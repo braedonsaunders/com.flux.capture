@@ -1,14 +1,11 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<manifest projecttype="SUITEAPP">
-    <publisherid>com.flux</publisherid>
-    <projectid>capture</projectid>
-    <projectname>Flux Capture</projectname>
-    <projectversion>1.0.0</projectversion>
+<manifest projecttype="ACCOUNTCUSTOMIZATION">
+    <projectname>FluxCapture</projectname>
     <frameworkversion>1.0</frameworkversion>
     <dependencies>
         <features>
             <feature required="true">SERVERSIDESCRIPTING</feature>
-            <feature required="false">MULTICURRENCY</feature>
+            <feature required="true">SUITESCRIPT</feature>
         </features>
     </dependencies>
 </manifest>

@@ -6,21 +6,22 @@ on:
       - main
   workflow_dispatch:
     inputs:
-      deploy_mode:
-        description: 'Deploy mode'
+      sync_mode:
+        description: 'Sync mode'
         required: true
-        default: 'deploy'
+        default: 'ci'
         type: choice
         options:
-          - deploy
-          - validate
+          - ci
+          - all
+
+env:
+  SUITECLOUD_CI: "1"
+  SUITECLOUD_CI_PASSKEY: ${{ secrets.NS_PASSKEY }}
 
 jobs:
   deploy:
     runs-on: ubuntu-latest
-    env:
-      SUITECLOUD_CI: "1"
-      SUITECLOUD_CI_PASSKEY: ${{ secrets.NS_PASSKEY }}
 
     steps:
       - name: Checkout repository
@@ -49,13 +50,14 @@ jobs:
             --certificateid ${{ secrets.NS_CERTIFICATE_ID }} \
             --privatekeypath /tmp/private.pem
 
-      - name: Validate project
-        if: ${{ github.event.inputs.deploy_mode == 'validate' }}
-        run: suitecloud project:validate
-
       - name: Deploy to NetSuite
-        if: ${{ github.event.inputs.deploy_mode != 'validate' }}
-        run: suitecloud project:deploy
+        env:
+          BASE_SHA: ${{ github.event.before }}
+        run: |
+          MODE="${{ github.event.inputs.sync_mode || 'ci' }}"
+          echo "Sync mode: $MODE"
+          echo "Base SHA: $BASE_SHA"
+          node scripts/sync.js --$MODE
 
       - name: Cleanup
         if: always()
@@ -68,5 +70,5 @@ jobs:
           echo "- **Account:** ${{ secrets.NS_ACCOUNT_ID }}" >> $GITHUB_STEP_SUMMARY
           echo "- **Branch:** ${{ github.ref_name }}" >> $GITHUB_STEP_SUMMARY
           echo "- **Commit:** \`${{ github.sha }}\`" >> $GITHUB_STEP_SUMMARY
-          echo "- **Mode:** ${{ github.event.inputs.deploy_mode || 'deploy' }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Mode:** ${{ github.event.inputs.sync_mode || 'ci' }}" >> $GITHUB_STEP_SUMMARY
           echo "- **Time:** $(date -u)" >> $GITHUB_STEP_SUMMARY
