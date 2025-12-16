@@ -1,7 +1,7 @@
-# DocuMind - Intelligent Document Capture for NetSuite
+# Flux Capture - Intelligent Document Capture for NetSuite
 
 <div align="center">
-  <img src="https://via.placeholder.com/200x200/6366f1/ffffff?text=DocuMind" alt="DocuMind Logo" width="200"/>
+  <img src="https://via.placeholder.com/200x200/6366f1/ffffff?text=Flux" alt="Flux Capture Logo" width="200"/>
   
   **AI-Powered Document Capture & Processing Platform**
   
@@ -14,7 +14,7 @@
 
 ## Overview
 
-DocuMind is a world-class, AI-powered document capture SuiteApp for NetSuite that transforms how businesses process vendor bills, expense reports, and financial documents. It goes far beyond NetSuite's native Bill Capture functionality with advanced features like machine learning, fraud detection, and intelligent automation.
+Flux Capture is a world-class, AI-powered document capture SuiteApp for NetSuite that transforms how businesses process vendor bills, expense reports, and financial documents. It goes far beyond NetSuite's native Bill Capture functionality with advanced features like machine learning, fraud detection, and intelligent automation.
 
 ## Key Features
 
@@ -82,7 +82,7 @@ DocuMind is a world-class, AI-powered document capture SuiteApp for NetSuite tha
 
 ### Manual Installation
 
-1. Upload all script files to `/SuiteScripts/DocuMind/`
+1. Upload all script files to `/SuiteScripts/FluxCapture/`
 2. Create custom records and lists from the Objects folder
 3. Configure script deployments:
    - Suitelet: `DM_MainSuitelet.js`
@@ -95,7 +95,7 @@ DocuMind is a world-class, AI-powered document capture SuiteApp for NetSuite tha
 ## Project Structure
 
 ```
-DocuMind/
+FluxCapture/
 ├── manifest.xml                    # SuiteApp manifest
 ├── deploy.xml                      # Deployment configuration
 ├── README.md                       # This file
@@ -295,7 +295,7 @@ Weighted calculation:
 
 ## Support
 
-For support and feature requests, please contact your NetSuite administrator or the DocuMind development team.
+For support and feature requests, please contact your NetSuite administrator or the Flux Capture development team.
 
 ## License
 
@@ -304,7 +304,7 @@ Proprietary - All rights reserved.
 ---
 
 <div align="center">
-  <strong>DocuMind</strong> - Transforming Document Capture
+  <strong>Flux Capture</strong> - Transforming Document Capture
   <br>
   Built with ❤️ for NetSuite
 </div>

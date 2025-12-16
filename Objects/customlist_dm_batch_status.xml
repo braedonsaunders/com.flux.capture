@@ -2,7 +2,7 @@
 <!-- Batch Status Custom List -->
 <customlist scriptid="customlist_dm_batch_status">
     <n>DM Batch Status</n>
-    <description>Status values for DocuMind batches</description>
+    <description>Status values for Flux Capture batches</description>
     <isordered>T</isordered>
     <customvalues>
         <customvalue scriptid="custval_pending">

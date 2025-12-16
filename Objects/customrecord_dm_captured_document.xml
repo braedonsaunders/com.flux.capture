@@ -17,7 +17,7 @@
     <enablemailmerge>F</enablemailmerge>
     <recordaccesslevel>USEPERMISSIONLIST</recordaccesslevel>
     <isordered>F</isordered>
-    <description>DocuMind Captured Document - Stores captured documents with extraction data</description>
+    <description>Flux Capture Document - Stores captured documents with extraction data</description>
     <disclaimer></disclaimer>
     <icon>DOCUMENT</icon>
     <iconbuiltin>T</iconbuiltin>

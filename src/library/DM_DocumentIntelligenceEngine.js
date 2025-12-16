@@ -1,9 +1,9 @@
 /**
  * @NApiVersion 2.1
  * @NModuleScope Public
- * @module DocuMind/DocumentIntelligenceEngine
+ * @module Flux Capture/DocumentIntelligenceEngine
  * 
- * DocuMind - Intelligent Document Capture Engine
+ * Flux Capture - Intelligent Document Capture Engine
  * Core AI-powered document processing, extraction, and intelligence library
  * 
  * Features:
@@ -180,7 +180,7 @@ define([
          * Asynchronous document processing using N/task.DocumentCaptureTask
          */
         _processAsync(fileObj, documentType, language) {
-            const outputPath = `/SuiteApps/com.documind/output/${Date.now()}_${fileObj.name.replace(/\.[^.]+$/, '')}.json`;
+            const outputPath = `/SuiteApps/com.flux.capture/output/${Date.now()}_${fileObj.name.replace(/\.[^.]+$/, '')}.json`;
             
             const docTask = task.create({
                 taskType: task.TaskType.DOCUMENT_CAPTURE

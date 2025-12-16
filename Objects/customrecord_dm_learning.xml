@@ -15,7 +15,7 @@
     <enablemailmerge>F</enablemailmerge>
     <recordaccesslevel>USEPERMISSIONLIST</recordaccesslevel>
     <isordered>F</isordered>
-    <description>DocuMind Learning - Stores user corrections for ML improvement</description>
+    <description>Flux Capture Learning - Stores user corrections for ML improvement</description>
     <icon>LIGHTBULB</icon>
     <iconbuiltin>T</iconbuiltin>
     

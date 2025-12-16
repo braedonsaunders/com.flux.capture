@@ -3,7 +3,7 @@
  * @NScriptType UserEventScript
  * @NModuleScope SameAccount
  * 
- * DocuMind - Document Events
+ * Flux Capture - Document Events
  * User Event script for automating document capture workflows
  * Handles events on captured documents and related transactions
  */
@@ -67,7 +67,7 @@ define(['N/record', 'N/search', 'N/runtime', 'N/email', 'N/render', 'N/file', 'N
             }
         } catch (e) {
             log.error({
-                title: 'DocuMind - beforeLoad Error',
+                title: 'Flux Capture - beforeLoad Error',
                 details: e.message
             });
         }
@@ -122,7 +122,7 @@ define(['N/record', 'N/search', 'N/runtime', 'N/email', 'N/render', 'N/file', 'N
             
         } catch (e) {
             log.error({
-                title: 'DocuMind - beforeSubmit Error',
+                title: 'Flux Capture - beforeSubmit Error',
                 details: e.message
             });
             throw e;
@@ -179,7 +179,7 @@ define(['N/record', 'N/search', 'N/runtime', 'N/email', 'N/render', 'N/file', 'N
             
         } catch (e) {
             log.error({
-                title: 'DocuMind - afterSubmit Error',
+                title: 'Flux Capture - afterSubmit Error',
                 details: e.message
             });
         }
@@ -560,12 +560,12 @@ define(['N/record', 'N/search', 'N/runtime', 'N/email', 'N/render', 'N/file', 'N
             mrTask.submit();
             
             log.audit({
-                title: 'DocuMind - Processing Triggered',
+                title: 'Flux Capture - Processing Triggered',
                 details: `Document ${documentId} queued for processing`
             });
         } catch (e) {
             log.error({
-                title: 'DocuMind - Processing Trigger Failed',
+                title: 'Flux Capture - Processing Trigger Failed',
                 details: e.message
             });
         }
@@ -583,24 +583,24 @@ define(['N/record', 'N/search', 'N/runtime', 'N/email', 'N/render', 'N/file', 'N
             
             switch (type) {
                 case NotificationType.DOCUMENT_READY:
-                    subject = `DocuMind: Document ${documentId} Uploaded`;
+                    subject = `Flux Capture: Document ${documentId} Uploaded`;
                     body = `Your document has been uploaded and is ready for processing.`;
                     break;
                     
                 case NotificationType.REVIEW_REQUIRED:
-                    subject = `DocuMind: Document ${documentId} Needs Review`;
+                    subject = `Flux Capture: Document ${documentId} Needs Review`;
                     body = `A document requires your review. Please review and approve or reject.`;
                     break;
                     
                 case NotificationType.ANOMALY_DETECTED:
                     const anomalies = JSON.parse(rec.getValue('custrecord_dm_anomalies') || '[]');
-                    subject = `DocuMind: Anomalies Detected in ${documentId}`;
+                    subject = `Flux Capture: Anomalies Detected in ${documentId}`;
                     body = `${anomalies.length} anomalies were detected in this document. Please review carefully.`;
                     break;
                     
                 case NotificationType.ERROR_OCCURRED:
                     const errorMsg = rec.getValue('custrecord_dm_error_message');
-                    subject = `DocuMind: Error Processing ${documentId}`;
+                    subject = `Flux Capture: Error Processing ${documentId}`;
                     body = `An error occurred: ${errorMsg}`;
                     break;
                     
@@ -619,7 +619,7 @@ define(['N/record', 'N/search', 'N/runtime', 'N/email', 'N/render', 'N/file', 'N
             }
         } catch (e) {
             log.error({
-                title: 'DocuMind - Notification Error',
+                title: 'Flux Capture - Notification Error',
                 details: e.message
             });
         }
@@ -639,7 +639,7 @@ define(['N/record', 'N/search', 'N/runtime', 'N/email', 'N/render', 'N/file', 'N
      */
     function handleStatusChange(rec, oldStatus, newStatus) {
         log.audit({
-            title: 'DocuMind - Status Change',
+            title: 'Flux Capture - Status Change',
             details: `Document ${rec.id}: ${oldStatus} -> ${newStatus}`
         });
         
@@ -706,13 +706,13 @@ define(['N/record', 'N/search', 'N/runtime', 'N/email', 'N/render', 'N/file', 'N
                 });
                 
                 log.audit({
-                    title: 'DocuMind - Transaction Created',
+                    title: 'Flux Capture - Transaction Created',
                     details: `Created transaction ${transactionId} from document ${rec.id}`
                 });
             }
         } catch (e) {
             log.error({
-                title: 'DocuMind - Transaction Creation Error',
+                title: 'Flux Capture - Transaction Creation Error',
                 details: e.message
             });
             
@@ -894,7 +894,7 @@ define(['N/record', 'N/search', 'N/runtime', 'N/email', 'N/render', 'N/file', 'N
      */
     function handleRejection(rec) {
         log.audit({
-            title: 'DocuMind - Document Rejected',
+            title: 'Flux Capture - Document Rejected',
             details: `Document ${rec.id} was rejected. Reason: ${rec.getValue('custrecord_dm_rejection_reason') || 'Not specified'}`
         });
     }
@@ -945,7 +945,7 @@ define(['N/record', 'N/search', 'N/runtime', 'N/email', 'N/render', 'N/file', 'N
             });
         } catch (e) {
             log.error({
-                title: 'DocuMind - Batch Status Update Error',
+                title: 'Flux Capture - Batch Status Update Error',
                 details: e.message
             });
         }
@@ -986,7 +986,7 @@ define(['N/record', 'N/search', 'N/runtime', 'N/email', 'N/render', 'N/file', 'N
             learningRecord.save();
         } catch (e) {
             log.error({
-                title: 'DocuMind - Learning Record Error',
+                title: 'Flux Capture - Learning Record Error',
                 details: e.message
             });
         }

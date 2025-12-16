@@ -3,7 +3,7 @@
  * @NScriptType ClientScript
  * @NModuleScope SameAccount
  * 
- * DocuMind - Document Client Script
+ * Flux Capture - Document Client Script
  * Provides enhanced client-side interactions for document capture
  */
 
@@ -17,7 +17,7 @@ define(['N/currentRecord', 'N/record', 'N/search', 'N/url', 'N/https', 'N/ui/dia
         const rec = context.currentRecord;
         const mode = context.mode;
         
-        console.log('DocuMind: Page initialized in', mode, 'mode');
+        console.log('Flux Capture: Page initialized in', mode, 'mode');
         
         if (mode === 'view') {
             // Initialize view mode features
@@ -874,9 +874,9 @@ define(['N/currentRecord', 'N/record', 'N/search', 'N/url', 'N/https', 'N/ui/dia
             };
             
             localStorage.setItem('dm_draft_' + rec.id, JSON.stringify(draftData));
-            console.log('DocuMind: Draft saved');
+            console.log('Flux Capture: Draft saved');
         } catch (e) {
-            console.error('DocuMind: Draft save failed', e);
+            console.error('Flux Capture: Draft save failed', e);
         }
     }
 
@@ -897,7 +897,7 @@ define(['N/currentRecord', 'N/record', 'N/search', 'N/url', 'N/https', 'N/ui/dia
     function showMessage(type, msg) {
         message.create({
             type: message.Type[type.toUpperCase()] || message.Type.INFORMATION,
-            title: 'DocuMind',
+            title: 'Flux Capture',
             message: msg,
             duration: 5000
         }).show();
