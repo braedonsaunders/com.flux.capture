@@ -446,7 +446,7 @@ define([
                     FROM customrecord_dm_captured_document
                     WHERE custrecord_dm_vendor = ?
                     AND custrecord_dm_invoice_number = ?
-                    AND custrecord_dm_status IN (3, 6)
+                    AND custrecord_dm_status IN ('extracted', 'completed')
                 `;
                 const result = query.runSuiteQL({ query: sql, params: [vendorId, invoiceNumber] });
                 return result.results[0].values[0] > 0;

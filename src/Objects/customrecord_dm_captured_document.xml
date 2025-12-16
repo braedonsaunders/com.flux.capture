@@ -36,23 +36,21 @@
         </customrecordcustomfield>
 
         <customrecordcustomfield scriptid="custrecord_dm_document_type">
-            <fieldtype>SELECT</fieldtype>
+            <fieldtype>TEXT</fieldtype>
             <label>Document Type</label>
-            <description>Type of document</description>
+            <description>Type of document (INVOICE, RECEIPT, CREDIT_MEMO, EXPENSE_REPORT, UNKNOWN)</description>
             <ismandatory>F</ismandatory>
             <displaytype>NORMAL</displaytype>
             <showinlist>T</showinlist>
-            <selectrecordtype>[scriptid=customlist_dm_document_types]</selectrecordtype>
         </customrecordcustomfield>
 
         <customrecordcustomfield scriptid="custrecord_dm_status">
-            <fieldtype>SELECT</fieldtype>
+            <fieldtype>TEXT</fieldtype>
             <label>Status</label>
-            <description>Processing status</description>
+            <description>Processing status (pending, processing, extracted, needs_review, approved, rejected, completed, error)</description>
             <ismandatory>F</ismandatory>
             <displaytype>NORMAL</displaytype>
             <showinlist>T</showinlist>
-            <selectrecordtype>[scriptid=customlist_dm_status]</selectrecordtype>
         </customrecordcustomfield>
 
         <customrecordcustomfield scriptid="custrecord_dm_vendor">
@@ -203,13 +201,12 @@
         </customrecordcustomfield>
 
         <customrecordcustomfield scriptid="custrecord_dm_source">
-            <fieldtype>SELECT</fieldtype>
+            <fieldtype>TEXT</fieldtype>
             <label>Source</label>
-            <description>How document was uploaded</description>
+            <description>How document was uploaded (upload, email, drag_drop, api, scanner, mobile)</description>
             <ismandatory>F</ismandatory>
             <displaytype>NORMAL</displaytype>
             <showinlist>T</showinlist>
-            <selectrecordtype>[scriptid=customlist_dm_source]</selectrecordtype>
         </customrecordcustomfield>
 
         <customrecordcustomfield scriptid="custrecord_dm_created_transaction">
@@ -289,7 +286,7 @@
         <customrecordcustomfield scriptid="custrecord_dm_user_corrections">
             <fieldtype>TEXTAREA</fieldtype>
             <label>User Corrections</label>
-            <description>Manual corrections made by user</description>
+            <description>Manual corrections made by user as JSON (includes field, original, corrected, pattern, count, date, user)</description>
             <ismandatory>F</ismandatory>
             <displaytype>HIDDEN</displaytype>
             <showinlist>F</showinlist>

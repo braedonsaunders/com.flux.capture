@@ -961,9 +961,9 @@ define([
             const sql = `
                 SELECT
                     COUNT(*) as total,
-                    SUM(CASE WHEN custrecord_dm_status IN (1,2,3,4) THEN 1 ELSE 0 END) as pending,
-                    SUM(CASE WHEN custrecord_dm_status = 6 THEN 1 ELSE 0 END) as completed,
-                    SUM(CASE WHEN custrecord_dm_status = 6 AND custrecord_dm_confidence_score >= 85 THEN 1 ELSE 0 END) as autoProcessed,
+                    SUM(CASE WHEN custrecord_dm_status IN ('pending','processing','extracted','needs_review') THEN 1 ELSE 0 END) as pending,
+                    SUM(CASE WHEN custrecord_dm_status = 'completed' THEN 1 ELSE 0 END) as completed,
+                    SUM(CASE WHEN custrecord_dm_status = 'completed' AND custrecord_dm_confidence_score >= 85 THEN 1 ELSE 0 END) as autoProcessed,
                     SUM(custrecord_dm_total_amount) as totalValue
                 FROM customrecord_dm_captured_document
                 WHERE custrecord_dm_created_date >= ADD_MONTHS(SYSDATE, -1)
@@ -1022,7 +1022,7 @@ define([
                 FROM customrecord_dm_captured_document
                 WHERE custrecord_dm_anomalies IS NOT NULL
                 AND custrecord_dm_anomalies != '[]'
-                AND custrecord_dm_status NOT IN (5, 6)
+                AND custrecord_dm_status NOT IN ('rejected', 'completed')
                 ORDER BY custrecord_dm_created_date DESC
                 FETCH FIRST ${limit * 2} ROWS ONLY
             `;
@@ -1061,11 +1061,11 @@ define([
             `;
 
             const statusMap = {
-                'pending': '1', 'processing': '2', 'review': '4', 'completed': '6'
+                'pending': 'pending', 'processing': 'processing', 'review': 'needs_review', 'completed': 'completed'
             };
 
             if (statusFilter && statusMap[statusFilter]) {
-                sql += ` AND custrecord_dm_status = ${statusMap[statusFilter]}`;
+                sql += ` AND custrecord_dm_status = '${statusMap[statusFilter]}'`;
             }
 
             sql += ` ORDER BY custrecord_dm_created_date DESC`;
@@ -1212,7 +1212,16 @@ define([
     }
 
     function getStatusClass(status) {
-        const classes = { 1: 'pending', 2: 'processing', 3: 'extracted', 4: 'review', 5: 'rejected', 6: 'completed', 7: 'error' };
+        const classes = {
+            'pending': 'pending',
+            'processing': 'processing',
+            'extracted': 'extracted',
+            'needs_review': 'review',
+            'approved': 'completed',
+            'rejected': 'rejected',
+            'completed': 'completed',
+            'error': 'error'
+        };
         return classes[status] || 'pending';
     }
 

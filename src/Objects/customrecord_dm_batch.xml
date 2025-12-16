@@ -18,13 +18,12 @@
 
     <customrecordcustomfields>
         <customrecordcustomfield scriptid="custrecord_dm_batch_status">
-            <fieldtype>SELECT</fieldtype>
+            <fieldtype>TEXT</fieldtype>
             <label>Status</label>
-            <description>Batch processing status</description>
+            <description>Batch processing status (pending, processing, completed, partial_error, failed, cancelled)</description>
             <ismandatory>F</ismandatory>
             <displaytype>NORMAL</displaytype>
             <showinlist>T</showinlist>
-            <selectrecordtype>[scriptid=customlist_dm_batch_status]</selectrecordtype>
         </customrecordcustomfield>
 
         <customrecordcustomfield scriptid="custrecord_dm_batch_document_count">
@@ -55,13 +54,12 @@
         </customrecordcustomfield>
 
         <customrecordcustomfield scriptid="custrecord_dm_batch_source">
-            <fieldtype>SELECT</fieldtype>
+            <fieldtype>TEXT</fieldtype>
             <label>Source</label>
-            <description>How batch was created</description>
+            <description>How batch was created (upload, email, drag_drop, api, scanner, mobile)</description>
             <ismandatory>F</ismandatory>
             <displaytype>NORMAL</displaytype>
             <showinlist>T</showinlist>
-            <selectrecordtype>[scriptid=customlist_dm_source]</selectrecordtype>
         </customrecordcustomfield>
 
         <customrecordcustomfield scriptid="custrecord_dm_batch_created_by">
