@@ -6,20 +6,14 @@ on:
       - main
   workflow_dispatch:
     inputs:
-      sync_mode:
-        description: 'Sync mode'
+      deploy_mode:
+        description: 'Deploy mode'
         required: true
-        default: 'ci'
+        default: 'deploy'
         type: choice
         options:
-          - ci
-          - all
-
-env:
-  # Enable machine-to-machine authentication mode
-  SUITECLOUD_CI: "1"
-  # Passkey for encrypting credentials (32-100 alphanumeric chars)
-  SUITECLOUD_CI_PASSKEY: ${{ secrets.NS_PASSKEY }}
+          - deploy
+          - validate
 
 jobs:
   deploy:
@@ -29,7 +23,7 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
-          fetch-depth: 0  # Full history to detect all deleted files across merged commits
+          fetch-depth: 0
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -37,7 +31,7 @@ jobs:
           node-version: '18'
 
       - name: Install SuiteCloud CLI
-        run: npm install -g @oracle/suitecloud-cli --acceptsuitecloudsdklicense
+        run: npm install -g @oracle/suitecloud-cli
 
       - name: Setup private key
         run: |
@@ -46,23 +40,20 @@ jobs:
 
       - name: Setup NetSuite authentication
         run: |
-          suitecloud account:setup:ci \
+          suitecloud account:setup \
             --account ${{ secrets.NS_ACCOUNT_ID }} \
             --authid "github-deploy" \
             --certificateid ${{ secrets.NS_CERTIFICATE_ID }} \
-            --privatekeypath /tmp/private.pem
+            --privatekeypath /tmp/private.pem \
+            --savetoken
+
+      - name: Validate project
+        if: ${{ github.event.inputs.deploy_mode == 'validate' }}
+        run: suitecloud project:validate
 
       - name: Deploy to NetSuite
-        env:
-          # Pass the previous branch state for accurate change detection
-          # This ensures all deletions are caught, even across multiple merged commits
-          BASE_SHA: ${{ github.event.before }}
-        run: |
-          # Use 'all' for manual triggers with that option, otherwise 'ci'
-          MODE="${{ github.event.inputs.sync_mode || 'ci' }}"
-          echo "Sync mode: $MODE"
-          echo "Base SHA: $BASE_SHA"
-          node scripts/sync.js --$MODE
+        if: ${{ github.event.inputs.deploy_mode != 'validate' }}
+        run: suitecloud project:deploy --applycontentprotection
 
       - name: Cleanup
         if: always()
@@ -75,5 +66,5 @@ jobs:
           echo "- **Account:** ${{ secrets.NS_ACCOUNT_ID }}" >> $GITHUB_STEP_SUMMARY
           echo "- **Branch:** ${{ github.ref_name }}" >> $GITHUB_STEP_SUMMARY
           echo "- **Commit:** \`${{ github.sha }}\`" >> $GITHUB_STEP_SUMMARY
-          echo "- **Mode:** ${{ github.event.inputs.sync_mode || 'ci' }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Mode:** ${{ github.event.inputs.deploy_mode || 'deploy' }}" >> $GITHUB_STEP_SUMMARY
           echo "- **Time:** $(date -u)" >> $GITHUB_STEP_SUMMARY
