@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Document Status Custom List -->
+<customlist scriptid="customlist_dm_status">
+    <name>DM Document Status</name>
+    <description>Status values for DocuMind captured documents</description>
+    <isordered>T</isordered>
+    <customvalues>
+        <customvalue scriptid="custval_pending">
+            <value>Pending</value>
+            <isInactive>F</isInactive>
+        </customvalue>
+        <customvalue scriptid="custval_processing">
+            <value>Processing</value>
+            <isInactive>F</isInactive>
+        </customvalue>
+        <customvalue scriptid="custval_extracted">
+            <value>Extracted</value>
+            <isInactive>F</isInactive>
+        </customvalue>
+        <customvalue scriptid="custval_needs_review">
+            <value>Needs Review</value>
+            <isInactive>F</isInactive>
+        </customvalue>
+        <customvalue scriptid="custval_approved">
+            <value>Approved</value>
+            <isInactive>F</isInactive>
+        </customvalue>
+        <customvalue scriptid="custval_rejected">
+            <value>Rejected</value>
+            <isInactive>F</isInactive>
+        </customvalue>
+        <customvalue scriptid="custval_completed">
+            <value>Completed</value>
+            <isInactive>F</isInactive>
+        </customvalue>
+        <customvalue scriptid="custval_error">
+            <value>Error</value>
+            <isInactive>F</isInactive>
+        </customvalue>
+    </customvalues>
+</customlist>

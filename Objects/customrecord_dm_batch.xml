@@ -1,0 +1,148 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<customrecordtype scriptid="customrecord_dm_batch">
+    <recordname>DM Batch</recordname>
+    <includename>T</includename>
+    <showid>T</showid>
+    <shownotes>T</shownotes>
+    <allowattachments>F</allowattachments>
+    <allowinlineediting>T</allowinlineediting>
+    <allowinlinedeleting>F</allowinlinedeleting>
+    <allowquicksearch>T</allowquicksearch>
+    <hierarchical>F</hierarchical>
+    <enablenumbering>T</enablenumbering>
+    <numberingprefix>DM-BATCH-</numberingprefix>
+    <numberingmindigits>5</numberingmindigits>
+    <enabledle>F</enabledle>
+    <enablekeywords>T</enablekeywords>
+    <enablemailmerge>F</enablemailmerge>
+    <recordaccesslevel>USEPERMISSIONLIST</recordaccesslevel>
+    <isordered>F</isordered>
+    <description>DocuMind Batch - Groups multiple documents for batch processing</description>
+    <icon>FOLDER</icon>
+    <iconbuiltin>T</iconbuiltin>
+    
+    <customrecordcustomfields>
+        <!-- Batch Status -->
+        <customrecordcustomfield scriptid="custrecord_dm_batch_status">
+            <fieldtype>SELECT</fieldtype>
+            <label>Status</label>
+            <description>Batch processing status</description>
+            <ismandatory>F</ismandatory>
+            <displaytype>NORMAL</displaytype>
+            <showinlist>T</showinlist>
+            <selectrecordtype>-customlist_dm_batch_status</selectrecordtype>
+        </customrecordcustomfield>
+        
+        <!-- Document Count -->
+        <customrecordcustomfield scriptid="custrecord_dm_batch_document_count">
+            <fieldtype>INTEGER</fieldtype>
+            <label>Document Count</label>
+            <description>Number of documents in batch</description>
+            <ismandatory>F</ismandatory>
+            <displaytype>NORMAL</displaytype>
+            <showinlist>T</showinlist>
+        </customrecordcustomfield>
+        
+        <!-- Processed Count -->
+        <customrecordcustomfield scriptid="custrecord_dm_batch_processed_count">
+            <fieldtype>INTEGER</fieldtype>
+            <label>Processed Count</label>
+            <description>Number of documents processed</description>
+            <ismandatory>F</ismandatory>
+            <displaytype>NORMAL</displaytype>
+            <showinlist>T</showinlist>
+        </customrecordcustomfield>
+        
+        <!-- Error Count -->
+        <customrecordcustomfield scriptid="custrecord_dm_batch_error_count">
+            <fieldtype>INTEGER</fieldtype>
+            <label>Error Count</label>
+            <description>Number of documents with errors</description>
+            <ismandatory>F</ismandatory>
+            <displaytype>NORMAL</displaytype>
+            <showinlist>T</showinlist>
+        </customrecordcustomfield>
+        
+        <!-- Source -->
+        <customrecordcustomfield scriptid="custrecord_dm_batch_source">
+            <fieldtype>SELECT</fieldtype>
+            <label>Source</label>
+            <description>How batch was created</description>
+            <ismandatory>F</ismandatory>
+            <displaytype>NORMAL</displaytype>
+            <showinlist>T</showinlist>
+            <selectrecordtype>-customlist_dm_source</selectrecordtype>
+        </customrecordcustomfield>
+        
+        <!-- Created By -->
+        <customrecordcustomfield scriptid="custrecord_dm_batch_created_by">
+            <fieldtype>SELECT</fieldtype>
+            <label>Created By</label>
+            <description>User who created the batch</description>
+            <ismandatory>F</ismandatory>
+            <displaytype>NORMAL</displaytype>
+            <showinlist>T</showinlist>
+            <selectrecordtype>-4</selectrecordtype>
+        </customrecordcustomfield>
+        
+        <!-- Created Date -->
+        <customrecordcustomfield scriptid="custrecord_dm_batch_created_date">
+            <fieldtype>DATETIMETZ</fieldtype>
+            <label>Created Date</label>
+            <description>Date batch was created</description>
+            <ismandatory>F</ismandatory>
+            <displaytype>NORMAL</displaytype>
+            <showinlist>T</showinlist>
+        </customrecordcustomfield>
+        
+        <!-- Completed Date -->
+        <customrecordcustomfield scriptid="custrecord_dm_batch_completed_date">
+            <fieldtype>DATETIMETZ</fieldtype>
+            <label>Completed Date</label>
+            <description>Date batch processing completed</description>
+            <ismandatory>F</ismandatory>
+            <displaytype>NORMAL</displaytype>
+            <showinlist>F</showinlist>
+        </customrecordcustomfield>
+        
+        <!-- Progress JSON -->
+        <customrecordcustomfield scriptid="custrecord_dm_batch_progress">
+            <fieldtype>LONGTEXT</fieldtype>
+            <label>Progress</label>
+            <description>Processing progress as JSON</description>
+            <ismandatory>F</ismandatory>
+            <displaytype>HIDDEN</displaytype>
+            <showinlist>F</showinlist>
+        </customrecordcustomfield>
+        
+        <!-- Email Sender (for email batches) -->
+        <customrecordcustomfield scriptid="custrecord_dm_batch_email_sender">
+            <fieldtype>EMAIL</fieldtype>
+            <label>Email Sender</label>
+            <description>Email address if from email import</description>
+            <ismandatory>F</ismandatory>
+            <displaytype>NORMAL</displaytype>
+            <showinlist>F</showinlist>
+        </customrecordcustomfield>
+        
+        <!-- Total Value -->
+        <customrecordcustomfield scriptid="custrecord_dm_batch_total_value">
+            <fieldtype>CURRENCY</fieldtype>
+            <label>Total Value</label>
+            <description>Sum of all document amounts</description>
+            <ismandatory>F</ismandatory>
+            <displaytype>NORMAL</displaytype>
+            <showinlist>T</showinlist>
+        </customrecordcustomfield>
+        
+        <!-- Average Confidence -->
+        <customrecordcustomfield scriptid="custrecord_dm_batch_avg_confidence">
+            <fieldtype>PERCENT</fieldtype>
+            <label>Avg Confidence</label>
+            <description>Average confidence score</description>
+            <ismandatory>F</ismandatory>
+            <displaytype>NORMAL</displaytype>
+            <showinlist>T</showinlist>
+        </customrecordcustomfield>
+    </customrecordcustomfields>
+</customrecordtype>

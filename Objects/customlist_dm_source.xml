@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Document Source Custom List -->
+<customlist scriptid="customlist_dm_source">
+    <n>DM Document Source</n>
+    <description>Source of document upload</description>
+    <isordered>T</isordered>
+    <customvalues>
+        <customvalue scriptid="custval_upload">
+            <value>Manual Upload</value>
+            <isInactive>F</isInactive>
+        </customvalue>
+        <customvalue scriptid="custval_email">
+            <value>Email Import</value>
+            <isInactive>F</isInactive>
+        </customvalue>
+        <customvalue scriptid="custval_drag_drop">
+            <value>Drag &amp; Drop</value>
+            <isInactive>F</isInactive>
+        </customvalue>
+        <customvalue scriptid="custval_api">
+            <value>API Integration</value>
+            <isInactive>F</isInactive>
+        </customvalue>
+        <customvalue scriptid="custval_scanner">
+            <value>Scanner</value>
+            <isInactive>F</isInactive>
+        </customvalue>
+        <customvalue scriptid="custval_mobile">
+            <value>Mobile App</value>
+            <isInactive>F</isInactive>
+        </customvalue>
+    </customvalues>
+</customlist>

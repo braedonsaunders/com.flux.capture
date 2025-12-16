@@ -1,0 +1,390 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<customrecordtype scriptid="customrecord_dm_captured_document">
+    <recordname>DM Captured Document</recordname>
+    <includename>T</includename>
+    <showid>T</showid>
+    <shownotes>T</shownotes>
+    <allowattachments>T</allowattachments>
+    <allowinlineediting>T</allowinlineediting>
+    <allowinlinedeleting>F</allowinlinedeleting>
+    <allowquicksearch>T</allowquicksearch>
+    <hierarchical>F</hierarchical>
+    <enablenumbering>T</enablenumbering>
+    <numberingprefix>DM-DOC-</numberingprefix>
+    <numberingmindigits>6</numberingmindigits>
+    <enabledle>F</enabledle>
+    <enablekeywords>T</enablekeywords>
+    <enablemailmerge>F</enablemailmerge>
+    <recordaccesslevel>USEPERMISSIONLIST</recordaccesslevel>
+    <isordered>F</isordered>
+    <description>DocuMind Captured Document - Stores captured documents with extraction data</description>
+    <disclaimer></disclaimer>
+    <icon>DOCUMENT</icon>
+    <iconbuiltin>T</iconbuiltin>
+    <iconindex>0</iconindex>
+    
+    <customrecordcustomfields>
+        <!-- Source File -->
+        <customrecordcustomfield scriptid="custrecord_dm_source_file">
+            <fieldtype>DOCUMENT</fieldtype>
+            <label>Source File</label>
+            <description>The original uploaded document file</description>
+            <ismandatory>T</ismandatory>
+            <displaytype>NORMAL</displaytype>
+            <showinlist>F</showinlist>
+        </customrecordcustomfield>
+        
+        <!-- Document ID -->
+        <customrecordcustomfield scriptid="custrecord_dm_document_id">
+            <fieldtype>TEXT</fieldtype>
+            <label>Document ID</label>
+            <description>Unique identifier for this document</description>
+            <ismandatory>F</ismandatory>
+            <displaytype>NORMAL</displaytype>
+            <showinlist>T</showinlist>
+            <isformula>F</isformula>
+        </customrecordcustomfield>
+        
+        <!-- Document Type -->
+        <customrecordcustomfield scriptid="custrecord_dm_document_type">
+            <fieldtype>SELECT</fieldtype>
+            <label>Document Type</label>
+            <description>Type of document</description>
+            <ismandatory>F</ismandatory>
+            <displaytype>NORMAL</displaytype>
+            <showinlist>T</showinlist>
+            <selectrecordtype>-customlist_dm_document_types</selectrecordtype>
+        </customrecordcustomfield>
+        
+        <!-- Status -->
+        <customrecordcustomfield scriptid="custrecord_dm_status">
+            <fieldtype>SELECT</fieldtype>
+            <label>Status</label>
+            <description>Processing status</description>
+            <ismandatory>F</ismandatory>
+            <displaytype>NORMAL</displaytype>
+            <showinlist>T</showinlist>
+            <selectrecordtype>-customlist_dm_status</selectrecordtype>
+        </customrecordcustomfield>
+        
+        <!-- Vendor -->
+        <customrecordcustomfield scriptid="custrecord_dm_vendor">
+            <fieldtype>SELECT</fieldtype>
+            <label>Vendor</label>
+            <description>Matched vendor</description>
+            <ismandatory>F</ismandatory>
+            <displaytype>NORMAL</displaytype>
+            <showinlist>T</showinlist>
+            <selectrecordtype>-4</selectrecordtype> <!-- Vendor -->
+        </customrecordcustomfield>
+        
+        <!-- Vendor Match Confidence -->
+        <customrecordcustomfield scriptid="custrecord_dm_vendor_match_confidence">
+            <fieldtype>PERCENT</fieldtype>
+            <label>Vendor Match Confidence</label>
+            <description>Confidence level of vendor match</description>
+            <ismandatory>F</ismandatory>
+            <displaytype>NORMAL</displaytype>
+            <showinlist>F</showinlist>
+        </customrecordcustomfield>
+        
+        <!-- Invoice Number -->
+        <customrecordcustomfield scriptid="custrecord_dm_invoice_number">
+            <fieldtype>TEXT</fieldtype>
+            <label>Invoice Number</label>
+            <description>Extracted invoice/reference number</description>
+            <ismandatory>F</ismandatory>
+            <displaytype>NORMAL</displaytype>
+            <showinlist>T</showinlist>
+        </customrecordcustomfield>
+        
+        <!-- Invoice Date -->
+        <customrecordcustomfield scriptid="custrecord_dm_invoice_date">
+            <fieldtype>DATE</fieldtype>
+            <label>Invoice Date</label>
+            <description>Extracted invoice date</description>
+            <ismandatory>F</ismandatory>
+            <displaytype>NORMAL</displaytype>
+            <showinlist>T</showinlist>
+        </customrecordcustomfield>
+        
+        <!-- Due Date -->
+        <customrecordcustomfield scriptid="custrecord_dm_due_date">
+            <fieldtype>DATE</fieldtype>
+            <label>Due Date</label>
+            <description>Extracted payment due date</description>
+            <ismandatory>F</ismandatory>
+            <displaytype>NORMAL</displaytype>
+            <showinlist>F</showinlist>
+        </customrecordcustomfield>
+        
+        <!-- Subtotal -->
+        <customrecordcustomfield scriptid="custrecord_dm_subtotal">
+            <fieldtype>CURRENCY</fieldtype>
+            <label>Subtotal</label>
+            <description>Extracted subtotal amount</description>
+            <ismandatory>F</ismandatory>
+            <displaytype>NORMAL</displaytype>
+            <showinlist>F</showinlist>
+        </customrecordcustomfield>
+        
+        <!-- Tax Amount -->
+        <customrecordcustomfield scriptid="custrecord_dm_tax_amount">
+            <fieldtype>CURRENCY</fieldtype>
+            <label>Tax Amount</label>
+            <description>Extracted tax amount</description>
+            <ismandatory>F</ismandatory>
+            <displaytype>NORMAL</displaytype>
+            <showinlist>F</showinlist>
+        </customrecordcustomfield>
+        
+        <!-- Total Amount -->
+        <customrecordcustomfield scriptid="custrecord_dm_total_amount">
+            <fieldtype>CURRENCY</fieldtype>
+            <label>Total Amount</label>
+            <description>Extracted total amount</description>
+            <ismandatory>F</ismandatory>
+            <displaytype>NORMAL</displaytype>
+            <showinlist>T</showinlist>
+        </customrecordcustomfield>
+        
+        <!-- Currency -->
+        <customrecordcustomfield scriptid="custrecord_dm_currency">
+            <fieldtype>SELECT</fieldtype>
+            <label>Currency</label>
+            <description>Document currency</description>
+            <ismandatory>F</ismandatory>
+            <displaytype>NORMAL</displaytype>
+            <showinlist>F</showinlist>
+            <selectrecordtype>-122</selectrecordtype> <!-- Currency -->
+        </customrecordcustomfield>
+        
+        <!-- PO Number -->
+        <customrecordcustomfield scriptid="custrecord_dm_po_number">
+            <fieldtype>TEXT</fieldtype>
+            <label>PO Number</label>
+            <description>Extracted purchase order number</description>
+            <ismandatory>F</ismandatory>
+            <displaytype>NORMAL</displaytype>
+            <showinlist>F</showinlist>
+        </customrecordcustomfield>
+        
+        <!-- Payment Terms -->
+        <customrecordcustomfield scriptid="custrecord_dm_payment_terms">
+            <fieldtype>SELECT</fieldtype>
+            <label>Payment Terms</label>
+            <description>Payment terms</description>
+            <ismandatory>F</ismandatory>
+            <displaytype>NORMAL</displaytype>
+            <showinlist>F</showinlist>
+            <selectrecordtype>-34</selectrecordtype> <!-- Term -->
+        </customrecordcustomfield>
+        
+        <!-- Line Items (JSON) -->
+        <customrecordcustomfield scriptid="custrecord_dm_line_items">
+            <fieldtype>LONGTEXT</fieldtype>
+            <label>Line Items</label>
+            <description>Extracted line items as JSON</description>
+            <ismandatory>F</ismandatory>
+            <displaytype>NORMAL</displaytype>
+            <showinlist>F</showinlist>
+        </customrecordcustomfield>
+        
+        <!-- Confidence Score -->
+        <customrecordcustomfield scriptid="custrecord_dm_confidence_score">
+            <fieldtype>PERCENT</fieldtype>
+            <label>Confidence Score</label>
+            <description>Overall extraction confidence</description>
+            <ismandatory>F</ismandatory>
+            <displaytype>NORMAL</displaytype>
+            <showinlist>T</showinlist>
+        </customrecordcustomfield>
+        
+        <!-- Anomalies (JSON) -->
+        <customrecordcustomfield scriptid="custrecord_dm_anomalies">
+            <fieldtype>LONGTEXT</fieldtype>
+            <label>Anomalies</label>
+            <description>Detected anomalies as JSON</description>
+            <ismandatory>F</ismandatory>
+            <displaytype>NORMAL</displaytype>
+            <showinlist>F</showinlist>
+        </customrecordcustomfield>
+        
+        <!-- Amount Validated -->
+        <customrecordcustomfield scriptid="custrecord_dm_amount_validated">
+            <fieldtype>CHECKBOX</fieldtype>
+            <label>Amount Validated</label>
+            <description>Whether line items match total</description>
+            <ismandatory>F</ismandatory>
+            <displaytype>NORMAL</displaytype>
+            <showinlist>F</showinlist>
+        </customrecordcustomfield>
+        
+        <!-- Batch ID -->
+        <customrecordcustomfield scriptid="custrecord_dm_batch_id">
+            <fieldtype>SELECT</fieldtype>
+            <label>Batch</label>
+            <description>Parent batch if uploaded in batch</description>
+            <ismandatory>F</ismandatory>
+            <displaytype>NORMAL</displaytype>
+            <showinlist>F</showinlist>
+            <selectrecordtype>-customrecord_dm_batch</selectrecordtype>
+        </customrecordcustomfield>
+        
+        <!-- Source -->
+        <customrecordcustomfield scriptid="custrecord_dm_source">
+            <fieldtype>SELECT</fieldtype>
+            <label>Source</label>
+            <description>How document was uploaded</description>
+            <ismandatory>F</ismandatory>
+            <displaytype>NORMAL</displaytype>
+            <showinlist>T</showinlist>
+            <selectrecordtype>-customlist_dm_source</selectrecordtype>
+        </customrecordcustomfield>
+        
+        <!-- Created Transaction -->
+        <customrecordcustomfield scriptid="custrecord_dm_created_transaction">
+            <fieldtype>TEXT</fieldtype>
+            <label>Created Transaction</label>
+            <description>Internal ID of created transaction</description>
+            <ismandatory>F</ismandatory>
+            <displaytype>NORMAL</displaytype>
+            <showinlist>F</showinlist>
+        </customrecordcustomfield>
+        
+        <!-- Create Transaction Flag -->
+        <customrecordcustomfield scriptid="custrecord_dm_create_transaction">
+            <fieldtype>CHECKBOX</fieldtype>
+            <label>Create Transaction</label>
+            <description>Whether to create transaction on approval</description>
+            <ismandatory>F</ismandatory>
+            <displaytype>NORMAL</displaytype>
+            <showinlist>F</showinlist>
+            <defaultchecked>T</defaultchecked>
+        </customrecordcustomfield>
+        
+        <!-- Rejection Reason -->
+        <customrecordcustomfield scriptid="custrecord_dm_rejection_reason">
+            <fieldtype>TEXTAREA</fieldtype>
+            <label>Rejection Reason</label>
+            <description>Reason for rejection</description>
+            <ismandatory>F</ismandatory>
+            <displaytype>NORMAL</displaytype>
+            <showinlist>F</showinlist>
+        </customrecordcustomfield>
+        
+        <!-- Error Message -->
+        <customrecordcustomfield scriptid="custrecord_dm_error_message">
+            <fieldtype>TEXTAREA</fieldtype>
+            <label>Error Message</label>
+            <description>Processing error message</description>
+            <ismandatory>F</ismandatory>
+            <displaytype>NORMAL</displaytype>
+            <showinlist>F</showinlist>
+        </customrecordcustomfield>
+        
+        <!-- Uploaded By -->
+        <customrecordcustomfield scriptid="custrecord_dm_uploaded_by">
+            <fieldtype>SELECT</fieldtype>
+            <label>Uploaded By</label>
+            <description>User who uploaded the document</description>
+            <ismandatory>F</ismandatory>
+            <displaytype>NORMAL</displaytype>
+            <showinlist>T</showinlist>
+            <selectrecordtype>-4</selectrecordtype> <!-- Employee -->
+        </customrecordcustomfield>
+        
+        <!-- Created Date -->
+        <customrecordcustomfield scriptid="custrecord_dm_created_date">
+            <fieldtype>DATETIMETZ</fieldtype>
+            <label>Created Date</label>
+            <description>Date document was uploaded</description>
+            <ismandatory>F</ismandatory>
+            <displaytype>NORMAL</displaytype>
+            <showinlist>T</showinlist>
+        </customrecordcustomfield>
+        
+        <!-- Modified Date -->
+        <customrecordcustomfield scriptid="custrecord_dm_modified_date">
+            <fieldtype>DATETIMETZ</fieldtype>
+            <label>Modified Date</label>
+            <description>Date document was last modified</description>
+            <ismandatory>F</ismandatory>
+            <displaytype>NORMAL</displaytype>
+            <showinlist>F</showinlist>
+        </customrecordcustomfield>
+        
+        <!-- Status History (JSON) -->
+        <customrecordcustomfield scriptid="custrecord_dm_status_history">
+            <fieldtype>LONGTEXT</fieldtype>
+            <label>Status History</label>
+            <description>Status change history as JSON</description>
+            <ismandatory>F</ismandatory>
+            <displaytype>HIDDEN</displaytype>
+            <showinlist>F</showinlist>
+        </customrecordcustomfield>
+        
+        <!-- User Corrections (JSON) -->
+        <customrecordcustomfield scriptid="custrecord_dm_user_corrections">
+            <fieldtype>LONGTEXT</fieldtype>
+            <label>User Corrections</label>
+            <description>Manual corrections made by user</description>
+            <ismandatory>F</ismandatory>
+            <displaytype>HIDDEN</displaytype>
+            <showinlist>F</showinlist>
+        </customrecordcustomfield>
+        
+        <!-- Extracted Text -->
+        <customrecordcustomfield scriptid="custrecord_dm_extracted_text">
+            <fieldtype>LONGTEXT</fieldtype>
+            <label>Extracted Text</label>
+            <description>Full text extracted from document</description>
+            <ismandatory>F</ismandatory>
+            <displaytype>HIDDEN</displaytype>
+            <showinlist>F</showinlist>
+        </customrecordcustomfield>
+        
+        <!-- Processing Time -->
+        <customrecordcustomfield scriptid="custrecord_dm_processing_time">
+            <fieldtype>INTEGER</fieldtype>
+            <label>Processing Time (ms)</label>
+            <description>Time taken to process document</description>
+            <ismandatory>F</ismandatory>
+            <displaytype>NORMAL</displaytype>
+            <showinlist>F</showinlist>
+        </customrecordcustomfield>
+        
+        <!-- Email Fields -->
+        <customrecordcustomfield scriptid="custrecord_dm_email_sender">
+            <fieldtype>EMAIL</fieldtype>
+            <label>Email Sender</label>
+            <description>Email address of sender</description>
+            <ismandatory>F</ismandatory>
+            <displaytype>NORMAL</displaytype>
+            <showinlist>F</showinlist>
+        </customrecordcustomfield>
+        
+        <customrecordcustomfield scriptid="custrecord_dm_email_subject">
+            <fieldtype>TEXT</fieldtype>
+            <label>Email Subject</label>
+            <description>Subject of source email</description>
+            <ismandatory>F</ismandatory>
+            <displaytype>NORMAL</displaytype>
+            <showinlist>F</showinlist>
+        </customrecordcustomfield>
+        
+        <customrecordcustomfield scriptid="custrecord_dm_email_received">
+            <fieldtype>DATETIMETZ</fieldtype>
+            <label>Email Received</label>
+            <description>Date email was received</description>
+            <ismandatory>F</ismandatory>
+            <displaytype>NORMAL</displaytype>
+            <showinlist>F</showinlist>
+        </customrecordcustomfield>
+    </customrecordcustomfields>
+    
+    <!-- Permissions -->
+    <recordsublists/>
+    
+    <links/>
+</customrecordtype>

@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Batch Status Custom List -->
+<customlist scriptid="customlist_dm_batch_status">
+    <n>DM Batch Status</n>
+    <description>Status values for DocuMind batches</description>
+    <isordered>T</isordered>
+    <customvalues>
+        <customvalue scriptid="custval_pending">
+            <value>Pending</value>
+            <isInactive>F</isInactive>
+        </customvalue>
+        <customvalue scriptid="custval_processing">
+            <value>Processing</value>
+            <isInactive>F</isInactive>
+        </customvalue>
+        <customvalue scriptid="custval_completed">
+            <value>Completed</value>
+            <isInactive>F</isInactive>
+        </customvalue>
+        <customvalue scriptid="custval_partial_error">
+            <value>Partial Error</value>
+            <isInactive>F</isInactive>
+        </customvalue>
+        <customvalue scriptid="custval_failed">
+            <value>Failed</value>
+            <isInactive>F</isInactive>
+        </customvalue>
+        <customvalue scriptid="custval_cancelled">
+            <value>Cancelled</value>
+            <isInactive>F</isInactive>
+        </customvalue>
+    </customvalues>
+</customlist>

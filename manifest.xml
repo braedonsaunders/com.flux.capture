@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<manifest projecttype="ACCOUNTCUSTOMIZATION">
+    <projectname>DocuMind - Intelligent Document Capture</projectname>
+    <frameworkversion>1.0</frameworkversion>
+    <publisherid>com.documind</publisherid>
+    <projectid>documind</projectid>
+    <projectversion>1.0.0</projectversion>
+    <description>
+        DocuMind is a next-generation intelligent document capture and processing platform 
+        that transforms unstructured documents into structured NetSuite transactions. 
+        Featuring AI-powered OCR, smart vendor matching, fraud detection, multi-currency 
+        support, and advanced analytics.
+    </description>
+    <dependencies>
+        <dependency>
+            <type>feature</type>
+            <name>ADVANCEDBILLCAPTURE</name>
+        </dependency>
+        <dependency>
+            <type>feature</type>
+            <name>MULTIVENDOR</name>
+        </dependency>
+        <dependency>
+            <type>feature</type>
+            <name>MULTICURRENCY</name>
+        </dependency>
+        <dependency>
+            <type>feature</type>
+            <name>EXPENSEREPORTS</name>
+        </dependency>
+    </dependencies>
+</manifest>
