@@ -139,7 +139,7 @@ define(['N/email', 'N/record', 'N/search', 'N/file', 'N/runtime', 'N/task', 'N/l
             notificationRecipient: scriptObj.getParameter({ name: 'custscript_dm_notify_recipient' }),
             maxAttachmentSize: scriptObj.getParameter({ name: 'custscript_dm_max_attachment_size' }) || 10485760, // 10MB
             trustedSenders: getTrustedSenders(),
-            emailAddress: getFlux CaptureEmailAddress()
+            emailAddress: getFluxCaptureEmailAddress()
         };
     }
 
@@ -224,7 +224,7 @@ define(['N/email', 'N/record', 'N/search', 'N/file', 'N/runtime', 'N/task', 'N/l
     /**
      * Get Flux Capture email address
      */
-    function getFlux CaptureEmailAddress() {
+    function getFluxCaptureEmailAddress() {
         const companyInfo = search.lookupFields({
             type: search.Type.COMPANY_INFORMATION,
             id: 1,
