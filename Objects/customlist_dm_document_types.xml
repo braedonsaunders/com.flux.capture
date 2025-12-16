@@ -1,33 +1,26 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<!-- Document Types Custom List -->
 <customlist scriptid="customlist_dm_document_types">
-    <n>DM Document Types</n>
+    <name>DM Document Types</name>
     <description>Types of documents supported by Flux Capture</description>
     <isordered>T</isordered>
     <customvalues>
         <customvalue scriptid="custval_invoice">
             <value>Invoice</value>
-            <isInactive>F</isInactive>
         </customvalue>
         <customvalue scriptid="custval_receipt">
             <value>Receipt</value>
-            <isInactive>F</isInactive>
         </customvalue>
         <customvalue scriptid="custval_credit_memo">
             <value>Credit Memo</value>
-            <isInactive>F</isInactive>
         </customvalue>
         <customvalue scriptid="custval_expense_report">
             <value>Expense Report</value>
-            <isInactive>F</isInactive>
         </customvalue>
         <customvalue scriptid="custval_purchase_order">
             <value>Purchase Order</value>
-            <isInactive>F</isInactive>
         </customvalue>
         <customvalue scriptid="custval_unknown">
             <value>Unknown</value>
-            <isInactive>F</isInactive>
         </customvalue>
     </customvalues>
 </customlist>
