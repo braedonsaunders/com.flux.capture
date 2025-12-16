@@ -160,7 +160,8 @@ function getGitCommitDeletedFiles() {
 
 function deleteFile(filePath) {
     try {
-        const fileCabinetPath = '/' + filePath.replace(/^src\/FileCabinet\//, '');
+        // Path relative to FileCabinet (no leading slash)
+        const fileCabinetPath = filePath.replace(/^src\/FileCabinet\//, '');
 
         log(`Deleting: ${filePath}`);
         log(`  File Cabinet path: ${fileCabinetPath}`);
@@ -227,7 +228,8 @@ function runProjectDeploy() {
 
 function uploadFile(filePath) {
     try {
-        const fileCabinetPath = '/' + filePath.replace(/^src\/FileCabinet\//, '');
+        // Path relative to FileCabinet (no leading slash)
+        const fileCabinetPath = filePath.replace(/^src\/FileCabinet\//, '');
 
         log(`Uploading: ${filePath}`);
         log(`  File Cabinet path: ${fileCabinetPath}`);
