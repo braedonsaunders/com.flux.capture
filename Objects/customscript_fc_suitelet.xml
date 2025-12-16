@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<suitelet scriptid="customscript_fc_suitelet">
+    <name>Flux Capture</name>
+    <scriptfile>[/SuiteScripts/FluxCapture/FC_Suitelet.js]</scriptfile>
+    <description>Flux Capture - Main Suitelet. Provides the complete UI for document capture including dashboard, upload, review, queue management, and settings.</description>
+    <isinactive>F</isinactive>
+    <notifyadmins>F</notifyadmins>
+    <notifyemails></notifyemails>
+    <notifyowner>T</notifyowner>
+    <notifyuser>F</notifyuser>
+    <status>RELEASED</status>
+    <scriptdeployments>
+        <scriptdeployment scriptid="customdeploy_fc_suitelet">
+            <status>RELEASED</status>
+            <title>Flux Capture</title>
+            <isdeployed>T</isdeployed>
+            <isonline>T</isonline>
+            <loglevel>DEBUG</loglevel>
+            <allroles>F</allroles>
+            <runasrole>ADMINISTRATOR</runasrole>
+            <roles>
+                <role>
+                    <role>ADMINISTRATOR</role>
+                </role>
+                <role>
+                    <role>FULL_ACCESS</role>
+                </role>
+            </roles>
+            <links>
+                <link>
+                    <linklabel>Flux Capture</linklabel>
+                    <linkcategory>LISTS</linkcategory>
+                    <linksubcategory>ACCOUNTS</linksubcategory>
+                </link>
+            </links>
+        </scriptdeployment>
+    </scriptdeployments>
+</suitelet>

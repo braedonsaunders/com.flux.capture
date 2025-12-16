@@ -2,9 +2,9 @@
 
 <div align="center">
   <img src="https://via.placeholder.com/200x200/6366f1/ffffff?text=Flux" alt="Flux Capture Logo" width="200"/>
-  
+
   **AI-Powered Document Capture & Processing Platform**
-  
+
   [![NetSuite](https://img.shields.io/badge/NetSuite-SuiteApp-blue)](https://www.netsuite.com)
   [![SuiteScript](https://img.shields.io/badge/SuiteScript-2.1-green)](https://docs.oracle.com/en/cloud/saas/netsuite/ns-online-help/)
   [![License](https://img.shields.io/badge/License-Proprietary-red)](LICENSE)
@@ -25,19 +25,18 @@ Flux Capture is a world-class, AI-powered document capture SuiteApp for NetSuite
 - **Confidence Scoring** - Every extraction includes a confidence score with weighted field analysis
 
 ### 🔍 Advanced Fraud Detection
-- **Duplicate Invoice Detection** - Smart similarity matching (92% threshold) to catch duplicate submissions
+- **Duplicate Invoice Detection** - Smart similarity matching to catch duplicate submissions
 - **Benford's Law Analysis** - Statistical analysis of number distributions to detect manipulation
-- **Amount Anomaly Detection** - Compares against historical vendor averages (50% deviation threshold)
+- **Amount Anomaly Detection** - Compares against historical vendor averages
 - **Round Number Pattern Detection** - Identifies suspicious patterns in invoice amounts
 
 ### 🧠 Machine Learning Engine
 - **Learn from Corrections** - System improves accuracy by learning from user corrections
 - **Vendor-Specific Patterns** - Builds custom extraction rules per vendor
-- **Field Mapping Memory** - Remembers how to interpret different document layouts
 - **Suggestion Engine** - Provides intelligent suggestions based on historical data
 
 ### 📊 Smart Vendor Matching
-- **Fuzzy String Matching** - Levenshtein distance algorithm for intelligent vendor matching
+- **Fuzzy String Matching** - Intelligent vendor matching algorithm
 - **Multiple Suggestions** - Ranked vendor suggestions with similarity scores
 - **Auto-Match Confidence** - High-confidence matches can be auto-approved
 
@@ -50,55 +49,58 @@ Flux Capture is a world-class, AI-powered document capture SuiteApp for NetSuite
 - **Email-to-Invoice** - Send invoices to a dedicated email address for automatic processing
 - **Trusted Sender Lists** - Configure approved senders and domains
 - **Auto-Processing** - Documents automatically queue for extraction
-- **Confirmation Emails** - Senders receive processing confirmations
 
 ### 📈 Analytics Dashboard
 - **Processing Statistics** - Track total processed, auto-processed, and pending review counts
-- **Performance Trends** - 7-day processing trend visualization
-- **Document Type Breakdown** - Pie chart analysis by document type
+- **Performance Trends** - Processing trend visualization
+- **Document Type Breakdown** - Analysis by document type
 - **Anomaly Alerts** - Real-time alerts for detected issues
 
 ### 🎨 Modern User Interface
 - **Split-Screen Review** - Document preview alongside extraction data
 - **Drag & Drop Upload** - Modern file upload with progress tracking
 - **Mobile Responsive** - Works on tablets and phones
-- **Camera Capture** - Take photos directly on mobile devices
 - **Batch Upload** - Process multiple documents at once
 
 ## Installation
 
 ### Prerequisites
 - NetSuite account with SuiteScript 2.1 support
-- Advanced Bill Capture feature enabled
-- API access for OCI Document Understanding (optional, for unlimited usage)
+- Advanced Bill Capture feature enabled (optional, for OCI integration)
 
-### SuiteCloud Project Setup
+### Simplified Deployment (Recommended)
 
-1. Clone this repository into your SuiteCloud project
-2. Deploy using SuiteCloud Development Framework:
-   ```bash
-   suitecloud project:deploy
-   ```
+Flux Capture uses a **simplified 2-script architecture** for easy deployment:
 
-### Manual Installation
+1. **FC_Suitelet** - Complete UI (Dashboard, Upload, Review, Queue, Settings)
+2. **FC_Router** - RESTlet API handling all operations
 
-1. Upload all script files to `/SuiteScripts/FluxCapture/`
-2. Create custom records and lists from the Objects folder
-3. Configure script deployments:
-   - Suitelet: `DM_MainSuitelet.js`
-   - RESTlet: `DM_API.js`
-   - Map/Reduce: `DM_BatchProcessor.js`
-   - User Event: `DM_DocumentEvents.js`
-   - Client Script: `DM_DocumentClient.js`
-   - Scheduled: `DM_EmailMonitor.js`
+Deploy using SuiteCloud CLI:
+```bash
+suitecloud project:deploy
+```
+
+### GitHub Actions Deployment
+
+This project includes automated deployment via GitHub Actions. Configure these secrets:
+
+| Secret | Description |
+|--------|-------------|
+| `NS_ACCOUNT_ID` | NetSuite account ID (e.g., `TSTDRV1234567`) |
+| `NS_CERTIFICATE_ID` | OAuth certificate ID |
+| `NS_PRIVATE_KEY` | Base64-encoded private key |
+| `NS_PASSKEY` | SuiteCloud CI passkey (32-100 chars) |
 
 ## Project Structure
 
 ```
-FluxCapture/
+com.flux.capture/
 ├── manifest.xml                    # SuiteApp manifest
 ├── deploy.xml                      # Deployment configuration
 ├── README.md                       # This file
+├── .github/
+│   └── workflows/
+│       └── deploy-netsuite.yml     # GitHub Actions deployment
 ├── Objects/                        # Custom record definitions
 │   ├── customrecord_dm_captured_document.xml
 │   ├── customrecord_dm_batch.xml
@@ -106,84 +108,83 @@ FluxCapture/
 │   ├── customlist_dm_status.xml
 │   ├── customlist_dm_document_types.xml
 │   ├── customlist_dm_source.xml
-│   └── customlist_dm_batch_status.xml
-├── src/
-│   ├── suitelet/
-│   │   └── DM_MainSuitelet.js      # Main UI (Dashboard, Upload, Review)
-│   ├── restlet/
-│   │   └── DM_API.js               # RESTful API endpoints
-│   ├── mapreduce/
-│   │   └── DM_BatchProcessor.js    # Batch document processing
-│   ├── userevent/
-│   │   └── DM_DocumentEvents.js    # Record event automation
-│   ├── clientscript/
-│   │   └── DM_DocumentClient.js    # Client-side interactions
-│   ├── scheduled/
-│   │   └── DM_EmailMonitor.js      # Email inbox monitoring
-│   └── library/
-│       └── DM_DocumentIntelligenceEngine.js  # Core AI engine
-└── assets/
-    ├── css/
-    ├── js/
-    └── templates/
+│   ├── customlist_dm_batch_status.xml
+│   ├── customscript_fc_router.xml      # RESTlet deployment
+│   └── customscript_fc_suitelet.xml    # Suitelet deployment
+└── FileCabinet/
+    └── SuiteScripts/
+        └── FluxCapture/
+            ├── FC_Engine.js        # Core AI/OCR processing engine
+            ├── FC_Router.js        # RESTlet API (single entry point)
+            └── FC_Suitelet.js      # Complete UI (single Suitelet)
 ```
+
+## Architecture
+
+### Simplified 2-Script Design
+
+| Script | Type | Purpose |
+|--------|------|---------|
+| **FC_Suitelet** | Suitelet | Complete web UI - Dashboard, Upload, Review, Queue, Batch, Settings |
+| **FC_Router** | RESTlet | All API operations - CRUD, upload, process, approve, batch, email import |
+| **FC_Engine** | Library | Core processing - OCR, vendor matching, fraud detection, confidence scoring |
+
+### Why 2 Scripts?
+
+- **Easy Deployment** - Only 2 script records to manage
+- **Simplified Permissions** - Fewer deployments to configure
+- **Single API Entry Point** - FC_Router handles all API calls with action routing
+- **Embedded Client Logic** - No separate client script needed
+- **No Scheduled Scripts** - Email import triggered via RESTlet endpoint (use external scheduler)
 
 ## Script Details
 
-### DM_DocumentIntelligenceEngine.js (Library)
-The core document processing engine with:
-- `DocumentCaptureEngine` - Main orchestrator for document processing
-- `TransactionCreator` - Creates NetSuite transactions from extractions
-- `LearningEngine` - Machine learning from user corrections
+### FC_Engine.js (Library Module)
+Core document processing engine:
+- `FluxCaptureEngine` class - Main orchestrator for document processing
 - Vendor matching with fuzzy logic
-- Fraud detection algorithms
-- Multi-currency support
+- Fraud/anomaly detection algorithms
+- Confidence scoring calculation
 
-### DM_MainSuitelet.js (Suitelet)
-Modern web UI featuring:
+### FC_Suitelet.js (Suitelet)
+Complete web UI featuring:
 - **Dashboard** - Statistics, charts, recent documents, anomaly alerts
 - **Upload** - Drag-drop file upload with type detection
 - **Review** - Split-screen document review interface
-- Responsive design with Chart.js visualizations
+- **Queue** - Processing queue with filters and bulk actions
+- **Batch** - Batch upload and management
+- **Settings** - Configuration options
 
-### DM_API.js (RESTlet)
-RESTful API with endpoints for:
-- File upload and processing
-- Document status updates
-- Batch operations
-- Statistics retrieval
-- Settings management
+### FC_Router.js (RESTlet)
+RESTful API router with all operations:
 
-### DM_BatchProcessor.js (Map/Reduce)
-High-performance batch processing:
-- Parallel document processing
-- Governance management
-- Error handling and retry logic
-- Progress tracking
+**GET Endpoints:**
+- `action=document&id=123` - Get document details
+- `action=list` - List documents with filters
+- `action=queue` - Get processing queue
+- `action=stats` - Dashboard statistics
+- `action=vendors&query=xyz` - Search vendors
+- `action=batches` - List batches
+- `action=health` - Health check
 
-### DM_DocumentEvents.js (User Event)
-Record automation:
-- Status change workflows
-- Transaction creation on approval
-- Notification triggers
-- Learning engine integration
-- Audit trail maintenance
+**POST Endpoints:**
+- `action=upload` - Upload single document
+- `action=batch` - Upload batch
+- `action=process` - Process document
+- `action=reprocess` - Reprocess document
+- `action=emailImport` - Import from email
+- `action=learn` - Submit correction
 
-### DM_DocumentClient.js (Client Script)
-Client-side enhancements:
-- Real-time validation
-- Auto-save functionality
-- Keyboard shortcuts
-- Smart suggestions
-- Visual feedback
+**PUT Endpoints:**
+- `action=update` - Update document
+- `action=approve` - Approve and create transaction
+- `action=reject` - Reject document
+- `action=status` - Update status
 
-### DM_EmailMonitor.js (Scheduled)
-Email inbox monitoring:
-- Polls inbox every 15 minutes
-- Trusted sender validation
-- Auto-document creation
-- Confirmation emails
-- Error handling
+**DELETE Endpoints:**
+- `action=document&id=123` - Delete document
+- `action=batch&batchId=456` - Delete batch
+- `action=clear` - Clear completed documents
 
 ## Custom Records
 
@@ -202,80 +203,44 @@ Groups multiple documents for batch processing:
 - Document counts and progress
 - Status tracking
 - Total value calculations
-- Average confidence
 
 ### DM Learning Record (`customrecord_dm_learning`)
 Stores user corrections for ML improvement:
 - Original vs corrected values
 - Pattern recognition data
 - Occurrence counts
-- Vendor associations
 
-## Configuration
-
-### Script Parameters
-
-**Main Suitelet:**
-- `custscript_dm_auto_approve_threshold` - Confidence threshold for auto-approval (default: 85%)
-- `custscript_dm_default_doc_type` - Default document type
-
-**Email Monitor:**
-- `custscript_dm_email_enabled` - Enable/disable email monitoring
-- `custscript_dm_auto_process` - Auto-process email attachments
-- `custscript_dm_inbox_folder` - File cabinet folder for inbox
-- `custscript_dm_notify_complete` - Send completion notifications
-
-## API Reference
+## API Examples
 
 ### Upload Document
 ```javascript
-POST /app/site/hosting/restlet.nl?script=customscript_dm_api&deploy=customdeploy_dm_api
+POST /app/site/hosting/restlet.nl?script=customscript_fc_router&deploy=customdeploy_fc_router
 Content-Type: application/json
 
 {
   "action": "upload",
-  "files": [
-    {
-      "name": "invoice.pdf",
-      "content": "base64encodedcontent",
-      "type": "pdf"
-    }
-  ],
-  "options": {
-    "documentType": "INVOICE",
-    "autoProcess": true
-  }
+  "fileName": "invoice.pdf",
+  "fileContent": "base64encodedcontent",
+  "documentType": "auto"
 }
-```
-
-### Get Document Status
-```javascript
-GET /app/site/hosting/restlet.nl?script=customscript_dm_api&deploy=customdeploy_dm_api&action=status&documentId=12345
 ```
 
 ### Approve Document
 ```javascript
-POST /app/site/hosting/restlet.nl?script=customscript_dm_api&deploy=customdeploy_dm_api
+PUT /app/site/hosting/restlet.nl?script=customscript_fc_router&deploy=customdeploy_fc_router
 Content-Type: application/json
 
 {
   "action": "approve",
   "documentId": 12345,
-  "corrections": {
-    "vendor": 456,
-    "totalAmount": 1500.00
-  }
+  "createTransaction": true
 }
 ```
 
-## Fraud Detection Thresholds
-
-| Detection Type | Threshold | Description |
-|----------------|-----------|-------------|
-| Duplicate Similarity | 92% | Minimum similarity for duplicate detection |
-| Amount Deviation | 50% | Max deviation from vendor average |
-| Benford Deviation | 15% | Max deviation from expected distribution |
-| Round Number Pattern | 60% | Threshold for suspicious round numbers |
+### Get Dashboard Stats
+```javascript
+GET /app/site/hosting/restlet.nl?script=customscript_fc_router&deploy=customdeploy_fc_router&action=stats
+```
 
 ## Confidence Scoring
 
@@ -283,15 +248,25 @@ Weighted calculation:
 - Vendor Name: 20%
 - Invoice Number: 15%
 - Invoice Date: 10%
-- Total Amount: 20%
+- Total Amount: 25%
 - Line Items: 15%
-- Vendor Match: 10%
-- Amount Validation: 10%
+- Vendor Match: 15%
 
 **Levels:**
-- HIGH: ≥85%
-- MEDIUM: ≥60%
-- LOW: <60%
+- HIGH: ≥85% (auto-approvable)
+- MEDIUM: ≥60% (needs review)
+- LOW: <60% (needs review)
+
+## Deployment Summary
+
+After deployment, you will have:
+
+| Component | Count |
+|-----------|-------|
+| **Scripts** | 2 (1 Suitelet + 1 RESTlet) |
+| **Custom Records** | 3 |
+| **Custom Lists** | 4 |
+| **Total Objects** | 9 |
 
 ## Support
 

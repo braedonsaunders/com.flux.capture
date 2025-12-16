@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<restlet scriptid="customscript_fc_router">
+    <name>Flux Capture Router</name>
+    <scriptfile>[/SuiteScripts/FluxCapture/FC_Router.js]</scriptfile>
+    <description>Flux Capture - Main API Router RESTlet. Handles all document capture API operations including upload, processing, review, approval, and batch operations.</description>
+    <isinactive>F</isinactive>
+    <notifyadmins>F</notifyadmins>
+    <notifyemails></notifyemails>
+    <notifyowner>T</notifyowner>
+    <notifyuser>F</notifyuser>
+    <status>RELEASED</status>
+    <scriptdeployments>
+        <scriptdeployment scriptid="customdeploy_fc_router">
+            <status>RELEASED</status>
+            <title>Flux Capture Router</title>
+            <isdeployed>T</isdeployed>
+            <loglevel>DEBUG</loglevel>
+            <allroles>F</allroles>
+            <runasrole>ADMINISTRATOR</runasrole>
+            <roles>
+                <role>
+                    <role>ADMINISTRATOR</role>
+                </role>
+                <role>
+                    <role>FULL_ACCESS</role>
+                </role>
+            </roles>
+        </scriptdeployment>
+    </scriptdeployments>
+</restlet>
