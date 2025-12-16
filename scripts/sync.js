@@ -27,8 +27,6 @@ const FILE_CABINET_PATH = 'src/FileCabinet/SuiteApps/com.flux.capture';
 // File extensions to sync
 const SYNCABLE_EXTENSIONS = ['.js', '.css', '.html', '.json', '.xml'];
 
-// Track which folders we've already created this session
-const createdFolders = new Set();
 
 function log(message, type = 'info') {
     const prefix = {
@@ -204,45 +202,27 @@ function deleteFiles(files) {
     return { success, failed };
 }
 
-function ensureFolderExists(folderPath) {
-    // Skip if we already created this folder in this session
-    if (createdFolders.has(folderPath)) {
-        return true;
-    }
+// Track if we've already tried project:deploy this session
+let triedProjectDeploy = false;
 
-    try {
-        log(`  Creating folder: ${folderPath}`);
-        const output = execSync(`suitecloud file:create --path "${folderPath}" --type FOLDER`, {
-            encoding: 'utf8',
-            stdio: ['pipe', 'pipe', 'pipe']
-        });
-        createdFolders.add(folderPath);
-        log(`  Folder created`, 'success');
-        return true;
-    } catch (e) {
-        const errorMsg = e.stderr || e.stdout || e.message || '';
-        // Folder already exists is fine
-        if (errorMsg.includes('already exists') || errorMsg.includes('duplicate')) {
-            createdFolders.add(folderPath);
-            return true;
-        }
-        log(`  Could not create folder: ${errorMsg}`, 'warn');
+function runProjectDeploy() {
+    if (triedProjectDeploy) {
         return false;
     }
-}
+    triedProjectDeploy = true;
 
-function createFolderHierarchy(fileCabinetPath) {
-    const folderPath = path.dirname(fileCabinetPath);
-    const parts = folderPath.split('/').filter(p => p);
-    let currentPath = '';
-
-    for (const part of parts) {
-        currentPath += '/' + part;
-        if (!ensureFolderExists(currentPath)) {
-            return false;
-        }
+    try {
+        log(`Running project:deploy to create folder structure...`, 'info');
+        execSync('suitecloud project:deploy', {
+            encoding: 'utf8',
+            stdio: 'inherit'
+        });
+        log(`Project deployed successfully`, 'success');
+        return true;
+    } catch (e) {
+        log(`Project deploy failed: ${e.message}`, 'error');
+        return false;
     }
-    return true;
 }
 
 function uploadFile(filePath) {
@@ -257,12 +237,12 @@ function uploadFile(filePath) {
             stdio: ['pipe', 'pipe', 'pipe']
         });
 
-        // Check for failure - if folder doesn't exist, create it and retry
+        // Check for failure - if folder doesn't exist, run project:deploy and retry
         if (output && (output.includes('were not uploaded') || output.includes('problem when uploading') || output.includes('does not exist'))) {
-            log(`  Upload failed, attempting to create folders...`, 'warn');
+            log(`  Upload failed, folder may not exist...`, 'warn');
 
-            // Create the folder hierarchy
-            if (createFolderHierarchy(fileCabinetPath)) {
+            // Run project:deploy to create folder structure
+            if (runProjectDeploy()) {
                 // Retry upload
                 log(`  Retrying upload...`);
                 output = execSync(`suitecloud file:upload --paths "${fileCabinetPath}"`, {
@@ -275,7 +255,7 @@ function uploadFile(filePath) {
                     return false;
                 }
             } else {
-                log(`  FAILED: Could not create folders`, 'error');
+                log(`  FAILED: Could not create folder structure`, 'error');
                 return false;
             }
         }
