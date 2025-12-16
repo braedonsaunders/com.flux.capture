@@ -12,19 +12,11 @@
     <enablenumbering>T</enablenumbering>
     <numberingprefix>DM-DOC-</numberingprefix>
     <numberingmindigits>6</numberingmindigits>
-    <enabledle>F</enabledle>
     <enablekeywords>T</enablekeywords>
-    <enablemailmerge>F</enablemailmerge>
-    <recordaccesslevel>USEPERMISSIONLIST</recordaccesslevel>
     <isordered>F</isordered>
     <description>Flux Capture Document - Stores captured documents with extraction data</description>
-    <disclaimer></disclaimer>
-    <icon>DOCUMENT</icon>
-    <iconbuiltin>T</iconbuiltin>
-    <iconindex>0</iconindex>
-    
+
     <customrecordcustomfields>
-        <!-- Source File -->
         <customrecordcustomfield scriptid="custrecord_dm_source_file">
             <fieldtype>DOCUMENT</fieldtype>
             <label>Source File</label>
@@ -33,8 +25,7 @@
             <displaytype>NORMAL</displaytype>
             <showinlist>F</showinlist>
         </customrecordcustomfield>
-        
-        <!-- Document ID -->
+
         <customrecordcustomfield scriptid="custrecord_dm_document_id">
             <fieldtype>TEXT</fieldtype>
             <label>Document ID</label>
@@ -42,10 +33,8 @@
             <ismandatory>F</ismandatory>
             <displaytype>NORMAL</displaytype>
             <showinlist>T</showinlist>
-            <isformula>F</isformula>
         </customrecordcustomfield>
-        
-        <!-- Document Type -->
+
         <customrecordcustomfield scriptid="custrecord_dm_document_type">
             <fieldtype>SELECT</fieldtype>
             <label>Document Type</label>
@@ -53,10 +42,9 @@
             <ismandatory>F</ismandatory>
             <displaytype>NORMAL</displaytype>
             <showinlist>T</showinlist>
-            <selectrecordtype>-customlist_dm_document_types</selectrecordtype>
+            <selectrecordtype>[scriptid=customlist_dm_document_types]</selectrecordtype>
         </customrecordcustomfield>
-        
-        <!-- Status -->
+
         <customrecordcustomfield scriptid="custrecord_dm_status">
             <fieldtype>SELECT</fieldtype>
             <label>Status</label>
@@ -64,10 +52,9 @@
             <ismandatory>F</ismandatory>
             <displaytype>NORMAL</displaytype>
             <showinlist>T</showinlist>
-            <selectrecordtype>-customlist_dm_status</selectrecordtype>
+            <selectrecordtype>[scriptid=customlist_dm_status]</selectrecordtype>
         </customrecordcustomfield>
-        
-        <!-- Vendor -->
+
         <customrecordcustomfield scriptid="custrecord_dm_vendor">
             <fieldtype>SELECT</fieldtype>
             <label>Vendor</label>
@@ -75,10 +62,9 @@
             <ismandatory>F</ismandatory>
             <displaytype>NORMAL</displaytype>
             <showinlist>T</showinlist>
-            <selectrecordtype>-4</selectrecordtype> <!-- Vendor -->
+            <selectrecordtype>-3</selectrecordtype>
         </customrecordcustomfield>
-        
-        <!-- Vendor Match Confidence -->
+
         <customrecordcustomfield scriptid="custrecord_dm_vendor_match_confidence">
             <fieldtype>PERCENT</fieldtype>
             <label>Vendor Match Confidence</label>
@@ -87,8 +73,7 @@
             <displaytype>NORMAL</displaytype>
             <showinlist>F</showinlist>
         </customrecordcustomfield>
-        
-        <!-- Invoice Number -->
+
         <customrecordcustomfield scriptid="custrecord_dm_invoice_number">
             <fieldtype>TEXT</fieldtype>
             <label>Invoice Number</label>
@@ -97,8 +82,7 @@
             <displaytype>NORMAL</displaytype>
             <showinlist>T</showinlist>
         </customrecordcustomfield>
-        
-        <!-- Invoice Date -->
+
         <customrecordcustomfield scriptid="custrecord_dm_invoice_date">
             <fieldtype>DATE</fieldtype>
             <label>Invoice Date</label>
@@ -107,8 +91,7 @@
             <displaytype>NORMAL</displaytype>
             <showinlist>T</showinlist>
         </customrecordcustomfield>
-        
-        <!-- Due Date -->
+
         <customrecordcustomfield scriptid="custrecord_dm_due_date">
             <fieldtype>DATE</fieldtype>
             <label>Due Date</label>
@@ -117,8 +100,7 @@
             <displaytype>NORMAL</displaytype>
             <showinlist>F</showinlist>
         </customrecordcustomfield>
-        
-        <!-- Subtotal -->
+
         <customrecordcustomfield scriptid="custrecord_dm_subtotal">
             <fieldtype>CURRENCY</fieldtype>
             <label>Subtotal</label>
@@ -127,8 +109,7 @@
             <displaytype>NORMAL</displaytype>
             <showinlist>F</showinlist>
         </customrecordcustomfield>
-        
-        <!-- Tax Amount -->
+
         <customrecordcustomfield scriptid="custrecord_dm_tax_amount">
             <fieldtype>CURRENCY</fieldtype>
             <label>Tax Amount</label>
@@ -137,8 +118,7 @@
             <displaytype>NORMAL</displaytype>
             <showinlist>F</showinlist>
         </customrecordcustomfield>
-        
-        <!-- Total Amount -->
+
         <customrecordcustomfield scriptid="custrecord_dm_total_amount">
             <fieldtype>CURRENCY</fieldtype>
             <label>Total Amount</label>
@@ -147,8 +127,7 @@
             <displaytype>NORMAL</displaytype>
             <showinlist>T</showinlist>
         </customrecordcustomfield>
-        
-        <!-- Currency -->
+
         <customrecordcustomfield scriptid="custrecord_dm_currency">
             <fieldtype>SELECT</fieldtype>
             <label>Currency</label>
@@ -156,10 +135,9 @@
             <ismandatory>F</ismandatory>
             <displaytype>NORMAL</displaytype>
             <showinlist>F</showinlist>
-            <selectrecordtype>-122</selectrecordtype> <!-- Currency -->
+            <selectrecordtype>-122</selectrecordtype>
         </customrecordcustomfield>
-        
-        <!-- PO Number -->
+
         <customrecordcustomfield scriptid="custrecord_dm_po_number">
             <fieldtype>TEXT</fieldtype>
             <label>PO Number</label>
@@ -168,29 +146,25 @@
             <displaytype>NORMAL</displaytype>
             <showinlist>F</showinlist>
         </customrecordcustomfield>
-        
-        <!-- Payment Terms -->
+
         <customrecordcustomfield scriptid="custrecord_dm_payment_terms">
-            <fieldtype>SELECT</fieldtype>
+            <fieldtype>TEXT</fieldtype>
             <label>Payment Terms</label>
             <description>Payment terms</description>
             <ismandatory>F</ismandatory>
             <displaytype>NORMAL</displaytype>
             <showinlist>F</showinlist>
-            <selectrecordtype>-34</selectrecordtype> <!-- Term -->
         </customrecordcustomfield>
-        
-        <!-- Line Items (JSON) -->
+
         <customrecordcustomfield scriptid="custrecord_dm_line_items">
-            <fieldtype>LONGTEXT</fieldtype>
+            <fieldtype>TEXTAREA</fieldtype>
             <label>Line Items</label>
             <description>Extracted line items as JSON</description>
             <ismandatory>F</ismandatory>
             <displaytype>NORMAL</displaytype>
             <showinlist>F</showinlist>
         </customrecordcustomfield>
-        
-        <!-- Confidence Score -->
+
         <customrecordcustomfield scriptid="custrecord_dm_confidence_score">
             <fieldtype>PERCENT</fieldtype>
             <label>Confidence Score</label>
@@ -199,18 +173,16 @@
             <displaytype>NORMAL</displaytype>
             <showinlist>T</showinlist>
         </customrecordcustomfield>
-        
-        <!-- Anomalies (JSON) -->
+
         <customrecordcustomfield scriptid="custrecord_dm_anomalies">
-            <fieldtype>LONGTEXT</fieldtype>
+            <fieldtype>TEXTAREA</fieldtype>
             <label>Anomalies</label>
             <description>Detected anomalies as JSON</description>
             <ismandatory>F</ismandatory>
             <displaytype>NORMAL</displaytype>
             <showinlist>F</showinlist>
         </customrecordcustomfield>
-        
-        <!-- Amount Validated -->
+
         <customrecordcustomfield scriptid="custrecord_dm_amount_validated">
             <fieldtype>CHECKBOX</fieldtype>
             <label>Amount Validated</label>
@@ -219,8 +191,7 @@
             <displaytype>NORMAL</displaytype>
             <showinlist>F</showinlist>
         </customrecordcustomfield>
-        
-        <!-- Batch ID -->
+
         <customrecordcustomfield scriptid="custrecord_dm_batch_id">
             <fieldtype>SELECT</fieldtype>
             <label>Batch</label>
@@ -228,10 +199,9 @@
             <ismandatory>F</ismandatory>
             <displaytype>NORMAL</displaytype>
             <showinlist>F</showinlist>
-            <selectrecordtype>-customrecord_dm_batch</selectrecordtype>
+            <selectrecordtype>[scriptid=customrecord_dm_batch]</selectrecordtype>
         </customrecordcustomfield>
-        
-        <!-- Source -->
+
         <customrecordcustomfield scriptid="custrecord_dm_source">
             <fieldtype>SELECT</fieldtype>
             <label>Source</label>
@@ -239,10 +209,9 @@
             <ismandatory>F</ismandatory>
             <displaytype>NORMAL</displaytype>
             <showinlist>T</showinlist>
-            <selectrecordtype>-customlist_dm_source</selectrecordtype>
+            <selectrecordtype>[scriptid=customlist_dm_source]</selectrecordtype>
         </customrecordcustomfield>
-        
-        <!-- Created Transaction -->
+
         <customrecordcustomfield scriptid="custrecord_dm_created_transaction">
             <fieldtype>TEXT</fieldtype>
             <label>Created Transaction</label>
@@ -251,8 +220,7 @@
             <displaytype>NORMAL</displaytype>
             <showinlist>F</showinlist>
         </customrecordcustomfield>
-        
-        <!-- Create Transaction Flag -->
+
         <customrecordcustomfield scriptid="custrecord_dm_create_transaction">
             <fieldtype>CHECKBOX</fieldtype>
             <label>Create Transaction</label>
@@ -262,8 +230,7 @@
             <showinlist>F</showinlist>
             <defaultchecked>T</defaultchecked>
         </customrecordcustomfield>
-        
-        <!-- Rejection Reason -->
+
         <customrecordcustomfield scriptid="custrecord_dm_rejection_reason">
             <fieldtype>TEXTAREA</fieldtype>
             <label>Rejection Reason</label>
@@ -272,8 +239,7 @@
             <displaytype>NORMAL</displaytype>
             <showinlist>F</showinlist>
         </customrecordcustomfield>
-        
-        <!-- Error Message -->
+
         <customrecordcustomfield scriptid="custrecord_dm_error_message">
             <fieldtype>TEXTAREA</fieldtype>
             <label>Error Message</label>
@@ -282,8 +248,7 @@
             <displaytype>NORMAL</displaytype>
             <showinlist>F</showinlist>
         </customrecordcustomfield>
-        
-        <!-- Uploaded By -->
+
         <customrecordcustomfield scriptid="custrecord_dm_uploaded_by">
             <fieldtype>SELECT</fieldtype>
             <label>Uploaded By</label>
@@ -291,10 +256,9 @@
             <ismandatory>F</ismandatory>
             <displaytype>NORMAL</displaytype>
             <showinlist>T</showinlist>
-            <selectrecordtype>-4</selectrecordtype> <!-- Employee -->
+            <selectrecordtype>-4</selectrecordtype>
         </customrecordcustomfield>
-        
-        <!-- Created Date -->
+
         <customrecordcustomfield scriptid="custrecord_dm_created_date">
             <fieldtype>DATETIMETZ</fieldtype>
             <label>Created Date</label>
@@ -303,8 +267,7 @@
             <displaytype>NORMAL</displaytype>
             <showinlist>T</showinlist>
         </customrecordcustomfield>
-        
-        <!-- Modified Date -->
+
         <customrecordcustomfield scriptid="custrecord_dm_modified_date">
             <fieldtype>DATETIMETZ</fieldtype>
             <label>Modified Date</label>
@@ -313,38 +276,34 @@
             <displaytype>NORMAL</displaytype>
             <showinlist>F</showinlist>
         </customrecordcustomfield>
-        
-        <!-- Status History (JSON) -->
+
         <customrecordcustomfield scriptid="custrecord_dm_status_history">
-            <fieldtype>LONGTEXT</fieldtype>
+            <fieldtype>TEXTAREA</fieldtype>
             <label>Status History</label>
             <description>Status change history as JSON</description>
             <ismandatory>F</ismandatory>
             <displaytype>HIDDEN</displaytype>
             <showinlist>F</showinlist>
         </customrecordcustomfield>
-        
-        <!-- User Corrections (JSON) -->
+
         <customrecordcustomfield scriptid="custrecord_dm_user_corrections">
-            <fieldtype>LONGTEXT</fieldtype>
+            <fieldtype>TEXTAREA</fieldtype>
             <label>User Corrections</label>
             <description>Manual corrections made by user</description>
             <ismandatory>F</ismandatory>
             <displaytype>HIDDEN</displaytype>
             <showinlist>F</showinlist>
         </customrecordcustomfield>
-        
-        <!-- Extracted Text -->
+
         <customrecordcustomfield scriptid="custrecord_dm_extracted_text">
-            <fieldtype>LONGTEXT</fieldtype>
+            <fieldtype>TEXTAREA</fieldtype>
             <label>Extracted Text</label>
             <description>Full text extracted from document</description>
             <ismandatory>F</ismandatory>
             <displaytype>HIDDEN</displaytype>
             <showinlist>F</showinlist>
         </customrecordcustomfield>
-        
-        <!-- Processing Time -->
+
         <customrecordcustomfield scriptid="custrecord_dm_processing_time">
             <fieldtype>INTEGER</fieldtype>
             <label>Processing Time (ms)</label>
@@ -353,8 +312,7 @@
             <displaytype>NORMAL</displaytype>
             <showinlist>F</showinlist>
         </customrecordcustomfield>
-        
-        <!-- Email Fields -->
+
         <customrecordcustomfield scriptid="custrecord_dm_email_sender">
             <fieldtype>EMAIL</fieldtype>
             <label>Email Sender</label>
@@ -363,7 +321,7 @@
             <displaytype>NORMAL</displaytype>
             <showinlist>F</showinlist>
         </customrecordcustomfield>
-        
+
         <customrecordcustomfield scriptid="custrecord_dm_email_subject">
             <fieldtype>TEXT</fieldtype>
             <label>Email Subject</label>
@@ -372,7 +330,7 @@
             <displaytype>NORMAL</displaytype>
             <showinlist>F</showinlist>
         </customrecordcustomfield>
-        
+
         <customrecordcustomfield scriptid="custrecord_dm_email_received">
             <fieldtype>DATETIMETZ</fieldtype>
             <label>Email Received</label>
@@ -382,9 +340,4 @@
             <showinlist>F</showinlist>
         </customrecordcustomfield>
     </customrecordcustomfields>
-    
-    <!-- Permissions -->
-    <recordsublists/>
-    
-    <links/>
 </customrecordtype>

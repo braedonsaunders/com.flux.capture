@@ -8,7 +8,6 @@
     <notifyemails></notifyemails>
     <notifyowner>T</notifyowner>
     <notifyuser>F</notifyuser>
-    <status>RELEASED</status>
     <scriptdeployments>
         <scriptdeployment scriptid="customdeploy_fc_suitelet">
             <status>RELEASED</status>
@@ -16,23 +15,7 @@
             <isdeployed>T</isdeployed>
             <isonline>T</isonline>
             <loglevel>DEBUG</loglevel>
-            <allroles>F</allroles>
-            <runasrole>ADMINISTRATOR</runasrole>
-            <roles>
-                <role>
-                    <role>ADMINISTRATOR</role>
-                </role>
-                <role>
-                    <role>FULL_ACCESS</role>
-                </role>
-            </roles>
-            <links>
-                <link>
-                    <linklabel>Flux Capture</linklabel>
-                    <linkcategory>LISTS</linkcategory>
-                    <linksubcategory>ACCOUNTS</linksubcategory>
-                </link>
-            </links>
+            <allroles>T</allroles>
         </scriptdeployment>
     </scriptdeployments>
 </suitelet>
