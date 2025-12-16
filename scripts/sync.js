@@ -7,8 +7,7 @@
  * Usage:
  *   node scripts/sync.js              # Sync changed files since last sync (local dev)
  *   node scripts/sync.js --ci         # Sync only files changed in latest commit (for CI/CD)
- *   node scripts/sync.js --all        # Force sync all files (creates folders if needed)
- *   node scripts/sync.js --init       # Initial deploy - creates folders and syncs all files
+ *   node scripts/sync.js --all        # Force sync all files
  *   node scripts/sync.js --watch      # Watch for changes and auto-sync
  *   node scripts/sync.js --no-delete  # Skip deletion of removed files
  *
@@ -27,6 +26,9 @@ const FILE_CABINET_PATH = 'src/FileCabinet/SuiteApps/com.flux.capture';
 
 // File extensions to sync
 const SYNCABLE_EXTENSIONS = ['.js', '.css', '.html', '.json', '.xml'];
+
+// Track which folders we've already created this session
+const createdFolders = new Set();
 
 function log(message, type = 'info') {
     const prefix = {
@@ -57,7 +59,6 @@ function getFileHash(filePath) {
     try {
         const stats = fs.statSync(filePath);
         const content = fs.readFileSync(filePath);
-        // Simple hash: mtime + size + first/last bytes
         return `${stats.mtimeMs}-${stats.size}-${content.slice(0, 100).toString('hex')}`;
     } catch (e) {
         return null;
@@ -98,7 +99,6 @@ function getChangedFiles(state) {
 
 function getGitChangedFiles() {
     try {
-        // Get files changed since last commit (staged + unstaged)
         const output = execSync('git diff --name-only HEAD 2>/dev/null || git diff --name-only', {
             encoding: 'utf8'
         }).trim();
@@ -114,20 +114,16 @@ function getGitChangedFiles() {
 }
 
 function getBaseRef() {
-    // Use BASE_SHA environment variable if provided (from CI)
-    // This allows comparing against the full range of pushed commits
     const baseSha = process.env.BASE_SHA;
     if (baseSha && baseSha !== '0000000000000000000000000000000000000000') {
         return baseSha;
     }
-    // Fallback to HEAD~1 for local development or first push
     return 'HEAD~1';
 }
 
 function getGitCommitChangedFiles() {
     try {
         const baseRef = getBaseRef();
-        // Get files changed since the base ref (for CI mode)
         log(`Comparing changes from ${baseRef} to HEAD...`);
         const output = execSync(`git diff --name-only ${baseRef} HEAD 2>/dev/null`, {
             encoding: 'utf8'
@@ -138,9 +134,8 @@ function getGitCommitChangedFiles() {
         return output.split('\n')
             .filter(f => f.startsWith(FILE_CABINET_PATH))
             .filter(f => SYNCABLE_EXTENSIONS.includes(path.extname(f).toLowerCase()))
-            .filter(f => fs.existsSync(f)); // Only include files that exist (not deleted)
+            .filter(f => fs.existsSync(f));
     } catch (e) {
-        // Fallback: if git diff fails (e.g., first commit), return all files
         log('Could not detect changed files, syncing all files', 'warn');
         return getAllFiles(FILE_CABINET_PATH);
     }
@@ -149,7 +144,6 @@ function getGitCommitChangedFiles() {
 function getGitCommitDeletedFiles() {
     try {
         const baseRef = getBaseRef();
-        // Get files deleted since the base ref using --diff-filter=D
         log(`Detecting deleted files from ${baseRef} to HEAD...`);
         const output = execSync(`git diff --name-only --diff-filter=D ${baseRef} HEAD 2>/dev/null`, {
             encoding: 'utf8'
@@ -168,7 +162,6 @@ function getGitCommitDeletedFiles() {
 
 function deleteFile(filePath) {
     try {
-        // Transform local path to File Cabinet path
         const fileCabinetPath = '/' + filePath.replace(/^src\/FileCabinet\//, '');
 
         log(`Deleting: ${filePath}`);
@@ -212,18 +205,25 @@ function deleteFiles(files) {
 }
 
 function ensureFolderExists(folderPath) {
+    // Skip if we already created this folder in this session
+    if (createdFolders.has(folderPath)) {
+        return true;
+    }
+
     try {
-        log(`Creating folder: ${folderPath}`);
-        execSync(`suitecloud file:create --paths "${folderPath}" --type FOLDER`, {
+        log(`  Creating folder: ${folderPath}`);
+        const output = execSync(`suitecloud file:create --paths "${folderPath}" --type FOLDER`, {
             encoding: 'utf8',
             stdio: ['pipe', 'pipe', 'pipe']
         });
+        createdFolders.add(folderPath);
+        log(`  Folder created`, 'success');
         return true;
     } catch (e) {
-        // Folder might already exist, that's OK
         const errorMsg = e.stderr || e.stdout || e.message || '';
-        if (errorMsg.includes('already exists')) {
-            log(`  Folder already exists`, 'info');
+        // Folder already exists is fine
+        if (errorMsg.includes('already exists') || errorMsg.includes('duplicate')) {
+            createdFolders.add(folderPath);
             return true;
         }
         log(`  Could not create folder: ${errorMsg}`, 'warn');
@@ -231,11 +231,22 @@ function ensureFolderExists(folderPath) {
     }
 }
 
-function uploadFile(filePath, createFolders = false) {
+function createFolderHierarchy(fileCabinetPath) {
+    const folderPath = path.dirname(fileCabinetPath);
+    const parts = folderPath.split('/').filter(p => p);
+    let currentPath = '';
+
+    for (const part of parts) {
+        currentPath += '/' + part;
+        if (!ensureFolderExists(currentPath)) {
+            return false;
+        }
+    }
+    return true;
+}
+
+function uploadFile(filePath) {
     try {
-        // Transform local path to File Cabinet path
-        // Local: src/FileCabinet/SuiteApps/com.flux.capture/FC_Router.js
-        // CLI needs: /SuiteApps/com.flux.capture/FC_Router.js
         const fileCabinetPath = '/' + filePath.replace(/^src\/FileCabinet\//, '');
 
         log(`Uploading: ${filePath}`);
@@ -246,21 +257,12 @@ function uploadFile(filePath, createFolders = false) {
             stdio: ['pipe', 'pipe', 'pipe']
         });
 
-        // Check for failure indicators in the response (CLI returns 0 even on failure)
+        // Check for failure - if folder doesn't exist, create it and retry
         if (output && (output.includes('were not uploaded') || output.includes('problem when uploading') || output.includes('does not exist'))) {
-            // If folder doesn't exist and we should create folders, try creating them
-            if (createFolders && output.includes('does not exist')) {
-                const folderPath = path.dirname(fileCabinetPath);
-                log(`  Folder doesn't exist, creating: ${folderPath}`, 'warn');
+            log(`  Upload failed, attempting to create folders...`, 'warn');
 
-                // Create folder hierarchy
-                const parts = folderPath.split('/').filter(p => p);
-                let currentPath = '';
-                for (const part of parts) {
-                    currentPath += '/' + part;
-                    ensureFolderExists(currentPath);
-                }
-
+            // Create the folder hierarchy
+            if (createFolderHierarchy(fileCabinetPath)) {
                 // Retry upload
                 log(`  Retrying upload...`);
                 output = execSync(`suitecloud file:upload --paths "${fileCabinetPath}"`, {
@@ -269,17 +271,17 @@ function uploadFile(filePath, createFolders = false) {
                 });
 
                 if (output && (output.includes('were not uploaded') || output.includes('problem when uploading') || output.includes('does not exist'))) {
-                    log(`  FAILED after folder creation: ${output.trim()}`, 'error');
+                    log(`  FAILED: ${output.trim()}`, 'error');
                     return false;
                 }
             } else {
-                log(`  FAILED: ${output.trim()}`, 'error');
+                log(`  FAILED: Could not create folders`, 'error');
                 return false;
             }
         }
 
-        if (output) {
-            log(`  Output: ${output.trim()}`, 'success');
+        if (output && !output.includes('FAILED')) {
+            log(`  Success`, 'success');
         }
         return true;
     } catch (e) {
@@ -289,7 +291,7 @@ function uploadFile(filePath, createFolders = false) {
     }
 }
 
-function uploadFiles(files, createFolders = false) {
+function uploadFiles(files) {
     if (files.length === 0) {
         log('No files to sync', 'success');
         return { success: 0, failed: 0 };
@@ -301,7 +303,7 @@ function uploadFiles(files, createFolders = false) {
     let failed = 0;
 
     for (const file of files) {
-        if (uploadFile(file, createFolders)) {
+        if (uploadFile(file)) {
             success++;
         } else {
             failed++;
@@ -329,7 +331,6 @@ function watchMode() {
 
         pendingFiles.add(fullPath);
 
-        // Debounce: wait 500ms after last change before syncing
         if (debounceTimer) clearTimeout(debounceTimer);
         debounceTimer = setTimeout(() => {
             const filesToSync = Array.from(pendingFiles);
@@ -338,7 +339,6 @@ function watchMode() {
             const { success, failed } = uploadFiles(filesToSync);
 
             if (success > 0) {
-                // Update state for successfully synced files
                 for (const file of filesToSync) {
                     state.fileHashes[file] = getFileHash(file);
                 }
@@ -360,7 +360,6 @@ function main() {
     const args = process.argv.slice(2);
     const forceAll = args.includes('--all');
     const ciMode = args.includes('--ci');
-    const initMode = args.includes('--init');
     const watchModeEnabled = args.includes('--watch');
     const noDelete = args.includes('--no-delete');
 
@@ -372,20 +371,14 @@ function main() {
     const state = loadSyncState();
     let filesToSync;
     let filesToDelete = [];
-    let createFolders = initMode || forceAll; // Create folders on init or all mode
 
-    if (initMode) {
-        log('Init mode: syncing all files and creating folders...');
-        filesToSync = getAllFiles(FILE_CABINET_PATH);
-    } else if (forceAll) {
+    if (forceAll) {
         log('Force syncing all files...');
         filesToSync = getAllFiles(FILE_CABINET_PATH);
     } else if (ciMode) {
-        // CI mode: only sync files changed in the latest commit
         log('CI mode: detecting files changed in latest commit...');
         filesToSync = getGitCommitChangedFiles();
 
-        // Detect deleted files unless --no-delete is specified
         if (!noDelete) {
             filesToDelete = getGitCommitDeletedFiles();
         }
@@ -395,17 +388,15 @@ function main() {
             return;
         }
     } else {
-        // Local dev: combine git changes and hash-based detection
         const gitChanges = getGitChangedFiles();
         const { changedFiles, newHashes } = getChangedFiles(state);
 
-        // Merge both detection methods
         filesToSync = [...new Set([...gitChanges, ...changedFiles])];
         state.fileHashes = { ...state.fileHashes, ...newHashes };
     }
 
     // Upload new/changed files
-    const { success: uploadSuccess, failed: uploadFailed } = uploadFiles(filesToSync, createFolders);
+    const { success: uploadSuccess, failed: uploadFailed } = uploadFiles(filesToSync);
 
     // Delete removed files
     const { success: deleteSuccess, failed: deleteFailed } = deleteFiles(filesToDelete);
@@ -417,7 +408,6 @@ function main() {
 
     if ((uploadSuccess > 0 || forceAll) && !ciMode) {
         state.lastSync = new Date().toISOString();
-        // Update hashes for synced files
         for (const file of filesToSync) {
             state.fileHashes[file] = getFileHash(file);
         }

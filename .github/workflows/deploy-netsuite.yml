@@ -14,7 +14,6 @@ on:
         options:
           - ci
           - all
-          - init
 
 env:
   SUITECLOUD_CI: "1"
