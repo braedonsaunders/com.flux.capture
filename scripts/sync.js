@@ -7,7 +7,8 @@
  * Usage:
  *   node scripts/sync.js              # Sync changed files since last sync (local dev)
  *   node scripts/sync.js --ci         # Sync only files changed in latest commit (for CI/CD)
- *   node scripts/sync.js --all        # Force sync all files
+ *   node scripts/sync.js --all        # Force sync all files (creates folders if needed)
+ *   node scripts/sync.js --init       # Initial deploy - creates folders and syncs all files
  *   node scripts/sync.js --watch      # Watch for changes and auto-sync
  *   node scripts/sync.js --no-delete  # Skip deletion of removed files
  *
@@ -210,7 +211,27 @@ function deleteFiles(files) {
     return { success, failed };
 }
 
-function uploadFile(filePath) {
+function ensureFolderExists(folderPath) {
+    try {
+        log(`Creating folder: ${folderPath}`);
+        execSync(`suitecloud file:create --paths "${folderPath}" --type FOLDER`, {
+            encoding: 'utf8',
+            stdio: ['pipe', 'pipe', 'pipe']
+        });
+        return true;
+    } catch (e) {
+        // Folder might already exist, that's OK
+        const errorMsg = e.stderr || e.stdout || e.message || '';
+        if (errorMsg.includes('already exists')) {
+            log(`  Folder already exists`, 'info');
+            return true;
+        }
+        log(`  Could not create folder: ${errorMsg}`, 'warn');
+        return false;
+    }
+}
+
+function uploadFile(filePath, createFolders = false) {
     try {
         // Transform local path to File Cabinet path
         // Local: src/FileCabinet/SuiteApps/com.flux.capture/FC_Router.js
@@ -220,15 +241,41 @@ function uploadFile(filePath) {
         log(`Uploading: ${filePath}`);
         log(`  File Cabinet path: ${fileCabinetPath}`);
 
-        const output = execSync(`suitecloud file:upload --paths "${fileCabinetPath}"`, {
+        let output = execSync(`suitecloud file:upload --paths "${fileCabinetPath}"`, {
             encoding: 'utf8',
             stdio: ['pipe', 'pipe', 'pipe']
         });
 
         // Check for failure indicators in the response (CLI returns 0 even on failure)
         if (output && (output.includes('were not uploaded') || output.includes('problem when uploading') || output.includes('does not exist'))) {
-            log(`  FAILED: ${output.trim()}`, 'error');
-            return false;
+            // If folder doesn't exist and we should create folders, try creating them
+            if (createFolders && output.includes('does not exist')) {
+                const folderPath = path.dirname(fileCabinetPath);
+                log(`  Folder doesn't exist, creating: ${folderPath}`, 'warn');
+
+                // Create folder hierarchy
+                const parts = folderPath.split('/').filter(p => p);
+                let currentPath = '';
+                for (const part of parts) {
+                    currentPath += '/' + part;
+                    ensureFolderExists(currentPath);
+                }
+
+                // Retry upload
+                log(`  Retrying upload...`);
+                output = execSync(`suitecloud file:upload --paths "${fileCabinetPath}"`, {
+                    encoding: 'utf8',
+                    stdio: ['pipe', 'pipe', 'pipe']
+                });
+
+                if (output && (output.includes('were not uploaded') || output.includes('problem when uploading') || output.includes('does not exist'))) {
+                    log(`  FAILED after folder creation: ${output.trim()}`, 'error');
+                    return false;
+                }
+            } else {
+                log(`  FAILED: ${output.trim()}`, 'error');
+                return false;
+            }
         }
 
         if (output) {
@@ -242,7 +289,7 @@ function uploadFile(filePath) {
     }
 }
 
-function uploadFiles(files) {
+function uploadFiles(files, createFolders = false) {
     if (files.length === 0) {
         log('No files to sync', 'success');
         return { success: 0, failed: 0 };
@@ -254,7 +301,7 @@ function uploadFiles(files) {
     let failed = 0;
 
     for (const file of files) {
-        if (uploadFile(file)) {
+        if (uploadFile(file, createFolders)) {
             success++;
         } else {
             failed++;
@@ -313,6 +360,7 @@ function main() {
     const args = process.argv.slice(2);
     const forceAll = args.includes('--all');
     const ciMode = args.includes('--ci');
+    const initMode = args.includes('--init');
     const watchModeEnabled = args.includes('--watch');
     const noDelete = args.includes('--no-delete');
 
@@ -324,8 +372,12 @@ function main() {
     const state = loadSyncState();
     let filesToSync;
     let filesToDelete = [];
+    let createFolders = initMode || forceAll; // Create folders on init or all mode
 
-    if (forceAll) {
+    if (initMode) {
+        log('Init mode: syncing all files and creating folders...');
+        filesToSync = getAllFiles(FILE_CABINET_PATH);
+    } else if (forceAll) {
         log('Force syncing all files...');
         filesToSync = getAllFiles(FILE_CABINET_PATH);
     } else if (ciMode) {
@@ -353,7 +405,7 @@ function main() {
     }
 
     // Upload new/changed files
-    const { success: uploadSuccess, failed: uploadFailed } = uploadFiles(filesToSync);
+    const { success: uploadSuccess, failed: uploadFailed } = uploadFiles(filesToSync, createFolders);
 
     // Delete removed files
     const { success: deleteSuccess, failed: deleteFailed } = deleteFiles(filesToDelete);
