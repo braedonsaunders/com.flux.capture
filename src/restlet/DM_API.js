@@ -3,7 +3,7 @@
  * @NScriptType Restlet
  * @NModuleScope SameAccount
  * 
- * DocuMind - Intelligent Document Capture API
+ * Flux Capture - Intelligent Document Capture API
  * RESTful API for document upload, processing, and management
  * 
  * Endpoints:
@@ -817,12 +817,12 @@ define([
     }
 
     function getSettings() {
-        // Get company preferences and DocuMind settings
+        // Get company preferences and Flux Capture settings
         const settings = {
             autoApproveThreshold: 85,
             defaultDocumentType: 'auto',
             emailImportEnabled: true,
-            emailAddress: `documind+${runtime.accountId}@netsuite.com`,
+            emailAddress: `flux+${runtime.accountId}@netsuite.com`,
             ocrProvider: 'oracle',
             duplicateDetection: true,
             benfordAnalysis: true,
@@ -1479,7 +1479,7 @@ define([
                             dueDate: finalData.dueDate,
                             currency: finalData.currency,
                             lineItems: lineItems,
-                            memo: `DocuMind Import - ${docRecord.getValue('custrecord_dm_file_name')}`,
+                            memo: `Flux Capture Import - ${docRecord.getValue('custrecord_dm_file_name')}`,
                             attachFileId: fileId
                         });
                         break;
@@ -1489,7 +1489,7 @@ define([
                             employeeId: runtime.getCurrentUser().id,
                             expenseDate: finalData.invoiceDate || new Date(),
                             lineItems: lineItems,
-                            memo: finalData.invoiceNumber || 'DocuMind Import',
+                            memo: finalData.invoiceNumber || 'Flux Capture Import',
                             attachFileId: fileId
                         });
                         break;
@@ -1501,7 +1501,7 @@ define([
                             creditDate: finalData.invoiceDate,
                             currency: finalData.currency,
                             lineItems: lineItems,
-                            memo: `DocuMind Import - ${docRecord.getValue('custrecord_dm_file_name')}`,
+                            memo: `Flux Capture Import - ${docRecord.getValue('custrecord_dm_file_name')}`,
                             attachFileId: fileId
                         });
                         break;
@@ -1662,7 +1662,7 @@ define([
                 settingsRecord = record.create({
                     type: 'customrecord_dm_settings'
                 });
-                settingsRecord.setValue('name', 'DocuMind Settings');
+                settingsRecord.setValue('name', 'Flux Capture Settings');
             }
             
             // Update settings
@@ -1860,11 +1860,11 @@ define([
     // ==================== Helper Functions ====================
 
     function getUploadFolder() {
-        // Find or create DocuMind upload folder
+        // Find or create Flux Capture upload folder
         const folderSearch = search.create({
             type: 'folder',
             filters: [
-                ['name', 'is', 'DocuMind Uploads']
+                ['name', 'is', 'Flux Capture Uploads']
             ],
             columns: ['internalid']
         });
@@ -1879,8 +1879,8 @@ define([
         const folderRecord = record.create({
             type: 'folder'
         });
-        folderRecord.setValue('name', 'DocuMind Uploads');
-        folderRecord.setValue('description', 'Uploaded documents for DocuMind processing');
+        folderRecord.setValue('name', 'Flux Capture Uploads');
+        folderRecord.setValue('description', 'Uploaded documents for Flux Capture processing');
         
         return folderRecord.save();
     }

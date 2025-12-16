@@ -2,7 +2,7 @@
 <!-- Document Types Custom List -->
 <customlist scriptid="customlist_dm_document_types">
     <n>DM Document Types</n>
-    <description>Types of documents supported by DocuMind</description>
+    <description>Types of documents supported by Flux Capture</description>
     <isordered>T</isordered>
     <customvalues>
         <customvalue scriptid="custval_invoice">

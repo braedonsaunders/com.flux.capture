@@ -3,7 +3,7 @@
  * @NScriptType MapReduceScript
  * @NModuleScope SameAccount
  * 
- * DocuMind - Batch Document Processor
+ * Flux Capture - Batch Document Processor
  * High-performance parallel processing of document batches
  * 
  * Features:
@@ -424,7 +424,7 @@ define([
                             dueDate: extractedData.dueDate,
                             currency: extractedData.currency,
                             lineItems: lineItems,
-                            memo: `DocuMind Auto-Import - ${docRecord.getValue('custrecord_dm_file_name')}`,
+                            memo: `Flux Capture Auto-Import - ${docRecord.getValue('custrecord_dm_file_name')}`,
                             attachFileId: fileId
                         });
                         break;
@@ -434,7 +434,7 @@ define([
                             employeeId: runtime.getCurrentUser().id,
                             expenseDate: extractedData.invoiceDate || new Date(),
                             lineItems: lineItems,
-                            memo: extractedData.invoiceNumber || 'DocuMind Auto-Import',
+                            memo: extractedData.invoiceNumber || 'Flux Capture Auto-Import',
                             attachFileId: fileId
                         });
                         break;
@@ -446,7 +446,7 @@ define([
                             creditDate: extractedData.invoiceDate,
                             currency: extractedData.currency,
                             lineItems: lineItems,
-                            memo: `DocuMind Auto-Import - ${docRecord.getValue('custrecord_dm_file_name')}`,
+                            memo: `Flux Capture Auto-Import - ${docRecord.getValue('custrecord_dm_file_name')}`,
                             attachFileId: fileId
                         });
                         break;
@@ -528,9 +528,9 @@ define([
             const recipients = recipientsStr.split(',').map(r => r.trim());
             
             // Build email content
-            const subject = `DocuMind Batch Processing Complete - ${stats.totalProcessed} Documents`;
+            const subject = `Flux Capture Batch Processing Complete - ${stats.totalProcessed} Documents`;
             
-            let body = `<h2>DocuMind Batch Processing Summary</h2>`;
+            let body = `<h2>Flux Capture Batch Processing Summary</h2>`;
             body += `<table border="1" cellpadding="8" cellspacing="0" style="border-collapse: collapse;">`;
             body += `<tr><td><strong>Total Processed</strong></td><td>${stats.totalProcessed}</td></tr>`;
             body += `<tr><td><strong>Successful</strong></td><td style="color: green;">${stats.successful}</td></tr>`;
@@ -548,7 +548,7 @@ define([
                 });
             }
             
-            body += `<p><a href="/app/site/hosting/scriptlet.nl?script=customscript_dm_main&deploy=customdeploy_dm_main">View DocuMind Dashboard</a></p>`;
+            body += `<p><a href="/app/site/hosting/scriptlet.nl?script=customscript_dm_main&deploy=customdeploy_dm_main">View Flux Capture Dashboard</a></p>`;
             
             email.send({
                 author: runtime.getCurrentUser().id,

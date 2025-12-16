@@ -3,7 +3,7 @@
  * @NScriptType Suitelet
  * @NModuleScope SameAccount
  * 
- * DocuMind - Main Dashboard Suitelet
+ * Flux Capture - Main Dashboard Suitelet
  * World-class document capture and intelligence platform UI
  */
 
@@ -76,7 +76,7 @@ define([
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>DocuMind - Intelligent Document Capture</title>
+    <title>Flux Capture - Intelligent Document Capture</title>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
     <style>
@@ -294,7 +294,7 @@ define([
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>DocuMind - Upload Documents</title>
+    <title>Flux Capture - Upload Documents</title>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
     <style>
@@ -404,7 +404,7 @@ define([
                         <i class="fas fa-envelope"></i>
                         <div class="email-text">
                             <h4>Forward Invoices via Email</h4>
-                            <p>Send documents to: <strong>invoices@${runtime.accountId}.documind.netsuite.com</strong></p>
+                            <p>Send documents to: <strong>invoices@${runtime.accountId}.flux.netsuite.com</strong></p>
                         </div>
                     </div>
                 </div>
@@ -446,7 +446,7 @@ define([
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>DocuMind - Review Document</title>
+    <title>Flux Capture - Review Document</title>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
     <style>
@@ -661,7 +661,7 @@ define([
                 <div class="sidebar-header">
                     <div class="logo">
                         <i class="fas fa-brain"></i>
-                        <span>DocuMind</span>
+                        <span>Flux Capture</span>
                     </div>
                 </div>
                 <nav class="sidebar-nav">
@@ -963,7 +963,7 @@ define([
 <!DOCTYPE html>
 <html>
 <head>
-    <title>DocuMind - Error</title>
+    <title>Flux Capture - Error</title>
     <style>
         body { font-family: Inter, sans-serif; display: flex; justify-content: center; align-items: center; height: 100vh; margin: 0; background: #f1f5f9; }
         .error-box { background: white; padding: 40px; border-radius: 12px; box-shadow: 0 4px 20px rgba(0,0,0,0.1); text-align: center; }

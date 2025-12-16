@@ -3,7 +3,7 @@
  * @NScriptType ScheduledScript
  * @NModuleScope SameAccount
  * 
- * DocuMind - Email Monitor
+ * Flux Capture - Email Monitor
  * Scheduled script to monitor email inbox and auto-import attached documents
  * Runs every 15 minutes to check for new document submissions via email
  */
@@ -25,7 +25,7 @@ define(['N/email', 'N/record', 'N/search', 'N/file', 'N/runtime', 'N/task', 'N/l
         'receipt',
         'expense',
         'payment',
-        'documind',
+        'flux',
         'document',
         'ap submission',
         'vendor bill'
@@ -39,7 +39,7 @@ define(['N/email', 'N/record', 'N/search', 'N/file', 'N/runtime', 'N/task', 'N/l
         const scriptObj = runtime.getCurrentScript();
         
         log.audit({
-            title: 'DocuMind Email Monitor',
+            title: 'Flux Capture Email Monitor',
             details: 'Starting email scan...'
         });
         
@@ -49,7 +49,7 @@ define(['N/email', 'N/record', 'N/search', 'N/file', 'N/runtime', 'N/task', 'N/l
             
             if (!config.enabled) {
                 log.audit({
-                    title: 'DocuMind Email Monitor',
+                    title: 'Flux Capture Email Monitor',
                     details: 'Email monitoring is disabled in settings'
                 });
                 return;
@@ -64,7 +64,7 @@ define(['N/email', 'N/record', 'N/search', 'N/file', 'N/runtime', 'N/task', 'N/l
             const emails = searchUnprocessedEmails(config);
             
             log.audit({
-                title: 'DocuMind Email Monitor',
+                title: 'Flux Capture Email Monitor',
                 details: `Found ${emails.length} unprocessed emails`
             });
             
@@ -76,7 +76,7 @@ define(['N/email', 'N/record', 'N/search', 'N/file', 'N/runtime', 'N/task', 'N/l
                 // Check governance
                 if (scriptObj.getRemainingUsage() < 500) {
                     log.audit({
-                        title: 'DocuMind Email Monitor',
+                        title: 'Flux Capture Email Monitor',
                         details: 'Approaching governance limit, stopping...'
                     });
                     return;
@@ -95,7 +95,7 @@ define(['N/email', 'N/record', 'N/search', 'N/file', 'N/runtime', 'N/task', 'N/l
                 } catch (e) {
                     errors++;
                     log.error({
-                        title: 'DocuMind Email Monitor - Processing Error',
+                        title: 'Flux Capture Email Monitor - Processing Error',
                         details: `Email ${emailData.id}: ${e.message}`
                     });
                     markEmailError(emailData.id, errorFolderId, e.message);
@@ -104,7 +104,7 @@ define(['N/email', 'N/record', 'N/search', 'N/file', 'N/runtime', 'N/task', 'N/l
             
             // Log summary
             log.audit({
-                title: 'DocuMind Email Monitor - Complete',
+                title: 'Flux Capture Email Monitor - Complete',
                 details: `Processed: ${processed}, Errors: ${errors}`
             });
             
@@ -115,7 +115,7 @@ define(['N/email', 'N/record', 'N/search', 'N/file', 'N/runtime', 'N/task', 'N/l
             
         } catch (e) {
             log.error({
-                title: 'DocuMind Email Monitor - Fatal Error',
+                title: 'Flux Capture Email Monitor - Fatal Error',
                 details: e.message
             });
         }
@@ -131,15 +131,15 @@ define(['N/email', 'N/record', 'N/search', 'N/file', 'N/runtime', 'N/task', 'N/l
         return {
             enabled: scriptObj.getParameter({ name: 'custscript_dm_email_enabled' }) !== false,
             inboxFolderId: scriptObj.getParameter({ name: 'custscript_dm_inbox_folder' }) || getDefaultInboxFolder(),
-            processedFolderId: scriptObj.getParameter({ name: 'custscript_dm_processed_folder' }) || createFolder('DocuMind Processed'),
-            errorFolderId: scriptObj.getParameter({ name: 'custscript_dm_error_folder' }) || createFolder('DocuMind Errors'),
+            processedFolderId: scriptObj.getParameter({ name: 'custscript_dm_processed_folder' }) || createFolder('Flux Capture Processed'),
+            errorFolderId: scriptObj.getParameter({ name: 'custscript_dm_error_folder' }) || createFolder('Flux Capture Errors'),
             autoProcess: scriptObj.getParameter({ name: 'custscript_dm_auto_process' }) !== false,
             defaultDocType: scriptObj.getParameter({ name: 'custscript_dm_default_doc_type' }) || 'invoice',
             notifyOnComplete: scriptObj.getParameter({ name: 'custscript_dm_notify_complete' }) === true,
             notificationRecipient: scriptObj.getParameter({ name: 'custscript_dm_notify_recipient' }),
             maxAttachmentSize: scriptObj.getParameter({ name: 'custscript_dm_max_attachment_size' }) || 10485760, // 10MB
             trustedSenders: getTrustedSenders(),
-            emailAddress: getDocuMindEmailAddress()
+            emailAddress: getFlux CaptureEmailAddress()
         };
     }
 
@@ -147,11 +147,11 @@ define(['N/email', 'N/record', 'N/search', 'N/file', 'N/runtime', 'N/task', 'N/l
      * Get default inbox folder
      */
     function getDefaultInboxFolder() {
-        // Search for existing DocuMind inbox folder
+        // Search for existing Flux Capture inbox folder
         const folderSearch = search.create({
             type: 'folder',
             filters: [
-                ['name', 'is', 'DocuMind Inbox']
+                ['name', 'is', 'Flux Capture Inbox']
             ],
             columns: ['internalid']
         });
@@ -162,7 +162,7 @@ define(['N/email', 'N/record', 'N/search', 'N/file', 'N/runtime', 'N/task', 'N/l
             return results[0].id;
         }
         
-        return createFolder('DocuMind Inbox');
+        return createFolder('Flux Capture Inbox');
     }
 
     /**
@@ -175,12 +175,12 @@ define(['N/email', 'N/record', 'N/search', 'N/file', 'N/runtime', 'N/task', 'N/l
             });
             
             folder.setValue({ fieldId: 'name', value: folderName });
-            folder.setValue({ fieldId: 'description', value: 'Created by DocuMind for email monitoring' });
+            folder.setValue({ fieldId: 'description', value: 'Created by Flux Capture for email monitoring' });
             
             return folder.save();
         } catch (e) {
             log.error({
-                title: 'DocuMind - Folder Creation Error',
+                title: 'Flux Capture - Folder Creation Error',
                 details: e.message
             });
             return null;
@@ -213,7 +213,7 @@ define(['N/email', 'N/record', 'N/search', 'N/file', 'N/runtime', 'N/task', 'N/l
         } catch (e) {
             // Custom record might not exist yet
             log.debug({
-                title: 'DocuMind - Trusted Senders',
+                title: 'Flux Capture - Trusted Senders',
                 details: 'No trusted sender records found, accepting all senders'
             });
         }
@@ -222,9 +222,9 @@ define(['N/email', 'N/record', 'N/search', 'N/file', 'N/runtime', 'N/task', 'N/l
     }
 
     /**
-     * Get DocuMind email address
+     * Get Flux Capture email address
      */
-    function getDocuMindEmailAddress() {
+    function getFlux CaptureEmailAddress() {
         const companyInfo = search.lookupFields({
             type: search.Type.COMPANY_INFORMATION,
             id: 1,
@@ -233,8 +233,8 @@ define(['N/email', 'N/record', 'N/search', 'N/file', 'N/runtime', 'N/task', 'N/l
         
         const accountId = companyInfo.companyid || runtime.accountId;
         
-        // Format: documind-{accountId}@netsuite.com
-        return `documind-${accountId}@netsuite.com`;
+        // Format: flux-{accountId}@netsuite.com
+        return `flux-${accountId}@netsuite.com`;
     }
 
     /**
@@ -279,7 +279,7 @@ define(['N/email', 'N/record', 'N/search', 'N/file', 'N/runtime', 'N/task', 'N/l
             });
         } catch (e) {
             log.error({
-                title: 'DocuMind - Email Search Error',
+                title: 'Flux Capture - Email Search Error',
                 details: e.message
             });
         }
@@ -323,7 +323,7 @@ define(['N/email', 'N/record', 'N/search', 'N/file', 'N/runtime', 'N/task', 'N/l
      */
     function processEmail(emailData, config) {
         log.debug({
-            title: 'DocuMind - Processing Email',
+            title: 'Flux Capture - Processing Email',
             details: `From: ${emailData.sender}, Subject: ${emailData.subject}`
         });
         
@@ -370,7 +370,7 @@ define(['N/email', 'N/record', 'N/search', 'N/file', 'N/runtime', 'N/task', 'N/l
                 // Validate attachment
                 if (attachment.size > config.maxAttachmentSize) {
                     log.warning({
-                        title: 'DocuMind - Attachment Too Large',
+                        title: 'Flux Capture - Attachment Too Large',
                         details: `${attachment.name}: ${attachment.size} bytes exceeds limit`
                     });
                     return;
@@ -381,7 +381,7 @@ define(['N/email', 'N/record', 'N/search', 'N/file', 'N/runtime', 'N/task', 'N/l
                 
                 if (!fileId) {
                     log.error({
-                        title: 'DocuMind - File Save Error',
+                        title: 'Flux Capture - File Save Error',
                         details: `Failed to save ${attachment.name}`
                     });
                     return;
@@ -403,7 +403,7 @@ define(['N/email', 'N/record', 'N/search', 'N/file', 'N/runtime', 'N/task', 'N/l
                 }
             } catch (e) {
                 log.error({
-                    title: 'DocuMind - Attachment Processing Error',
+                    title: 'Flux Capture - Attachment Processing Error',
                     details: e.message
                 });
             }
@@ -489,7 +489,7 @@ define(['N/email', 'N/record', 'N/search', 'N/file', 'N/runtime', 'N/task', 'N/l
                 });
             } catch (e) {
                 log.error({
-                    title: 'DocuMind - Attachment Parse Error',
+                    title: 'Flux Capture - Attachment Parse Error',
                     details: e.message
                 });
             }
@@ -577,7 +577,7 @@ define(['N/email', 'N/record', 'N/search', 'N/file', 'N/runtime', 'N/task', 'N/l
             return batchRecord.save();
         } catch (e) {
             log.error({
-                title: 'DocuMind - Batch Creation Error',
+                title: 'Flux Capture - Batch Creation Error',
                 details: e.message
             });
             return null;
@@ -600,7 +600,7 @@ define(['N/email', 'N/record', 'N/search', 'N/file', 'N/runtime', 'N/task', 'N/l
             return fileRecord.save();
         } catch (e) {
             log.error({
-                title: 'DocuMind - File Save Error',
+                title: 'Flux Capture - File Save Error',
                 details: e.message
             });
             return null;
@@ -711,7 +711,7 @@ define(['N/email', 'N/record', 'N/search', 'N/file', 'N/runtime', 'N/task', 'N/l
             return docRecord.save();
         } catch (e) {
             log.error({
-                title: 'DocuMind - Document Creation Error',
+                title: 'Flux Capture - Document Creation Error',
                 details: e.message
             });
             return null;
@@ -735,12 +735,12 @@ define(['N/email', 'N/record', 'N/search', 'N/file', 'N/runtime', 'N/task', 'N/l
             mrTask.submit();
             
             log.audit({
-                title: 'DocuMind - Processing Triggered',
+                title: 'Flux Capture - Processing Triggered',
                 details: `Submitted ${documentIds.length} documents for processing`
             });
         } catch (e) {
             log.error({
-                title: 'DocuMind - Processing Trigger Error',
+                title: 'Flux Capture - Processing Trigger Error',
                 details: e.message
             });
         }
@@ -754,13 +754,13 @@ define(['N/email', 'N/record', 'N/search', 'N/file', 'N/runtime', 'N/task', 'N/l
             email.send({
                 author: runtime.getCurrentUser().id,
                 recipients: recipient,
-                subject: 'DocuMind: Documents Received',
+                subject: 'Flux Capture: Documents Received',
                 body: `
                     <html>
                     <body style="font-family: Arial, sans-serif; color: #333;">
                         <div style="max-width: 600px; margin: 0 auto; padding: 20px;">
                             <div style="background: linear-gradient(135deg, #6366f1, #8b5cf6); padding: 20px; border-radius: 8px 8px 0 0;">
-                                <h1 style="color: white; margin: 0;">DocuMind</h1>
+                                <h1 style="color: white; margin: 0;">Flux Capture</h1>
                                 <p style="color: rgba(255,255,255,0.8); margin: 5px 0 0 0;">Intelligent Document Capture</p>
                             </div>
                             <div style="background: #f8fafc; padding: 20px; border: 1px solid #e2e8f0; border-top: none; border-radius: 0 0 8px 8px;">
@@ -777,7 +777,7 @@ define(['N/email', 'N/record', 'N/search', 'N/file', 'N/runtime', 'N/task', 'N/l
                                     </p>
                                 </div>
                                 <p style="color: #64748b; font-size: 12px; margin-bottom: 0;">
-                                    This is an automated message from DocuMind. Please do not reply to this email.
+                                    This is an automated message from Flux Capture. Please do not reply to this email.
                                 </p>
                             </div>
                         </div>
@@ -787,7 +787,7 @@ define(['N/email', 'N/record', 'N/search', 'N/file', 'N/runtime', 'N/task', 'N/l
             });
         } catch (e) {
             log.error({
-                title: 'DocuMind - Confirmation Email Error',
+                title: 'Flux Capture - Confirmation Email Error',
                 details: e.message
             });
         }
@@ -863,11 +863,11 @@ define(['N/email', 'N/record', 'N/search', 'N/file', 'N/runtime', 'N/task', 'N/l
             email.send({
                 author: runtime.getCurrentUser().id,
                 recipients: config.notificationRecipient,
-                subject: `DocuMind: Email Monitor Summary - ${processed} Processed, ${errors} Errors`,
+                subject: `Flux Capture: Email Monitor Summary - ${processed} Processed, ${errors} Errors`,
                 body: `
                     <html>
                     <body style="font-family: Arial, sans-serif;">
-                        <h2>DocuMind Email Monitor Summary</h2>
+                        <h2>Flux Capture Email Monitor Summary</h2>
                         <p><strong>Run Time:</strong> ${new Date().toISOString()}</p>
                         <p><strong>Documents Processed:</strong> ${processed}</p>
                         <p><strong>Errors:</strong> ${errors}</p>
@@ -878,7 +878,7 @@ define(['N/email', 'N/record', 'N/search', 'N/file', 'N/runtime', 'N/task', 'N/l
             });
         } catch (e) {
             log.error({
-                title: 'DocuMind - Summary Notification Error',
+                title: 'Flux Capture - Summary Notification Error',
                 details: e.message
             });
         }

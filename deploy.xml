@@ -4,7 +4,7 @@
         <path>~/AccountConfiguration/*</path>
     </configuration>
     <files>
-        <path>~/FileCabinet/SuiteScripts/DocuMind/*</path>
+        <path>~/FileCabinet/SuiteScripts/FluxCapture/*</path>
     </files>
     <objects>
         <path>~/Objects/*</path>

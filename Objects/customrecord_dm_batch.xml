@@ -17,7 +17,7 @@
     <enablemailmerge>F</enablemailmerge>
     <recordaccesslevel>USEPERMISSIONLIST</recordaccesslevel>
     <isordered>F</isordered>
-    <description>DocuMind Batch - Groups multiple documents for batch processing</description>
+    <description>Flux Capture Batch - Groups multiple documents for batch processing</description>
     <icon>FOLDER</icon>
     <iconbuiltin>T</iconbuiltin>
     
