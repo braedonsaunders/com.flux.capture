@@ -1,6 +1,8 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <deploy>
     <files>
-        <path>~/FileCabinet/SuiteApps/com.flux.capture/**</path>
+        <path>~/FileCabinet/SuiteApps/com.flux.capture/FC_Engine.js</path>
+        <path>~/FileCabinet/SuiteApps/com.flux.capture/FC_Router.js</path>
+        <path>~/FileCabinet/SuiteApps/com.flux.capture/FC_Suitelet.js</path>
     </files>
 </deploy>
