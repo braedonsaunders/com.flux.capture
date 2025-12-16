@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <suitelet scriptid="customscript_fc_suitelet">
     <name>Flux Capture</name>
-    <scriptfile>[/SuiteScripts/FluxCapture/FC_Suitelet.js]</scriptfile>
+    <scriptfile>[/SuiteApps/com.flux.capture/FC_Suitelet.js]</scriptfile>
     <description>Flux Capture - Main Suitelet. Provides the complete UI for document capture including dashboard, upload, review, queue management, and settings.</description>
     <isinactive>F</isinactive>
     <notifyadmins>F</notifyadmins>

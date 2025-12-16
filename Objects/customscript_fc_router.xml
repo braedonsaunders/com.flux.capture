@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <restlet scriptid="customscript_fc_router">
     <name>Flux Capture Router</name>
-    <scriptfile>[/SuiteScripts/FluxCapture/FC_Router.js]</scriptfile>
+    <scriptfile>[/SuiteApps/com.flux.capture/FC_Router.js]</scriptfile>
     <description>Flux Capture - Main API Router RESTlet. Handles all document capture API operations including upload, processing, review, approval, and batch operations.</description>
     <isinactive>F</isinactive>
     <notifyadmins>F</notifyadmins>

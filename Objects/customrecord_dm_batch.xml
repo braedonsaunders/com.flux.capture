@@ -10,7 +10,7 @@
     <allowquicksearch>T</allowquicksearch>
     <hierarchical>F</hierarchical>
     <enablenumbering>T</enablenumbering>
-    <numberingprefix>DM-BATCH-</numberingprefix>
+    <numberingprefix>DMB-</numberingprefix>
     <numberingmindigits>5</numberingmindigits>
     <enablekeywords>T</enablekeywords>
     <isordered>F</isordered>
