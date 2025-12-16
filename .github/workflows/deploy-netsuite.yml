@@ -55,7 +55,7 @@ jobs:
 
       - name: Deploy to NetSuite
         if: ${{ github.event.inputs.deploy_mode != 'validate' }}
-        run: suitecloud project:deploy --applycontentprotection
+        run: suitecloud project:deploy
 
       - name: Cleanup
         if: always()
