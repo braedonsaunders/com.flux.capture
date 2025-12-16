@@ -1,6 +1,9 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<manifest projecttype="ACCOUNTCUSTOMIZATION">
-    <projectname>Flux Capture - Intelligent Document Capture</projectname>
+<manifest projecttype="SUITEAPP">
+    <publisherid>com.flux</publisherid>
+    <projectid>capture</projectid>
+    <projectname>Flux Capture</projectname>
+    <projectversion>1.0.0</projectversion>
     <frameworkversion>1.0</frameworkversion>
     <dependencies>
         <features>
