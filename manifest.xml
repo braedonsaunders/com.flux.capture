@@ -2,31 +2,10 @@
 <manifest projecttype="ACCOUNTCUSTOMIZATION">
     <projectname>Flux Capture - Intelligent Document Capture</projectname>
     <frameworkversion>1.0</frameworkversion>
-    <publisherid>com.flux</publisherid>
-    <projectid>capture</projectid>
-    <projectversion>1.0.0</projectversion>
-    <description>
-        Flux Capture is a next-generation intelligent document capture and processing platform 
-        that transforms unstructured documents into structured NetSuite transactions. 
-        Featuring AI-powered OCR, smart vendor matching, fraud detection, multi-currency 
-        support, and advanced analytics.
-    </description>
     <dependencies>
-        <dependency>
-            <type>feature</type>
-            <name>ADVANCEDBILLCAPTURE</name>
-        </dependency>
-        <dependency>
-            <type>feature</type>
-            <name>MULTIVENDOR</name>
-        </dependency>
-        <dependency>
-            <type>feature</type>
-            <name>MULTICURRENCY</name>
-        </dependency>
-        <dependency>
-            <type>feature</type>
-            <name>EXPENSEREPORTS</name>
-        </dependency>
+        <features>
+            <feature required="false">ADVANCEDBILLCAPTURE</feature>
+            <feature required="false">MULTICURRENCY</feature>
+        </features>
     </dependencies>
 </manifest>
