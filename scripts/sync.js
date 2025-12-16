@@ -232,19 +232,29 @@ function uploadFile(filePath) {
         log(`Uploading: ${filePath}`);
         log(`  File Cabinet path: ${fileCabinetPath}`);
 
-        let output = execSync(`suitecloud file:upload --paths "${fileCabinetPath}"`, {
-            encoding: 'utf8',
-            stdio: ['pipe', 'pipe', 'pipe']
-        });
+        let output;
+        let stderr;
+        try {
+            output = execSync(`suitecloud file:upload --paths "${fileCabinetPath}"`, {
+                encoding: 'utf8',
+                stdio: ['pipe', 'pipe', 'pipe']
+            });
+        } catch (cmdError) {
+            output = cmdError.stdout || '';
+            stderr = cmdError.stderr || '';
+            log(`  Command output: ${output.trim()}`, 'warn');
+            if (stderr) {
+                log(`  Command stderr: ${stderr.trim()}`, 'warn');
+            }
+        }
 
-        // Check for failure - if folder doesn't exist, run project:deploy and retry
+        // Check for failure
         if (output && (output.includes('were not uploaded') || output.includes('problem when uploading') || output.includes('does not exist'))) {
-            log(`  Upload failed, folder may not exist...`, 'warn');
+            log(`  Upload result: ${output.trim()}`, 'warn');
 
-            // Run project:deploy to create folder structure
-            if (runProjectDeploy()) {
-                // Retry upload
-                log(`  Retrying upload...`);
+            // Retry once without project:deploy (which is broken for SuiteApps)
+            log(`  Retrying upload...`);
+            try {
                 output = execSync(`suitecloud file:upload --paths "${fileCabinetPath}"`, {
                     encoding: 'utf8',
                     stdio: ['pipe', 'pipe', 'pipe']
@@ -254,13 +264,13 @@ function uploadFile(filePath) {
                     log(`  FAILED: ${output.trim()}`, 'error');
                     return false;
                 }
-            } else {
-                log(`  FAILED: Could not create folder structure`, 'error');
+            } catch (retryError) {
+                log(`  FAILED: ${retryError.stdout || retryError.stderr || retryError.message}`, 'error');
                 return false;
             }
         }
 
-        if (output && !output.includes('FAILED')) {
+        if (output && !output.includes('FAILED') && !output.includes('were not uploaded')) {
             log(`  Success`, 'success');
         }
         return true;
