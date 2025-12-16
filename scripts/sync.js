@@ -7,7 +7,7 @@
  * Usage:
  *   node scripts/sync.js              # Sync changed files since last sync (local dev)
  *   node scripts/sync.js --ci         # Sync only files changed in latest commit (for CI/CD)
- *   node scripts/sync.js --all        # Full project:deploy (includes Objects, scripts, etc.)
+ *   node scripts/sync.js --all        # Force sync all files
  *   node scripts/sync.js --watch      # Watch for changes and auto-sync
  *   node scripts/sync.js --no-delete  # Skip deletion of removed files
  *
@@ -365,18 +365,8 @@ function main() {
     let filesToDelete = [];
 
     if (forceAll) {
-        log('Full project deploy (--all mode)...');
-        try {
-            execSync('suitecloud project:deploy', {
-                encoding: 'utf8',
-                stdio: 'inherit'
-            });
-            log('Project deployed successfully', 'success');
-        } catch (e) {
-            log(`Project deploy failed: ${e.message}`, 'error');
-            process.exit(1);
-        }
-        return;
+        log('Force syncing all files...');
+        filesToSync = getAllFiles(FILE_CABINET_PATH);
     } else if (ciMode) {
         log('CI mode: detecting files changed in latest commit...');
         filesToSync = getGitCommitChangedFiles();
