@@ -30,34 +30,80 @@ define([
     const API_VERSION = '2.0.0';
 
     // ==================== Status Constants ====================
+    // These are stored as INTEGER fields in NetSuite custom records
 
     const DocStatus = Object.freeze({
-        PENDING: 'pending',
-        PROCESSING: 'processing',
-        EXTRACTED: 'extracted',
-        NEEDS_REVIEW: 'needs_review',
-        APPROVED: 'approved',
-        REJECTED: 'rejected',
-        COMPLETED: 'completed',
-        ERROR: 'error'
+        PENDING: 1,
+        PROCESSING: 2,
+        EXTRACTED: 3,
+        NEEDS_REVIEW: 4,
+        REJECTED: 5,
+        COMPLETED: 6,
+        ERROR: 7
+    });
+
+    const DocStatusLabels = Object.freeze({
+        [DocStatus.PENDING]: 'Pending',
+        [DocStatus.PROCESSING]: 'Processing',
+        [DocStatus.EXTRACTED]: 'Extracted',
+        [DocStatus.NEEDS_REVIEW]: 'Needs Review',
+        [DocStatus.REJECTED]: 'Rejected',
+        [DocStatus.COMPLETED]: 'Completed',
+        [DocStatus.ERROR]: 'Error'
     });
 
     const BatchStatus = Object.freeze({
-        PENDING: 'pending',
-        PROCESSING: 'processing',
-        COMPLETED: 'completed',
-        PARTIAL_ERROR: 'partial_error',
-        FAILED: 'failed',
-        CANCELLED: 'cancelled'
+        PENDING: 1,
+        PROCESSING: 2,
+        COMPLETED: 3,
+        PARTIAL_ERROR: 4,
+        FAILED: 5,
+        CANCELLED: 6
+    });
+
+    const BatchStatusLabels = Object.freeze({
+        [BatchStatus.PENDING]: 'Pending',
+        [BatchStatus.PROCESSING]: 'Processing',
+        [BatchStatus.COMPLETED]: 'Completed',
+        [BatchStatus.PARTIAL_ERROR]: 'Partial Error',
+        [BatchStatus.FAILED]: 'Failed',
+        [BatchStatus.CANCELLED]: 'Cancelled'
+    });
+
+    const DocType = Object.freeze({
+        INVOICE: 1,
+        RECEIPT: 2,
+        CREDIT_MEMO: 3,
+        EXPENSE_REPORT: 4,
+        PURCHASE_ORDER: 5,
+        UNKNOWN: 6
+    });
+
+    const DocTypeLabels = Object.freeze({
+        [DocType.INVOICE]: 'Invoice',
+        [DocType.RECEIPT]: 'Receipt',
+        [DocType.CREDIT_MEMO]: 'Credit Memo',
+        [DocType.EXPENSE_REPORT]: 'Expense Report',
+        [DocType.PURCHASE_ORDER]: 'Purchase Order',
+        [DocType.UNKNOWN]: 'Unknown'
     });
 
     const Source = Object.freeze({
-        UPLOAD: 'upload',
-        EMAIL: 'email',
-        DRAG_DROP: 'drag_drop',
-        API: 'api',
-        SCANNER: 'scanner',
-        MOBILE: 'mobile'
+        UPLOAD: 1,
+        EMAIL: 2,
+        DRAG_DROP: 3,
+        API: 4,
+        SCANNER: 5,
+        MOBILE: 6
+    });
+
+    const SourceLabels = Object.freeze({
+        [Source.UPLOAD]: 'Manual Upload',
+        [Source.EMAIL]: 'Email Import',
+        [Source.DRAG_DROP]: 'Drag and Drop',
+        [Source.API]: 'API Integration',
+        [Source.SCANNER]: 'Scanner',
+        [Source.MOBILE]: 'Mobile App'
     });
 
     // ==================== Response Helpers ====================
@@ -411,13 +457,13 @@ define([
                 custrecord_dm_batch_id as batchId,
                 custrecord_dm_anomalies as anomalies
             FROM customrecord_dm_captured_document
-            WHERE custrecord_dm_status IN ('${DocStatus.PENDING}', '${DocStatus.PROCESSING}', '${DocStatus.EXTRACTED}', '${DocStatus.NEEDS_REVIEW}')
+            WHERE custrecord_dm_status IN (${DocStatus.PENDING}, ${DocStatus.PROCESSING}, ${DocStatus.EXTRACTED}, ${DocStatus.NEEDS_REVIEW})
             ORDER BY
                 CASE custrecord_dm_status
-                    WHEN '${DocStatus.NEEDS_REVIEW}' THEN 1
-                    WHEN '${DocStatus.EXTRACTED}' THEN 2
-                    WHEN '${DocStatus.PROCESSING}' THEN 3
-                    WHEN '${DocStatus.PENDING}' THEN 4
+                    WHEN ${DocStatus.NEEDS_REVIEW} THEN 1
+                    WHEN ${DocStatus.EXTRACTED} THEN 2
+                    WHEN ${DocStatus.PROCESSING} THEN 3
+                    WHEN ${DocStatus.PENDING} THEN 4
                 END,
                 custrecord_dm_created_date ASC
             OFFSET ${(page - 1) * pageSize} ROWS FETCH NEXT ${pageSize} ROWS ONLY
@@ -447,7 +493,7 @@ define([
         const countSql = `
             SELECT custrecord_dm_status as status, COUNT(*) as count
             FROM customrecord_dm_captured_document
-            WHERE custrecord_dm_status IN ('${DocStatus.PENDING}', '${DocStatus.PROCESSING}', '${DocStatus.EXTRACTED}', '${DocStatus.NEEDS_REVIEW}')
+            WHERE custrecord_dm_status IN (${DocStatus.PENDING}, ${DocStatus.PROCESSING}, ${DocStatus.EXTRACTED}, ${DocStatus.NEEDS_REVIEW})
             GROUP BY custrecord_dm_status
         `;
 
@@ -468,11 +514,11 @@ define([
         const statsSql = `
             SELECT
                 COUNT(*) as total,
-                SUM(CASE WHEN custrecord_dm_status = '${DocStatus.COMPLETED}' THEN 1 ELSE 0 END) as completed,
-                SUM(CASE WHEN custrecord_dm_status = '${DocStatus.COMPLETED}' AND custrecord_dm_confidence_score >= 85 THEN 1 ELSE 0 END) as autoProcessed,
-                SUM(CASE WHEN custrecord_dm_status IN ('${DocStatus.PENDING}', '${DocStatus.PROCESSING}', '${DocStatus.EXTRACTED}', '${DocStatus.NEEDS_REVIEW}') THEN 1 ELSE 0 END) as pending,
-                SUM(CASE WHEN custrecord_dm_status = '${DocStatus.REJECTED}' THEN 1 ELSE 0 END) as rejected,
-                SUM(CASE WHEN custrecord_dm_status = '${DocStatus.ERROR}' THEN 1 ELSE 0 END) as errors,
+                SUM(CASE WHEN custrecord_dm_status = ${DocStatus.COMPLETED} THEN 1 ELSE 0 END) as completed,
+                SUM(CASE WHEN custrecord_dm_status = ${DocStatus.COMPLETED} AND custrecord_dm_confidence_score >= 85 THEN 1 ELSE 0 END) as autoProcessed,
+                SUM(CASE WHEN custrecord_dm_status IN (${DocStatus.PENDING}, ${DocStatus.PROCESSING}, ${DocStatus.EXTRACTED}, ${DocStatus.NEEDS_REVIEW}) THEN 1 ELSE 0 END) as pending,
+                SUM(CASE WHEN custrecord_dm_status = ${DocStatus.REJECTED} THEN 1 ELSE 0 END) as rejected,
+                SUM(CASE WHEN custrecord_dm_status = ${DocStatus.ERROR} THEN 1 ELSE 0 END) as errors,
                 AVG(custrecord_dm_confidence_score) as avgConfidence,
                 SUM(custrecord_dm_total_amount) as totalValue
             FROM customrecord_dm_captured_document
@@ -542,7 +588,7 @@ define([
             FROM customrecord_dm_captured_document
             WHERE custrecord_dm_anomalies IS NOT NULL
             AND custrecord_dm_anomalies != '[]'
-            AND custrecord_dm_status NOT IN ('${DocStatus.REJECTED}', '${DocStatus.COMPLETED}')
+            AND custrecord_dm_status NOT IN (${DocStatus.REJECTED}, ${DocStatus.COMPLETED})
             ORDER BY custrecord_dm_created_date DESC
             FETCH FIRST ${limit} ROWS ONLY
         `;
@@ -1281,10 +1327,10 @@ define([
             let actualTransactionType = transactionType;
 
             if (createTransaction && vendorId) {
-                // Determine transaction type
+                // Determine transaction type based on document type ID
                 if (!actualTransactionType) {
-                    actualTransactionType = documentType === 'EXPENSE_REPORT' ? 'expensereport' :
-                                          documentType === 'CREDIT_MEMO' ? 'vendorcredit' : 'vendorbill';
+                    actualTransactionType = documentType === DocType.EXPENSE_REPORT ? 'expensereport' :
+                                          documentType === DocType.CREDIT_MEMO ? 'vendorcredit' : 'vendorbill';
                 }
 
                 transactionId = createTransactionFromDocument(docRecord, actualTransactionType);
@@ -1551,8 +1597,8 @@ define([
     function updateBatchProgress(batchId) {
         const sql = `
             SELECT COUNT(*) as total,
-                SUM(CASE WHEN custrecord_dm_status IN ('${DocStatus.REJECTED}', '${DocStatus.COMPLETED}') THEN 1 ELSE 0 END) as processed,
-                SUM(CASE WHEN custrecord_dm_status = '${DocStatus.ERROR}' THEN 1 ELSE 0 END) as errors
+                SUM(CASE WHEN custrecord_dm_status IN (${DocStatus.REJECTED}, ${DocStatus.COMPLETED}) THEN 1 ELSE 0 END) as processed,
+                SUM(CASE WHEN custrecord_dm_status = ${DocStatus.ERROR} THEN 1 ELSE 0 END) as errors
             FROM customrecord_dm_captured_document
             WHERE custrecord_dm_batch_id = ?
         `;
@@ -1647,54 +1693,21 @@ define([
         return txnRecord ? txnRecord.save() : null;
     }
 
-    // Display text helper functions
+    // Display text helper functions - use the Labels constants
     function getStatusDisplayText(status) {
-        const map = {
-            [DocStatus.PENDING]: 'Pending',
-            [DocStatus.PROCESSING]: 'Processing',
-            [DocStatus.EXTRACTED]: 'Extracted',
-            [DocStatus.NEEDS_REVIEW]: 'Needs Review',
-            [DocStatus.APPROVED]: 'Approved',
-            [DocStatus.REJECTED]: 'Rejected',
-            [DocStatus.COMPLETED]: 'Completed',
-            [DocStatus.ERROR]: 'Error'
-        };
-        return map[status] || status;
+        return DocStatusLabels[status] || status;
     }
 
     function getBatchStatusDisplayText(status) {
-        const map = {
-            [BatchStatus.PENDING]: 'Pending',
-            [BatchStatus.PROCESSING]: 'Processing',
-            [BatchStatus.COMPLETED]: 'Completed',
-            [BatchStatus.PARTIAL_ERROR]: 'Partial Error',
-            [BatchStatus.FAILED]: 'Failed',
-            [BatchStatus.CANCELLED]: 'Cancelled'
-        };
-        return map[status] || status;
+        return BatchStatusLabels[status] || status;
     }
 
     function getSourceDisplayText(source) {
-        const map = {
-            [Source.UPLOAD]: 'Manual Upload',
-            [Source.EMAIL]: 'Email Import',
-            [Source.DRAG_DROP]: 'Drag and Drop',
-            [Source.API]: 'API Integration',
-            [Source.SCANNER]: 'Scanner',
-            [Source.MOBILE]: 'Mobile App'
-        };
-        return map[source] || source;
+        return SourceLabels[source] || source;
     }
 
     function getDocTypeDisplayText(docType) {
-        const map = {
-            'INVOICE': 'Invoice',
-            'RECEIPT': 'Receipt',
-            'CREDIT_MEMO': 'Credit Memo',
-            'EXPENSE_REPORT': 'Expense Report',
-            'UNKNOWN': 'Unknown'
-        };
-        return map[docType] || docType;
+        return DocTypeLabels[docType] || docType;
     }
 
     return {

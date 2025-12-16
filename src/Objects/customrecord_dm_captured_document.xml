@@ -36,18 +36,18 @@
         </customrecordcustomfield>
 
         <customrecordcustomfield scriptid="custrecord_dm_document_type">
-            <fieldtype>TEXT</fieldtype>
+            <fieldtype>INTEGER</fieldtype>
             <label>Document Type</label>
-            <description>Type of document (INVOICE, RECEIPT, CREDIT_MEMO, EXPENSE_REPORT, UNKNOWN)</description>
+            <description>Type of document: 1=Invoice, 2=Receipt, 3=Credit Memo, 4=Expense Report, 5=Purchase Order, 6=Unknown</description>
             <ismandatory>F</ismandatory>
             <displaytype>NORMAL</displaytype>
             <showinlist>T</showinlist>
         </customrecordcustomfield>
 
         <customrecordcustomfield scriptid="custrecord_dm_status">
-            <fieldtype>TEXT</fieldtype>
+            <fieldtype>INTEGER</fieldtype>
             <label>Status</label>
-            <description>Processing status (pending, processing, extracted, needs_review, approved, rejected, completed, error)</description>
+            <description>Processing status: 1=Pending, 2=Processing, 3=Extracted, 4=Needs Review, 5=Rejected, 6=Completed, 7=Error</description>
             <ismandatory>F</ismandatory>
             <displaytype>NORMAL</displaytype>
             <showinlist>T</showinlist>
@@ -201,9 +201,9 @@
         </customrecordcustomfield>
 
         <customrecordcustomfield scriptid="custrecord_dm_source">
-            <fieldtype>TEXT</fieldtype>
+            <fieldtype>INTEGER</fieldtype>
             <label>Source</label>
-            <description>How document was uploaded (upload, email, drag_drop, api, scanner, mobile)</description>
+            <description>How document was uploaded: 1=Upload, 2=Email, 3=Drag/Drop, 4=API, 5=Scanner, 6=Mobile</description>
             <ismandatory>F</ismandatory>
             <displaytype>NORMAL</displaytype>
             <showinlist>T</showinlist>
