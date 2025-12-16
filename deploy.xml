@@ -1,9 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <deploy>
     <files>
-        <path>~/FileCabinet/SuiteApps/com.flux.capture/*</path>
+        <path>~/FileCabinet/SuiteApps/com.flux.capture/**</path>
     </files>
-    <objects>
-        <path>~/Objects/*</path>
-    </objects>
 </deploy>

@@ -2,19 +2,22 @@
 <restlet scriptid="customscript_fc_router">
     <name>Flux Capture Router</name>
     <scriptfile>[/SuiteApps/com.flux.capture/FC_Router.js]</scriptfile>
-    <description>Flux Capture - Main API Router RESTlet. Handles all document capture API operations including upload, processing, review, approval, and batch operations.</description>
+    <description>RESTlet API router for Flux Capture document processing</description>
     <isinactive>F</isinactive>
     <notifyadmins>F</notifyadmins>
     <notifyemails></notifyemails>
     <notifyowner>T</notifyowner>
-    <notifyuser>F</notifyuser>
     <scriptdeployments>
         <scriptdeployment scriptid="customdeploy_fc_router">
             <status>RELEASED</status>
             <title>Flux Capture Router</title>
             <isdeployed>T</isdeployed>
-            <loglevel>DEBUG</loglevel>
-            <allroles>T</allroles>
+            <loglevel>ERROR</loglevel>
+            <allemployees>T</allemployees>
+            <allpartners>F</allpartners>
+            <allroles>F</allroles>
+            <audslctrole></audslctrole>
+            <runasrole>ADMINISTRATOR</runasrole>
         </scriptdeployment>
     </scriptdeployments>
 </restlet>
