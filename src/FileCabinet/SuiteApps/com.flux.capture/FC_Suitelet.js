@@ -22,37 +22,229 @@ define([
 
     // ==================== Main Entry Point ====================
 
+    /**
+     * Handle Suitelet requests
+     * Uses iframe approach to preserve NetSuite menu while serving app
+     */
     function onRequest(context) {
-        const { request, response } = context;
-        const action = request.parameters.action || 'dashboard';
+        if (context.request.method !== 'GET') {
+            context.response.write('Method not allowed');
+            return;
+        }
 
         try {
-            switch (action) {
-                case 'dashboard':
-                    renderDashboard(context);
-                    break;
-                case 'upload':
-                    renderUploadPage(context);
-                    break;
-                case 'review':
-                    renderReviewPage(context);
-                    break;
-                case 'queue':
-                    renderQueuePage(context);
-                    break;
-                case 'batch':
-                    renderBatchPage(context);
-                    break;
-                case 'settings':
-                    renderSettingsPage(context);
-                    break;
-                default:
-                    renderDashboard(context);
+            // Check if we're rendering inside the iframe (app mode) or the wrapper
+            const isInnerFrame = context.request.parameters.fc_mode === 'app';
+
+            if (isInnerFrame) {
+                // MODE 1: Serve raw HTML app content inside iframe
+                serveAppContent(context);
+            } else {
+                // MODE 2: Serve NetSuite wrapper with iframe (preserves NS menu)
+                serveWrapper(context);
             }
         } catch (error) {
             log.error('Suitelet Error', error);
-            response.write(renderErrorPage(error.message));
+            context.response.write(renderErrorPage(error.message));
         }
+    }
+
+    /**
+     * MODE 1: APP CONTENT (Raw HTML inside Iframe)
+     * Routes to appropriate page based on action parameter
+     */
+    function serveAppContent(context) {
+        const { request, response } = context;
+        const action = request.parameters.action || 'dashboard';
+
+        switch (action) {
+            case 'dashboard':
+                renderDashboard(context);
+                break;
+            case 'upload':
+                renderUploadPage(context);
+                break;
+            case 'review':
+                renderReviewPage(context);
+                break;
+            case 'queue':
+                renderQueuePage(context);
+                break;
+            case 'batch':
+                renderBatchPage(context);
+                break;
+            case 'settings':
+                renderSettingsPage(context);
+                break;
+            default:
+                renderDashboard(context);
+        }
+    }
+
+    /**
+     * MODE 2: NETSUITE WRAPPER (Preserves Menu, No Grey Bar)
+     * Creates a form with inline HTML hosting an iframe that loads the app content
+     */
+    function serveWrapper(context) {
+        const form = serverWidget.createForm({ title: 'Flux Capture' });
+
+        // Get the URL of *this* Suitelet with app mode flag
+        const currentScript = runtime.getCurrentScript();
+        const action = context.request.parameters.action || 'dashboard';
+        const docId = context.request.parameters.docId || '';
+
+        let suiteletUrl = url.resolveScript({
+            scriptId: currentScript.id,
+            deploymentId: currentScript.deploymentId
+        }) + '&fc_mode=app&action=' + action;
+
+        if (docId) {
+            suiteletUrl += '&docId=' + docId;
+        }
+
+        // Add an Inline HTML field to host the Iframe
+        const field = form.addField({
+            id: 'custpage_fc_frame',
+            type: serverWidget.FieldType.INLINEHTML,
+            label: ' '
+        });
+
+        // Styling for full-width iframe below NS header (no grey bar)
+        // Use visibility:hidden (not opacity:0) so descendants can override with visibility:visible
+        field.defaultValue = `
+            <style>
+                /* === Hide form title elements without breaking iframe === */
+                /* IMPORTANT: Use visibility:hidden (not opacity:0) because:
+                   - opacity:0 on parent makes ALL descendants invisible (cannot be overridden)
+                   - visibility:hidden CAN be overridden by descendants with visibility:visible
+                   This keeps elements in DOM flow so NS can reference them (for highlightElementId) */
+                #main_form > table:first-child,
+                .uir-page-title-secondline,
+                .uir-page-title,
+                .uir-page-title-firstline,
+                #main_form > tbody > tr:first-child,
+                #main_form > table > tbody > tr:first-child {
+                    visibility: hidden !important;
+                    pointer-events: none !important;
+                    height: 0 !important;
+                    min-height: 0 !important;
+                    max-height: 0 !important;
+                    overflow: visible !important; /* Allow positioned children to escape */
+                    padding: 0 !important;
+                    margin: 0 !important;
+                    border: none !important;
+                    line-height: 0 !important;
+                    font-size: 0 !important;
+                }
+
+                /* Iframe container - full width, positioned below NS header */
+                .fc-frame-wrapper {
+                    position: fixed;
+                    left: 0;
+                    right: 0;
+                    bottom: 0;
+                    top: 103px; /* Fallback, will be overridden by JS */
+                    width: 100vw;
+                    z-index: 100;
+                    /* Override inherited styles from NetSuite's anti-flash CSS */
+                    visibility: visible !important;
+                    opacity: 1 !important;
+                    pointer-events: auto !important;
+                }
+
+                .fc-iframe {
+                    width: 100%;
+                    height: 100%;
+                    border: none;
+                    display: block;
+                    visibility: visible !important;
+                    opacity: 1 !important;
+                    pointer-events: auto !important;
+                }
+            </style>
+            <div class="fc-frame-wrapper">
+                <iframe
+                    src="${suiteletUrl}"
+                    class="fc-iframe"
+                    title="Flux Capture"
+                ></iframe>
+            </div>
+            <script>
+                (function() {
+                    /**
+                     * Detect NetSuite header bottom position and adjust iframe accordingly
+                     */
+                    function adjustIframePosition() {
+                        var wrapper = document.querySelector('.fc-frame-wrapper');
+                        if (!wrapper) return false;
+
+                        // NetSuite header selectors (order matters - most specific first)
+                        var headerSelectors = [
+                            '#div__header',           // Redwood theme header
+                            '#ns-header',             // Modern NetSuite header
+                            '#ns_navigation',         // Navigation bar
+                            '.uir-page-header',       // Classic UI header
+                            '#nscm'                   // NetSuite Center Menu
+                        ];
+
+                        var headerBottom = 0;
+
+                        // Try each selector to find the header
+                        for (var i = 0; i < headerSelectors.length; i++) {
+                            var header = document.querySelector(headerSelectors[i]);
+                            if (header) {
+                                var rect = header.getBoundingClientRect();
+                                // Use the highest bottom value found (in case of nested headers)
+                                if (rect.bottom > headerBottom) {
+                                    headerBottom = rect.bottom;
+                                }
+                            }
+                        }
+
+                        // Fallback: scan for navigation elements by checking elements at top of page
+                        if (headerBottom === 0) {
+                            var yPositions = [40, 60, 80, 100];
+                            for (var j = 0; j < yPositions.length; j++) {
+                                var elements = document.elementsFromPoint(window.innerWidth / 2, yPositions[j]);
+                                for (var k = 0; k < elements.length; k++) {
+                                    var el = elements[k];
+                                    if (el.tagName === 'BODY' || el.tagName === 'HTML') continue;
+                                    var rect = el.getBoundingClientRect();
+                                    if (rect.bottom > headerBottom && rect.bottom < 200) {
+                                        headerBottom = rect.bottom;
+                                    }
+                                }
+                            }
+                        }
+
+                        // Apply detected position (minimum 80px, maximum 120px for safety)
+                        if (headerBottom > 0) {
+                            headerBottom = Math.max(80, Math.min(120, headerBottom));
+                            wrapper.style.top = headerBottom + 'px';
+                            return true;
+                        }
+
+                        return false;
+                    }
+
+                    // Run immediately
+                    var success = adjustIframePosition();
+
+                    // Retry with delays for async-loading themes (like Redwood)
+                    if (!success) {
+                        var retries = [100, 200, 400, 800];
+                        retries.forEach(function(delay) {
+                            setTimeout(adjustIframePosition, delay);
+                        });
+                    }
+
+                    // Also adjust on window resize
+                    window.addEventListener('resize', adjustIframePosition);
+                })();
+            </script>
+        `;
+
+        context.response.writePage(form);
     }
 
     // ==================== Dashboard ====================
@@ -1039,7 +1231,51 @@ define([
     <title>Flux Capture - ${title}</title>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
-    <style>${getStyles()}</style>`;
+    <style>${getStyles()}</style>
+    <script>
+        // Theme sync - detect NetSuite parent theme colors and apply to app
+        (function() {
+            function syncThemeFromParent() {
+                try {
+                    // Try to access parent window (NS wrapper) to detect theme
+                    if (window.parent && window.parent !== window) {
+                        var parentDoc = window.parent.document;
+
+                        // Detect Redwood theme primary color
+                        var redwoodHeader = parentDoc.querySelector('#div__header');
+                        if (redwoodHeader) {
+                            var headerStyle = window.parent.getComputedStyle(redwoodHeader);
+                            var bgColor = headerStyle.backgroundColor;
+                            if (bgColor && bgColor !== 'rgba(0, 0, 0, 0)') {
+                                // Apply detected color to CSS variables
+                                document.documentElement.style.setProperty('--fc-primary', bgColor);
+                            }
+                        }
+
+                        // Detect NS navigation bar color
+                        var navBar = parentDoc.querySelector('#ns_navigation, .ns-navigation');
+                        if (navBar) {
+                            var navStyle = window.parent.getComputedStyle(navBar);
+                            var navBg = navStyle.backgroundColor;
+                            if (navBg && navBg !== 'rgba(0, 0, 0, 0)') {
+                                document.documentElement.style.setProperty('--fc-primary-dark', navBg);
+                            }
+                        }
+                    }
+                } catch (e) {
+                    // Cross-origin access blocked - use default theme
+                    console.log('Theme sync skipped - using default colors');
+                }
+            }
+
+            // Run on load
+            if (document.readyState === 'loading') {
+                document.addEventListener('DOMContentLoaded', syncThemeFromParent);
+            } else {
+                syncThemeFromParent();
+            }
+        })();
+    </script>`;
     }
 
     function renderSidebar(active) {
@@ -1110,22 +1346,34 @@ define([
     function renderScripts() {
         return `
     <script>
+        // Helper to get base URL with fc_mode preserved for iframe navigation
+        function getBaseUrl() {
+            const params = new URLSearchParams(window.location.search);
+            const baseParams = [];
+            // Preserve script and deploy params
+            if (params.get('script')) baseParams.push('script=' + params.get('script'));
+            if (params.get('deploy')) baseParams.push('deploy=' + params.get('deploy'));
+            // Always include fc_mode=app when inside iframe
+            baseParams.push('fc_mode=app');
+            return window.location.pathname + '?' + baseParams.join('&');
+        }
+
         function navigate(action) {
-            window.location.href = window.location.pathname + '?action=' + action;
+            window.location.href = getBaseUrl() + '&action=' + action;
         }
 
         function reviewDoc(id) {
-            window.location.href = window.location.pathname + '?action=review&docId=' + id;
+            window.location.href = getBaseUrl() + '&action=review&docId=' + id;
         }
 
         function filterQueue(status) {
-            window.location.href = window.location.pathname + '?action=queue&status=' + status;
+            window.location.href = getBaseUrl() + '&action=queue&status=' + status;
         }
 
         function goToPage(page) {
             const params = new URLSearchParams(window.location.search);
-            params.set('page', page);
-            window.location.href = window.location.pathname + '?' + params.toString();
+            const status = params.get('status') || '';
+            window.location.href = getBaseUrl() + '&action=queue&page=' + page + (status ? '&status=' + status : '');
         }
 
         function toggleSelectAll() {
@@ -1230,7 +1478,7 @@ define([
             document.getElementById('progressTitle').textContent = 'Complete!';
             document.getElementById('progressText').textContent = 'All files processed';
 
-            setTimeout(() => navigate('queue'), 1500);
+            setTimeout(function() { navigate('queue'); }, 1500);
         }
 
         function readFileAsBase64(file) {
@@ -1245,65 +1493,113 @@ define([
 
     function getStyles() {
         return `
+        /* CSS Custom Properties for theme sync with NetSuite */
+        :root {
+            /* Primary colors - can be overridden for NS theme sync */
+            --fc-primary: #6366f1;
+            --fc-primary-dark: #4f46e5;
+            --fc-primary-light: #818cf8;
+            --fc-primary-bg: #eef2ff;
+
+            /* Sidebar colors */
+            --fc-sidebar-bg: linear-gradient(180deg, var(--fc-primary), var(--fc-primary-dark));
+            --fc-sidebar-text: rgba(255, 255, 255, 0.8);
+            --fc-sidebar-text-active: white;
+            --fc-sidebar-hover: rgba(255, 255, 255, 0.1);
+
+            /* Surface colors */
+            --fc-surface: #ffffff;
+            --fc-background: #f1f5f9;
+            --fc-border: #e2e8f0;
+
+            /* Text colors */
+            --fc-text-primary: #1e293b;
+            --fc-text-secondary: #64748b;
+
+            /* Status colors */
+            --fc-success: #16a34a;
+            --fc-warning: #f59e0b;
+            --fc-danger: #dc2626;
+            --fc-info: #2563eb;
+        }
+
         * { margin: 0; padding: 0; box-sizing: border-box; }
-        body { font-family: 'Inter', sans-serif; background: #f1f5f9; color: #1e293b; }
+        body {
+            font-family: 'Inter', sans-serif;
+            background: var(--fc-background);
+            color: var(--fc-text-primary);
+        }
 
         .app-container { display: flex; min-height: 100vh; }
 
         .sidebar {
-            width: 240px; background: linear-gradient(180deg, #6366f1, #4f46e5);
-            color: white; padding: 20px 0; position: fixed; height: 100vh;
+            width: 240px;
+            background: var(--fc-sidebar-bg);
+            color: white;
+            padding: 20px 0;
+            position: fixed;
+            height: 100vh;
+            /* Sync with NetSuite theme - detect and apply */
+            transition: background 0.3s ease;
         }
         .sidebar-logo { padding: 0 20px 30px; font-size: 20px; font-weight: 700; display: flex; align-items: center; gap: 10px; }
         .sidebar-logo i { font-size: 24px; }
         .sidebar-nav { display: flex; flex-direction: column; }
         .nav-item {
-            padding: 14px 20px; color: rgba(255,255,255,0.8); text-decoration: none;
-            display: flex; align-items: center; gap: 12px; transition: all 0.2s;
+            padding: 14px 20px;
+            color: var(--fc-sidebar-text);
+            text-decoration: none;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            transition: all 0.2s;
         }
-        .nav-item:hover, .nav-item.active { background: rgba(255,255,255,0.1); color: white; }
-        .nav-item.active { border-left: 3px solid white; }
+        .nav-item:hover, .nav-item.active {
+            background: var(--fc-sidebar-hover);
+            color: var(--fc-sidebar-text-active);
+        }
+        .nav-item.active { border-left: 3px solid var(--fc-sidebar-text-active); }
 
         .main-content { flex: 1; margin-left: 240px; padding: 30px; }
 
         .page-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 30px; }
         .page-header h1 { font-size: 28px; font-weight: 700; }
-        .page-header p { color: #64748b; margin-top: 4px; }
+        .page-header p { color: var(--fc-text-secondary); margin-top: 4px; }
 
         .quick-actions { display: flex; gap: 12px; margin-bottom: 30px; }
         .action-btn {
             padding: 12px 24px; border: none; border-radius: 8px; cursor: pointer;
             font-size: 14px; font-weight: 500; display: flex; align-items: center; gap: 8px;
-            background: white; color: #374151; box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+            background: var(--fc-surface); color: #374151; box-shadow: 0 1px 3px rgba(0,0,0,0.1);
             transition: all 0.2s;
         }
         .action-btn:hover { box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
-        .action-btn.primary { background: #6366f1; color: white; }
-        .action-btn .badge { background: #ef4444; color: white; padding: 2px 8px; border-radius: 10px; font-size: 12px; }
+        .action-btn.primary { background: var(--fc-primary); color: white; }
+        .action-btn .badge { background: var(--fc-danger); color: white; padding: 2px 8px; border-radius: 10px; font-size: 12px; }
 
         .stats-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 20px; margin-bottom: 30px; }
         .stat-card {
-            background: white; border-radius: 12px; padding: 20px;
+            background: var(--fc-surface); border-radius: 12px; padding: 20px;
             box-shadow: 0 1px 3px rgba(0,0,0,0.1); display: flex; flex-direction: column; gap: 12px;
         }
         .stat-icon { width: 48px; height: 48px; border-radius: 12px; display: flex; align-items: center; justify-content: center; font-size: 20px; }
-        .stat-icon.blue { background: #dbeafe; color: #2563eb; }
-        .stat-icon.green { background: #dcfce7; color: #16a34a; }
+        .stat-icon.blue { background: #dbeafe; color: var(--fc-info); }
+        .stat-icon.green { background: #dcfce7; color: var(--fc-success); }
         .stat-icon.orange { background: #fed7aa; color: #ea580c; }
-        .stat-icon.purple { background: #e9d5ff; color: #9333ea; }
+        .stat-icon.purple { background: var(--fc-primary-bg); color: var(--fc-primary); }
         .stat-value { font-size: 28px; font-weight: 700; }
-        .stat-label { color: #64748b; font-size: 14px; }
-        .stat-trend { color: #16a34a; font-size: 13px; }
-        .stat-link { color: #6366f1; font-size: 13px; text-decoration: none; }
+        .stat-label { color: var(--fc-text-secondary); font-size: 14px; }
+        .stat-trend { color: var(--fc-success); font-size: 13px; }
+        .stat-link { color: var(--fc-primary); font-size: 13px; text-decoration: none; }
 
         .content-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
-        .card { background: white; border-radius: 12px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
+        .card { background: var(--fc-surface); border-radius: 12px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
         .card-header {
-            padding: 16px 20px; border-bottom: 1px solid #e2e8f0;
+            padding: 16px 20px; border-bottom: 1px solid var(--fc-border);
             display: flex; justify-content: space-between; align-items: center;
         }
         .card-header h3 { font-size: 16px; display: flex; align-items: center; gap: 8px; }
-        .card-header a { color: #6366f1; font-size: 13px; text-decoration: none; }
+        .card-header a { color: var(--fc-primary); font-size: 13px; text-decoration: none; }
         .card-body { padding: 16px 20px; }
 
         .doc-list { display: flex; flex-direction: column; gap: 12px; }
@@ -1311,24 +1607,24 @@ define([
             display: flex; align-items: center; gap: 12px; padding: 12px;
             border-radius: 8px; cursor: pointer; transition: background 0.2s;
         }
-        .doc-item:hover { background: #f8fafc; }
+        .doc-item:hover { background: var(--fc-background); }
         .doc-icon { width: 40px; height: 40px; border-radius: 8px; display: flex; align-items: center; justify-content: center; }
-        .doc-icon.pending { background: #fef3c7; color: #d97706; }
-        .doc-icon.processing { background: #dbeafe; color: #2563eb; }
-        .doc-icon.completed { background: #dcfce7; color: #16a34a; }
-        .doc-icon.rejected { background: #fee2e2; color: #dc2626; }
+        .doc-icon.pending { background: #fef3c7; color: var(--fc-warning); }
+        .doc-icon.processing { background: #dbeafe; color: var(--fc-info); }
+        .doc-icon.completed { background: #dcfce7; color: var(--fc-success); }
+        .doc-icon.rejected { background: #fee2e2; color: var(--fc-danger); }
         .doc-info { flex: 1; }
         .doc-name { display: block; font-weight: 500; }
-        .doc-meta { display: block; font-size: 12px; color: #64748b; }
+        .doc-meta { display: block; font-size: 12px; color: var(--fc-text-secondary); }
         .doc-amount { font-weight: 600; }
         .status-badge {
             padding: 4px 10px; border-radius: 12px; font-size: 12px; font-weight: 500;
         }
-        .status-badge.pending { background: #fef3c7; color: #d97706; }
-        .status-badge.processing { background: #dbeafe; color: #2563eb; }
+        .status-badge.pending { background: #fef3c7; color: var(--fc-warning); }
+        .status-badge.processing { background: #dbeafe; color: var(--fc-info); }
         .status-badge.extracted, .status-badge.review { background: #fed7aa; color: #ea580c; }
-        .status-badge.completed { background: #dcfce7; color: #16a34a; }
-        .status-badge.rejected, .status-badge.error { background: #fee2e2; color: #dc2626; }
+        .status-badge.completed { background: #dcfce7; color: var(--fc-success); }
+        .status-badge.rejected, .status-badge.error { background: #fee2e2; color: var(--fc-danger); }
 
         .anomaly-list { display: flex; flex-direction: column; gap: 10px; }
         .anomaly-item {
@@ -1336,89 +1632,89 @@ define([
             border-radius: 8px; background: #fef3c7;
         }
         .anomaly-item.high { background: #fee2e2; }
-        .anomaly-item i { color: #d97706; }
-        .anomaly-item.high i { color: #dc2626; }
+        .anomaly-item i { color: var(--fc-warning); }
+        .anomaly-item.high i { color: var(--fc-danger); }
         .anomaly-info { flex: 1; }
         .anomaly-title { display: block; font-weight: 500; font-size: 14px; }
-        .anomaly-meta { display: block; font-size: 12px; color: #64748b; }
-        .btn-sm { padding: 6px 12px; border: none; border-radius: 6px; background: white; cursor: pointer; font-size: 12px; }
+        .anomaly-meta { display: block; font-size: 12px; color: var(--fc-text-secondary); }
+        .btn-sm { padding: 6px 12px; border: none; border-radius: 6px; background: var(--fc-surface); cursor: pointer; font-size: 12px; }
 
-        .alert-count { padding: 4px 10px; border-radius: 12px; font-size: 12px; background: #e2e8f0; }
-        .alert-count.has-alerts { background: #fee2e2; color: #dc2626; }
+        .alert-count { padding: 4px 10px; border-radius: 12px; font-size: 12px; background: var(--fc-border); }
+        .alert-count.has-alerts { background: #fee2e2; color: var(--fc-danger); }
 
-        .empty-state { text-align: center; padding: 40px 20px; color: #64748b; }
+        .empty-state { text-align: center; padding: 40px 20px; color: var(--fc-text-secondary); }
         .empty-state i { font-size: 48px; margin-bottom: 16px; opacity: 0.5; }
 
         /* Upload Page */
         .upload-container { max-width: 800px; margin: 0 auto; }
         .type-selector { display: flex; gap: 12px; margin-bottom: 24px; }
         .type-option {
-            flex: 1; padding: 16px; background: white; border: 2px solid #e2e8f0;
+            flex: 1; padding: 16px; background: var(--fc-surface); border: 2px solid var(--fc-border);
             border-radius: 12px; cursor: pointer; text-align: center; transition: all 0.2s;
         }
-        .type-option:hover { border-color: #6366f1; }
-        .type-option.active { border-color: #6366f1; background: #eef2ff; }
+        .type-option:hover { border-color: var(--fc-primary); }
+        .type-option.active { border-color: var(--fc-primary); background: var(--fc-primary-bg); }
         .type-option input { display: none; }
-        .type-option i { font-size: 24px; color: #6366f1; margin-bottom: 8px; display: block; }
+        .type-option i { font-size: 24px; color: var(--fc-primary); margin-bottom: 8px; display: block; }
         .type-option span { font-weight: 500; }
 
         .upload-zone {
-            background: white; border: 2px dashed #cbd5e1; border-radius: 16px;
+            background: var(--fc-surface); border: 2px dashed #cbd5e1; border-radius: 16px;
             padding: 60px 40px; text-align: center; cursor: pointer; transition: all 0.2s;
         }
-        .upload-zone:hover, .upload-zone.dragover { border-color: #6366f1; background: #f8fafc; }
-        .upload-icon { font-size: 64px; color: #6366f1; margin-bottom: 20px; }
+        .upload-zone:hover, .upload-zone.dragover { border-color: var(--fc-primary); background: var(--fc-background); }
+        .upload-icon { font-size: 64px; color: var(--fc-primary); margin-bottom: 20px; }
         .upload-zone h2 { margin-bottom: 8px; }
-        .upload-zone p { color: #64748b; }
+        .upload-zone p { color: var(--fc-text-secondary); }
         .supported-formats { margin-top: 20px; }
-        .format-badge { display: inline-block; padding: 4px 10px; background: #e2e8f0; border-radius: 4px; font-size: 12px; margin: 0 4px; }
+        .format-badge { display: inline-block; padding: 4px 10px; background: var(--fc-border); border-radius: 4px; font-size: 12px; margin: 0 4px; }
 
-        .upload-queue { background: white; border-radius: 12px; padding: 20px; margin-top: 24px; }
+        .upload-queue { background: var(--fc-surface); border-radius: 12px; padding: 20px; margin-top: 24px; }
         .queue-header { display: flex; justify-content: space-between; margin-bottom: 16px; }
         .queue-list { max-height: 300px; overflow-y: auto; }
-        .queue-item { display: flex; align-items: center; gap: 12px; padding: 12px; border-bottom: 1px solid #e2e8f0; }
-        .queue-item i { color: #ef4444; font-size: 20px; }
+        .queue-item { display: flex; align-items: center; gap: 12px; padding: 12px; border-bottom: 1px solid var(--fc-border); }
+        .queue-item i { color: var(--fc-danger); font-size: 20px; }
         .queue-item span { flex: 1; }
-        .file-size { color: #64748b; font-size: 12px; }
+        .file-size { color: var(--fc-text-secondary); font-size: 12px; }
         .queue-actions { display: flex; justify-content: flex-end; gap: 12px; margin-top: 16px; }
 
-        .upload-progress { background: white; border-radius: 12px; padding: 60px 40px; text-align: center; margin-top: 24px; }
-        .spinner { width: 48px; height: 48px; border: 4px solid #e2e8f0; border-top-color: #6366f1; border-radius: 50%; animation: spin 1s linear infinite; margin: 0 auto 20px; }
+        .upload-progress { background: var(--fc-surface); border-radius: 12px; padding: 60px 40px; text-align: center; margin-top: 24px; }
+        .spinner { width: 48px; height: 48px; border: 4px solid var(--fc-border); border-top-color: var(--fc-primary); border-radius: 50%; animation: spin 1s linear infinite; margin: 0 auto 20px; }
         @keyframes spin { to { transform: rotate(360deg); } }
-        .progress-bar { height: 8px; background: #e2e8f0; border-radius: 4px; overflow: hidden; margin-top: 20px; }
-        .progress-fill { height: 100%; background: #6366f1; transition: width 0.3s; }
+        .progress-bar { height: 8px; background: var(--fc-border); border-radius: 4px; overflow: hidden; margin-top: 20px; }
+        .progress-fill { height: 100%; background: var(--fc-primary); transition: width 0.3s; }
 
-        .btn { padding: 10px 20px; border: 1px solid #e2e8f0; background: white; border-radius: 8px; cursor: pointer; font-size: 14px; display: inline-flex; align-items: center; gap: 8px; }
-        .btn.primary { background: #6366f1; color: white; border: none; }
-        .btn.success { background: #16a34a; color: white; border: none; }
-        .btn.danger { background: #dc2626; color: white; border: none; }
-        .btn-text { background: none; border: none; color: #6366f1; cursor: pointer; }
-        .btn-icon { background: none; border: none; cursor: pointer; padding: 8px; color: #64748b; }
-        .btn-icon:hover { color: #1e293b; }
-        .btn-back { background: none; border: none; cursor: pointer; display: flex; align-items: center; gap: 8px; color: #64748b; }
+        .btn { padding: 10px 20px; border: 1px solid var(--fc-border); background: var(--fc-surface); border-radius: 8px; cursor: pointer; font-size: 14px; display: inline-flex; align-items: center; gap: 8px; }
+        .btn.primary { background: var(--fc-primary); color: white; border: none; }
+        .btn.success { background: var(--fc-success); color: white; border: none; }
+        .btn.danger { background: var(--fc-danger); color: white; border: none; }
+        .btn-text { background: none; border: none; color: var(--fc-primary); cursor: pointer; }
+        .btn-icon { background: none; border: none; cursor: pointer; padding: 8px; color: var(--fc-text-secondary); }
+        .btn-icon:hover { color: var(--fc-text-primary); }
+        .btn-back { background: none; border: none; cursor: pointer; display: flex; align-items: center; gap: 8px; color: var(--fc-text-secondary); }
 
         /* Queue Page */
         .queue-filters { display: flex; justify-content: space-between; margin-bottom: 20px; }
         .filter-tabs { display: flex; gap: 8px; }
-        .filter-tab { padding: 8px 16px; border: none; background: white; border-radius: 8px; cursor: pointer; }
-        .filter-tab.active { background: #6366f1; color: white; }
+        .filter-tab { padding: 8px 16px; border: none; background: var(--fc-surface); border-radius: 8px; cursor: pointer; }
+        .filter-tab.active { background: var(--fc-primary); color: white; }
 
-        .queue-table { background: white; border-radius: 12px; overflow: hidden; }
+        .queue-table { background: var(--fc-surface); border-radius: 12px; overflow: hidden; }
         .queue-table table { width: 100%; border-collapse: collapse; }
-        .queue-table th, .queue-table td { padding: 14px 16px; text-align: left; border-bottom: 1px solid #e2e8f0; }
-        .queue-table th { background: #f8fafc; font-weight: 600; font-size: 13px; color: #64748b; }
-        .queue-table tr:hover { background: #f8fafc; }
+        .queue-table th, .queue-table td { padding: 14px 16px; text-align: left; border-bottom: 1px solid var(--fc-border); }
+        .queue-table th { background: var(--fc-background); font-weight: 600; font-size: 13px; color: var(--fc-text-secondary); }
+        .queue-table tr:hover { background: var(--fc-background); }
         .queue-table tr.has-anomaly { background: #fffbeb; }
 
-        .confidence-bar { width: 100px; height: 8px; background: #e2e8f0; border-radius: 4px; position: relative; }
+        .confidence-bar { width: 100px; height: 8px; background: var(--fc-border); border-radius: 4px; position: relative; }
         .confidence-fill { height: 100%; border-radius: 4px; }
-        .confidence-bar.high .confidence-fill { background: #16a34a; }
-        .confidence-bar.medium .confidence-fill { background: #f59e0b; }
-        .confidence-bar.low .confidence-fill { background: #dc2626; }
+        .confidence-bar.high .confidence-fill { background: var(--fc-success); }
+        .confidence-bar.medium .confidence-fill { background: var(--fc-warning); }
+        .confidence-bar.low .confidence-fill { background: var(--fc-danger); }
         .confidence-bar span { position: absolute; right: -35px; top: -3px; font-size: 12px; }
 
         .pagination { display: flex; justify-content: center; gap: 12px; margin-top: 20px; }
-        .pagination button { padding: 8px 16px; border: 1px solid #e2e8f0; background: white; border-radius: 8px; cursor: pointer; }
+        .pagination button { padding: 8px 16px; border: 1px solid var(--fc-border); background: var(--fc-surface); border-radius: 8px; cursor: pointer; }
         .pagination button:disabled { opacity: 0.5; cursor: not-allowed; }
 
         /* Review Page */
@@ -1427,13 +1723,13 @@ define([
         .review-actions { display: flex; gap: 12px; }
         .review-container { display: grid; grid-template-columns: 1fr 400px; gap: 20px; flex: 1; overflow: hidden; }
 
-        .document-preview { background: white; border-radius: 12px; display: flex; flex-direction: column; }
-        .preview-toolbar { padding: 12px; border-bottom: 1px solid #e2e8f0; display: flex; gap: 8px; }
-        .tool-btn { padding: 8px; border: 1px solid #e2e8f0; background: white; border-radius: 6px; cursor: pointer; }
+        .document-preview { background: var(--fc-surface); border-radius: 12px; display: flex; flex-direction: column; }
+        .preview-toolbar { padding: 12px; border-bottom: 1px solid var(--fc-border); display: flex; gap: 8px; }
+        .tool-btn { padding: 8px; border: 1px solid var(--fc-border); background: var(--fc-surface); border-radius: 6px; cursor: pointer; }
         .preview-frame { flex: 1; overflow: hidden; }
         .preview-frame iframe { width: 100%; height: 100%; border: none; transform-origin: top left; }
 
-        .extraction-panel { background: white; border-radius: 12px; padding: 20px; overflow-y: auto; }
+        .extraction-panel { background: var(--fc-surface); border-radius: 12px; padding: 20px; overflow-y: auto; }
         .confidence-banner { padding: 16px; border-radius: 8px; margin-bottom: 20px; }
         .confidence-banner.high { background: #dcfce7; }
         .confidence-banner.medium { background: #fef3c7; }
@@ -1443,44 +1739,44 @@ define([
         .score-circle svg { width: 100%; height: 100%; }
         .score-bg { fill: none; stroke: rgba(0,0,0,0.1); stroke-width: 3; }
         .score-fill { fill: none; stroke: currentColor; stroke-width: 3; stroke-linecap: round; }
-        .confidence-banner.high .score-fill { stroke: #16a34a; }
-        .confidence-banner.medium .score-fill { stroke: #f59e0b; }
-        .confidence-banner.low .score-fill { stroke: #dc2626; }
+        .confidence-banner.high .score-fill { stroke: var(--fc-success); }
+        .confidence-banner.medium .score-fill { stroke: var(--fc-warning); }
+        .confidence-banner.low .score-fill { stroke: var(--fc-danger); }
         .score-text { font-size: 10px; font-weight: 600; text-anchor: middle; }
         .score-label { font-weight: 600; }
 
         .anomaly-warnings { margin-bottom: 20px; }
         .warning-item { display: flex; align-items: center; gap: 12px; padding: 12px; border-radius: 8px; background: #fef3c7; margin-bottom: 8px; }
         .warning-item.high { background: #fee2e2; }
-        .warning-item i { color: #d97706; }
-        .warning-item.high i { color: #dc2626; }
+        .warning-item i { color: var(--fc-warning); }
+        .warning-item.high i { color: var(--fc-danger); }
 
-        .extracted-fields h3, .amount-fields h3, .line-items h3 { font-size: 14px; color: #64748b; margin-bottom: 16px; border-bottom: 1px solid #e2e8f0; padding-bottom: 8px; }
+        .extracted-fields h3, .amount-fields h3, .line-items h3 { font-size: 14px; color: var(--fc-text-secondary); margin-bottom: 16px; border-bottom: 1px solid var(--fc-border); padding-bottom: 8px; }
         .field-group { margin-bottom: 16px; }
-        .field-group label { display: block; font-size: 12px; color: #64748b; margin-bottom: 4px; }
-        .field-group input, .field-group select { width: 100%; padding: 10px 12px; border: 1px solid #e2e8f0; border-radius: 8px; font-size: 14px; }
+        .field-group label { display: block; font-size: 12px; color: var(--fc-text-secondary); margin-bottom: 4px; }
+        .field-group input, .field-group select { width: 100%; padding: 10px 12px; border: 1px solid var(--fc-border); border-radius: 8px; font-size: 14px; }
         .field-row { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
 
         .amount-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
         .amount-field { text-align: center; }
-        .amount-field label { display: block; font-size: 12px; color: #64748b; margin-bottom: 4px; }
-        .amount-field input { width: 100%; padding: 10px; border: 1px solid #e2e8f0; border-radius: 8px; text-align: right; }
-        .amount-field.total input { background: #f8fafc; font-weight: 600; }
+        .amount-field label { display: block; font-size: 12px; color: var(--fc-text-secondary); margin-bottom: 4px; }
+        .amount-field input { width: 100%; padding: 10px; border: 1px solid var(--fc-border); border-radius: 8px; text-align: right; }
+        .amount-field.total input { background: var(--fc-background); font-weight: 600; }
 
         .line-items { margin-top: 20px; }
         .line-items-table { width: 100%; border-collapse: collapse; font-size: 13px; }
-        .line-items-table th, .line-items-table td { padding: 8px; border: 1px solid #e2e8f0; }
-        .line-items-table th { background: #f8fafc; font-weight: 500; }
+        .line-items-table th, .line-items-table td { padding: 8px; border: 1px solid var(--fc-border); }
+        .line-items-table th { background: var(--fc-background); font-weight: 500; }
         .line-items-table input { width: 100%; padding: 6px; border: none; background: transparent; }
 
         /* Settings */
         .settings-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 20px; }
-        .settings-section { background: white; border-radius: 12px; padding: 24px; }
+        .settings-section { background: var(--fc-surface); border-radius: 12px; padding: 24px; }
         .settings-section h3 { margin-bottom: 20px; display: flex; align-items: center; gap: 10px; }
         .setting-item { margin-bottom: 16px; display: flex; justify-content: space-between; align-items: center; }
         .setting-item label { font-weight: 500; }
         .setting-item input[type="range"] { width: 150px; }
-        .setting-item select { padding: 8px 12px; border: 1px solid #e2e8f0; border-radius: 6px; }
+        .setting-item select { padding: 8px 12px; border: 1px solid var(--fc-border); border-radius: 6px; }
         .settings-actions { margin-top: 24px; }
 
         @media (max-width: 1200px) {
