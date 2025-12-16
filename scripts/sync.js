@@ -212,7 +212,7 @@ function ensureFolderExists(folderPath) {
 
     try {
         log(`  Creating folder: ${folderPath}`);
-        const output = execSync(`suitecloud file:create --paths "${folderPath}" --type FOLDER`, {
+        const output = execSync(`suitecloud file:create --path "${folderPath}" --type FOLDER`, {
             encoding: 'utf8',
             stdio: ['pipe', 'pipe', 'pipe']
         });
