@@ -18,6 +18,9 @@ on:
 jobs:
   deploy:
     runs-on: ubuntu-latest
+    env:
+      SUITECLOUD_CI: "1"
+      SUITECLOUD_CI_PASSKEY: ${{ secrets.NS_PASSKEY }}
 
     steps:
       - name: Checkout repository
@@ -40,12 +43,11 @@ jobs:
 
       - name: Setup NetSuite authentication
         run: |
-          suitecloud account:setup \
+          suitecloud account:setup:ci \
             --account ${{ secrets.NS_ACCOUNT_ID }} \
             --authid "github-deploy" \
             --certificateid ${{ secrets.NS_CERTIFICATE_ID }} \
-            --privatekeypath /tmp/private.pem \
-            --savetoken
+            --privatekeypath /tmp/private.pem
 
       - name: Validate project
         if: ${{ github.event.inputs.deploy_mode == 'validate' }}
