@@ -292,13 +292,17 @@ define([
     function _delete(context) {
         var result;
         try {
-            // Parse context if it's a string (some DELETE implementations)
-            var params = context;
+            // For DELETE requests, params come as URL query string object (not body)
+            // NetSuite RESTlets pass query params directly to the handler
+            var params = context || {};
+
+            // If context is a string (body), try to parse it, but prefer URL params
             if (typeof context === 'string') {
                 try {
                     params = JSON.parse(context);
                 } catch (e) {
-                    params = context;
+                    // Not JSON, might be empty string or URL encoded
+                    params = {};
                 }
             }
 

@@ -2346,20 +2346,20 @@
 .quick-action[data-action="approve"]:hover { color: var(--color-success); }
 .quick-action[data-action="reject"]:hover { color: var(--color-danger); }
 
-/* Detail Panel - Flyout from Right */
+/* Detail Panel - Flyout from Right - Full Height */
 .rail-detail {
-    position: absolute;
+    position: fixed;
     top: 0;
     right: 0;
     bottom: 0;
     width: 600px;
-    max-width: 55vw;
+    max-width: 60vw;
     background: var(--surface-card);
     border-left: 1px solid var(--border-color);
     box-shadow: var(--shadow-xl);
     transform: translateX(100%);
-    transition: transform 0.25s ease;
-    z-index: 100;
+    transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    z-index: 1000;
     display: flex;
     flex-direction: column;
     overflow: hidden;
@@ -2481,11 +2481,10 @@
 .conf-badge.conf-medium { background: var(--color-warning-bg); color: var(--color-warning); }
 .conf-badge.conf-low { background: var(--color-danger-bg); color: var(--color-danger); }
 
-/* Panel Preview */
+/* Panel Preview - Takes available space */
 .panel-preview {
-    flex: 1;
-    min-height: 350px;
-    max-height: 55vh;
+    flex: 1 1 auto;
+    min-height: 300px;
     background: var(--gray-900);
     position: relative;
     overflow: hidden;
@@ -2881,24 +2880,43 @@ body.flow-mode-active .rail-toolbar .stat-item {
     position: fixed;
     left: 0;
     top: 50%;
-    transform: translateY(-50%);
-    width: 24px;
-    height: 48px;
+    transform: translateY(-50%) translateX(-100%);
+    width: 28px;
+    height: 56px;
     border: none;
-    background: var(--sidebar-bg, var(--gray-800));
-    border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
-    color: white;
+    background: linear-gradient(180deg, #0f172a 0%, #1e293b 100%);
+    border-radius: 0 var(--radius-md) var(--radius-md) 0;
+    color: rgba(255,255,255,0.8);
     cursor: pointer;
-    display: none;
+    display: flex;
     align-items: center;
     justify-content: center;
-    z-index: 100;
-    transition: all 0.15s ease;
+    z-index: 101;
+    transition: transform 0.35s cubic-bezier(0.4, 0, 0.2, 1),
+                width 0.2s ease,
+                background 0.2s ease;
+    box-shadow: 2px 0 8px rgba(0,0,0,0.15);
+}
+
+body.sidebar-collapsed .sidebar-expand-btn {
+    transform: translateY(-50%) translateX(0);
 }
 
 .sidebar-expand-btn:hover {
-    width: 32px;
+    width: 36px;
     background: var(--color-primary);
+    color: white;
+}
+
+/* Sidebar Animation - High class smooth transition */
+.app-sidebar {
+    transition: width 0.35s cubic-bezier(0.4, 0, 0.2, 1),
+                padding 0.35s cubic-bezier(0.4, 0, 0.2, 1),
+                transform 0.35s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.app-main {
+    transition: margin-left 0.35s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 /* Collapsed sidebar state */
@@ -2906,6 +2924,7 @@ body.sidebar-collapsed .app-sidebar {
     width: 0;
     padding: 0;
     overflow: hidden;
+    transform: translateX(-100%);
 }
 
 body.sidebar-collapsed .sidebar-expand-btn {
@@ -2939,7 +2958,15 @@ body.dark-mode .app-main {
 }
 
 body.dark-mode .app-sidebar {
-    background: var(--gray-900);
+    background: linear-gradient(180deg, #0a0a12 0%, #111827 100%);
+}
+
+body.dark-mode .sidebar-controls {
+    border-color: rgba(255,255,255,0.05);
+}
+
+body.dark-mode .sidebar-footer {
+    border-color: rgba(255,255,255,0.05);
 }
 
 body.dark-mode .surface-card,
