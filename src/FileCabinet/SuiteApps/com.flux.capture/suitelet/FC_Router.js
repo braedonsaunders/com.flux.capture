@@ -20,23 +20,15 @@ define([
     'N/log',
     'N/encode',
     'N/email',
-    'N/format'
-], function(file, record, search, query, runtime, errorModule, log, encode, email, format) {
+    'N/format',
+    '/SuiteApps/com.flux.capture/lib/FC_Engine'
+], function(file, record, search, query, runtime, errorModule, log, encode, email, format, FC_Engine) {
 
     const API_VERSION = '2.0.0';
 
-    // Lazy-load Engine only when needed
-    var EngineCache = null;
+    // Engine module - may be null if it failed to load
     function getEngine() {
-        if (!EngineCache) {
-            try {
-                EngineCache = require('/SuiteApps/com.flux.capture/lib/FC_Engine');
-            } catch (e) {
-                log.error('FC_Engine load error', e.message);
-                EngineCache = { FluxCaptureEngine: null };
-            }
-        }
-        return EngineCache;
+        return FC_Engine || { FluxCaptureEngine: null };
     }
 
     // ==================== Status Constants ====================
