@@ -157,7 +157,76 @@ define([
     <title>Flux Capture</title>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
-    <link href="${cssUrl}" rel="stylesheet">
+    ${cssUrl ? '<link href="' + cssUrl + '" rel="stylesheet">' : ''}
+    <style>
+    /* Critical inline CSS fallback */
+    :root{--flux-primary:#2563eb;--flux-primary-hover:#1d4ed8;--flux-success:#059669;--flux-warning:#d97706;--flux-danger:#dc2626;--flux-gray-50:#f8fafc;--flux-gray-100:#f1f5f9;--flux-gray-200:#e2e8f0;--flux-gray-300:#cbd5e1;--flux-gray-400:#94a3b8;--flux-gray-500:#64748b;--flux-gray-600:#475569;--flux-gray-700:#334155;--flux-gray-800:#1e293b;--flux-gray-900:#0f172a;--flux-surface:#fff;--flux-background:#f8fafc;--flux-border:#e2e8f0;--flux-text-primary:#0f172a;--flux-text-secondary:#475569;--flux-text-tertiary:#94a3b8;--sidebar-bg:linear-gradient(180deg,#0f172a 0%,#1e293b 100%);--sidebar-text:rgba(255,255,255,.65);--sidebar-text-active:#fff;--shadow-sm:0 1px 3px rgba(0,0,0,.06);--shadow-md:0 4px 6px -1px rgba(0,0,0,.07);--transition-base:200ms cubic-bezier(.4,0,.2,1)}
+    *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+    body{font-family:'Inter',system-ui,-apple-system,sans-serif;font-size:14px;line-height:1.5;color:var(--flux-text-primary);background:var(--flux-background);-webkit-font-smoothing:antialiased}
+    .app-container{display:flex;min-height:100vh}
+    .sidebar{width:260px;background:var(--sidebar-bg);color:var(--sidebar-text);display:flex;flex-direction:column;position:fixed;top:0;left:0;bottom:0;z-index:100}
+    .sidebar-header{padding:20px;display:flex;align-items:center;gap:12px}
+    .sidebar-logo{width:40px;height:40px;background:var(--flux-primary);border-radius:10px;display:flex;align-items:center;justify-content:center}
+    .sidebar-logo svg{width:24px;height:24px;color:#fff}
+    .sidebar-brand-name{font-size:20px;font-weight:700;color:#fff}
+    .sidebar-brand-tagline{font-size:11px;color:var(--sidebar-text);text-transform:uppercase;letter-spacing:.5px}
+    .sidebar-nav{flex:1;padding:8px 12px;overflow-y:auto}
+    .nav-section{margin-bottom:24px}
+    .nav-section-title{font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;color:var(--flux-gray-500);padding:8px 12px;margin-bottom:4px}
+    .nav-item{display:flex;align-items:center;gap:12px;padding:10px 12px;border-radius:8px;color:var(--sidebar-text);text-decoration:none;transition:all var(--transition-base);cursor:pointer}
+    .nav-item:hover{background:rgba(255,255,255,.08);color:rgba(255,255,255,.9)}
+    .nav-item.active{background:var(--flux-primary);color:#fff}
+    .nav-icon{width:20px;text-align:center}
+    .sidebar-footer{padding:16px;border-top:1px solid rgba(255,255,255,.08)}
+    .sidebar-user{display:flex;align-items:center;gap:12px}
+    .sidebar-user-avatar{width:36px;height:36px;border-radius:8px;background:var(--flux-primary);color:#fff;display:flex;align-items:center;justify-content:center;font-weight:600;font-size:13px}
+    .sidebar-user-name{font-weight:500;color:#fff;font-size:13px}
+    .sidebar-user-role{font-size:12px;color:var(--sidebar-text)}
+    .main-content{flex:1;margin-left:260px;display:flex;flex-direction:column;min-height:100vh}
+    .view-container{flex:1;padding:24px 32px;transition:opacity .2s ease,transform .2s ease}
+    .page-header{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:24px}
+    .page-header h1{font-size:28px;font-weight:700;color:var(--flux-text-primary);margin:0}
+    .page-subtitle{color:var(--flux-text-secondary);margin-top:4px}
+    .btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;padding:10px 16px;font-size:14px;font-weight:500;border-radius:8px;border:none;cursor:pointer;transition:all var(--transition-base)}
+    .btn-primary{background:var(--flux-primary);color:#fff}
+    .btn-primary:hover{background:var(--flux-primary-hover)}
+    .btn-ghost{background:transparent;color:var(--flux-text-secondary)}
+    .btn-ghost:hover{background:var(--flux-gray-100)}
+    .card{background:var(--flux-surface);border-radius:12px;border:1px solid var(--flux-border);box-shadow:var(--shadow-sm)}
+    .card-header{padding:16px 20px;border-bottom:1px solid var(--flux-border);display:flex;justify-content:space-between;align-items:center}
+    .card-title{font-weight:600;display:flex;align-items:center;gap:8px}
+    .card-body{padding:20px}
+    .metrics-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:16px;margin-bottom:24px}
+    .metric-card{background:var(--flux-surface);border-radius:12px;padding:20px;border:1px solid var(--flux-border);display:flex;align-items:flex-start;gap:16px}
+    .metric-icon{width:48px;height:48px;border-radius:12px;display:flex;align-items:center;justify-content:center;font-size:20px}
+    .metric-blue .metric-icon{background:rgba(37,99,235,.1);color:var(--flux-primary)}
+    .metric-green .metric-icon{background:rgba(5,150,105,.1);color:var(--flux-success)}
+    .metric-amber .metric-icon{background:rgba(217,119,6,.1);color:var(--flux-warning)}
+    .metric-purple .metric-icon{background:rgba(124,58,237,.1);color:#7c3aed}
+    .metric-value{font-size:28px;font-weight:700;color:var(--flux-text-primary)}
+    .metric-label{font-size:13px;color:var(--flux-text-secondary);margin-top:2px}
+    .empty-state{text-align:center;padding:48px 24px}
+    .empty-icon{width:64px;height:64px;margin:0 auto 16px;background:var(--flux-gray-100);border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:24px;color:var(--flux-gray-400)}
+    .empty-state h4{font-size:16px;font-weight:600;margin-bottom:8px}
+    .empty-state p{color:var(--flux-text-secondary);margin-bottom:16px}
+    .loading-overlay{position:fixed;inset:0;background:rgba(255,255,255,.8);display:flex;align-items:center;justify-content:center;z-index:1000;opacity:0;visibility:hidden;transition:all .2s}
+    .loading-overlay.visible{opacity:1;visibility:visible}
+    .loading-spinner svg{width:48px;height:48px;animation:spin 1s linear infinite}
+    @keyframes spin{to{transform:rotate(360deg)}}
+    .toast-container{position:fixed;bottom:24px;right:24px;z-index:1001;display:flex;flex-direction:column;gap:8px}
+    .toast{padding:12px 16px;background:var(--flux-gray-800);color:#fff;border-radius:8px;display:flex;align-items:center;gap:10px;transform:translateX(120%);transition:transform .3s}
+    .toast.visible{transform:translateX(0)}
+    .data-table{overflow-x:auto}
+    .data-table table{width:100%;border-collapse:collapse}
+    .data-table th,.data-table td{padding:12px 16px;text-align:left;border-bottom:1px solid var(--flux-border)}
+    .data-table th{font-weight:600;color:var(--flux-text-secondary);font-size:12px;text-transform:uppercase;background:var(--flux-gray-50)}
+    .status-pill{display:inline-flex;padding:4px 10px;border-radius:20px;font-size:12px;font-weight:500}
+    .status-pending{background:#fef3c7;color:#92400e}
+    .status-completed{background:#d1fae5;color:#065f46}
+    .status-review{background:#fef3c7;color:#92400e}
+    .status-error{background:#fee2e2;color:#991b1b}
+    .nav-badge{background:var(--flux-danger);color:#fff;font-size:11px;padding:2px 6px;border-radius:10px;margin-left:auto}
+    </style>
 </head>
 <body>
     <div class="app-container" id="app">
@@ -1227,13 +1296,43 @@ define([
      * Helper functions
      */
     function getCssFileUrl() {
-        try {
-            const cssFile = file.load({ id: '/SuiteApps/com.flux.capture/FC_Styles.css' });
-            return cssFile.url;
-        } catch (e) {
-            log.error('CSS Load Error', e);
-            return '';
+        // Try multiple possible paths for the CSS file
+        var paths = [
+            '/SuiteApps/com.flux.capture/FC_Styles.css',
+            'SuiteApps/com.flux.capture/FC_Styles.css',
+            '/SuiteScripts/com.flux.capture/FC_Styles.css',
+            'SuiteScripts/com.flux.capture/FC_Styles.css'
+        ];
+
+        for (var i = 0; i < paths.length; i++) {
+            try {
+                var cssFile = file.load({ id: paths[i] });
+                log.debug('CSS Loaded', 'Found at: ' + paths[i] + ', URL: ' + cssFile.url);
+                return cssFile.url;
+            } catch (e) {
+                log.debug('CSS Path Failed', paths[i] + ' - ' + e.message);
+            }
         }
+
+        // Try searching for the file
+        try {
+            var searchResults = require('N/search').create({
+                type: 'file',
+                filters: [['name', 'is', 'FC_Styles.css']],
+                columns: ['internalid', 'url', 'folder']
+            }).run().getRange({ start: 0, end: 1 });
+
+            if (searchResults.length > 0) {
+                var foundUrl = searchResults[0].getValue('url');
+                log.debug('CSS Found via Search', 'URL: ' + foundUrl);
+                return foundUrl;
+            }
+        } catch (searchErr) {
+            log.debug('CSS Search Failed', searchErr.message);
+        }
+
+        log.error('CSS Load Failed', 'Could not find FC_Styles.css in any location');
+        return '';
     }
 
     function getRestletUrl() {
