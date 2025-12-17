@@ -24,23 +24,23 @@ define([
     'N/encode',
     'N/email',
     'N/format'
-], function(file, record, search, query, runtime, error, log, encode, email, format) {
-
-    // Lazy-load Engine only when needed
-    var Engine = null;
-    function getEngine() {
-        if (!Engine) {
-            try {
-                Engine = require('./FC_Engine');
-            } catch (e) {
-                log.error('FC_Engine load error', e.message);
-                Engine = { FluxCaptureEngine: null };
-            }
-        }
-        return Engine;
-    }
+], function(file, record, search, query, runtime, errorModule, log, encode, email, format) {
 
     const API_VERSION = '2.0.0';
+
+    // Lazy-load Engine only when needed
+    var EngineCache = null;
+    function getEngine() {
+        if (!EngineCache) {
+            try {
+                EngineCache = require('./FC_Engine');
+            } catch (e) {
+                log.error('FC_Engine load error', e.message);
+                EngineCache = { FluxCaptureEngine: null };
+            }
+        }
+        return EngineCache;
+    }
 
     // ==================== Status Constants ====================
     // These are stored as INTEGER fields in NetSuite custom records
