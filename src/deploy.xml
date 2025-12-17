@@ -1,11 +1,11 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <deploy>
-    <configuration>
+    <objects>
         <path>~/Objects/customrecord_dm_batch.xml</path>
         <path>~/Objects/customrecord_dm_captured_document.xml</path>
         <path>~/Objects/customscript_fc_router.xml</path>
         <path>~/Objects/customscript_fc_suitelet.xml</path>
-    </configuration>
+    </objects>
     <files>
         <path>~/FileCabinet/SuiteApps/com.flux.capture/*</path>
     </files>
