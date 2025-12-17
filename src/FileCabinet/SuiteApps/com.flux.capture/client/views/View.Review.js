@@ -608,6 +608,21 @@
                 });
             } else {
                 // ========== NO LAYOUT - Render all fields flat ==========
+                // Show notice about missing layout
+                var transactionLabel = this.transactionType === 'vendorbill' ? 'Vendor Bill' :
+                    this.transactionType === 'expensereport' ? 'Expense Report' :
+                    this.transactionType === 'purchaseorder' ? 'Purchase Order' :
+                    this.transactionType;
+
+                html += '<div class="layout-notice">' +
+                    '<div class="notice-icon"><i class="fas fa-info-circle"></i></div>' +
+                    '<div class="notice-content">' +
+                        '<strong>Form layout not yet captured</strong>' +
+                        '<p>To display fields grouped by tabs as they appear in NetSuite, open any ' + transactionLabel + ' in NetSuite. ' +
+                        'The layout will be captured automatically and used for all future documents of this type.</p>' +
+                    '</div>' +
+                '</div>';
+
                 // Filter visible body fields (exclude entity - handled above)
                 var visibleFields = bodyFields.filter(function(f) {
                     return f.id !== 'entity' && f.isDisplay !== false;

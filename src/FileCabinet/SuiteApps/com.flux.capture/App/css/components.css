@@ -1205,6 +1205,37 @@
     color: var(--color-danger);
 }
 
+/* Layout Notice */
+.layout-notice {
+    display: flex;
+    align-items: flex-start;
+    gap: var(--space-md);
+    background: var(--color-info-bg, rgba(59, 130, 246, 0.1));
+    border: 1px solid rgba(59, 130, 246, 0.2);
+    border-radius: var(--radius-md);
+    padding: var(--space-md);
+    margin-bottom: var(--space-lg);
+}
+
+.layout-notice .notice-icon {
+    flex-shrink: 0;
+    color: var(--color-primary);
+    font-size: 18px;
+}
+
+.layout-notice .notice-content strong {
+    display: block;
+    color: var(--text-primary);
+    margin-bottom: var(--space-xs);
+}
+
+.layout-notice .notice-content p {
+    font-size: var(--font-size-sm);
+    color: var(--text-secondary);
+    margin: 0;
+    line-height: 1.5;
+}
+
 /* Field Confidence Badges */
 .field-confidence {
     display: inline-flex;

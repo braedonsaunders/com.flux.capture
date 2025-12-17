@@ -22,7 +22,7 @@ function(record, search, log, cache) {
     // Cache configuration
     var CACHE_NAME = 'FC_FORM_SCHEMA';
     var CACHE_SCOPE = cache.Scope.PUBLIC;
-    var CACHE_TTL_SECONDS = 86400; // 24 hours
+    var CACHE_TTL_SECONDS = 2592000; // 30 days (form layouts rarely change)
 
     // Known sublists by record type (these exist on the record, not form-specific)
     var RECORD_SUBLISTS = {
