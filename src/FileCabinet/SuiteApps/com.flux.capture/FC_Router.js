@@ -62,42 +62,43 @@ define(['N/log'], function(log) {
             }
 
             log.debug('FC_Router RESPONSE', JSON.stringify(response));
-            return response;
+            // Return as string - NetSuite will set Content-Type to text/plain
+            return JSON.stringify(response);
 
         } catch (e) {
             log.error('FC_Router CATCH ERROR', e.message + ' | ' + e.stack);
-            return {
+            return JSON.stringify({
                 success: false,
                 error: { code: 'CAUGHT_ERROR', message: e.message }
-            };
+            });
         }
     }
 
     function post(context) {
         log.debug('FC_Router POST', JSON.stringify(context));
-        return {
+        return JSON.stringify({
             success: true,
             version: API_VERSION,
             message: 'POST received'
-        };
+        });
     }
 
     function put(context) {
         log.debug('FC_Router PUT', JSON.stringify(context));
-        return {
+        return JSON.stringify({
             success: true,
             version: API_VERSION,
             message: 'PUT received'
-        };
+        });
     }
 
     function doDelete(context) {
         log.debug('FC_Router DELETE', JSON.stringify(context));
-        return {
+        return JSON.stringify({
             success: true,
             version: API_VERSION,
             message: 'DELETE received'
-        };
+        });
     }
 
     return {
