@@ -814,6 +814,7 @@
     flex-direction: column;
     height: 100vh;
     overflow: hidden;
+    max-width: 100%;
 }
 
 .review-content {
@@ -821,6 +822,7 @@
     gap: 0;
     flex: 1;
     overflow: hidden;
+    max-width: 100%;
 }
 
 .preview-panel {
@@ -895,7 +897,9 @@
     border-radius: var(--radius-lg);
     border: 1px solid var(--border-color);
     overflow-y: auto;
+    overflow-x: hidden;
     padding: var(--space-lg);
+    min-width: 0; /* Allow flex item to shrink below content size */
 }
 
 /* ==========================================
