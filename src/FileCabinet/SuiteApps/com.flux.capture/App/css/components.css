@@ -838,34 +838,50 @@
 
 /* Panel Resizer */
 .panel-resizer {
-    width: 8px;
+    width: 12px;
     cursor: col-resize;
     background: transparent;
     display: flex;
     align-items: center;
     justify-content: center;
     flex-shrink: 0;
-    transition: background 0.15s;
-    z-index: 10;
+    z-index: 100;
+    position: relative;
+}
+
+/* Larger invisible hit area */
+.panel-resizer::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    left: -6px;
+    right: -6px;
+    cursor: col-resize;
 }
 
 .panel-resizer:hover,
 .panel-resizer.dragging {
-    background: var(--color-primary-light);
+    background: rgba(59, 130, 246, 0.2);
 }
 
 .resizer-handle {
     width: 4px;
-    height: 40px;
-    background: var(--border-color);
+    height: 48px;
+    background: var(--gray-400);
     border-radius: 2px;
-    transition: background 0.15s, height 0.15s;
+    transition: background 0.15s, transform 0.15s;
+    pointer-events: none;
 }
 
-.panel-resizer:hover .resizer-handle,
+.panel-resizer:hover .resizer-handle {
+    background: var(--color-primary);
+    transform: scaleY(1.2);
+}
+
 .panel-resizer.dragging .resizer-handle {
     background: var(--color-primary);
-    height: 60px;
+    transform: scaleY(1.5);
 }
 
 .preview-tools {

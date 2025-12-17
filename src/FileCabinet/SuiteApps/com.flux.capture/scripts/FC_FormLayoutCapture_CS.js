@@ -17,6 +17,27 @@ function(currentRecord, url) {
     // Cache check - only extract once per form per session
     var EXTRACTED_FORMS = {};
 
+    // System/internal fields to always skip
+    var SKIP_FIELDS = [
+        'ntype', 'recordtype', 'nsapiCT', 'customform', 'entryformquerystring',
+        '_csrf', 'wfinstances', 'id', 'sys_id', 'selectedtab', 'type',
+        'baserecordtype', 'nsapiFC', 'nsapiPS', 'nsapiVF', 'nsapiPI',
+        'nsapiSR', 'nsapiLI', 'nsapiVD', 'nsapiRC', 'nsapiPD', 'nlrole',
+        'submitted', 'nextbill', 'nexttransaction', 'void', 'voided',
+        'nlapiSR', 'nlapiPI', 'nlapiVF', 'nlapiPS', 'nlapiFC', 'nlapiVD',
+        'nlapiLI', 'nlapiRC', 'wfPI', 'wfVF', 'wfFC', 'wfPS', 'wfSR',
+        'nkey', 'nsapiPI2', 'externalid', 'isinactive', 'internalid',
+        'whence', 'wfSR', 'selectedtab', 'e', 'l', 'cf', 'prevdate',
+        'currentrecord', 'memdoc', 'undefined'
+    ];
+
+    // Patterns for system field IDs
+    var SKIP_PATTERNS = [
+        /^nsapi/i, /^sys_/i, /^wf[A-Z]/, /^nlapi/i, /^_/, /^hddn/i,
+        /^sps/, /^nlmulti/, /^machine\d/, /^row\d/, /^intr_/,
+        /recmachcustrecord/, /recmachine/, /^cmb_/, /^popup_/
+    ];
+
     /**
      * Page Init - Extract form layout automatically
      */
@@ -73,7 +94,16 @@ function(currentRecord, url) {
                 return;
             }
 
-            console.log('[FC_FormLayoutCapture] Layout extracted:', layout.tabs.length, 'tabs');
+            // Log extracted fields for debugging
+            console.log('[FC_FormLayoutCapture] === EXTRACTION SUMMARY ===');
+            layout.tabs.forEach(function(tab) {
+                console.log('[FC_FormLayoutCapture] Tab:', tab.label);
+                tab.fieldGroups.forEach(function(group) {
+                    console.log('[FC_FormLayoutCapture]   Group:', group.label, '- Fields:', group.fields.join(', '));
+                });
+                console.log('[FC_FormLayoutCapture]   Sublists:', tab.sublists.join(', '));
+            });
+            console.log('[FC_FormLayoutCapture] Sublists detail:', JSON.stringify(layout.sublists, null, 2));
 
             // Get RESTlet URL
             var restletUrl = url.resolveScript({
@@ -83,7 +113,7 @@ function(currentRecord, url) {
 
             console.log('[FC_FormLayoutCapture] Saving to:', restletUrl);
 
-            // Save to server using XHR (more reliable in client scripts)
+            // Save to server using XHR
             var xhr = new XMLHttpRequest();
             xhr.open('PUT', restletUrl, true);
             xhr.setRequestHeader('Content-Type', 'application/json');
@@ -105,7 +135,7 @@ function(currentRecord, url) {
             }));
 
         } catch (e) {
-            console.error('[FC_FormLayoutCapture] Extract error:', e.message);
+            console.error('[FC_FormLayoutCapture] Extract error:', e);
         }
     }
 
@@ -121,110 +151,226 @@ function(currentRecord, url) {
             recordType: recordType
         };
 
-        // Extract main tab with all visible fields
-        var mainTab = {
-            id: 'main',
-            label: 'Main',
-            displayOrder: 0,
-            fieldGroups: [],
-            sublists: []
-        };
+        // Find NetSuite's main form
+        var mainForm = document.querySelector('form[name="main_form"], #main_form');
+        if (!mainForm) {
+            mainForm = document.body;
+        }
 
-        // Extract visible fields
-        var fields = extractVisibleFields();
-        console.log('[FC_FormLayoutCapture] Found', fields.length, 'visible fields');
+        // Extract tabs from NetSuite tab structure
+        var tabs = extractTabs(mainForm);
 
-        if (fields.length > 0) {
-            mainTab.fieldGroups.push({
-                id: 'primary',
-                label: 'Primary Information',
+        if (tabs.length === 0) {
+            // No tabs found - create a single main tab
+            var fields = extractFieldsFromContainer(mainForm);
+            tabs.push({
+                id: 'main',
+                label: 'Main',
                 displayOrder: 0,
-                fields: fields
+                fieldGroups: [{
+                    id: 'primary',
+                    label: 'Primary Information',
+                    displayOrder: 0,
+                    fields: fields
+                }],
+                sublists: []
             });
         }
 
         // Extract sublists
-        var sublists = extractSublists();
-        console.log('[FC_FormLayoutCapture] Found', sublists.length, 'sublists');
+        var sublists = extractSublists(mainForm);
 
-        sublists.forEach(function(sl) {
-            mainTab.sublists.push(sl.id);
-        });
+        // Add sublist IDs to appropriate tabs
+        if (tabs.length > 0 && sublists.length > 0) {
+            tabs[0].sublists = sublists.map(function(sl) { return sl.id; });
+        }
 
-        layout.tabs.push(mainTab);
+        layout.tabs = tabs;
         layout.sublists = sublists;
 
         return layout;
     }
 
     /**
-     * Extract visible fields from the form
+     * Extract tabs from NetSuite form
      */
-    function extractVisibleFields() {
+    function extractTabs(container) {
+        var tabs = [];
+
+        // NetSuite tab links
+        var tabLinks = container.querySelectorAll('.uir-machine-headerrow a, .tabBnt, .uir_tab, [id^="maintab"]');
+
+        if (tabLinks.length === 0) {
+            return tabs; // No tabs, will use default
+        }
+
+        tabLinks.forEach(function(link, idx) {
+            var tabLabel = (link.textContent || '').trim();
+            if (!tabLabel || tabLabel.length > 50) return;
+
+            var tabId = link.id || 'tab_' + idx;
+
+            // Find the tab content
+            var tabContent = findTabContent(tabId, container);
+            var fields = tabContent ? extractFieldsFromContainer(tabContent) : [];
+
+            tabs.push({
+                id: tabId,
+                label: tabLabel,
+                displayOrder: idx,
+                fieldGroups: [{
+                    id: 'group_' + idx,
+                    label: tabLabel,
+                    displayOrder: 0,
+                    fields: fields
+                }],
+                sublists: []
+            });
+        });
+
+        return tabs;
+    }
+
+    /**
+     * Find tab content container
+     */
+    function findTabContent(tabId, container) {
+        // Try common NetSuite patterns
+        var content = container.querySelector('[data-tab="' + tabId + '"], #' + tabId + '_content, #' + tabId + 'div');
+        return content;
+    }
+
+    /**
+     * Extract fields from a container - only visible, user-facing fields
+     */
+    function extractFieldsFromContainer(container) {
         var fields = [];
         var seen = {};
 
-        // System fields to skip
-        var skipFields = ['ntype', 'recordtype', 'nsapiCT', 'customform', 'entryformquerystring',
-                         '_csrf', 'wfinstances', 'id', 'sys_id', 'selectedtab', 'type',
-                         'baserecordtype', 'nsapiFC', 'nsapiPS', 'nsapiVF', 'nsapiPI',
-                         'nsapiSR', 'nsapiLI', 'nsapiVD', 'nsapiRC', 'nsapiPD', 'nlrole',
-                         'submitted', 'nextbill', 'nexttransaction'];
+        // Look for labeled fields - these are the real form fields
+        // NetSuite puts field labels in specific table cells
+        var labelCells = container.querySelectorAll('td.labelSpanEdit, td.labeltd, .uir-label, span.smallgraytextnolink');
 
-        // Find all input elements
-        var inputs = document.querySelectorAll('input[id], select[id], textarea[id]');
+        labelCells.forEach(function(labelCell) {
+            // Find the input associated with this label
+            var row = labelCell.closest('tr');
+            if (!row) return;
 
-        inputs.forEach(function(el) {
-            var fieldId = getFieldIdFromElement(el);
+            // Check row visibility
+            if (!isElementVisible(row)) return;
+
+            // Find input in the same row or next cell
+            var input = row.querySelector('input[id]:not([type="hidden"]), select[id], textarea[id]');
+            if (!input) return;
+
+            var fieldId = cleanFieldId(input.id);
             if (!fieldId || seen[fieldId]) return;
-            if (skipFields.indexOf(fieldId) !== -1) return;
-            if (fieldId.indexOf('nsapi') === 0) return;
-            if (fieldId.indexOf('sys_') === 0) return;
+            if (shouldSkipField(fieldId)) return;
 
-            // Check if field row is visible
-            var row = el.closest('tr');
-            if (row) {
-                var style = window.getComputedStyle(row);
-                if (style.display === 'none') return;
-            }
+            // Verify the input is visible
+            if (!isElementVisible(input)) return;
 
             seen[fieldId] = true;
             fields.push(fieldId);
         });
 
+        // If no labeled fields found, fall back to finding inputs in visible rows
+        if (fields.length === 0) {
+            var inputs = container.querySelectorAll('input[id]:not([type="hidden"]), select[id], textarea[id]');
+            inputs.forEach(function(input) {
+                var fieldId = cleanFieldId(input.id);
+                if (!fieldId || seen[fieldId]) return;
+                if (shouldSkipField(fieldId)) return;
+
+                // Must be in a visible table row
+                var row = input.closest('tr');
+                if (row && !isElementVisible(row)) return;
+                if (!isElementVisible(input)) return;
+
+                seen[fieldId] = true;
+                fields.push(fieldId);
+            });
+        }
+
+        console.log('[FC_FormLayoutCapture] Extracted fields from container:', fields);
         return fields;
     }
 
     /**
-     * Get field ID from element
+     * Check if element is visible
      */
-    function getFieldIdFromElement(el) {
-        var id = el.id || '';
+    function isElementVisible(el) {
+        if (!el) return false;
+
+        // Check for hidden attribute
+        if (el.hidden) return false;
+
+        // Check inline style
+        if (el.style.display === 'none' || el.style.visibility === 'hidden') return false;
+
+        // Check computed style
+        var style = window.getComputedStyle(el);
+        if (style.display === 'none' || style.visibility === 'hidden') return false;
+
+        // Check dimensions (0 width/height usually means hidden)
+        var rect = el.getBoundingClientRect();
+        if (rect.width === 0 && rect.height === 0) return false;
+
+        return true;
+    }
+
+    /**
+     * Clean field ID from NetSuite prefixes/suffixes
+     */
+    function cleanFieldId(id) {
         if (!id) return null;
 
-        // Clean NetSuite prefixes/suffixes
         return id.replace(/^inpt_/, '')
                  .replace(/^txt_/, '')
+                 .replace(/^hddn_/, '')
                  .replace(/_display$/, '')
                  .replace(/_fs$/, '')
+                 .replace(/_fs_lkp$/, '')
                  .replace(/_val$/, '')
-                 .replace(/_formattedValue$/, '');
+                 .replace(/_formattedValue$/, '')
+                 .replace(/_send$/, '');
+    }
+
+    /**
+     * Check if field should be skipped
+     */
+    function shouldSkipField(fieldId) {
+        if (!fieldId) return true;
+
+        // Check exact matches
+        if (SKIP_FIELDS.indexOf(fieldId.toLowerCase()) !== -1) return true;
+
+        // Check patterns
+        for (var i = 0; i < SKIP_PATTERNS.length; i++) {
+            if (SKIP_PATTERNS[i].test(fieldId)) return true;
+        }
+
+        return false;
     }
 
     /**
      * Extract sublists from the form
      */
-    function extractSublists() {
+    function extractSublists(container) {
         var sublists = [];
+        var seen = {};
 
-        // Look for sublist tables
-        var tables = document.querySelectorAll('table.machine, table.uir-machine-table, [id*="_splits"]');
+        // NetSuite sublist machines
+        var machines = container.querySelectorAll('table[id*="line"], table[id*="expense"], table[id*="item"], div.uir-machine');
 
-        tables.forEach(function(table) {
-            var sublistId = inferSublistId(table);
-            if (!sublistId) return;
+        machines.forEach(function(machine) {
+            var sublistId = inferSublistId(machine);
+            if (!sublistId || seen[sublistId]) return;
 
-            var columns = extractSublistColumns(table);
+            seen[sublistId] = true;
+
+            var columns = extractSublistColumns(machine);
+            console.log('[FC_FormLayoutCapture] Sublist', sublistId, 'columns:', columns);
 
             sublists.push({
                 id: sublistId,
@@ -242,36 +388,50 @@ function(currentRecord, url) {
      */
     function inferSublistId(table) {
         var id = (table.id || '').toLowerCase();
-        var className = (table.className || '').toLowerCase();
 
-        if (id.includes('expense') || className.includes('expense')) return 'expense';
-        if (id.includes('item') || className.includes('item')) return 'item';
-        if (id.includes('line') || className.includes('line')) return 'line';
-        if (id.includes('apply') || className.includes('apply')) return 'apply';
+        // Direct ID patterns
+        if (id.includes('expense_splits') || id.includes('expenseline')) return 'expense';
+        if (id.includes('item_splits') || id.includes('itemline')) return 'item';
+        if (id.includes('line')) return 'line';
+        if (id.includes('apply')) return 'apply';
+        if (id.includes('expense')) return 'expense';
+        if (id.includes('item')) return 'item';
 
         return null;
     }
 
     /**
-     * Extract visible columns from sublist
+     * Extract visible columns from sublist header
      */
     function extractSublistColumns(table) {
         var columns = [];
+        var seen = {};
 
-        var headerRow = table.querySelector('tr.uir-machine-headerrow, thead tr, tr:first-child');
+        // Find header row
+        var headerRow = table.querySelector('tr.uir-machine-headerrow, thead tr');
+        if (!headerRow) {
+            // Try first row with multiple cells
+            headerRow = table.querySelector('tr');
+        }
         if (!headerRow) return columns;
 
         var cells = headerRow.querySelectorAll('td, th');
-        cells.forEach(function(cell) {
-            var colId = cell.getAttribute('data-ns-column') ||
-                       cell.getAttribute('data-column') ||
-                       inferColumnId(cell);
+        cells.forEach(function(cell, idx) {
+            // Skip if not visible
+            if (!isElementVisible(cell)) return;
 
-            if (colId && colId !== 'delete' && colId !== 'insert') {
-                var style = window.getComputedStyle(cell);
-                if (style.display !== 'none') {
-                    columns.push(colId);
-                }
+            // Get column ID from data attribute or infer from text
+            var colId = cell.getAttribute('data-ns-tooltip') ||
+                       cell.getAttribute('data-field') ||
+                       cell.getAttribute('data-column');
+
+            if (!colId) {
+                colId = inferColumnIdFromHeader(cell);
+            }
+
+            if (colId && !seen[colId]) {
+                seen[colId] = true;
+                columns.push(colId);
             }
         });
 
@@ -279,14 +439,18 @@ function(currentRecord, url) {
     }
 
     /**
-     * Infer column ID from header cell
+     * Infer column ID from header cell text
      */
-    function inferColumnId(cell) {
+    function inferColumnIdFromHeader(cell) {
         var text = (cell.textContent || '').trim().toLowerCase();
-        if (!text || text.length > 30) return null;
+        if (!text || text.length > 40) return null;
+
+        // Skip system columns
+        if (text === '' || text === 'add' || text === 'insert' || text === 'delete') return null;
 
         var mappings = {
             'account': 'account',
+            'expense account': 'account',
             'amount': 'amount',
             'memo': 'memo',
             'description': 'description',
@@ -295,16 +459,25 @@ function(currentRecord, url) {
             'rate': 'rate',
             'item': 'item',
             'department': 'department',
+            'dept': 'department',
             'class': 'class',
             'location': 'location',
             'customer': 'customer',
+            'customer:job': 'customer',
             'tax code': 'taxcode',
             'category': 'category',
             'gross amt': 'grossamt',
-            'tax amt': 'tax1amt'
+            'tax amt': 'tax1amt',
+            'net amount': 'amount',
+            'date': 'expensedate',
+            'currency': 'currency',
+            'exchange rate': 'exchangerate',
+            'receipt': 'receipt',
+            'billable': 'isbillable',
+            'reimbursable': 'isreimbursable'
         };
 
-        return mappings[text] || null;
+        return mappings[text] || text.replace(/\s+/g, '').replace(/[^a-z0-9]/gi, '');
     }
 
     return {
