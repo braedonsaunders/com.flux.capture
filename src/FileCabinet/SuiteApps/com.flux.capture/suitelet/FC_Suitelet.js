@@ -185,6 +185,83 @@ define(['N/file', 'N/runtime', 'N/url', 'N/ui/serverWidget', 'N/search'], functi
                     }\
                     \
                     window.addEventListener("resize", adjustIframePosition);\
+                    \
+                    /**\
+                     * Detect NetSuite navbar theme color and sync to iframe sidebar\
+                     */\
+                    function detectAndSyncNavbarColor() {\
+                        var iframe = document.querySelector(".fc-iframe");\
+                        if (!iframe || !iframe.contentWindow) return false;\
+                        \
+                        var navbarColor = null;\
+                        \
+                        /* NetSuite navbar selectors - order by specificity */\
+                        var navbarSelectors = [\
+                            "#div__header",           /* Redwood theme header */\
+                            "#ns-header",             /* Modern NS header */\
+                            ".ns-header-container",   /* Header container */\
+                            "#ns_navigation",         /* Navigation bar */\
+                            ".uir-page-header",       /* Classic UI header */\
+                            "#nscm"                   /* NetSuite Center Menu */\
+                        ];\
+                        \
+                        for (var i = 0; i < navbarSelectors.length; i++) {\
+                            var navbar = document.querySelector(navbarSelectors[i]);\
+                            if (navbar) {\
+                                var style = window.getComputedStyle(navbar);\
+                                var bgColor = style.backgroundColor;\
+                                /* Skip transparent or white backgrounds */\
+                                if (bgColor && bgColor !== "transparent" && bgColor !== "rgba(0, 0, 0, 0)" && bgColor !== "rgb(255, 255, 255)") {\
+                                    navbarColor = bgColor;\
+                                    break;\
+                                }\
+                            }\
+                        }\
+                        \
+                        /* Fallback: try to find any dark header element */\
+                        if (!navbarColor) {\
+                            var headerElements = document.querySelectorAll("[id*=header], [class*=header], [id*=nav], [class*=nav]");\
+                            for (var j = 0; j < headerElements.length; j++) {\
+                                var el = headerElements[j];\
+                                var rect = el.getBoundingClientRect();\
+                                /* Only consider elements at top of page */\
+                                if (rect.top >= 0 && rect.top < 100 && rect.height > 30) {\
+                                    var style = window.getComputedStyle(el);\
+                                    var bgColor = style.backgroundColor;\
+                                    if (bgColor && bgColor !== "transparent" && bgColor !== "rgba(0, 0, 0, 0)" && bgColor !== "rgb(255, 255, 255)") {\
+                                        navbarColor = bgColor;\
+                                        break;\
+                                    }\
+                                }\
+                            }\
+                        }\
+                        \
+                        if (navbarColor) {\
+                            try {\
+                                iframe.contentWindow.postMessage({\
+                                    type: "FC_NAVBAR_COLOR",\
+                                    color: navbarColor\
+                                }, "*");\
+                                return true;\
+                            } catch (e) {\
+                                /* Cross-origin error - iframe not ready */\
+                                return false;\
+                            }\
+                        }\
+                        return false;\
+                    }\
+                    \
+                    /* Wait for iframe to load then sync color */\
+                    var fcIframe = document.querySelector(".fc-iframe");\
+                    if (fcIframe) {\
+                        fcIframe.addEventListener("load", function() {\
+                            /* Retry with delays to ensure iframe is ready */\
+                            var colorRetries = [100, 300, 600, 1000];\
+                            colorRetries.forEach(function(delay) {\
+                                setTimeout(detectAndSyncNavbarColor, delay);\
+                            });\
+                        });\
+                    }\
                 })();\
             </script>';
 
