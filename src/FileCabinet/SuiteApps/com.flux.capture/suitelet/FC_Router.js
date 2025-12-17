@@ -1071,29 +1071,40 @@ define([
                     newStatus = DocStatus.EXTRACTED;
                 }
 
+                // Build update values, skipping currency (requires internal ID lookup)
+                var updateValues = {
+                    'custrecord_dm_status': newStatus,
+                    'custrecord_dm_document_type': extraction.documentType || documentType,
+                    'custrecord_dm_vendor': extraction.vendorMatch && extraction.vendorMatch.vendorId ? extraction.vendorMatch.vendorId : null,
+                    'custrecord_dm_vendor_match_confidence': extraction.vendorMatch ? extraction.vendorMatch.confidence : 0,
+                    'custrecord_dm_invoice_number': extraction.fields && extraction.fields.invoiceNumber ? extraction.fields.invoiceNumber : '',
+                    'custrecord_dm_invoice_date': extraction.fields && extraction.fields.invoiceDate ? extraction.fields.invoiceDate : null,
+                    'custrecord_dm_due_date': extraction.fields && extraction.fields.dueDate ? extraction.fields.dueDate : null,
+                    'custrecord_dm_subtotal': extraction.fields && extraction.fields.subtotal ? extraction.fields.subtotal : 0,
+                    'custrecord_dm_tax_amount': extraction.fields && extraction.fields.taxAmount ? extraction.fields.taxAmount : 0,
+                    'custrecord_dm_total_amount': extraction.fields && extraction.fields.totalAmount ? extraction.fields.totalAmount : 0,
+                    'custrecord_dm_po_number': extraction.fields && extraction.fields.poNumber ? extraction.fields.poNumber : '',
+                    'custrecord_dm_line_items': JSON.stringify(extraction.lineItems || []),
+                    'custrecord_dm_anomalies': JSON.stringify(extraction.anomalies || []),
+                    'custrecord_dm_confidence_score': extraction.confidence.overall,
+                    'custrecord_dm_amount_validated': extraction.amountValidation ? extraction.amountValidation.valid : false,
+                    'custrecord_dm_processing_time': processingTime,
+                    'custrecord_dm_modified_date': new Date()
+                };
+
+                // Only set currency if it's a numeric ID (not a code like "USD")
+                if (extraction.fields && extraction.fields.currency) {
+                    var currencyVal = extraction.fields.currency;
+                    if (typeof currencyVal === 'number' || (typeof currencyVal === 'string' && /^\d+$/.test(currencyVal))) {
+                        updateValues['custrecord_dm_currency'] = parseInt(currencyVal, 10);
+                    }
+                    // Skip text currency codes - would need lookup to convert
+                }
+
                 record.submitFields({
                     type: 'customrecord_dm_captured_document',
                     id: documentId,
-                    values: {
-                        'custrecord_dm_status': newStatus,
-                        'custrecord_dm_document_type': extraction.documentType || documentType,
-                        'custrecord_dm_vendor': extraction.vendorMatch && extraction.vendorMatch.vendorId ? extraction.vendorMatch.vendorId : null,
-                        'custrecord_dm_vendor_match_confidence': extraction.vendorMatch ? extraction.vendorMatch.confidence : 0,
-                        'custrecord_dm_invoice_number': extraction.fields && extraction.fields.invoiceNumber ? extraction.fields.invoiceNumber : '',
-                        'custrecord_dm_invoice_date': extraction.fields && extraction.fields.invoiceDate ? extraction.fields.invoiceDate : null,
-                        'custrecord_dm_due_date': extraction.fields && extraction.fields.dueDate ? extraction.fields.dueDate : null,
-                        'custrecord_dm_subtotal': extraction.fields && extraction.fields.subtotal ? extraction.fields.subtotal : 0,
-                        'custrecord_dm_tax_amount': extraction.fields && extraction.fields.taxAmount ? extraction.fields.taxAmount : 0,
-                        'custrecord_dm_total_amount': extraction.fields && extraction.fields.totalAmount ? extraction.fields.totalAmount : 0,
-                        'custrecord_dm_currency': extraction.fields && extraction.fields.currency ? extraction.fields.currency : null,
-                        'custrecord_dm_po_number': extraction.fields && extraction.fields.poNumber ? extraction.fields.poNumber : '',
-                        'custrecord_dm_line_items': JSON.stringify(extraction.lineItems || []),
-                        'custrecord_dm_anomalies': JSON.stringify(extraction.anomalies || []),
-                        'custrecord_dm_confidence_score': extraction.confidence.overall,
-                        'custrecord_dm_amount_validated': extraction.amountValidation ? extraction.amountValidation.valid : false,
-                        'custrecord_dm_processing_time': processingTime,
-                        'custrecord_dm_modified_date': new Date()
-                    }
+                    values: updateValues
                 });
 
                 return Response.success({
