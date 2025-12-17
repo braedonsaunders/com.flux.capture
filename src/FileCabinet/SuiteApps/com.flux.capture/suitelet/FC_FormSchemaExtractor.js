@@ -18,8 +18,8 @@
 define(['N/record', 'N/search', 'N/log', 'N/cache'],
 function(record, search, log, cache) {
 
-    // Schema version for migrations
-    var SCHEMA_VERSION = 1;
+    // Schema version for migrations (bump to invalidate cache)
+    var SCHEMA_VERSION = 2;
 
     // Cache configuration
     var CACHE_NAME = 'FC_FORM_SCHEMA';
@@ -333,12 +333,19 @@ function(record, search, log, cache) {
     }
 
     /**
+     * Get cache key including schema version
+     */
+    function getCacheKey(recordType) {
+        return 'schema_v' + SCHEMA_VERSION + '_' + recordType;
+    }
+
+    /**
      * Get cached schema from N/cache
      */
     function getCachedSchema(recordType) {
         try {
             var schemaCache = getSchemaCache();
-            var cacheKey = 'schema_' + recordType;
+            var cacheKey = getCacheKey(recordType);
             var cached = schemaCache.get({ key: cacheKey });
 
             if (cached) {
@@ -360,7 +367,7 @@ function(record, search, log, cache) {
     function saveSchemaToCache(recordType, schema) {
         try {
             var schemaCache = getSchemaCache();
-            var cacheKey = 'schema_' + recordType;
+            var cacheKey = getCacheKey(recordType);
 
             // Remove cache metadata before saving
             var schemaToCache = JSON.parse(JSON.stringify(schema));
@@ -382,45 +389,133 @@ function(record, search, log, cache) {
     }
 
     /**
+     * Standard field labels for common fields
+     */
+    var STANDARD_FIELD_LABELS = {
+        entity: 'Vendor',
+        trandate: 'Date',
+        duedate: 'Due Date',
+        tranid: 'Reference No.',
+        memo: 'Memo',
+        currency: 'Currency',
+        terms: 'Terms',
+        approvalstatus: 'Approval Status',
+        subsidiary: 'Subsidiary',
+        department: 'Department',
+        class: 'Class',
+        location: 'Location',
+        account: 'Account',
+        postingperiod: 'Posting Period',
+        exchangerate: 'Exchange Rate',
+        nexus: 'Nexus',
+        total: 'Total',
+        usertotal: 'Amount',
+        taxtotal: 'Tax Total',
+        discountitem: 'Discount Item',
+        discountrate: 'Discount Rate',
+        createdfrom: 'Created From',
+        billaddress: 'Billing Address',
+        billaddresslist: 'Billing Address List',
+        externalid: 'External ID',
+        createddate: 'Created Date',
+        lastmodifieddate: 'Last Modified',
+        nextapprover: 'Next Approver',
+        advance: 'Advance',
+        shipaddress: 'Ship Address',
+        shipmethod: 'Ship Method',
+        shipdate: 'Ship Date',
+        otherrefnum: 'PO/Check Number'
+    };
+
+    /**
+     * Standard field types for common fields
+     */
+    var STANDARD_FIELD_TYPES = {
+        entity: 'select',
+        trandate: 'date',
+        duedate: 'date',
+        tranid: 'text',
+        memo: 'textarea',
+        currency: 'select',
+        terms: 'select',
+        approvalstatus: 'select',
+        subsidiary: 'select',
+        department: 'select',
+        class: 'select',
+        location: 'select',
+        account: 'select',
+        postingperiod: 'select',
+        exchangerate: 'currency',
+        nexus: 'select',
+        total: 'currency',
+        usertotal: 'currency',
+        taxtotal: 'currency',
+        discountitem: 'select',
+        discountrate: 'percent',
+        createdfrom: 'select',
+        billaddress: 'textarea',
+        billaddresslist: 'select',
+        externalid: 'text',
+        createddate: 'datetime',
+        lastmodifieddate: 'datetime',
+        nextapprover: 'select',
+        advance: 'currency',
+        shipaddress: 'textarea',
+        shipmethod: 'select',
+        shipdate: 'date',
+        otherrefnum: 'text'
+    };
+
+    /**
      * Extract field metadata from a temporary record
+     * Falls back to standard definitions if getField() fails
      */
     function extractFieldMetadata(tempRecord, fieldId, displayOrder) {
+        var fieldInfo = {
+            id: fieldId,
+            label: STANDARD_FIELD_LABELS[fieldId] || fieldId,
+            type: STANDARD_FIELD_TYPES[fieldId] || 'text',
+            mandatory: false,
+            isDisplay: true,
+            isDisabled: false,
+            isCustom: fieldId.indexOf('custbody') === 0,
+            help: '',
+            displayOrder: displayOrder
+        };
+
         try {
             var field = tempRecord.getField({ fieldId: fieldId });
-            if (!field) return null;
+            if (field) {
+                // Override with actual metadata if available
+                fieldInfo.label = field.label || fieldInfo.label;
+                fieldInfo.type = field.type || fieldInfo.type;
+                fieldInfo.mandatory = field.isMandatory || false;
+                fieldInfo.isDisplay = field.isDisplay !== false;
+                fieldInfo.isDisabled = field.isDisabled || false;
+                fieldInfo.help = field.help || '';
 
-            var fieldInfo = {
-                id: fieldId,
-                label: field.label || fieldId,
-                type: field.type || 'text',
-                mandatory: field.isMandatory || false,
-                isDisplay: field.isDisplay !== false,
-                isDisabled: field.isDisabled || false,
-                isCustom: fieldId.indexOf('custbody') === 0,
-                help: field.help || '',
-                displayOrder: displayOrder
-            };
-
-            // Get select options for select/multiselect fields
-            if (field.type === 'select' || field.type === 'multiselect') {
-                try {
-                    var options = field.getSelectOptions({ filter: null });
-                    if (options && options.length > 0 && options.length < 200) {
-                        fieldInfo.options = options.map(function(opt) {
-                            return { value: opt.value, text: opt.text };
-                        });
-                    } else if (options) {
-                        fieldInfo.hasOptions = true;
-                        fieldInfo.optionCount = options.length;
-                        fieldInfo.lookupRequired = options.length >= 200;
-                    }
-                } catch (e) { /* ignore options error */ }
+                // Get select options for select/multiselect fields
+                if (field.type === 'select' || field.type === 'multiselect') {
+                    try {
+                        var options = field.getSelectOptions({ filter: null });
+                        if (options && options.length > 0 && options.length < 200) {
+                            fieldInfo.options = options.map(function(opt) {
+                                return { value: opt.value, text: opt.text };
+                            });
+                        } else if (options) {
+                            fieldInfo.hasOptions = true;
+                            fieldInfo.optionCount = options.length;
+                            fieldInfo.lookupRequired = options.length >= 200;
+                        }
+                    } catch (e) { /* ignore options error */ }
+                }
             }
-
-            return fieldInfo;
         } catch (e) {
-            return null;
+            // Use default fieldInfo if getField fails
+            log.debug('extractFieldMetadata', 'Using fallback for field ' + fieldId + ': ' + e.message);
         }
+
+        return fieldInfo;
     }
 
     /**
@@ -736,9 +831,8 @@ function(record, search, log, cache) {
 
             standardLayout.sublists.forEach(function(sublistDef) {
                 var sublistId = sublistDef.id;
-                var sublistFields = [];
-                var visibleColumns = [];
-                var sublistDisplayOrder = 0;
+                var sublistFieldsMap = {}; // Store fields by ID for easy lookup
+                var customSublistFields = []; // Custom fields not in standard layout
 
                 try {
                     var sublistFieldIds = tempRecord.getSublistFields({ sublistId: sublistId });
@@ -751,29 +845,81 @@ function(record, search, log, cache) {
                         }
 
                         var fieldInfo = extractSublistFieldMetadata(
-                            tempRecord, sublistId, fieldId, sublistDisplayOrder++
+                            tempRecord, sublistId, fieldId, 0 // displayOrder set later
                         );
 
                         if (fieldInfo) {
-                            sublistFields.push(fieldInfo);
-
-                            if (fieldInfo.isDisplay) {
-                                visibleColumns.push(fieldId);
+                            if (isCustom) {
+                                customSublistFields.push(fieldInfo);
+                            } else {
+                                sublistFieldsMap[fieldId] = fieldInfo;
                             }
                         }
                     });
 
-                    if (visibleColumns.length === 0) {
-                        visibleColumns = sublistDef.defaultColumns.slice();
-                    }
-
                 } catch (e) {
                     log.debug('extractFormSchema', 'Could not extract sublist ' + sublistId + ': ' + e.message);
-                    sublistFields = sublistDef.defaultColumns.map(function(f, idx) {
-                        return { id: f, label: f, type: 'text', displayOrder: idx };
+                    // Create minimal field info for default columns
+                    sublistDef.defaultColumns.forEach(function(fieldId) {
+                        sublistFieldsMap[fieldId] = {
+                            id: fieldId,
+                            label: fieldId,
+                            type: 'text',
+                            isDisplay: true,
+                            isCustom: false
+                        };
                     });
-                    visibleColumns = sublistDef.defaultColumns.slice();
                 }
+
+                // Build ordered field list: defaultColumns first, then other standard, then custom
+                var sublistFields = [];
+                var displayOrder = 0;
+
+                // First: Add fields from defaultColumns in preferred order
+                sublistDef.defaultColumns.forEach(function(fieldId) {
+                    if (sublistFieldsMap[fieldId]) {
+                        sublistFieldsMap[fieldId].displayOrder = displayOrder++;
+                        sublistFields.push(sublistFieldsMap[fieldId]);
+                        delete sublistFieldsMap[fieldId]; // Mark as added
+                    }
+                });
+
+                // Second: Add remaining standard fields from allColumns
+                sublistDef.allColumns.forEach(function(fieldId) {
+                    if (sublistFieldsMap[fieldId]) {
+                        sublistFieldsMap[fieldId].displayOrder = displayOrder++;
+                        sublistFields.push(sublistFieldsMap[fieldId]);
+                        delete sublistFieldsMap[fieldId];
+                    }
+                });
+
+                // Third: Add any remaining standard fields (shouldn't happen, but safety)
+                Object.keys(sublistFieldsMap).forEach(function(fieldId) {
+                    sublistFieldsMap[fieldId].displayOrder = displayOrder++;
+                    sublistFields.push(sublistFieldsMap[fieldId]);
+                });
+
+                // Fourth: Add custom fields at the end
+                customSublistFields.forEach(function(fieldInfo) {
+                    fieldInfo.displayOrder = displayOrder++;
+                    sublistFields.push(fieldInfo);
+                });
+
+                // Build visible columns list (defaultColumns that exist + custom visible fields)
+                var visibleColumns = [];
+                sublistDef.defaultColumns.forEach(function(fieldId) {
+                    var field = sublistFields.find(function(f) { return f.id === fieldId; });
+                    if (field && field.isDisplay) {
+                        visibleColumns.push(fieldId);
+                    }
+                });
+
+                // Add visible custom columns
+                customSublistFields.forEach(function(fieldInfo) {
+                    if (fieldInfo.isDisplay) {
+                        visibleColumns.push(fieldInfo.id);
+                    }
+                });
 
                 sublists.push({
                     id: sublistId,
@@ -892,7 +1038,7 @@ function(record, search, log, cache) {
         try {
             var normalizedType = normalizeRecordType(recordType);
             var schemaCache = getSchemaCache();
-            schemaCache.remove({ key: 'schema_' + normalizedType });
+            schemaCache.remove({ key: getCacheKey(normalizedType) });
             return { success: true };
         } catch (e) {
             return { success: false, error: e.message };
