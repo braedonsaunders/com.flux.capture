@@ -2121,7 +2121,8 @@
 .view-rail {
     display: flex;
     flex-direction: column;
-    height: 100vh;
+    height: 100%;
+    max-height: 100vh;
     overflow: hidden;
     position: relative;
 }
@@ -2249,14 +2250,14 @@
     flex: 1;
     gap: 0;
     padding: 0;
-    overflow-x: auto;
+    overflow: hidden;
     background: var(--gray-100);
 }
 
 /* Individual Zone - Full width, no gaps */
 .zone {
-    flex: 1;
-    min-width: 200px;
+    flex: 1 1 0;
+    min-width: 0;
     max-width: none;
     display: flex;
     flex-direction: column;
