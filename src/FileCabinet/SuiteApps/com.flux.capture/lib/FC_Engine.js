@@ -616,14 +616,30 @@ define([
                         confidence: getCellConfidence(amountIdx) || table.confidence || null
                     };
 
-                    // Only add if we have meaningful content (description or non-zero amount)
-                    if ((item.description && item.description.trim().length > 0) || item.amount > 0) {
+                    // Filter out summary/footer rows and rows without meaningful content
+                    const desc = (item.description || '').trim().toLowerCase();
+                    const isSummaryRow = /^(sub\s*total|subtotal|total|tax|vat|gst|hst|pst|shipping|freight|discount|balance|amount\s*due|grand\s*total|net|gross)$/i.test(desc) ||
+                                        desc.startsWith('total') || desc.startsWith('subtotal') ||
+                                        desc.includes('total due') || desc.includes('amount due');
+
+                    // Check for meaningful description (not just numbers, not too short, not summary)
+                    const hasValidDescription = item.description &&
+                                               item.description.trim().length >= 3 &&
+                                               !/^\d+[\.,]?\d*$/.test(item.description.trim()) &&
+                                               !isSummaryRow;
+
+                    // Line item must have a valid description AND (amount > 0 OR qty > 0)
+                    const isValidLineItem = hasValidDescription && (item.amount > 0 || item.quantity > 0);
+
+                    if (isValidLineItem) {
                         // Calculate amount if missing but we have qty and price
                         if (!item.amount && item.quantity && item.unitPrice) {
                             item.amount = Math.round(item.quantity * item.unitPrice * 100) / 100;
                         }
                         items.push(item);
                         log.debug('FluxCapture.lineItem', `Row ${rowIndex + 1}: "${item.description}" x${item.quantity} @ ${item.unitPrice} = ${item.amount}`);
+                    } else {
+                        log.debug('FluxCapture.lineItem.skipped', `Row ${rowIndex + 1} skipped: "${item.description}" (summary: ${isSummaryRow}, validDesc: ${hasValidDescription})`);
                     }
                 });
             }
