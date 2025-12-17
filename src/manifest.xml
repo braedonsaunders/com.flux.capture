@@ -6,5 +6,9 @@
         <features>
             <feature required="true">SERVERSIDESCRIPTING</feature>
         </features>
+        <files>
+            <file>/SuiteApps/com.flux.capture/FC_Router.js</file>
+            <file>/SuiteApps/com.flux.capture/FC_Suitelet.js</file>
+        </files>
     </dependencies>
 </manifest>
