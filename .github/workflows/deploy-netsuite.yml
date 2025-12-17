@@ -14,6 +14,7 @@ on:
         options:
           - ci
           - all
+          - deploy
 
 env:
   SUITECLOUD_CI: "1"
