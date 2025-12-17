@@ -47,10 +47,11 @@
             this.activeTab = 'details';
             this.flowMode = false;
             this.detailPanelOpen = false;
+            this.formFieldsLoaded = false;
 
             renderTemplate('tpl-rail', 'view-container');
             this.bindEvents();
-            this.loadData();
+            this.loadInitialData();
             this.startRefresh();
         },
 
@@ -63,26 +64,20 @@
         // ==========================================
         // DATA LOADING
         // ==========================================
-        loadData: function() {
+        loadInitialData: function() {
             var self = this;
 
-            // Load queue data (same as Queue view) and form fields
+            // Load queue data AND form fields on first load only
             Promise.all([
                 API.get('queue', { pageSize: 100 }),
                 API.get('formfields', { transactionType: 'vendorbill' })
             ]).then(function(results) {
                 var queueData = results[0] || {};
-                self.documents = queueData.documents || [];
+                self.documents = queueData.queue || [];
                 self.formFields = results[1] || {};
+                self.formFieldsLoaded = true;
 
-                // Build review queue
-                self.reviewQueue = self.documents.filter(function(d) {
-                    var status = String(d.status);
-                    return status === DocStatus.NEEDS_REVIEW ||
-                           status === DocStatus.EXTRACTED ||
-                           status === DocStatus.ERROR;
-                });
-
+                self.processDocuments();
                 self.render();
 
                 // If we had a selected doc, refresh its data
@@ -90,9 +85,38 @@
                     self.loadDocumentDetails(self.selectedDocId);
                 }
             }).catch(function(err) {
-                console.error('[Rail] Load error:', err);
+                console.error('[Flow] Load error:', err);
                 UI.toast('Failed to load documents: ' + err.message, 'error');
             });
+        },
+
+        refreshQueue: function() {
+            var self = this;
+
+            // Only refresh queue data, not form fields
+            API.get('queue', { pageSize: 100 }).then(function(queueData) {
+                self.documents = (queueData && queueData.queue) || [];
+                self.processDocuments();
+                self.render();
+            }).catch(function(err) {
+                console.error('[Flow] Refresh error:', err);
+            });
+        },
+
+        processDocuments: function() {
+            var self = this;
+            // Build review queue
+            this.reviewQueue = this.documents.filter(function(d) {
+                var status = String(d.status);
+                return status === DocStatus.NEEDS_REVIEW ||
+                       status === DocStatus.EXTRACTED ||
+                       status === DocStatus.ERROR;
+            });
+        },
+
+        loadData: function() {
+            // For backwards compatibility, call refreshQueue
+            this.refreshQueue();
         },
 
         loadDocumentDetails: function(docId) {
@@ -110,7 +134,7 @@
             this.stopRefresh();
             this.refreshInterval = setInterval(function() {
                 if (!self.flowMode && !self.detailPanelOpen) {
-                    self.loadData();
+                    self.refreshQueue();
                 }
             }, this.REFRESH_MS);
         },
@@ -744,18 +768,22 @@
         }
     };
 
-    // Register the controller
+    // Register the controller as 'flow' (primary route)
+    Router.register('flow',
+        function(params) { RailController.init(params); },
+        function() { RailController.cleanup(); }
+    );
+
+    // Keep backward compatibility with 'queue' and 'rail' routes
+    Router.register('queue',
+        function(params) { RailController.init(params); },
+        function() { RailController.cleanup(); }
+    );
     Router.register('rail',
         function(params) { RailController.init(params); },
         function() { RailController.cleanup(); }
     );
 
-    // Also make this available as 'queue' route for unified experience
-    Router.register('queue',
-        function(params) { RailController.init(params); },
-        function() { RailController.cleanup(); }
-    );
-
-    console.log('[View.Rail] Loaded');
+    console.log('[View.Flow] Loaded');
 
 })();

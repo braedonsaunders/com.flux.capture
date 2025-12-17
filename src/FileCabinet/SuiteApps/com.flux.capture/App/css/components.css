@@ -2837,3 +2837,172 @@ body.flow-mode-active .rail-toolbar .stat-item {
     display: block;
     opacity: 0.5;
 }
+
+/* ==========================================
+   SIDEBAR CONTROLS
+   ========================================== */
+.sidebar-controls {
+    display: flex;
+    justify-content: center;
+    gap: var(--space-xs);
+    padding: var(--space-sm) 0;
+    border-bottom: 1px solid rgba(255,255,255,0.1);
+    margin-bottom: var(--space-sm);
+}
+
+.sidebar-control {
+    width: 32px;
+    height: 32px;
+    border: none;
+    background: rgba(255,255,255,0.1);
+    border-radius: var(--radius-sm);
+    color: rgba(255,255,255,0.7);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.15s ease;
+}
+
+.sidebar-control:hover {
+    background: rgba(255,255,255,0.2);
+    color: white;
+}
+
+.sidebar-control.active {
+    background: var(--color-primary);
+    color: white;
+}
+
+/* Expand button when sidebar is collapsed */
+.sidebar-expand-btn {
+    position: fixed;
+    left: 0;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 24px;
+    height: 48px;
+    border: none;
+    background: var(--sidebar-bg, var(--gray-800));
+    border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+    color: white;
+    cursor: pointer;
+    display: none;
+    align-items: center;
+    justify-content: center;
+    z-index: 100;
+    transition: all 0.15s ease;
+}
+
+.sidebar-expand-btn:hover {
+    width: 32px;
+    background: var(--color-primary);
+}
+
+/* Collapsed sidebar state */
+body.sidebar-collapsed .app-sidebar {
+    width: 0;
+    padding: 0;
+    overflow: hidden;
+}
+
+body.sidebar-collapsed .sidebar-expand-btn {
+    display: flex;
+}
+
+body.sidebar-collapsed .app-main {
+    margin-left: 0;
+}
+
+/* ==========================================
+   DARK MODE
+   ========================================== */
+body.dark-mode {
+    --surface-bg: #1a1a2e;
+    --surface-card: #16213e;
+    --surface-elevated: #1a1a2e;
+    --text-primary: #e4e4e7;
+    --text-secondary: #a1a1aa;
+    --text-muted: #71717a;
+    --border-color: #27273a;
+    --gray-50: #1a1a2e;
+    --gray-100: #16213e;
+    --gray-200: #27273a;
+    --gray-800: #0f0f1a;
+    --gray-900: #0a0a12;
+}
+
+body.dark-mode .app-main {
+    background: var(--surface-bg);
+}
+
+body.dark-mode .app-sidebar {
+    background: var(--gray-900);
+}
+
+body.dark-mode .surface-card,
+body.dark-mode .card,
+body.dark-mode .doc-card,
+body.dark-mode .zone {
+    background: var(--surface-card);
+    border-color: var(--border-color);
+}
+
+body.dark-mode input,
+body.dark-mode select,
+body.dark-mode textarea {
+    background: var(--gray-100);
+    border-color: var(--border-color);
+    color: var(--text-primary);
+}
+
+body.dark-mode .btn-secondary {
+    background: var(--gray-200);
+    color: var(--text-primary);
+}
+
+body.dark-mode .panel-preview {
+    background: var(--gray-900);
+}
+
+body.dark-mode .detail-panel,
+body.dark-mode #detail-panel {
+    background: var(--surface-card);
+}
+
+body.dark-mode .panel-actions {
+    background: var(--gray-100);
+}
+
+body.dark-mode .zone-empty {
+    color: var(--text-muted);
+}
+
+body.dark-mode .rail-toolbar {
+    background: var(--surface-card);
+    border-color: var(--border-color);
+}
+
+body.dark-mode .rail-zones {
+    background: var(--surface-bg);
+}
+
+/* Dark mode icon swap */
+body.dark-mode #btn-dark-mode i::before {
+    content: "\f185"; /* sun icon */
+}
+
+/* ==========================================
+   FULLSCREEN MODE
+   ========================================== */
+body.fullscreen-mode .app-sidebar {
+    display: none;
+}
+
+body.fullscreen-mode .app-main {
+    margin-left: 0;
+}
+
+body.fullscreen-mode .sidebar-expand-btn {
+    display: none;
+}
