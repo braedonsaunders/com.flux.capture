@@ -124,7 +124,11 @@ define(['N/file', 'N/runtime', 'N/url', 'N/ui/serverWidget', 'N/search'], functi
         // 6. Log file resolution status for debugging
         log.debug('File URLs Resolved', JSON.stringify(fileUrls));
 
-        // 7. Serve raw HTML
+        // 7. Set content type and serve raw HTML
+        context.response.setHeader({
+            name: 'Content-Type',
+            value: 'text/html; charset=utf-8'
+        });
         context.response.write(htmlContent);
     }
 
