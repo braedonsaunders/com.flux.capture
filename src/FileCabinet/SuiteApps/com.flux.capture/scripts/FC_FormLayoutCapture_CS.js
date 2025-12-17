@@ -502,19 +502,20 @@ function(currentRecord, url) {
 
         console.log('[FC_FormLayoutCapture] Looking for sublists...');
 
-        // NetSuite sublists have data-nsps-type="sublist" attribute on the table
-        var sublistTables = container.querySelectorAll('table[data-nsps-type="sublist"]');
-        console.log('[FC_FormLayoutCapture] Found', sublistTables.length, 'tables with data-nsps-type="sublist"');
+        // Search in entire document as sublists may be outside main form container
+        var searchRoot = document;
+
+        // Method 1: NetSuite sublists with data-nsps-type="sublist" attribute
+        var sublistTables = searchRoot.querySelectorAll('table[data-nsps-type="sublist"]');
+        console.log('[FC_FormLayoutCapture] Method 1 - data-nsps-type: Found', sublistTables.length, 'tables');
 
         sublistTables.forEach(function(table) {
-            // Get sublist ID from data attribute
             var sublistId = table.getAttribute('data-nsps-id');
             if (!sublistId || seen[sublistId]) return;
 
             seen[sublistId] = true;
-
             var columns = extractSublistColumns(table);
-            console.log('[FC_FormLayoutCapture] Sublist', sublistId, 'columns:', columns);
+            console.log('[FC_FormLayoutCapture] Sublist', sublistId, 'columns:', columns.length);
 
             sublists.push({
                 id: sublistId,
@@ -524,19 +525,18 @@ function(currentRecord, url) {
             });
         });
 
-        // Fallback: look for tables with _splits suffix (e.g., expense_splits, item_splits)
+        // Method 2: Tables with _splits suffix (e.g., expense_splits, item_splits)
         if (sublists.length === 0) {
-            console.log('[FC_FormLayoutCapture] No sublists found via data attribute, trying ID patterns...');
+            var splitsTables = searchRoot.querySelectorAll('table[id$="_splits"]');
+            console.log('[FC_FormLayoutCapture] Method 2 - _splits suffix: Found', splitsTables.length, 'tables');
 
-            var splitsTables = container.querySelectorAll('table[id$="_splits"]');
             splitsTables.forEach(function(table) {
                 var sublistId = inferSublistId(table);
                 if (!sublistId || seen[sublistId]) return;
 
                 seen[sublistId] = true;
-
                 var columns = extractSublistColumns(table);
-                console.log('[FC_FormLayoutCapture] Sublist (fallback)', sublistId, 'columns:', columns);
+                console.log('[FC_FormLayoutCapture] Sublist (splits)', sublistId, 'columns:', columns.length);
 
                 sublists.push({
                     id: sublistId,
@@ -547,7 +547,77 @@ function(currentRecord, url) {
             });
         }
 
+        // Method 3: Look for machine tables (common NetSuite pattern)
+        if (sublists.length === 0) {
+            var machineTables = searchRoot.querySelectorAll('table.uir-machine-table, div.uir-machine-table-container table');
+            console.log('[FC_FormLayoutCapture] Method 3 - uir-machine-table: Found', machineTables.length, 'tables');
+
+            machineTables.forEach(function(table) {
+                // Check for header row to confirm it's a sublist
+                var headerRow = table.querySelector('tr.uir-machine-headerrow');
+                if (!headerRow) return;
+
+                var sublistId = inferSublistId(table) || inferSublistFromTable(table);
+                if (!sublistId || seen[sublistId]) return;
+
+                seen[sublistId] = true;
+                var columns = extractSublistColumns(table);
+                console.log('[FC_FormLayoutCapture] Sublist (machine)', sublistId, 'columns:', columns.length);
+
+                sublists.push({
+                    id: sublistId,
+                    label: sublistId.charAt(0).toUpperCase() + sublistId.slice(1),
+                    visibleColumns: columns,
+                    columnOrder: columns
+                });
+            });
+        }
+
+        // Method 4: Look for any table with header row containing data-label attributes
+        if (sublists.length === 0) {
+            var allTables = searchRoot.querySelectorAll('table');
+            console.log('[FC_FormLayoutCapture] Method 4 - scanning all tables:', allTables.length, 'tables');
+
+            allTables.forEach(function(table) {
+                // Must have data-label cells in header
+                var dataLabelCells = table.querySelectorAll('tr:first-child td[data-label], tr:first-child th[data-label]');
+                if (dataLabelCells.length < 2) return; // Need at least 2 columns
+
+                var sublistId = inferSublistId(table) || inferSublistFromTable(table);
+                if (!sublistId || seen[sublistId]) return;
+
+                seen[sublistId] = true;
+                var columns = extractSublistColumns(table);
+                console.log('[FC_FormLayoutCapture] Sublist (data-label)', sublistId, 'columns:', columns.length);
+
+                sublists.push({
+                    id: sublistId,
+                    label: sublistId.charAt(0).toUpperCase() + sublistId.slice(1),
+                    visibleColumns: columns,
+                    columnOrder: columns
+                });
+            });
+        }
+
+        console.log('[FC_FormLayoutCapture] Total sublists found:', sublists.length);
         return sublists;
+    }
+
+    /**
+     * Infer sublist ID from table content (fallback)
+     */
+    function inferSublistFromTable(table) {
+        var headers = table.querySelectorAll('td[data-label], th[data-label], td.listheadertextb');
+        var headerText = '';
+        headers.forEach(function(h) {
+            headerText += ' ' + (h.getAttribute('data-label') || h.textContent || '').toLowerCase();
+        });
+
+        if (headerText.includes('expense') || headerText.includes('receipt')) return 'expense';
+        if (headerText.includes('item') || headerText.includes('quantity')) return 'item';
+        if (headerText.includes('amount') && headerText.includes('account')) return 'expense';
+
+        return null;
     }
 
     /**

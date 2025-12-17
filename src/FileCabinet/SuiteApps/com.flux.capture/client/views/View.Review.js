@@ -551,9 +551,19 @@
                 // ========== RENDER WITH LAYOUT (tabs/groups from DOM extraction) ==========
                 var visibleTabs = layout.tabs.filter(function(tab) {
                     var hasGroups = tab.fieldGroups && tab.fieldGroups.some(function(g) {
-                        return g.fields && g.fields.some(function(fid) {
-                            var field = bodyFields.find(function(f) { return f.id === fid; });
-                            return field && field.isDisplay !== false;
+                        return g.fields && g.fields.some(function(fieldRef) {
+                            // Handle both field ID strings and field objects
+                            var fieldId = typeof fieldRef === 'object' ? fieldRef.id : fieldRef;
+                            var domField = typeof fieldRef === 'object' ? fieldRef : null;
+
+                            // Check schema
+                            var field = bodyFields.find(function(f) { return f.id === fieldId; });
+                            if (field && field.isDisplay !== false) return true;
+
+                            // Or if DOM says it's visible
+                            if (domField && domField.mode !== 'hidden') return true;
+
+                            return false;
                         });
                     });
                     var hasSublists = tab.sublists && tab.sublists.length > 0;
@@ -580,11 +590,35 @@
                     if (tab.fieldGroups && tab.fieldGroups.length > 0) {
                         tab.fieldGroups.forEach(function(group) {
                             var groupFields = [];
-                            (group.fields || []).forEach(function(fieldId) {
+                            (group.fields || []).forEach(function(fieldRef) {
+                                // Handle both field ID strings and field objects from DOM extraction
+                                var fieldId = typeof fieldRef === 'object' ? fieldRef.id : fieldRef;
                                 if (fieldId === 'entity') return;
+
+                                // First check if DOM extraction gave us field metadata
+                                var domField = typeof fieldRef === 'object' ? fieldRef : null;
+
+                                // Look up in schema bodyFields for full field definition
                                 var nsField = bodyFields.find(function(f) { return f.id === fieldId; });
+
                                 if (nsField && nsField.isDisplay !== false) {
+                                    // Merge DOM extraction data into schema field
+                                    if (domField) {
+                                        nsField.label = domField.label || nsField.label;
+                                        nsField.type = domField.type || nsField.type;
+                                        nsField.mandatory = domField.required || nsField.mandatory;
+                                        nsField.isDisplay = domField.mode !== 'hidden';
+                                    }
                                     groupFields.push(nsField);
+                                } else if (domField && domField.mode !== 'hidden') {
+                                    // Field not in schema but visible in DOM - use DOM data
+                                    groupFields.push({
+                                        id: fieldId,
+                                        label: domField.label || fieldId,
+                                        type: domField.type || 'text',
+                                        mandatory: domField.required || false,
+                                        isDisplay: true
+                                    });
                                 }
                             });
 
