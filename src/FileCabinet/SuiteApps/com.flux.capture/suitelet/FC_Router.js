@@ -1071,6 +1071,57 @@ define([
                     newStatus = DocStatus.EXTRACTED;
                 }
 
+                // Helper to parse dates from various formats
+                function parseExtractedDate(dateVal) {
+                    if (!dateVal) return null;
+                    if (dateVal instanceof Date) return dateVal;
+
+                    var dateStr = String(dateVal).trim();
+                    if (!dateStr) return null;
+
+                    // Try various date formats
+                    var parsed = null;
+
+                    // Try "Dec 15/2025" or "Dec 15, 2025" format
+                    var monthMatch = dateStr.match(/^([A-Za-z]+)\s*(\d{1,2})[\/,\s]+(\d{4})$/);
+                    if (monthMatch) {
+                        var months = { jan: 0, feb: 1, mar: 2, apr: 3, may: 4, jun: 5, jul: 6, aug: 7, sep: 8, oct: 9, nov: 10, dec: 11 };
+                        var monthNum = months[monthMatch[1].toLowerCase().substring(0, 3)];
+                        if (monthNum !== undefined) {
+                            parsed = new Date(parseInt(monthMatch[3]), monthNum, parseInt(monthMatch[2]));
+                        }
+                    }
+
+                    // Try MM/DD/YYYY or MM-DD-YYYY
+                    if (!parsed) {
+                        var slashMatch = dateStr.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})$/);
+                        if (slashMatch) {
+                            parsed = new Date(parseInt(slashMatch[3]), parseInt(slashMatch[1]) - 1, parseInt(slashMatch[2]));
+                        }
+                    }
+
+                    // Try YYYY-MM-DD
+                    if (!parsed) {
+                        var isoMatch = dateStr.match(/^(\d{4})[\/\-](\d{1,2})[\/\-](\d{1,2})$/);
+                        if (isoMatch) {
+                            parsed = new Date(parseInt(isoMatch[1]), parseInt(isoMatch[2]) - 1, parseInt(isoMatch[3]));
+                        }
+                    }
+
+                    // Fallback to native parsing
+                    if (!parsed) {
+                        parsed = new Date(dateStr);
+                    }
+
+                    // Validate the date
+                    if (parsed && !isNaN(parsed.getTime())) {
+                        return parsed;
+                    }
+
+                    log.warn('parseExtractedDate', 'Could not parse date: ' + dateStr);
+                    return null;
+                }
+
                 // Build update values, skipping currency (requires internal ID lookup)
                 var updateValues = {
                     'custrecord_dm_status': newStatus,
@@ -1078,8 +1129,8 @@ define([
                     'custrecord_dm_vendor': extraction.vendorMatch && extraction.vendorMatch.vendorId ? extraction.vendorMatch.vendorId : null,
                     'custrecord_dm_vendor_match_confidence': extraction.vendorMatch ? extraction.vendorMatch.confidence : 0,
                     'custrecord_dm_invoice_number': extraction.fields && extraction.fields.invoiceNumber ? extraction.fields.invoiceNumber : '',
-                    'custrecord_dm_invoice_date': extraction.fields && extraction.fields.invoiceDate ? extraction.fields.invoiceDate : null,
-                    'custrecord_dm_due_date': extraction.fields && extraction.fields.dueDate ? extraction.fields.dueDate : null,
+                    'custrecord_dm_invoice_date': parseExtractedDate(extraction.fields && extraction.fields.invoiceDate),
+                    'custrecord_dm_due_date': parseExtractedDate(extraction.fields && extraction.fields.dueDate),
                     'custrecord_dm_subtotal': extraction.fields && extraction.fields.subtotal ? extraction.fields.subtotal : 0,
                     'custrecord_dm_tax_amount': extraction.fields && extraction.fields.taxAmount ? extraction.fields.taxAmount : 0,
                     'custrecord_dm_total_amount': extraction.fields && extraction.fields.totalAmount ? extraction.fields.totalAmount : 0,
