@@ -21,13 +21,34 @@ define([
     'use strict';
 
     // ==================== Constants ====================
+    // These match the INTEGER values stored in NetSuite custom records
+
+    const DocStatus = Object.freeze({
+        PENDING: 1,
+        PROCESSING: 2,
+        EXTRACTED: 3,
+        NEEDS_REVIEW: 4,
+        REJECTED: 5,
+        COMPLETED: 6,
+        ERROR: 7
+    });
 
     const DocumentType = Object.freeze({
-        INVOICE: 'INVOICE',
-        RECEIPT: 'RECEIPT',
-        CREDIT_MEMO: 'CREDIT_MEMO',
-        EXPENSE_REPORT: 'EXPENSE_REPORT',
-        UNKNOWN: 'UNKNOWN'
+        INVOICE: 1,
+        RECEIPT: 2,
+        CREDIT_MEMO: 3,
+        EXPENSE_REPORT: 4,
+        PURCHASE_ORDER: 5,
+        UNKNOWN: 6
+    });
+
+    const DocumentTypeLabels = Object.freeze({
+        [DocumentType.INVOICE]: 'Invoice',
+        [DocumentType.RECEIPT]: 'Receipt',
+        [DocumentType.CREDIT_MEMO]: 'Credit Memo',
+        [DocumentType.EXPENSE_REPORT]: 'Expense Report',
+        [DocumentType.PURCHASE_ORDER]: 'Purchase Order',
+        [DocumentType.UNKNOWN]: 'Unknown'
     });
 
     const ConfidenceLevel = Object.freeze({
@@ -446,7 +467,7 @@ define([
                     FROM customrecord_dm_captured_document
                     WHERE custrecord_dm_vendor = ?
                     AND custrecord_dm_invoice_number = ?
-                    AND custrecord_dm_status IN (3, 6)
+                    AND custrecord_dm_status IN (${DocStatus.EXTRACTED}, ${DocStatus.COMPLETED})
                 `;
                 const result = query.runSuiteQL({ query: sql, params: [vendorId, invoiceNumber] });
                 return result.results[0].values[0] > 0;

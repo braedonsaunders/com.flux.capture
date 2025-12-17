@@ -104,11 +104,6 @@ com.flux.capture/
 ├── Objects/                        # Custom record definitions
 │   ├── customrecord_dm_captured_document.xml
 │   ├── customrecord_dm_batch.xml
-│   ├── customrecord_dm_learning.xml
-│   ├── customlist_dm_status.xml
-│   ├── customlist_dm_document_types.xml
-│   ├── customlist_dm_source.xml
-│   ├── customlist_dm_batch_status.xml
 │   ├── customscript_fc_router.xml      # RESTlet deployment
 │   └── customscript_fc_suitelet.xml    # Suitelet deployment
 └── FileCabinet/
@@ -195,20 +190,62 @@ Primary record for captured documents with fields for:
 - Line items (JSON)
 - Confidence scores
 - Anomaly data
-- Status tracking
+- Status tracking (INTEGER - values hardcoded in JS)
+- Document type (INTEGER - values hardcoded in JS)
+- Source (INTEGER - values hardcoded in JS)
+- User corrections (JSON - for ML learning)
 - Audit information
 
 ### DM Batch (`customrecord_dm_batch`)
 Groups multiple documents for batch processing:
 - Document counts and progress
-- Status tracking
+- Status tracking (INTEGER - values hardcoded in JS)
 - Total value calculations
 
-### DM Learning Record (`customrecord_dm_learning`)
-Stores user corrections for ML improvement:
-- Original vs corrected values
-- Pattern recognition data
-- Occurrence counts
+> **Note:** All enum values (status, document type, source, batch status) are stored as INTEGER fields with values defined as constants in `FC_Router.js` and `FC_Engine.js`. No custom lists are used.
+
+### Enum Values (Hardcoded Constants)
+
+**Document Type** (`custrecord_dm_document_type`):
+| Value | Meaning |
+|-------|---------|
+| 1 | Invoice |
+| 2 | Receipt |
+| 3 | Credit Memo |
+| 4 | Expense Report |
+| 5 | Purchase Order |
+| 6 | Unknown |
+
+**Document Status** (`custrecord_dm_status`):
+| Value | Meaning |
+|-------|---------|
+| 1 | Pending |
+| 2 | Processing |
+| 3 | Extracted |
+| 4 | Needs Review |
+| 5 | Rejected |
+| 6 | Completed |
+| 7 | Error |
+
+**Batch Status** (`custrecord_dm_batch_status`):
+| Value | Meaning |
+|-------|---------|
+| 1 | Pending |
+| 2 | Processing |
+| 3 | Completed |
+| 4 | Partial Error |
+| 5 | Failed |
+| 6 | Cancelled |
+
+**Source** (`custrecord_dm_source` / `custrecord_dm_batch_source`):
+| Value | Meaning |
+|-------|---------|
+| 1 | Manual Upload |
+| 2 | Email Import |
+| 3 | Drag and Drop |
+| 4 | API Integration |
+| 5 | Scanner |
+| 6 | Mobile App |
 
 ## API Examples
 
@@ -264,9 +301,9 @@ After deployment, you will have:
 | Component | Count |
 |-----------|-------|
 | **Scripts** | 2 (1 Suitelet + 1 RESTlet) |
-| **Custom Records** | 3 |
-| **Custom Lists** | 4 |
-| **Total Objects** | 9 |
+| **Custom Records** | 2 |
+| **Custom Lists** | 0 (enums hardcoded in JS) |
+| **Total Objects** | 4 |
 
 ## Support
 

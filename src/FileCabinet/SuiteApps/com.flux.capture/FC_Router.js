@@ -29,6 +29,83 @@ define([
 
     const API_VERSION = '2.0.0';
 
+    // ==================== Status Constants ====================
+    // These are stored as INTEGER fields in NetSuite custom records
+
+    const DocStatus = Object.freeze({
+        PENDING: 1,
+        PROCESSING: 2,
+        EXTRACTED: 3,
+        NEEDS_REVIEW: 4,
+        REJECTED: 5,
+        COMPLETED: 6,
+        ERROR: 7
+    });
+
+    const DocStatusLabels = Object.freeze({
+        [DocStatus.PENDING]: 'Pending',
+        [DocStatus.PROCESSING]: 'Processing',
+        [DocStatus.EXTRACTED]: 'Extracted',
+        [DocStatus.NEEDS_REVIEW]: 'Needs Review',
+        [DocStatus.REJECTED]: 'Rejected',
+        [DocStatus.COMPLETED]: 'Completed',
+        [DocStatus.ERROR]: 'Error'
+    });
+
+    const BatchStatus = Object.freeze({
+        PENDING: 1,
+        PROCESSING: 2,
+        COMPLETED: 3,
+        PARTIAL_ERROR: 4,
+        FAILED: 5,
+        CANCELLED: 6
+    });
+
+    const BatchStatusLabels = Object.freeze({
+        [BatchStatus.PENDING]: 'Pending',
+        [BatchStatus.PROCESSING]: 'Processing',
+        [BatchStatus.COMPLETED]: 'Completed',
+        [BatchStatus.PARTIAL_ERROR]: 'Partial Error',
+        [BatchStatus.FAILED]: 'Failed',
+        [BatchStatus.CANCELLED]: 'Cancelled'
+    });
+
+    const DocType = Object.freeze({
+        INVOICE: 1,
+        RECEIPT: 2,
+        CREDIT_MEMO: 3,
+        EXPENSE_REPORT: 4,
+        PURCHASE_ORDER: 5,
+        UNKNOWN: 6
+    });
+
+    const DocTypeLabels = Object.freeze({
+        [DocType.INVOICE]: 'Invoice',
+        [DocType.RECEIPT]: 'Receipt',
+        [DocType.CREDIT_MEMO]: 'Credit Memo',
+        [DocType.EXPENSE_REPORT]: 'Expense Report',
+        [DocType.PURCHASE_ORDER]: 'Purchase Order',
+        [DocType.UNKNOWN]: 'Unknown'
+    });
+
+    const Source = Object.freeze({
+        UPLOAD: 1,
+        EMAIL: 2,
+        DRAG_DROP: 3,
+        API: 4,
+        SCANNER: 5,
+        MOBILE: 6
+    });
+
+    const SourceLabels = Object.freeze({
+        [Source.UPLOAD]: 'Manual Upload',
+        [Source.EMAIL]: 'Email Import',
+        [Source.DRAG_DROP]: 'Drag and Drop',
+        [Source.API]: 'API Integration',
+        [Source.SCANNER]: 'Scanner',
+        [Source.MOBILE]: 'Mobile App'
+    });
+
     // ==================== Response Helpers ====================
 
     const Response = {
@@ -202,14 +279,15 @@ define([
 
         const lineItems = JSON.parse(docRecord.getValue('custrecord_dm_line_items') || '[]');
         const anomalies = JSON.parse(docRecord.getValue('custrecord_dm_anomalies') || '[]');
+        const status = docRecord.getValue('custrecord_dm_status');
 
         const document = {
             id: documentId,
             name: docRecord.getValue('name'),
-            status: docRecord.getValue('custrecord_dm_status'),
-            statusText: docRecord.getText('custrecord_dm_status'),
+            status: status,
+            statusText: getStatusDisplayText(status),
             documentType: docRecord.getValue('custrecord_dm_document_type'),
-            documentTypeText: docRecord.getText('custrecord_dm_document_type'),
+            documentTypeText: getDocTypeDisplayText(docRecord.getValue('custrecord_dm_document_type')),
             sourceFile: docRecord.getValue('custrecord_dm_source_file'),
             documentId: docRecord.getValue('custrecord_dm_document_id'),
             batchId: docRecord.getValue('custrecord_dm_batch_id'),
@@ -236,7 +314,7 @@ define([
             amountValidated: docRecord.getValue('custrecord_dm_amount_validated'),
             createdTransaction: docRecord.getValue('custrecord_dm_created_transaction'),
             source: docRecord.getValue('custrecord_dm_source'),
-            sourceText: docRecord.getText('custrecord_dm_source'),
+            sourceText: getSourceDisplayText(docRecord.getValue('custrecord_dm_source')),
             emailSender: docRecord.getValue('custrecord_dm_email_sender'),
             emailSubject: docRecord.getValue('custrecord_dm_email_subject'),
             rejectionReason: docRecord.getValue('custrecord_dm_rejection_reason'),
@@ -379,10 +457,13 @@ define([
                 custrecord_dm_batch_id as batchId,
                 custrecord_dm_anomalies as anomalies
             FROM customrecord_dm_captured_document
-            WHERE custrecord_dm_status IN (1, 2, 3, 4)
+            WHERE custrecord_dm_status IN (${DocStatus.PENDING}, ${DocStatus.PROCESSING}, ${DocStatus.EXTRACTED}, ${DocStatus.NEEDS_REVIEW})
             ORDER BY
                 CASE custrecord_dm_status
-                    WHEN 4 THEN 1 WHEN 3 THEN 2 WHEN 2 THEN 3 WHEN 1 THEN 4
+                    WHEN ${DocStatus.NEEDS_REVIEW} THEN 1
+                    WHEN ${DocStatus.EXTRACTED} THEN 2
+                    WHEN ${DocStatus.PROCESSING} THEN 3
+                    WHEN ${DocStatus.PENDING} THEN 4
                 END,
                 custrecord_dm_created_date ASC
             OFFSET ${(page - 1) * pageSize} ROWS FETCH NEXT ${pageSize} ROWS ONLY
@@ -412,7 +493,7 @@ define([
         const countSql = `
             SELECT custrecord_dm_status as status, COUNT(*) as count
             FROM customrecord_dm_captured_document
-            WHERE custrecord_dm_status IN (1, 2, 3, 4)
+            WHERE custrecord_dm_status IN (${DocStatus.PENDING}, ${DocStatus.PROCESSING}, ${DocStatus.EXTRACTED}, ${DocStatus.NEEDS_REVIEW})
             GROUP BY custrecord_dm_status
         `;
 
@@ -433,11 +514,11 @@ define([
         const statsSql = `
             SELECT
                 COUNT(*) as total,
-                SUM(CASE WHEN custrecord_dm_status = 6 THEN 1 ELSE 0 END) as completed,
-                SUM(CASE WHEN custrecord_dm_status = 6 AND custrecord_dm_confidence_score >= 85 THEN 1 ELSE 0 END) as autoProcessed,
-                SUM(CASE WHEN custrecord_dm_status IN (1, 2, 3, 4) THEN 1 ELSE 0 END) as pending,
-                SUM(CASE WHEN custrecord_dm_status = 5 THEN 1 ELSE 0 END) as rejected,
-                SUM(CASE WHEN custrecord_dm_status = 7 THEN 1 ELSE 0 END) as errors,
+                SUM(CASE WHEN custrecord_dm_status = ${DocStatus.COMPLETED} THEN 1 ELSE 0 END) as completed,
+                SUM(CASE WHEN custrecord_dm_status = ${DocStatus.COMPLETED} AND custrecord_dm_confidence_score >= 85 THEN 1 ELSE 0 END) as autoProcessed,
+                SUM(CASE WHEN custrecord_dm_status IN (${DocStatus.PENDING}, ${DocStatus.PROCESSING}, ${DocStatus.EXTRACTED}, ${DocStatus.NEEDS_REVIEW}) THEN 1 ELSE 0 END) as pending,
+                SUM(CASE WHEN custrecord_dm_status = ${DocStatus.REJECTED} THEN 1 ELSE 0 END) as rejected,
+                SUM(CASE WHEN custrecord_dm_status = ${DocStatus.ERROR} THEN 1 ELSE 0 END) as errors,
                 AVG(custrecord_dm_confidence_score) as avgConfidence,
                 SUM(custrecord_dm_total_amount) as totalValue
             FROM customrecord_dm_captured_document
@@ -449,7 +530,7 @@ define([
 
         // Get document type breakdown
         const typeSql = `
-            SELECT BUILTIN.DF(custrecord_dm_document_type) as docType, COUNT(*) as count
+            SELECT custrecord_dm_document_type as docType, COUNT(*) as count
             FROM customrecord_dm_captured_document
             WHERE custrecord_dm_created_date >= ADD_MONTHS(SYSDATE, -1)
             GROUP BY custrecord_dm_document_type
@@ -507,7 +588,7 @@ define([
             FROM customrecord_dm_captured_document
             WHERE custrecord_dm_anomalies IS NOT NULL
             AND custrecord_dm_anomalies != '[]'
-            AND custrecord_dm_status NOT IN (5, 6)
+            AND custrecord_dm_status NOT IN (${DocStatus.REJECTED}, ${DocStatus.COMPLETED})
             ORDER BY custrecord_dm_created_date DESC
             FETCH FIRST ${limit} ROWS ONLY
         `;
@@ -661,12 +742,13 @@ define([
         }
 
         const batchRecord = record.load({ type: 'customrecord_dm_batch', id: batchId });
+        const status = batchRecord.getValue('custrecord_dm_batch_status');
 
         const batch = {
             id: batchId,
             name: batchRecord.getValue('name'),
-            status: batchRecord.getValue('custrecord_dm_batch_status'),
-            statusText: batchRecord.getText('custrecord_dm_batch_status'),
+            status: status,
+            statusText: getBatchStatusDisplayText(status),
             documentCount: batchRecord.getValue('custrecord_dm_batch_document_count'),
             processedCount: batchRecord.getValue('custrecord_dm_batch_processed_count'),
             errorCount: batchRecord.getValue('custrecord_dm_batch_error_count'),
@@ -720,7 +802,7 @@ define([
         const volumeSql = `
             SELECT TO_CHAR(custrecord_dm_created_date, 'YYYY-MM-DD') as day,
                 COUNT(*) as total,
-                SUM(CASE WHEN custrecord_dm_status = 6 THEN 1 ELSE 0 END) as completed,
+                SUM(CASE WHEN custrecord_dm_status = '${DocStatus.COMPLETED}' THEN 1 ELSE 0 END) as completed,
                 AVG(custrecord_dm_confidence_score) as avgConfidence
             FROM customrecord_dm_captured_document
             WHERE custrecord_dm_created_date >= SYSDATE - ${period}
@@ -777,10 +859,10 @@ define([
         const docId = generateDocumentId();
         docRecord.setValue('name', fileName);
         docRecord.setValue('custrecord_dm_document_id', docId);
-        docRecord.setValue('custrecord_dm_status', 1); // Pending
+        docRecord.setValue('custrecord_dm_status', DocStatus.PENDING);
         docRecord.setValue('custrecord_dm_document_type', documentType === 'auto' ? '' : documentType);
         docRecord.setValue('custrecord_dm_source_file', fileId);
-        docRecord.setValue('custrecord_dm_source', 1); // Manual Upload
+        docRecord.setValue('custrecord_dm_source', Source.UPLOAD);
         docRecord.setValue('custrecord_dm_uploaded_by', runtime.getCurrentUser().id);
         docRecord.setValue('custrecord_dm_created_date', new Date());
 
@@ -800,7 +882,7 @@ define([
             documentCode: docId,
             fileId: fileId,
             fileName: fileName,
-            status: 'pending'
+            status: DocStatus.PENDING
         }, 'Document uploaded successfully');
     }
 
@@ -815,12 +897,12 @@ define([
         // Create batch record
         const batchRecord = record.create({ type: 'customrecord_dm_batch' });
         batchRecord.setValue('name', batchName);
-        batchRecord.setValue('custrecord_dm_batch_status', 1); // Pending
+        batchRecord.setValue('custrecord_dm_batch_status', BatchStatus.PENDING);
         batchRecord.setValue('custrecord_dm_batch_document_count', files.length);
         batchRecord.setValue('custrecord_dm_batch_processed_count', 0);
         batchRecord.setValue('custrecord_dm_batch_created_date', new Date());
         batchRecord.setValue('custrecord_dm_batch_created_by', runtime.getCurrentUser().id);
-        batchRecord.setValue('custrecord_dm_batch_source', 1); // Manual
+        batchRecord.setValue('custrecord_dm_batch_source', Source.UPLOAD);
 
         const batchId = batchRecord.save();
 
@@ -872,7 +954,7 @@ define([
         record.submitFields({
             type: 'customrecord_dm_batch',
             id: batchId,
-            values: { 'custrecord_dm_batch_status': 2 } // Processing
+            values: { 'custrecord_dm_batch_status': BatchStatus.PROCESSING }
         });
 
         return Response.success({
@@ -894,7 +976,7 @@ define([
         record.submitFields({
             type: 'customrecord_dm_captured_document',
             id: documentId,
-            values: { 'custrecord_dm_status': 2 } // Processing
+            values: { 'custrecord_dm_status': DocStatus.PROCESSING }
         });
 
         try {
@@ -926,9 +1008,9 @@ define([
                 const extraction = result.extraction;
 
                 // Determine status based on confidence
-                let newStatus = 4; // Needs Review
+                let newStatus = DocStatus.NEEDS_REVIEW;
                 if (extraction.confidence.overall >= 85 && extraction.anomalies.length === 0) {
-                    newStatus = 3; // Extracted (ready for approval)
+                    newStatus = DocStatus.EXTRACTED;
                 }
 
                 // Update document record
@@ -959,7 +1041,7 @@ define([
 
                 return Response.success({
                     documentId: documentId,
-                    status: newStatus === 3 ? 'extracted' : 'needs_review',
+                    status: newStatus === DocStatus.EXTRACTED ? 'extracted' : 'needs_review',
                     confidence: extraction.confidence.overall,
                     anomalyCount: extraction.anomalies.length,
                     processingTime: processingTime
@@ -969,7 +1051,7 @@ define([
                     type: 'customrecord_dm_captured_document',
                     id: documentId,
                     values: {
-                        'custrecord_dm_status': 7, // Error
+                        'custrecord_dm_status': DocStatus.ERROR,
                         'custrecord_dm_error_message': result.error
                     }
                 });
@@ -983,7 +1065,7 @@ define([
                 type: 'customrecord_dm_captured_document',
                 id: documentId,
                 values: {
-                    'custrecord_dm_status': 7, // Error
+                    'custrecord_dm_status': DocStatus.ERROR,
                     'custrecord_dm_error_message': e.message
                 }
             });
@@ -1002,7 +1084,7 @@ define([
             // Get all pending docs in batch
             const sql = `
                 SELECT id FROM customrecord_dm_captured_document
-                WHERE custrecord_dm_batch_id = ? AND custrecord_dm_status = 1
+                WHERE custrecord_dm_batch_id = ? AND custrecord_dm_status = '${DocStatus.PENDING}'
             `;
             const results = query.runSuiteQL({ query: sql, params: [batchId] });
             docsToProcess = results.results.map(r => r.values[0]);
@@ -1055,7 +1137,7 @@ define([
             type: 'customrecord_dm_captured_document',
             id: documentId,
             values: {
-                'custrecord_dm_status': 1, // Pending
+                'custrecord_dm_status': DocStatus.PENDING,
                 'custrecord_dm_line_items': '[]',
                 'custrecord_dm_anomalies': '[]',
                 'custrecord_dm_confidence_score': 0,
@@ -1091,7 +1173,7 @@ define([
                         type: 'customrecord_dm_captured_document',
                         id: result.data.documentId,
                         values: {
-                            'custrecord_dm_source': 2, // Email
+                            'custrecord_dm_source': Source.EMAIL,
                             'custrecord_dm_email_sender': emailSender,
                             'custrecord_dm_email_subject': emailSubject,
                             'custrecord_dm_email_received': new Date()
@@ -1131,19 +1213,42 @@ define([
         }
 
         try {
-            const learningRecord = record.create({ type: 'customrecord_dm_learning' });
-            learningRecord.setValue('name', `Correction-${documentId}-${fieldName}`);
-            learningRecord.setValue('custrecord_dm_learn_document', documentId);
-            learningRecord.setValue('custrecord_dm_learn_field', fieldName);
-            learningRecord.setValue('custrecord_dm_learn_original', String(originalValue));
-            learningRecord.setValue('custrecord_dm_learn_corrected', String(correctedValue));
-            learningRecord.setValue('custrecord_dm_learn_user', runtime.getCurrentUser().id);
-            learningRecord.setValue('custrecord_dm_learn_date', new Date());
-            learningRecord.setValue('custrecord_dm_learn_count', 1);
+            // Load existing corrections from document
+            const docRecord = record.load({
+                type: 'customrecord_dm_captured_document',
+                id: documentId
+            });
 
-            const correctionId = learningRecord.save();
+            const existingCorrections = JSON.parse(docRecord.getValue('custrecord_dm_user_corrections') || '[]');
 
-            return Response.success({ correctionId: correctionId }, 'Correction recorded');
+            // Add new correction
+            const correction = {
+                field: fieldName,
+                original: String(originalValue),
+                corrected: String(correctedValue),
+                date: new Date().toISOString(),
+                user: runtime.getCurrentUser().id
+            };
+
+            // Check if correction for this field already exists
+            const existingIndex = existingCorrections.findIndex(c => c.field === fieldName);
+            if (existingIndex >= 0) {
+                existingCorrections[existingIndex] = correction;
+            } else {
+                existingCorrections.push(correction);
+            }
+
+            // Save corrections back to document
+            record.submitFields({
+                type: 'customrecord_dm_captured_document',
+                id: documentId,
+                values: {
+                    'custrecord_dm_user_corrections': JSON.stringify(existingCorrections),
+                    'custrecord_dm_modified_date': new Date()
+                }
+            });
+
+            return Response.success({ documentId: documentId, corrections: existingCorrections }, 'Correction recorded');
         } catch (e) {
             return Response.error('CORRECTION_FAILED', e.message);
         }
@@ -1222,10 +1327,10 @@ define([
             let actualTransactionType = transactionType;
 
             if (createTransaction && vendorId) {
-                // Determine transaction type
+                // Determine transaction type based on document type ID
                 if (!actualTransactionType) {
-                    actualTransactionType = documentType === 'EXPENSE_REPORT' ? 'expensereport' :
-                                          documentType === 'CREDIT_MEMO' ? 'vendorcredit' : 'vendorbill';
+                    actualTransactionType = documentType === DocType.EXPENSE_REPORT ? 'expensereport' :
+                                          documentType === DocType.CREDIT_MEMO ? 'vendorcredit' : 'vendorbill';
                 }
 
                 transactionId = createTransactionFromDocument(docRecord, actualTransactionType);
@@ -1236,7 +1341,7 @@ define([
                 type: 'customrecord_dm_captured_document',
                 id: documentId,
                 values: {
-                    'custrecord_dm_status': 6, // Completed
+                    'custrecord_dm_status': DocStatus.COMPLETED,
                     'custrecord_dm_created_transaction': transactionId ? String(transactionId) : '',
                     'custrecord_dm_modified_date': new Date()
                 }
@@ -1252,7 +1357,7 @@ define([
                 documentId: documentId,
                 transactionId: transactionId,
                 transactionType: actualTransactionType,
-                status: 'completed'
+                status: DocStatus.COMPLETED
             }, 'Document approved');
         } catch (e) {
             log.error('Approve error', e);
@@ -1280,7 +1385,7 @@ define([
                 type: 'customrecord_dm_captured_document',
                 id: documentId,
                 values: {
-                    'custrecord_dm_status': 5, // Rejected
+                    'custrecord_dm_status': DocStatus.REJECTED,
                     'custrecord_dm_rejection_reason': reason,
                     'custrecord_dm_modified_date': new Date()
                 }
@@ -1292,7 +1397,7 @@ define([
 
             return Response.success({
                 documentId: documentId,
-                status: 'rejected',
+                status: DocStatus.REJECTED,
                 reason: reason
             }, 'Document rejected');
         } catch (e) {
@@ -1424,7 +1529,7 @@ define([
             const docSearch = search.create({
                 type: 'customrecord_dm_captured_document',
                 filters: [
-                    ['custrecord_dm_status', 'anyof', [5, 6]], // Rejected or Completed
+                    ['custrecord_dm_status', 'anyof', [DocStatus.REJECTED, DocStatus.COMPLETED]],
                     'AND',
                     ['custrecord_dm_modified_date', 'before', `daysago${olderThanDays}`]
                 ],
@@ -1492,8 +1597,8 @@ define([
     function updateBatchProgress(batchId) {
         const sql = `
             SELECT COUNT(*) as total,
-                SUM(CASE WHEN custrecord_dm_status IN (5, 6) THEN 1 ELSE 0 END) as processed,
-                SUM(CASE WHEN custrecord_dm_status = 7 THEN 1 ELSE 0 END) as errors
+                SUM(CASE WHEN custrecord_dm_status IN (${DocStatus.REJECTED}, ${DocStatus.COMPLETED}) THEN 1 ELSE 0 END) as processed,
+                SUM(CASE WHEN custrecord_dm_status = ${DocStatus.ERROR} THEN 1 ELSE 0 END) as errors
             FROM customrecord_dm_captured_document
             WHERE custrecord_dm_batch_id = ?
         `;
@@ -1509,7 +1614,7 @@ define([
         };
 
         if (processed >= total && total > 0) {
-            updates['custrecord_dm_batch_status'] = 3; // Completed
+            updates['custrecord_dm_batch_status'] = BatchStatus.COMPLETED;
             updates['custrecord_dm_batch_completed_date'] = new Date();
         }
 
@@ -1586,6 +1691,23 @@ define([
         }
 
         return txnRecord ? txnRecord.save() : null;
+    }
+
+    // Display text helper functions - use the Labels constants
+    function getStatusDisplayText(status) {
+        return DocStatusLabels[status] || status;
+    }
+
+    function getBatchStatusDisplayText(status) {
+        return BatchStatusLabels[status] || status;
+    }
+
+    function getSourceDisplayText(source) {
+        return SourceLabels[source] || source;
+    }
+
+    function getDocTypeDisplayText(docType) {
+        return DocTypeLabels[docType] || docType;
     }
 
     return {
