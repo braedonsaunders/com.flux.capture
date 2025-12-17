@@ -43,9 +43,17 @@ jobs:
           echo "${{ secrets.NS_PRIVATE_KEY }}" | base64 -d > /tmp/private.pem
           chmod 600 /tmp/private.pem
 
-      - name: Setup NetSuite authentication
+      - name: Setup NetSuite authentication (root)
         run: |
           suitecloud account:setup:ci \
+            --account ${{ secrets.NS_ACCOUNT_ID }} \
+            --authid "github-deploy" \
+            --certificateid ${{ secrets.NS_CERTIFICATE_ID }} \
+            --privatekeypath /tmp/private.pem
+
+      - name: Setup NetSuite authentication (src - for SDF deploy)
+        run: |
+          cd src && suitecloud account:setup:ci \
             --account ${{ secrets.NS_ACCOUNT_ID }} \
             --authid "github-deploy" \
             --certificateid ${{ secrets.NS_CERTIFICATE_ID }} \
