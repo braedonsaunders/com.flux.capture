@@ -243,24 +243,34 @@
             var resizer = el('#panel-resizer');
             var previewPanel = el('#preview-panel');
             var container = el('#review-content');
+            var previewViewport = el('#preview-viewport');
 
             if (!resizer || !previewPanel || !container) return;
 
             var isResizing = false;
             var startX, startWidth;
 
-            resizer.addEventListener('mousedown', function(e) {
+            // Create overlay to prevent iframe from stealing events
+            var overlay = document.createElement('div');
+            overlay.id = 'resize-overlay';
+            overlay.style.cssText = 'position:fixed;top:0;left:0;right:0;bottom:0;z-index:9999;cursor:col-resize;display:none;';
+            document.body.appendChild(overlay);
+
+            function startResize(e) {
                 isResizing = true;
                 startX = e.clientX;
                 startWidth = previewPanel.offsetWidth;
                 resizer.classList.add('dragging');
+                overlay.style.display = 'block';
                 document.body.style.cursor = 'col-resize';
                 document.body.style.userSelect = 'none';
+                if (previewViewport) previewViewport.style.pointerEvents = 'none';
                 e.preventDefault();
-            });
+            }
 
-            document.addEventListener('mousemove', function(e) {
+            function doResize(e) {
                 if (!isResizing) return;
+                e.preventDefault();
 
                 var containerWidth = container.offsetWidth;
                 var newWidth = startWidth + (e.clientX - startX);
@@ -272,30 +282,33 @@
 
                 var percentage = (newWidth / containerWidth) * 100;
                 previewPanel.style.flex = '0 0 ' + percentage + '%';
-            });
-
-            function stopResizing() {
-                if (isResizing) {
-                    isResizing = false;
-                    resizer.classList.remove('dragging');
-                    document.body.style.cursor = '';
-                    document.body.style.userSelect = '';
-
-                    // Save preference to localStorage
-                    // Extract percentage from flex: "0 0 XX%" - match number before %
-                    try {
-                        var flexVal = previewPanel.style.flex;
-                        var percentMatch = flexVal.match(/([\d.]+)%/);
-                        if (percentMatch && percentMatch[1]) {
-                            localStorage.setItem('fc_preview_width', percentMatch[1]);
-                        }
-                    } catch (e) { /* ignore */ }
-                }
             }
 
-            document.addEventListener('mouseup', stopResizing);
-            window.addEventListener('mouseup', stopResizing);
-            document.addEventListener('mouseleave', stopResizing);
+            function stopResize() {
+                if (!isResizing) return;
+                isResizing = false;
+                resizer.classList.remove('dragging');
+                overlay.style.display = 'none';
+                document.body.style.cursor = '';
+                document.body.style.userSelect = '';
+                if (previewViewport) previewViewport.style.pointerEvents = '';
+
+                // Save preference to localStorage
+                try {
+                    var flexVal = previewPanel.style.flex;
+                    var percentMatch = flexVal.match(/([\d.]+)%/);
+                    if (percentMatch && percentMatch[1]) {
+                        localStorage.setItem('fc_preview_width', percentMatch[1]);
+                    }
+                } catch (e) { /* ignore */ }
+            }
+
+            // Mouse events
+            resizer.addEventListener('mousedown', startResize);
+            document.addEventListener('mousemove', doResize);
+            document.addEventListener('mouseup', stopResize);
+            overlay.addEventListener('mousemove', doResize);
+            overlay.addEventListener('mouseup', stopResize);
 
             // Set initial width - use saved preference or default to 45%
             var DEFAULT_PREVIEW_WIDTH = 45;
