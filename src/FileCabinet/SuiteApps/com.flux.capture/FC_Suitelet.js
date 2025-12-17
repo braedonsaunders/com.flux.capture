@@ -276,68 +276,74 @@ define([
                 return CONFIG.API_URL + sep + qs;
             },
 
+            handleResponse: function(response) {
+                return response.text().then(function(text) {
+                    if (!response.ok) {
+                        // Try to parse as JSON for error details
+                        try {
+                            var errData = JSON.parse(text);
+                            throw new Error(errData.error ? errData.error.message : 'Request failed: ' + response.status);
+                        } catch (e) {
+                            if (e.message.indexOf('Request failed') === 0) throw e;
+                            throw new Error('Request failed: ' + response.status + ' - ' + text.substring(0, 100));
+                        }
+                    }
+                    try {
+                        var data = JSON.parse(text);
+                        if (!data.success) throw new Error(data.error ? data.error.message : 'API Error');
+                        return data.data;
+                    } catch (e) {
+                        throw new Error('Invalid JSON response');
+                    }
+                });
+            },
+
             get: function(action, params, signal) {
                 params = params || {};
                 params.action = action;
+                var self = this;
                 var options = {};
                 if (signal) options.signal = signal;
-                return fetch(this.buildUrl(params), options)
-                    .then(function(r) { return r.json(); })
-                    .then(function(data) {
-                        if (!data.success) throw new Error(data.error ? data.error.message : 'API Error');
-                        return data.data;
-                    });
+                return fetch(this.buildUrl(params), options).then(function(r) { return self.handleResponse(r); });
             },
 
             post: function(action, body, signal) {
                 body = body || {};
                 body.action = action;
+                var self = this;
                 var options = {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify(body)
                 };
                 if (signal) options.signal = signal;
-                return fetch(CONFIG.API_URL, options)
-                    .then(function(r) { return r.json(); })
-                    .then(function(data) {
-                        if (!data.success) throw new Error(data.error ? data.error.message : 'API Error');
-                        return data.data;
-                    });
+                return fetch(CONFIG.API_URL, options).then(function(r) { return self.handleResponse(r); });
             },
 
             put: function(action, body, signal) {
                 body = body || {};
                 body.action = action;
+                var self = this;
                 var options = {
                     method: 'PUT',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify(body)
                 };
                 if (signal) options.signal = signal;
-                return fetch(CONFIG.API_URL, options)
-                    .then(function(r) { return r.json(); })
-                    .then(function(data) {
-                        if (!data.success) throw new Error(data.error ? data.error.message : 'API Error');
-                        return data.data;
-                    });
+                return fetch(CONFIG.API_URL, options).then(function(r) { return self.handleResponse(r); });
             },
 
             delete: function(action, body, signal) {
                 body = body || {};
                 body.action = action;
+                var self = this;
                 var options = {
                     method: 'DELETE',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify(body)
                 };
                 if (signal) options.signal = signal;
-                return fetch(CONFIG.API_URL, options)
-                    .then(function(r) { return r.json(); })
-                    .then(function(data) {
-                        if (!data.success) throw new Error(data.error ? data.error.message : 'API Error');
-                        return data.data;
-                    });
+                return fetch(CONFIG.API_URL, options).then(function(r) { return self.handleResponse(r); });
             }
         };
 
