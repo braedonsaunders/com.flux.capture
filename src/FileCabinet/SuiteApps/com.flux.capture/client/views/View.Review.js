@@ -274,7 +274,7 @@
                 previewPanel.style.flex = '0 0 ' + percentage + '%';
             });
 
-            document.addEventListener('mouseup', function() {
+            function stopResizing() {
                 if (isResizing) {
                     isResizing = false;
                     resizer.classList.remove('dragging');
@@ -291,7 +291,11 @@
                         }
                     } catch (e) { /* ignore */ }
                 }
-            });
+            }
+
+            document.addEventListener('mouseup', stopResizing);
+            window.addEventListener('mouseup', stopResizing);
+            document.addEventListener('mouseleave', stopResizing);
 
             // Set initial width - use saved preference or default to 45%
             var DEFAULT_PREVIEW_WIDTH = 45;
