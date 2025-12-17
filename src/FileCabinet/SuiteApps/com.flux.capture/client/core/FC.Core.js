@@ -397,15 +397,23 @@
         },
 
         /**
-         * Hide loading state
+         * Hide loading state with premium fade animation
          */
         hideLoading: function() {
             console.log('[UI] hideLoading called');
             var loading = el('#loading-screen');
             console.log('[UI] loading-screen element:', loading);
             if (loading) {
-                loading.style.display = 'none';
-                console.log('[UI] Loading screen hidden');
+                // Add hidden class to trigger CSS fade animation
+                loading.classList.add('hidden');
+
+                // Remove from DOM after animation completes
+                setTimeout(function() {
+                    if (loading.parentNode) {
+                        loading.parentNode.removeChild(loading);
+                    }
+                    console.log('[UI] Loading screen removed');
+                }, 500);
             }
         }
     };

@@ -18,6 +18,7 @@
         /* Critical variables and base styles */
         :root {
             --color-primary: #2563eb;
+            --color-primary-glow: rgba(37, 99, 235, 0.4);
             --surface-body: #f8fafc;
             --surface-card: #ffffff;
             --text-primary: #0f172a;
@@ -39,6 +40,8 @@
             color: var(--text-primary);
         }
         .app-wrapper { display: flex; min-height: 100vh; }
+
+        /* Sidebar - hidden until color resolved */
         .app-sidebar {
             width: var(--sidebar-width);
             background: linear-gradient(180deg, var(--gray-900), var(--gray-800));
@@ -48,7 +51,15 @@
             z-index: 100;
             display: flex;
             flex-direction: column;
+            opacity: 0;
+            transform: translateX(-10px);
+            transition: opacity 0.4s ease, transform 0.4s ease;
         }
+        .app-sidebar.sidebar-ready {
+            opacity: 1;
+            transform: translateX(0);
+        }
+
         .sidebar-header { padding: var(--space-lg); display: flex; align-items: center; gap: var(--space-md); }
         .sidebar-logo {
             width: 40px; height: 40px;
@@ -94,17 +105,189 @@
         .view-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: var(--space-lg); }
         .view-header h1 { font-size: 28px; font-weight: 700; margin: 0; }
         .header-subtitle { color: var(--text-secondary); margin-top: 4px; }
+
+        /* ==========================================
+           PREMIUM LOADING SCREEN
+           ========================================== */
         .loading-screen {
-            position: fixed; inset: 0; background: var(--surface-body);
-            display: flex; align-items: center; justify-content: center; z-index: 9999;
+            position: fixed;
+            inset: 0;
+            background: linear-gradient(135deg, #0f172a 0%, #1e293b 50%, #0f172a 100%);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 9999;
+            opacity: 1;
+            transition: opacity 0.5s ease, visibility 0.5s ease;
         }
-        .spinner {
-            width: 48px; height: 48px;
-            border: 3px solid #e2e8f0; border-top-color: var(--color-primary);
-            border-radius: 50%; animation: spin 1s linear infinite;
-            margin: 0 auto var(--space-md);
+        .loading-screen.hidden {
+            opacity: 0;
+            visibility: hidden;
+            pointer-events: none;
         }
-        @keyframes spin { to { transform: rotate(360deg); } }
+
+        .loading-content {
+            text-align: center;
+            position: relative;
+        }
+
+        /* Animated Logo Container */
+        .loading-logo {
+            position: relative;
+            width: 100px;
+            height: 100px;
+            margin: 0 auto 32px;
+        }
+
+        /* Orbital Rings */
+        .loading-ring {
+            position: absolute;
+            inset: 0;
+            border: 2px solid transparent;
+            border-top-color: var(--color-primary);
+            border-radius: 50%;
+            animation: ring-spin 1.5s cubic-bezier(0.68, -0.55, 0.27, 1.55) infinite;
+        }
+        .loading-ring-2 {
+            inset: 8px;
+            border-top-color: rgba(37, 99, 235, 0.5);
+            animation-duration: 2s;
+            animation-direction: reverse;
+        }
+        .loading-ring-3 {
+            inset: 16px;
+            border-top-color: rgba(37, 99, 235, 0.3);
+            animation-duration: 2.5s;
+        }
+
+        @keyframes ring-spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        /* Center Icon */
+        .loading-icon {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: 48px;
+            height: 48px;
+            background: var(--color-primary);
+            border-radius: 12px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            box-shadow: 0 0 40px var(--color-primary-glow), 0 0 80px var(--color-primary-glow);
+            animation: icon-pulse 2s ease-in-out infinite;
+        }
+        .loading-icon svg {
+            width: 28px;
+            height: 28px;
+            color: white;
+        }
+
+        @keyframes icon-pulse {
+            0%, 100% {
+                box-shadow: 0 0 40px var(--color-primary-glow), 0 0 80px var(--color-primary-glow);
+                transform: translate(-50%, -50%) scale(1);
+            }
+            50% {
+                box-shadow: 0 0 60px var(--color-primary-glow), 0 0 120px var(--color-primary-glow);
+                transform: translate(-50%, -50%) scale(1.05);
+            }
+        }
+
+        /* Brand Text with Letter Animation */
+        .loading-brand {
+            display: flex;
+            justify-content: center;
+            gap: 4px;
+            margin-bottom: 8px;
+        }
+        .loading-letter {
+            font-size: 32px;
+            font-weight: 800;
+            color: white;
+            opacity: 0;
+            transform: translateY(20px);
+            animation: letter-in 0.5s ease forwards;
+            animation-delay: calc(var(--i) * 0.1s);
+        }
+
+        @keyframes letter-in {
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        /* Tagline */
+        .loading-tagline {
+            font-size: 12px;
+            text-transform: uppercase;
+            letter-spacing: 3px;
+            color: rgba(255, 255, 255, 0.5);
+            margin-bottom: 40px;
+            opacity: 0;
+            animation: fade-in 0.5s ease 0.6s forwards;
+        }
+
+        @keyframes fade-in {
+            to { opacity: 1; }
+        }
+
+        /* Progress Bar */
+        .loading-progress {
+            width: 200px;
+            height: 3px;
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 3px;
+            margin: 0 auto;
+            overflow: hidden;
+        }
+        .loading-progress-bar {
+            height: 100%;
+            width: 30%;
+            background: linear-gradient(90deg, var(--color-primary), #60a5fa);
+            border-radius: 3px;
+            animation: progress-slide 1.5s ease-in-out infinite;
+        }
+
+        @keyframes progress-slide {
+            0% { transform: translateX(-100%); width: 30%; }
+            50% { width: 60%; }
+            100% { transform: translateX(400%); width: 30%; }
+        }
+
+        /* Ambient Particles */
+        .loading-particles {
+            position: absolute;
+            inset: 0;
+            overflow: hidden;
+            pointer-events: none;
+        }
+        .particle {
+            position: absolute;
+            width: 4px;
+            height: 4px;
+            background: var(--color-primary);
+            border-radius: 50%;
+            opacity: 0;
+            animation: particle-float 3s ease-in-out infinite;
+        }
+        .particle:nth-child(1) { left: 20%; animation-delay: 0s; }
+        .particle:nth-child(2) { left: 40%; animation-delay: 0.5s; }
+        .particle:nth-child(3) { left: 60%; animation-delay: 1s; }
+        .particle:nth-child(4) { left: 80%; animation-delay: 1.5s; }
+
+        @keyframes particle-float {
+            0% { bottom: -10px; opacity: 0; transform: scale(0); }
+            20% { opacity: 0.6; transform: scale(1); }
+            80% { opacity: 0.6; }
+            100% { bottom: 100%; opacity: 0; transform: scale(0); }
+        }
+
         .btn {
             display: inline-flex; align-items: center; justify-content: center; gap: 8px;
             padding: 10px var(--space-md); font-size: 14px; font-weight: 500;
@@ -367,10 +550,28 @@
                 // Apply directly to sidebar
                 if (sidebar) {
                     sidebar.style.background = sidebarColor;
+
+                    // Reveal sidebar with animation after color is applied
+                    requestAnimationFrame(function() {
+                        sidebar.classList.add('sidebar-ready');
+                    });
                 }
+
+                // Mark color as ready globally
+                window.FC_COLOR_READY = true;
 
                 console.log('[FC] Sidebar color synced with NetSuite navbar:', color, '->', sidebarColor);
                 return true;
+            }
+
+            /**
+             * Reveal sidebar (called after color detection or as fallback)
+             */
+            function revealSidebar() {
+                var sidebar = document.querySelector('.app-sidebar');
+                if (sidebar && !sidebar.classList.contains('sidebar-ready')) {
+                    sidebar.classList.add('sidebar-ready');
+                }
             }
 
             // Also listen for postMessage as fallback
@@ -382,6 +583,14 @@
 
             // Run color detection immediately
             syncNetSuiteColorWithRetry();
+
+            // Safety net: reveal sidebar after max wait time even if detection fails
+            setTimeout(function() {
+                if (!window.FC_COLOR_READY) {
+                    applyDetectedColor('rgb(30, 41, 59)'); // Default dark color
+                }
+                revealSidebar();
+            }, 2000);
         })();
     </script>
 
@@ -455,11 +664,43 @@
 
         <!-- MAIN CONTENT AREA -->
         <main class="app-main">
-            <!-- Loading screen -->
+            <!-- Premium Loading Screen -->
             <div class="loading-screen" id="loading-screen">
+                <!-- Ambient Particles -->
+                <div class="loading-particles">
+                    <div class="particle"></div>
+                    <div class="particle"></div>
+                    <div class="particle"></div>
+                    <div class="particle"></div>
+                </div>
+
                 <div class="loading-content">
-                    <div class="spinner"></div>
-                    <p>Loading Flux Capture...</p>
+                    <!-- Animated Logo with Orbital Rings -->
+                    <div class="loading-logo">
+                        <div class="loading-ring"></div>
+                        <div class="loading-ring loading-ring-2"></div>
+                        <div class="loading-ring loading-ring-3"></div>
+                        <div class="loading-icon">
+                            <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                <path d="M13 2L3 14H12L11 22L21 10H12L13 2Z" fill="currentColor"/>
+                            </svg>
+                        </div>
+                    </div>
+
+                    <!-- Animated Brand Text -->
+                    <div class="loading-brand">
+                        <span class="loading-letter" style="--i:0">F</span>
+                        <span class="loading-letter" style="--i:1">L</span>
+                        <span class="loading-letter" style="--i:2">U</span>
+                        <span class="loading-letter" style="--i:3">X</span>
+                    </div>
+
+                    <div class="loading-tagline">Document Intelligence</div>
+
+                    <!-- Progress Bar -->
+                    <div class="loading-progress">
+                        <div class="loading-progress-bar"></div>
+                    </div>
                 </div>
             </div>
 

@@ -124,6 +124,15 @@ body {
     left: 0;
     bottom: 0;
     z-index: 100;
+    /* Hidden until color resolved */
+    opacity: 0;
+    transform: translateX(-10px);
+    transition: opacity 0.4s ease, transform 0.4s ease;
+}
+
+.app-sidebar.sidebar-ready {
+    opacity: 1;
+    transform: translateX(0);
 }
 
 .sidebar-header {
