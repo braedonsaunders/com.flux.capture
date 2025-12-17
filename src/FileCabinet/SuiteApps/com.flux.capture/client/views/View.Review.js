@@ -688,6 +688,28 @@
 
                     html += '</div>'; // close tab content
                 });
+
+                // ========== RENDER ORPHAN SUBLISTS ==========
+                // Find sublists from schema that weren't in any tab's layout
+                // This handles cases where client-side extraction missed some sublists (e.g., "loading")
+                var renderedSublistIds = [];
+                visibleTabs.forEach(function(tab) {
+                    (tab.sublists || []).forEach(function(slId) {
+                        if (renderedSublistIds.indexOf(slId) === -1) {
+                            renderedSublistIds.push(slId);
+                        }
+                    });
+                });
+
+                var orphanSublists = sublists.filter(function(sl) {
+                    return renderedSublistIds.indexOf(sl.id) === -1;
+                });
+
+                if (orphanSublists.length > 0) {
+                    console.log('[View.Review] Found orphan sublists not in layout:', orphanSublists.map(function(s) { return s.id; }));
+                    // Render orphan sublists outside of tabs (always visible)
+                    html += self.renderSublists(orphanSublists, doc);
+                }
             } else {
                 // ========== NO LAYOUT - Render all fields flat ==========
                 // Show notice about missing layout
@@ -1001,7 +1023,9 @@
             // Determine visible columns (important fields first)
             var visibleFields = this.getVisibleSublistFields(sublist);
 
-            var html = '<table class="line-items sublist-table">' +
+            // Wrap table in scrollable container to prevent overflow
+            var html = '<div class="sublist-table-wrapper">' +
+                '<table class="line-items sublist-table">' +
                 '<thead><tr>';
 
             visibleFields.forEach(function(f) {
@@ -1022,7 +1046,7 @@
                 html += '</tr>';
             });
 
-            html += '</tbody></table>';
+            html += '</tbody></table></div>'; // Close wrapper
 
             // Sublist total
             var total = items.reduce(function(sum, item) { return sum + (parseFloat(item.amount) || 0); }, 0);

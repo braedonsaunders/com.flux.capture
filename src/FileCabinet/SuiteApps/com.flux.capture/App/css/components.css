@@ -1542,9 +1542,18 @@
     margin-bottom: var(--space-sm);
 }
 
+/* Table wrapper for horizontal scroll when needed */
+.sublist-table-wrapper {
+    overflow-x: auto;
+    max-width: 100%;
+}
+
 .sublist-table {
     width: 100%;
+    min-width: 100%;
+    max-width: 100%;
     font-size: var(--font-size-sm);
+    table-layout: fixed; /* CRITICAL: Forces table to respect width constraints */
 }
 
 .sublist-table th {
@@ -1557,11 +1566,16 @@
     letter-spacing: 0.5px;
     border-bottom: 1px solid var(--border-color);
     background: var(--gray-50);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
 }
 
 .sublist-table td {
     padding: var(--space-xs);
     vertical-align: middle;
+    overflow: hidden;
+    text-overflow: ellipsis;
 }
 
 .sublist-table .line-input {
