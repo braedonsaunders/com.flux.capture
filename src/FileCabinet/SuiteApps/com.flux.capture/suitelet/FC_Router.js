@@ -730,38 +730,54 @@ define([
             var accountType = context.accountType || 'Expense';
             var searchQuery = context.query || '';
 
-            var innerSql = 'SELECT id, acctnumber, acctname, accttype, BUILTIN.DF(currency) as currency ' +
-                "FROM account WHERE isinactive = 'F'";
-
-            var params = [];
+            // Use N/search for more reliable account lookup
+            var filters = [
+                ['isinactive', 'is', 'F']
+            ];
 
             // Filter by account type if specified
             if (accountType) {
-                innerSql += " AND accttype = ?";
-                params.push(accountType);
+                filters.push('AND');
+                filters.push(['type', 'is', accountType]);
             }
 
             // Search filter
             if (searchQuery && searchQuery.length >= 2) {
-                innerSql += ' AND (LOWER(acctname) LIKE LOWER(?) OR LOWER(acctnumber) LIKE LOWER(?))';
-                var searchPattern = '%' + searchQuery + '%';
-                params.push(searchPattern, searchPattern);
+                filters.push('AND');
+                filters.push([
+                    ['name', 'contains', searchQuery],
+                    'OR',
+                    ['number', 'contains', searchQuery]
+                ]);
             }
 
-            innerSql += ' ORDER BY acctnumber, acctname';
-            var sql = 'SELECT * FROM (' + innerSql + ') WHERE ROWNUM <= 200';
+            var accountSearch = search.create({
+                type: search.Type.ACCOUNT,
+                filters: filters,
+                columns: [
+                    search.createColumn({ name: 'internalid' }),
+                    search.createColumn({ name: 'number', sort: search.Sort.ASC }),
+                    search.createColumn({ name: 'name' }),
+                    search.createColumn({ name: 'type' }),
+                    search.createColumn({ name: 'currency' })
+                ]
+            });
 
-            var results = query.runSuiteQL({ query: sql, params: params });
+            var accounts = [];
+            var resultSet = accountSearch.run();
+            var results = resultSet.getRange({ start: 0, end: 200 });
 
-            var accounts = results.results.map(function(row) {
-                return {
-                    value: String(row.values[0]),
-                    text: row.values[1] ? row.values[1] + ' - ' + row.values[2] : row.values[2],
-                    number: row.values[1],
-                    name: row.values[2],
-                    type: row.values[3],
-                    currency: row.values[4]
-                };
+            results.forEach(function(result) {
+                var number = result.getValue('number') || '';
+                var name = result.getValue('name') || '';
+                accounts.push({
+                    value: result.getValue('internalid'),
+                    text: number ? number + ' - ' + name : name,
+                    number: number,
+                    name: name,
+                    type: result.getText('type'),
+                    currency: result.getText('currency')
+                });
             });
 
             return Response.success(accounts);
@@ -780,43 +796,63 @@ define([
             var searchQuery = context.query || '';
             var itemType = context.itemType; // Optional: inventoryitem, noninventoryitem, etc.
 
-            var innerSql = 'SELECT id, itemid, displayname, description, BUILTIN.DF(purchaseunit) as unit, ' +
-                'cost, BUILTIN.DF(expenseaccount) as expenseAccount ' +
-                "FROM item WHERE isinactive = 'F' AND purchasedescription IS NOT NULL";
-
-            var params = [];
+            // Use N/search for more reliable item lookup
+            var filters = [
+                ['isinactive', 'is', 'F']
+            ];
 
             // Filter by item type if specified
             if (itemType) {
-                innerSql += " AND itemtype = ?";
-                params.push(itemType);
+                filters.push('AND');
+                filters.push(['type', 'is', itemType]);
             }
 
             // Search filter
             if (searchQuery && searchQuery.length >= 2) {
-                innerSql += ' AND (LOWER(itemid) LIKE LOWER(?) OR LOWER(displayname) LIKE LOWER(?) OR LOWER(description) LIKE LOWER(?))';
-                var searchPattern = '%' + searchQuery + '%';
-                params.push(searchPattern, searchPattern, searchPattern);
+                filters.push('AND');
+                filters.push([
+                    ['itemid', 'contains', searchQuery],
+                    'OR',
+                    ['displayname', 'contains', searchQuery],
+                    'OR',
+                    ['description', 'contains', searchQuery]
+                ]);
             }
 
-            innerSql += ' ORDER BY itemid';
-            var sql = 'SELECT * FROM (' + innerSql + ') WHERE ROWNUM <= 200';
+            var itemSearch = search.create({
+                type: search.Type.ITEM,
+                filters: filters,
+                columns: [
+                    search.createColumn({ name: 'internalid' }),
+                    search.createColumn({ name: 'itemid', sort: search.Sort.ASC }),
+                    search.createColumn({ name: 'displayname' }),
+                    search.createColumn({ name: 'description' }),
+                    search.createColumn({ name: 'purchaseunit' }),
+                    search.createColumn({ name: 'cost' }),
+                    search.createColumn({ name: 'expenseaccount' })
+                ]
+            });
 
-            var results = query.runSuiteQL({ query: sql, params: params });
+            var items = [];
+            var resultSet = itemSearch.run();
+            var results = resultSet.getRange({ start: 0, end: 200 });
 
-            var items = results.results.map(function(row) {
-                var displayText = row.values[1];
-                if (row.values[2]) displayText += ' - ' + row.values[2];
-                return {
-                    value: String(row.values[0]),
+            results.forEach(function(result) {
+                var itemId = result.getValue('itemid') || '';
+                var displayName = result.getValue('displayname') || '';
+                var displayText = itemId;
+                if (displayName) displayText += ' - ' + displayName;
+
+                items.push({
+                    value: result.getValue('internalid'),
                     text: displayText,
-                    itemId: row.values[1],
-                    displayName: row.values[2],
-                    description: row.values[3],
-                    unit: row.values[4],
-                    cost: row.values[5],
-                    expenseAccount: row.values[6]
-                };
+                    itemId: itemId,
+                    displayName: displayName,
+                    description: result.getValue('description'),
+                    unit: result.getText('purchaseunit'),
+                    cost: result.getValue('cost'),
+                    expenseAccount: result.getText('expenseaccount')
+                });
             });
 
             return Response.success(items);
