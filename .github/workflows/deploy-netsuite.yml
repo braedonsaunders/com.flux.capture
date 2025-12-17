@@ -55,7 +55,7 @@ jobs:
         run: |
           cd src && suitecloud account:setup:ci \
             --account ${{ secrets.NS_ACCOUNT_ID }} \
-            --authid "github-deploy" \
+            --authid "github-deploy-sdf" \
             --certificateid ${{ secrets.NS_CERTIFICATE_ID }} \
             --privatekeypath /tmp/private.pem
 
