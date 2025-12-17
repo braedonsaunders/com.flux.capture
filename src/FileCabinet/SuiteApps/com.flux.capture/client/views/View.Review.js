@@ -424,6 +424,8 @@
             var anomalies = doc.anomalies || [];
             var formFields = this.formFields || {};
             var bodyFields = formFields.bodyFields || [];
+            var sublists = formFields.sublists || [];
+            var fieldGroups = formFields.fieldGroups || [];
 
             var html = '';
 
@@ -475,49 +477,93 @@
                 '</div>' +
             '</div>';
 
-            // ========== TRANSACTION DETAILS (Dynamic from NetSuite) ==========
-            html += this.renderDynamicFieldSection('Transaction Details', 'fa-file-invoice', bodyFields, [
-                { ns: 'tranid', doc: 'invoiceNumber', label: 'Reference/Invoice #', type: 'text' },
-                { ns: 'trandate', doc: 'invoiceDate', label: 'Transaction Date', type: 'date' },
-                { ns: 'duedate', doc: 'dueDate', label: 'Due Date', type: 'date' },
-                { ns: 'memo', doc: 'memo', label: 'Memo', type: 'text' }
-            ]);
+            // ========== RENDER FIELD GROUPS (Dynamic from NetSuite form) ==========
+            fieldGroups.forEach(function(group) {
+                if (group.id === 'custom') return; // Custom fields rendered separately below
 
-            // ========== CLASSIFICATION FIELDS ==========
-            html += this.renderDynamicFieldSection('Classification', 'fa-tags', bodyFields, [
-                { ns: 'subsidiary', doc: 'subsidiary', label: 'Subsidiary', type: 'select' },
-                { ns: 'department', doc: 'department', label: 'Department', type: 'select' },
-                { ns: 'class', doc: 'class', label: 'Class', type: 'select' },
-                { ns: 'location', doc: 'location', label: 'Location', type: 'select' }
-            ]);
+                var groupFields = [];
+                group.fields.forEach(function(fieldId) {
+                    var nsField = bodyFields.find(function(f) { return f.id === fieldId; });
+                    if (nsField && !nsField.isHidden) {
+                        groupFields.push(nsField);
+                    }
+                });
 
-            // ========== PAYMENT & TERMS ==========
-            html += this.renderDynamicFieldSection('Payment & Terms', 'fa-credit-card', bodyFields, [
-                { ns: 'terms', doc: 'paymentTerms', label: 'Payment Terms', type: 'select' },
-                { ns: 'currency', doc: 'currency', label: 'Currency', type: 'select' },
-                { ns: 'exchangerate', doc: 'exchangeRate', label: 'Exchange Rate', type: 'number' },
-                { ns: 'account', doc: 'apAccount', label: 'A/P Account', type: 'select' }
-            ]);
+                if (groupFields.length === 0) return;
+
+                var icon = 'fa-file-alt';
+                if (group.id === 'primary') icon = 'fa-file-invoice';
+                else if (group.id === 'classification') icon = 'fa-tags';
+                else if (group.id === 'reference') icon = 'fa-link';
+                else if (group.id === 'accounting') icon = 'fa-credit-card';
+
+                html += '<div class="form-section">' +
+                    '<h4><i class="fas ' + icon + '"></i> ' + escapeHtml(group.label) + '</h4>' +
+                    '<div class="form-grid">';
+
+                // Render fields in rows of 2
+                for (var i = 0; i < groupFields.length; i += 2) {
+                    html += '<div class="form-row">';
+                    html += self.renderNsField(groupFields[i], doc);
+                    if (groupFields[i + 1]) {
+                        html += self.renderNsField(groupFields[i + 1], doc);
+                    }
+                    html += '</div>';
+                }
+
+                html += '</div></div>';
+            });
 
             // ========== CUSTOM FIELDS ==========
-            var customFields = bodyFields.filter(function(f) { return f.isCustom; });
+            var customFields = bodyFields.filter(function(f) { return f.isCustom && !f.isHidden; });
             if (customFields.length > 0) {
                 html += '<div class="form-section">' +
                     '<h4><i class="fas fa-cog"></i> Custom Fields</h4>' +
                     '<div class="form-grid">';
-                customFields.forEach(function(field) {
-                    html += self.renderDynamicField(field, doc[field.id] || '');
-                });
+                for (var i = 0; i < customFields.length; i += 2) {
+                    html += '<div class="form-row">';
+                    html += self.renderNsField(customFields[i], doc);
+                    if (customFields[i + 1]) {
+                        html += self.renderNsField(customFields[i + 1], doc);
+                    }
+                    html += '</div>';
+                }
                 html += '</div></div>';
             }
 
-            // ========== LINE ITEMS TABLE ==========
-            html += '<div class="form-section">' +
-                '<h4><i class="fas fa-list"></i> Line Items <button class="btn btn-ghost btn-sm" id="btn-add-line" style="margin-left:auto;"><i class="fas fa-plus"></i> Add</button></h4>' +
-                '<div class="line-items-table" id="line-items-container">' +
-                    this.renderLineItemsTable() +
-                '</div>' +
-            '</div>';
+            // ========== LINE ITEMS WITH TABS (Expense/Item sublists) ==========
+            html += '<div class="form-section line-section">' +
+                '<h4><i class="fas fa-list"></i> Line Items</h4>';
+
+            // Render tabs if multiple sublists
+            if (sublists.length > 1) {
+                html += '<div class="sublist-tabs" id="sublist-tabs">';
+                sublists.forEach(function(sl, idx) {
+                    html += '<button class="sublist-tab' + (idx === 0 ? ' active' : '') + '" data-sublist="' + sl.id + '">' +
+                        '<i class="fas fa-' + (sl.type === 'expense' ? 'receipt' : 'box') + '"></i> ' +
+                        escapeHtml(sl.label) +
+                        '<span class="tab-count" id="count-' + sl.id + '">0</span>' +
+                    '</button>';
+                });
+                html += '</div>';
+            }
+
+            // Render each sublist container
+            sublists.forEach(function(sl, idx) {
+                var isActive = idx === 0;
+                html += '<div class="sublist-container' + (isActive ? ' active' : '') + '" id="sublist-' + sl.id + '" data-sublist-id="' + sl.id + '">' +
+                    '<div class="sublist-toolbar">' +
+                        '<button class="btn btn-ghost btn-sm btn-add-line" data-sublist="' + sl.id + '">' +
+                            '<i class="fas fa-plus"></i> Add ' + (sl.type === 'expense' ? 'Expense' : 'Item') +
+                        '</button>' +
+                    '</div>' +
+                    '<div class="line-items-table" id="lines-' + sl.id + '">' +
+                        self.renderSublistTable(sl, doc) +
+                    '</div>' +
+                '</div>';
+            });
+
+            html += '</div>';
 
             // ========== AMOUNTS ==========
             html += '<div class="form-section amounts-section">' +
@@ -556,8 +602,198 @@
 
             panel.innerHTML = html;
 
+            // Initialize line items data structure for each sublist
+            this.initSublistData(sublists);
+
+            // Update tab counts
+            this.updateTabCounts();
+
             // ========== BIND FORM EVENTS ==========
             this.bindFormEvents();
+        },
+
+        // Render a NetSuite field directly
+        renderNsField: function(nsField, doc) {
+            var fieldId = 'field-' + nsField.id;
+            var label = nsField.label || nsField.id;
+            var isRequired = nsField.mandatory;
+
+            // Map NS field IDs to document data keys
+            var fieldMapping = {
+                'tranid': 'invoiceNumber',
+                'trandate': 'invoiceDate',
+                'duedate': 'dueDate',
+                'terms': 'paymentTerms',
+                'account': 'apAccount',
+                'exchangerate': 'exchangeRate'
+            };
+            var docKey = fieldMapping[nsField.id] || nsField.id;
+            var value = doc[docKey] || '';
+
+            var html = '<div class="form-field">' +
+                '<label>' + escapeHtml(label) + ' ' + this.renderConfidenceBadge(docKey) +
+                (isRequired ? ' <span class="required">*</span>' : '') + '</label>';
+
+            if (nsField.type === 'select' && nsField.options && nsField.options.length > 0) {
+                html += '<select id="' + fieldId + '">';
+                html += '<option value="">-- Select --</option>';
+                nsField.options.forEach(function(opt) {
+                    var selected = (String(value) === String(opt.value)) ? ' selected' : '';
+                    html += '<option value="' + escapeHtml(opt.value) + '"' + selected + '>' + escapeHtml(opt.text) + '</option>';
+                });
+                html += '</select>';
+            } else if (nsField.type === 'date') {
+                html += '<input type="date" id="' + fieldId + '" value="' + formatDateInput(value) + '">';
+            } else if (nsField.type === 'currency' || nsField.type === 'float') {
+                html += '<div class="input-with-prefix">' +
+                    '<span class="input-prefix">$</span>' +
+                    '<input type="number" step="0.01" id="' + fieldId + '" value="' + (parseFloat(value) || 0).toFixed(2) + '">' +
+                '</div>';
+            } else if (nsField.type === 'integer') {
+                html += '<input type="number" step="1" id="' + fieldId + '" value="' + escapeHtml(value) + '">';
+            } else if (nsField.type === 'checkbox') {
+                html += '<input type="checkbox" id="' + fieldId + '"' + (value ? ' checked' : '') + '>';
+            } else if (nsField.type === 'textarea') {
+                html += '<textarea id="' + fieldId + '" rows="2">' + escapeHtml(value) + '</textarea>';
+            } else {
+                html += '<input type="text" id="' + fieldId + '" value="' + escapeHtml(value) + '">';
+            }
+
+            html += '</div>';
+            return html;
+        },
+
+        // Render a sublist table with its fields
+        renderSublistTable: function(sublist, doc) {
+            var self = this;
+            var sublistId = sublist.id;
+            var fields = sublist.fields || [];
+
+            // Get line items for this sublist type
+            var items = [];
+            if (sublistId === 'expense') {
+                items = doc.expenseLines || doc.lineItems || [];
+            } else if (sublistId === 'item') {
+                items = doc.itemLines || [];
+            }
+
+            // Store in controller for later updates
+            if (!this.sublistData) this.sublistData = {};
+            this.sublistData[sublistId] = items;
+
+            if (items.length === 0) {
+                return '<div class="empty-line-items">' +
+                    '<i class="fas fa-' + (sublist.type === 'expense' ? 'receipt' : 'box') + '"></i>' +
+                    '<span>No ' + sublist.label.toLowerCase() + ' added</span>' +
+                '</div>';
+            }
+
+            // Determine visible columns (important fields first)
+            var visibleFields = this.getVisibleSublistFields(sublist);
+
+            var html = '<table class="line-items sublist-table">' +
+                '<thead><tr>';
+
+            visibleFields.forEach(function(f) {
+                var width = '';
+                if (f.id === 'amount' || f.id === 'rate') width = ' style="width:100px;"';
+                else if (f.id === 'quantity') width = ' style="width:70px;"';
+                else if (f.id === 'description' || f.id === 'memo') width = ' style="min-width:150px;"';
+                html += '<th' + width + '>' + escapeHtml(f.label) + '</th>';
+            });
+            html += '<th style="width:40px;"></th></tr></thead><tbody>';
+
+            items.forEach(function(item, idx) {
+                html += '<tr data-idx="' + idx + '" data-sublist="' + sublistId + '">';
+                visibleFields.forEach(function(f) {
+                    html += self.renderSublistCell(f, item, idx, sublistId);
+                });
+                html += '<td><button class="btn btn-ghost btn-icon btn-sm btn-remove-line" data-sublist="' + sublistId + '" title="Remove"><i class="fas fa-times"></i></button></td>';
+                html += '</tr>';
+            });
+
+            html += '</tbody></table>';
+
+            // Sublist total
+            var total = items.reduce(function(sum, item) { return sum + (parseFloat(item.amount) || 0); }, 0);
+            html += '<div class="line-items-total">' + escapeHtml(sublist.label) + ' Total: <strong>$' + total.toFixed(2) + '</strong></div>';
+
+            return html;
+        },
+
+        // Get visible fields for a sublist (prioritize important fields)
+        getVisibleSublistFields: function(sublist) {
+            var fields = sublist.fields || [];
+            var priorityOrder = [];
+
+            if (sublist.type === 'expense') {
+                priorityOrder = ['account', 'amount', 'memo', 'department', 'class', 'location', 'taxcode'];
+            } else {
+                priorityOrder = ['item', 'description', 'quantity', 'rate', 'amount', 'department', 'class', 'location'];
+            }
+
+            var visible = [];
+            priorityOrder.forEach(function(fieldId) {
+                var field = fields.find(function(f) { return f.id === fieldId; });
+                if (field) visible.push(field);
+            });
+
+            // Add any custom fields
+            fields.forEach(function(f) {
+                if (f.isCustom && !visible.find(function(v) { return v.id === f.id; })) {
+                    visible.push(f);
+                }
+            });
+
+            return visible.slice(0, 8); // Limit to 8 columns for readability
+        },
+
+        // Render a single cell in the sublist table
+        renderSublistCell: function(field, item, idx, sublistId) {
+            var value = item[field.id] || '';
+            var inputId = 'line-' + sublistId + '-' + idx + '-' + field.id;
+
+            if (field.type === 'select' && field.options && field.options.length > 0) {
+                var html = '<td><select class="line-input" id="' + inputId + '" data-field="' + field.id + '">';
+                html += '<option value="">--</option>';
+                field.options.forEach(function(opt) {
+                    var selected = (String(value) === String(opt.value)) ? ' selected' : '';
+                    html += '<option value="' + escapeHtml(opt.value) + '"' + selected + '>' + escapeHtml(opt.text) + '</option>';
+                });
+                html += '</select></td>';
+                return html;
+            } else if (field.type === 'currency' || field.id === 'amount' || field.id === 'rate') {
+                return '<td><input type="number" step="0.01" class="line-input line-amount" id="' + inputId + '" value="' + (parseFloat(value) || 0).toFixed(2) + '" data-field="' + field.id + '"></td>';
+            } else if (field.type === 'integer' || field.id === 'quantity') {
+                return '<td><input type="number" step="1" class="line-input line-qty" id="' + inputId + '" value="' + (parseInt(value) || 0) + '" data-field="' + field.id + '"></td>';
+            } else {
+                return '<td><input type="text" class="line-input" id="' + inputId + '" value="' + escapeHtml(value) + '" data-field="' + field.id + '"></td>';
+            }
+        },
+
+        // Initialize sublist data structure
+        initSublistData: function(sublists) {
+            var self = this;
+            if (!this.sublistData) this.sublistData = {};
+
+            sublists.forEach(function(sl) {
+                if (!self.sublistData[sl.id]) {
+                    self.sublistData[sl.id] = [];
+                }
+            });
+        },
+
+        // Update tab counts
+        updateTabCounts: function() {
+            var self = this;
+            if (!this.sublistData) return;
+
+            Object.keys(this.sublistData).forEach(function(sublistId) {
+                var countEl = el('#count-' + sublistId);
+                if (countEl) {
+                    countEl.textContent = self.sublistData[sublistId].length;
+                }
+            });
         },
 
         // Render a section of dynamic fields based on NetSuite field metadata
@@ -746,7 +982,7 @@
             var panel = el('#extraction-panel');
             if (!panel) return;
 
-            panel.querySelectorAll('input:not(.line-desc):not(.line-qty):not(.line-price):not(.line-amount), select').forEach(function(input) {
+            panel.querySelectorAll('input:not(.line-input):not(.line-desc):not(.line-qty):not(.line-price):not(.line-amount), select:not(.line-input)').forEach(function(input) {
                 input.addEventListener('change', function() {
                     var field = this.id.replace('field-', '');
                     self.changes[field] = this.value;
@@ -803,12 +1039,73 @@
                 taxEl.addEventListener('input', calcTotal);
             }
 
-            // Add line item button
+            // ========== SUBLIST TAB SWITCHING ==========
+            var tabsContainer = el('#sublist-tabs');
+            if (tabsContainer) {
+                tabsContainer.addEventListener('click', function(e) {
+                    var tab = e.target.closest('.sublist-tab');
+                    if (!tab) return;
+
+                    var sublistId = tab.dataset.sublist;
+
+                    // Update active tab
+                    els('.sublist-tab').forEach(function(t) { t.classList.remove('active'); });
+                    tab.classList.add('active');
+
+                    // Show corresponding container
+                    els('.sublist-container').forEach(function(c) { c.classList.remove('active'); });
+                    var container = el('#sublist-' + sublistId);
+                    if (container) container.classList.add('active');
+                });
+            }
+
+            // ========== LINE ITEM OPERATIONS (Delegated for all sublists) ==========
+            var lineSection = el('.line-section');
+            if (lineSection) {
+                // Add line button clicks
+                lineSection.addEventListener('click', function(e) {
+                    var addBtn = e.target.closest('.btn-add-line');
+                    if (addBtn) {
+                        var sublistId = addBtn.dataset.sublist;
+                        self.addSublistLine(sublistId);
+                        return;
+                    }
+
+                    var removeBtn = e.target.closest('.btn-remove-line');
+                    if (removeBtn) {
+                        var row = removeBtn.closest('tr');
+                        if (row) {
+                            var idx = parseInt(row.dataset.idx, 10);
+                            var sublistId = row.dataset.sublist;
+                            self.removeSublistLine(sublistId, idx);
+                        }
+                        return;
+                    }
+                });
+
+                // Line input changes
+                lineSection.addEventListener('input', function(e) {
+                    var input = e.target;
+                    if (!input.classList.contains('line-input')) return;
+
+                    var row = input.closest('tr');
+                    if (!row) return;
+
+                    var idx = parseInt(row.dataset.idx, 10);
+                    var sublistId = row.dataset.sublist;
+                    var fieldId = input.dataset.field;
+                    var value = input.value;
+
+                    self.updateSublistLine(sublistId, idx, fieldId, value);
+                });
+            }
+
+            // Legacy: Add line item button (fallback for old template)
             this.on('#btn-add-line', 'click', function() {
                 self.addLineItem();
             });
 
-            // Line item events (delegated)
+            // Legacy: Line item events (delegated) - for old template compatibility
             var container = el('#line-items-container');
             if (container) {
                 container.addEventListener('input', function(e) {
@@ -832,6 +1129,104 @@
             this.on('#btn-shortcuts', 'click', function() {
                 self.showShortcutsHelp();
             });
+        },
+
+        // ==========================================
+        // SUBLIST LINE OPERATIONS
+        // ==========================================
+        addSublistLine: function(sublistId) {
+            if (!this.sublistData) this.sublistData = {};
+            if (!this.sublistData[sublistId]) this.sublistData[sublistId] = [];
+
+            // Create empty line based on sublist type
+            var newLine = { amount: 0 };
+            if (sublistId === 'expense') {
+                newLine.account = '';
+                newLine.memo = '';
+            } else if (sublistId === 'item') {
+                newLine.item = '';
+                newLine.description = '';
+                newLine.quantity = 1;
+                newLine.rate = 0;
+            }
+
+            this.sublistData[sublistId].push(newLine);
+            this.changes[sublistId + 'Lines'] = this.sublistData[sublistId];
+            this.markUnsaved();
+            this.refreshSublist(sublistId);
+            this.updateTabCounts();
+        },
+
+        removeSublistLine: function(sublistId, idx) {
+            if (!this.sublistData || !this.sublistData[sublistId]) return;
+
+            this.sublistData[sublistId].splice(idx, 1);
+            this.changes[sublistId + 'Lines'] = this.sublistData[sublistId];
+            this.markUnsaved();
+            this.refreshSublist(sublistId);
+            this.updateTabCounts();
+        },
+
+        updateSublistLine: function(sublistId, idx, fieldId, value) {
+            if (!this.sublistData || !this.sublistData[sublistId]) return;
+
+            var line = this.sublistData[sublistId][idx];
+            if (!line) return;
+
+            // Convert numeric fields
+            if (fieldId === 'amount' || fieldId === 'rate' || fieldId === 'quantity') {
+                value = parseFloat(value) || 0;
+            }
+
+            line[fieldId] = value;
+
+            // Auto-calculate amount for item lines
+            if ((fieldId === 'quantity' || fieldId === 'rate') && sublistId === 'item') {
+                var qty = parseFloat(line.quantity) || 0;
+                var rate = parseFloat(line.rate) || 0;
+                line.amount = qty * rate;
+
+                // Update the amount input
+                var amountInput = el('#line-' + sublistId + '-' + idx + '-amount');
+                if (amountInput) amountInput.value = line.amount.toFixed(2);
+            }
+
+            this.changes[sublistId + 'Lines'] = this.sublistData[sublistId];
+            this.markUnsaved();
+            this.updateSublistTotal(sublistId);
+        },
+
+        refreshSublist: function(sublistId) {
+            var container = el('#lines-' + sublistId);
+            var sublistContainer = el('#sublist-' + sublistId);
+            if (!container || !sublistContainer) return;
+
+            // Get the sublist config from form fields
+            var formFields = this.formFields || {};
+            var sublists = formFields.sublists || [];
+            var sublist = sublists.find(function(sl) { return sl.id === sublistId; });
+
+            if (!sublist) return;
+
+            // Re-render the sublist table
+            var items = this.sublistData[sublistId] || [];
+            var doc = { expenseLines: [], itemLines: [] };
+            doc[sublistId === 'expense' ? 'expenseLines' : 'itemLines'] = items;
+
+            container.innerHTML = this.renderSublistTable(sublist, doc);
+        },
+
+        updateSublistTotal: function(sublistId) {
+            if (!this.sublistData || !this.sublistData[sublistId]) return;
+
+            var total = this.sublistData[sublistId].reduce(function(sum, item) {
+                return sum + (parseFloat(item.amount) || 0);
+            }, 0);
+
+            var totalEl = document.querySelector('#sublist-' + sublistId + ' .line-items-total strong');
+            if (totalEl) {
+                totalEl.textContent = '$' + total.toFixed(2);
+            }
         },
 
         // ==========================================

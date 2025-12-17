@@ -208,18 +208,25 @@
 
         /**
          * Make DELETE request to Router
+         * NetSuite RESTlets don't reliably parse DELETE body, so we use URL params
          * @param {string} action - Action name
-         * @param {object} body - Request body
+         * @param {object} params - Request parameters
          * @returns {Promise}
          */
-        delete: function(action, body) {
-            body = body || {};
-            body.action = action;
+        delete: function(action, params) {
+            params = params || {};
+            params.action = action;
 
-            return fetch(window.FC_CONFIG.apiUrl, {
+            // Build URL with query parameters (NetSuite RESTlets parse these reliably)
+            var queryString = Object.keys(params).map(function(key) {
+                return encodeURIComponent(key) + '=' + encodeURIComponent(params[key]);
+            }).join('&');
+
+            var url = window.FC_CONFIG.apiUrl + (window.FC_CONFIG.apiUrl.indexOf('?') === -1 ? '?' : '&') + queryString;
+
+            return fetch(url, {
                 method: 'DELETE',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(body)
+                headers: { 'Content-Type': 'application/json' }
             })
             .then(function(response) {
                 return response.text();
