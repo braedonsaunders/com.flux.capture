@@ -199,6 +199,9 @@ define([
                 case 'analytics':
                     result = getAnalytics(context);
                     break;
+                case 'formfields':
+                    result = getTransactionFormFields(context.transactionType, context.formId);
+                    break;
                 case 'health':
                     result = Response.success({ status: 'healthy', version: API_VERSION });
                     break;
@@ -289,11 +292,13 @@ define([
     function _delete(context) {
         var result;
         try {
+            log.debug('_delete', { context: JSON.stringify(context) });
             var action = context.action || 'document';
 
             switch (action) {
                 case 'document':
-                    result = deleteDocument(context.id);
+                    var docId = context.id || context.documentId;
+                    result = deleteDocument(docId);
                     break;
                 case 'batch':
                     result = deleteBatch(context.batchId);
@@ -796,6 +801,169 @@ define([
         });
 
         return Response.success(batch);
+    }
+
+    /**
+     * Get form fields for a transaction type
+     * @param {string} transactionType - Type: 'vendorbill', 'expensereport', etc.
+     * @param {number} formId - Optional specific form ID
+     * @returns {Object} Form field configuration
+     */
+    function getTransactionFormFields(transactionType, formId) {
+        if (!transactionType) {
+            return Response.error('MISSING_PARAM', 'Transaction type is required');
+        }
+
+        try {
+            var recordType;
+            var sublistId;
+            var defaultBodyFields = [];
+            var defaultLineFields = [];
+
+            // Map transaction types
+            switch (transactionType.toLowerCase()) {
+                case 'vendorbill':
+                case 'vendor_bill':
+                case 'bill':
+                    recordType = record.Type.VENDOR_BILL;
+                    sublistId = 'item';
+                    defaultBodyFields = ['entity', 'trandate', 'duedate', 'tranid', 'memo', 'currency', 'terms', 'approvalstatus'];
+                    defaultLineFields = ['item', 'quantity', 'rate', 'amount', 'description', 'taxcode', 'department', 'class', 'location'];
+                    break;
+                case 'expensereport':
+                case 'expense_report':
+                case 'expense':
+                    recordType = record.Type.EXPENSE_REPORT;
+                    sublistId = 'expense';
+                    defaultBodyFields = ['entity', 'trandate', 'memo', 'approvalstatus', 'advance'];
+                    defaultLineFields = ['category', 'amount', 'memo', 'expensedate', 'currency', 'department', 'class', 'location'];
+                    break;
+                case 'vendorcredit':
+                case 'vendor_credit':
+                    recordType = record.Type.VENDOR_CREDIT;
+                    sublistId = 'item';
+                    defaultBodyFields = ['entity', 'trandate', 'tranid', 'memo', 'currency'];
+                    defaultLineFields = ['item', 'quantity', 'rate', 'amount', 'description'];
+                    break;
+                default:
+                    return Response.error('INVALID_TYPE', 'Unsupported transaction type: ' + transactionType);
+            }
+
+            // Create a temporary record to inspect fields
+            var tempRecord;
+            try {
+                var createOptions = { type: recordType, isDynamic: true };
+                if (formId) {
+                    createOptions.defaultValues = { customform: formId };
+                }
+                tempRecord = record.create(createOptions);
+            } catch (e) {
+                log.error('getTransactionFormFields', 'Failed to create temp record: ' + e.message);
+                // Return default fields if we can't create record
+                return Response.success({
+                    transactionType: transactionType,
+                    recordType: recordType,
+                    formId: formId || 'default',
+                    bodyFields: defaultBodyFields.map(function(f) {
+                        return { id: f, label: f, type: 'text', mandatory: false };
+                    }),
+                    lineFields: defaultLineFields.map(function(f) {
+                        return { id: f, label: f, type: 'text' };
+                    }),
+                    sublistId: sublistId
+                });
+            }
+
+            // Get actual form ID being used
+            var actualFormId;
+            try {
+                actualFormId = tempRecord.getValue('customform');
+            } catch (e) { /* ignore */ }
+
+            // Get all body fields
+            var bodyFieldIds = tempRecord.getFields();
+            var bodyFields = [];
+
+            // Filter to relevant fields
+            var relevantBodyFields = ['entity', 'trandate', 'duedate', 'tranid', 'memo', 'currency',
+                                      'terms', 'approvalstatus', 'subsidiary', 'department', 'class',
+                                      'location', 'account', 'postingperiod', 'exchangerate'];
+
+            bodyFieldIds.forEach(function(fieldId) {
+                if (relevantBodyFields.indexOf(fieldId) === -1 && fieldId.indexOf('custbody') === -1) {
+                    return; // Skip non-relevant standard fields
+                }
+
+                try {
+                    var field = tempRecord.getField({ fieldId: fieldId });
+                    if (field) {
+                        var fieldInfo = {
+                            id: fieldId,
+                            label: field.label || fieldId,
+                            type: field.type || 'text',
+                            mandatory: field.isMandatory || false,
+                            isCustom: fieldId.indexOf('custbody') === 0
+                        };
+
+                        // Get select options if it's a select field
+                        if (field.type === 'select' || field.type === 'multiselect') {
+                            try {
+                                var options = field.getSelectOptions();
+                                if (options && options.length < 100) { // Don't return huge lists
+                                    fieldInfo.options = options.map(function(opt) {
+                                        return { value: opt.value, text: opt.text };
+                                    });
+                                }
+                            } catch (e) { /* ignore */ }
+                        }
+
+                        bodyFields.push(fieldInfo);
+                    }
+                } catch (e) {
+                    // Field not accessible, skip
+                }
+            });
+
+            // Get sublist fields
+            var lineFields = [];
+            try {
+                var sublistFieldIds = tempRecord.getSublistFields({ sublistId: sublistId });
+
+                sublistFieldIds.forEach(function(fieldId) {
+                    try {
+                        var field = tempRecord.getSublistField({ sublistId: sublistId, fieldId: fieldId, line: 0 });
+                        if (field) {
+                            lineFields.push({
+                                id: fieldId,
+                                label: field.label || fieldId,
+                                type: field.type || 'text',
+                                mandatory: field.isMandatory || false,
+                                isCustom: fieldId.indexOf('custcol') === 0
+                            });
+                        }
+                    } catch (e) { /* ignore */ }
+                });
+            } catch (e) {
+                log.debug('getTransactionFormFields', 'Could not get sublist fields: ' + e.message);
+                // Use defaults
+                lineFields = defaultLineFields.map(function(f) {
+                    return { id: f, label: f, type: 'text' };
+                });
+            }
+
+            return Response.success({
+                transactionType: transactionType,
+                recordType: String(recordType),
+                formId: actualFormId || formId || 'default',
+                bodyFields: bodyFields,
+                lineFields: lineFields,
+                sublistId: sublistId
+            });
+
+        } catch (e) {
+            log.error('getTransactionFormFields', e);
+            return Response.error('FORM_FIELDS_ERROR', e.message);
+        }
     }
 
     function getSettings() {

@@ -174,9 +174,17 @@
             tbody.querySelectorAll('[data-delete]').forEach(function(btn) {
                 btn.addEventListener('click', function() {
                     var docId = this.dataset.delete;
-                    if (confirm('Delete this document?')) {
-                        self.deleteDocument(docId);
-                    }
+                    UI.confirm({
+                        title: 'Delete Document',
+                        message: 'Are you sure you want to delete this document? This action cannot be undone.',
+                        confirmText: 'Delete',
+                        cancelText: 'Cancel',
+                        type: 'danger'
+                    }).then(function(confirmed) {
+                        if (confirmed) {
+                            self.deleteDocument(docId);
+                        }
+                    });
                 });
             });
         },
