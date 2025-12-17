@@ -396,6 +396,10 @@
             var confClass = confidence >= 85 ? 'high' : confidence >= 60 ? 'medium' : 'low';
             var lineItems = doc.lineItems || [];
 
+            // Use fileUrl if available (from document details API), otherwise no preview
+            var previewUrl = doc.fileUrl || '';
+            var hasPreview = !!previewUrl;
+
             return '<div class="panel-document">' +
                 // Header with close button
                 '<div class="panel-header">' +
@@ -405,10 +409,10 @@
                     '</div>' +
                     '<button class="btn btn-ghost btn-icon" id="btn-close-panel"><i class="fas fa-times"></i></button>' +
                 '</div>' +
-                // PDF Preview
+                // PDF Preview - use fileUrl from API
                 '<div class="panel-preview">' +
-                    (doc.sourceFile ?
-                        '<iframe src="' + this.getPreviewUrl(doc.sourceFile) + '" title="Document Preview"></iframe>' :
+                    (hasPreview ?
+                        '<iframe src="' + previewUrl + '" title="Document Preview"></iframe>' :
                         '<div class="no-preview"><i class="fas fa-file-pdf"></i><span>No preview available</span></div>'
                     ) +
                 '</div>' +
@@ -658,22 +662,14 @@
         // FLOW MODE
         // ==========================================
         toggleFlowMode: function() {
-            this.flowMode = !this.flowMode;
-
-            if (this.flowMode) {
-                this.flowIndex = 0;
-                if (this.reviewQueue.length > 0) {
-                    this.selectDocument(this.reviewQueue[0].id);
-                    UI.toast('Flow Mode: Use arrow keys to navigate', 'info');
-                } else {
-                    this.flowMode = false;
-                    UI.toast('No documents to review', 'warning');
-                }
+            // Flow mode navigates to full page review for first document in queue
+            if (this.reviewQueue.length > 0) {
+                var firstDoc = this.reviewQueue[0];
+                Router.navigate('review', { docId: firstDoc.id });
+                UI.toast('Flow Mode: Review documents with keyboard shortcuts', 'info');
+            } else {
+                UI.toast('No documents to review', 'warning');
             }
-
-            document.body.classList.toggle('flow-mode-active', this.flowMode);
-            var btn = el('#btn-flow-mode');
-            if (btn) btn.classList.toggle('active', this.flowMode);
         },
 
         approveAndNext: function() {

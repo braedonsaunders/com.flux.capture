@@ -27,7 +27,8 @@ define(['N/file', 'N/runtime', 'N/url', 'N/ui/serverWidget', 'N/search'], functi
         'js_view_review': 'client/views/View.Review.js',
         'js_view_rail': 'client/views/View.Rail.js',
         'js_view_batch': 'client/views/View.Batch.js',
-        'js_view_settings': 'client/views/View.Settings.js'
+        'js_view_settings': 'client/views/View.Settings.js',
+        'js_view_documents': 'client/views/View.Documents.js'
     };
 
     function onRequest(context) {
@@ -299,6 +300,7 @@ define(['N/file', 'N/runtime', 'N/url', 'N/ui/serverWidget', 'N/search'], functi
         htmlContent = htmlContent.replace(/\{\{JS_VIEW_RAIL_URL\}\}/g, fileUrls['js_view_rail'] || '');
         htmlContent = htmlContent.replace(/\{\{JS_VIEW_BATCH_URL\}\}/g, fileUrls['js_view_batch'] || '');
         htmlContent = htmlContent.replace(/\{\{JS_VIEW_SETTINGS_URL\}\}/g, fileUrls['js_view_settings'] || '');
+        htmlContent = htmlContent.replace(/\{\{JS_VIEW_DOCUMENTS_URL\}\}/g, fileUrls['js_view_documents'] || '');
 
         // 5. Inject runtime configuration
         var currentUser = runtime.getCurrentUser();
