@@ -907,24 +907,63 @@
         // Render a single cell in the sublist table
         renderSublistCell: function(field, item, idx, sublistId) {
             var value = item[field.id] || '';
+            var displayValue = item[field.id + '_display'] || ''; // For lookups, store display text
             var inputId = 'line-' + sublistId + '-' + idx + '-' + field.id;
 
+            // Select field with inline options (small list) - render searchable select
             if (field.type === 'select' && field.options && field.options.length > 0) {
-                var html = '<td><select class="line-input" id="' + inputId + '" data-field="' + field.id + '">';
-                html += '<option value="">--</option>';
+                var html = '<td class="select-cell">' +
+                    '<div class="searchable-select" data-field="' + field.id + '">' +
+                    '<input type="text" class="select-search line-input" id="' + inputId + '-search" ' +
+                        'placeholder="Search..." data-field="' + field.id + '" autocomplete="off">' +
+                    '<select class="line-input select-hidden" id="' + inputId + '" data-field="' + field.id + '">' +
+                    '<option value="">--</option>';
                 field.options.forEach(function(opt) {
                     var selected = (String(value) === String(opt.value)) ? ' selected' : '';
                     html += '<option value="' + escapeHtml(opt.value) + '"' + selected + '>' + escapeHtml(opt.text) + '</option>';
                 });
-                html += '</select></td>';
+                html += '</select>' +
+                    '<div class="select-dropdown"></div>' +
+                    '</div></td>';
                 return html;
-            } else if (field.type === 'currency' || field.id === 'amount' || field.id === 'rate') {
+            }
+            // Select field requiring API lookup (large list like account, customer, item)
+            else if (field.type === 'select' && (field.lookupRequired || field.hasOptions)) {
+                var lookupType = this.getLookupType(field.id, sublistId);
+                var html = '<td class="select-cell">' +
+                    '<div class="typeahead-select" data-field="' + field.id + '" data-lookup="' + lookupType + '">' +
+                    '<input type="hidden" class="line-input" id="' + inputId + '" value="' + escapeHtml(value) + '" data-field="' + field.id + '">' +
+                    '<input type="text" class="typeahead-input line-input" id="' + inputId + '-display" ' +
+                        'value="' + escapeHtml(displayValue || value) + '" placeholder="Search ' + escapeHtml(field.label) + '..." ' +
+                        'data-field="' + field.id + '" data-lookup="' + lookupType + '" autocomplete="off">' +
+                    '<div class="typeahead-dropdown"></div>' +
+                    '</div></td>';
+                return html;
+            }
+            // Currency/amount fields
+            else if (field.type === 'currency' || field.id === 'amount' || field.id === 'rate') {
                 return '<td><input type="number" step="0.01" class="line-input line-amount" id="' + inputId + '" value="' + (parseFloat(value) || 0).toFixed(2) + '" data-field="' + field.id + '"></td>';
-            } else if (field.type === 'integer' || field.id === 'quantity') {
+            }
+            // Integer/quantity fields
+            else if (field.type === 'integer' || field.id === 'quantity') {
                 return '<td><input type="number" step="1" class="line-input line-qty" id="' + inputId + '" value="' + (parseInt(value) || 0) + '" data-field="' + field.id + '"></td>';
-            } else {
+            }
+            // Default text input
+            else {
                 return '<td><input type="text" class="line-input" id="' + inputId + '" value="' + escapeHtml(value) + '" data-field="' + field.id + '"></td>';
             }
+        },
+
+        // Determine API lookup type for a field
+        getLookupType: function(fieldId, sublistId) {
+            if (fieldId === 'account') return 'accounts';
+            if (fieldId === 'item') return 'items';
+            if (fieldId === 'customer') return 'customers';
+            if (fieldId === 'department') return 'departments';
+            if (fieldId === 'class') return 'classes';
+            if (fieldId === 'location') return 'locations';
+            if (fieldId === 'entity') return 'vendors';
+            return 'generic';
         },
 
         // Initialize sublist data structure

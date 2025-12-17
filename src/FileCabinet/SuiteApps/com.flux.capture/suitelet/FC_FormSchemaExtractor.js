@@ -19,7 +19,7 @@ define(['N/record', 'N/search', 'N/log', 'N/cache'],
 function(record, search, log, cache) {
 
     // Schema version for migrations (bump to invalidate cache)
-    var SCHEMA_VERSION = 3;
+    var SCHEMA_VERSION = 4;
 
     // Cache configuration
     var CACHE_NAME = 'FC_FORM_SCHEMA';
@@ -787,39 +787,57 @@ function(record, search, log, cache) {
                 actualFormId = tempRecord.getValue('customform');
             } catch (e) { /* ignore */ }
 
-            // Extract body fields - get ALL fields, let layout determine display
-            var bodyFieldIds = tempRecord.getFields();
+            // Get the standard layout for this record type - this defines which fields to extract
+            var standardLayout = STANDARD_LAYOUTS[normalizedType];
+            if (!standardLayout) {
+                return {
+                    success: false,
+                    error: 'NO_LAYOUT',
+                    message: 'No standard layout defined for: ' + normalizedType
+                };
+            }
+
+            // Build list of fields to extract from the layout definition
+            var layoutFields = [];
+            standardLayout.tabs.forEach(function(tab) {
+                tab.fieldGroups.forEach(function(group) {
+                    group.fields.forEach(function(fieldId) {
+                        if (layoutFields.indexOf(fieldId) === -1) {
+                            layoutFields.push(fieldId);
+                        }
+                    });
+                });
+            });
+
+            log.debug('extractFormSchema', 'Layout defines ' + layoutFields.length + ' body fields for ' + normalizedType);
+
+            // Extract body fields defined in layout
             var bodyFields = [];
             var customFields = [];
             var displayOrder = 0;
 
-            // Fields to always skip (system/internal fields)
-            var skipFields = ['customform', 'ntype', 'recordtype', 'id', 'type'];
-
-            log.debug('extractFormSchema', 'Found ' + bodyFieldIds.length + ' body fields for ' + normalizedType);
-
-            bodyFieldIds.forEach(function(fieldId) {
-                // Skip system fields
-                if (skipFields.indexOf(fieldId) !== -1) {
-                    return;
-                }
-
-                var isCustom = fieldId.indexOf('custbody') === 0;
-
+            // First: Extract fields defined in our layout
+            layoutFields.forEach(function(fieldId) {
                 var fieldInfo = extractFieldMetadata(tempRecord, fieldId, displayOrder++);
                 if (fieldInfo) {
-                    if (isCustom) {
+                    bodyFields.push(fieldInfo);
+                }
+            });
+
+            // Second: Extract custom body fields (custbody_*)
+            var allFieldIds = tempRecord.getFields();
+            allFieldIds.forEach(function(fieldId) {
+                if (fieldId.indexOf('custbody') === 0) {
+                    var fieldInfo = extractFieldMetadata(tempRecord, fieldId, displayOrder++);
+                    if (fieldInfo) {
                         customFields.push(fieldInfo);
-                    } else {
-                        bodyFields.push(fieldInfo);
                     }
                 }
             });
 
-            log.debug('extractFormSchema', 'Extracted ' + bodyFields.length + ' body fields, ' + customFields.length + ' custom fields');
+            log.debug('extractFormSchema', 'Extracted ' + bodyFields.length + ' layout fields, ' + customFields.length + ' custom fields');
 
-            // Extract sublists
-            var standardLayout = STANDARD_LAYOUTS[normalizedType] || { sublists: [] };
+            // Extract sublists (standardLayout already defined above)
             var sublists = [];
 
             standardLayout.sublists.forEach(function(sublistDef) {
