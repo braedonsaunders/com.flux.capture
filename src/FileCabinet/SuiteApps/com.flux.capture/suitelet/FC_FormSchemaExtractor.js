@@ -19,7 +19,7 @@ define(['N/record', 'N/search', 'N/log', 'N/cache'],
 function(record, search, log, cache) {
 
     // Schema version for migrations (bump to invalidate cache)
-    var SCHEMA_VERSION = 2;
+    var SCHEMA_VERSION = 3;
 
     // Cache configuration
     var CACHE_NAME = 'FC_FORM_SCHEMA';
@@ -787,33 +787,24 @@ function(record, search, log, cache) {
                 actualFormId = tempRecord.getValue('customform');
             } catch (e) { /* ignore */ }
 
-            // Extract body fields
+            // Extract body fields - get ALL fields, let layout determine display
             var bodyFieldIds = tempRecord.getFields();
             var bodyFields = [];
             var customFields = [];
             var displayOrder = 0;
 
-            // Important fields we want to capture
-            var relevantFields = [
-                'entity', 'trandate', 'duedate', 'tranid', 'memo', 'currency',
-                'terms', 'approvalstatus', 'subsidiary', 'department', 'class',
-                'location', 'account', 'postingperiod', 'exchangerate', 'nexus',
-                'total', 'usertotal', 'taxtotal', 'discountitem', 'discountrate',
-                'createdfrom', 'billaddress', 'billaddresslist', 'externalid',
-                'createddate', 'lastmodifieddate', 'nextapprover', 'advance',
-                'shipaddress', 'shipmethod', 'shipdate', 'otherrefnum'
-            ];
+            // Fields to always skip (system/internal fields)
+            var skipFields = ['customform', 'ntype', 'recordtype', 'id', 'type'];
+
+            log.debug('extractFormSchema', 'Found ' + bodyFieldIds.length + ' body fields for ' + normalizedType);
 
             bodyFieldIds.forEach(function(fieldId) {
+                // Skip system fields
+                if (skipFields.indexOf(fieldId) !== -1) {
+                    return;
+                }
+
                 var isCustom = fieldId.indexOf('custbody') === 0;
-
-                if (!isCustom && relevantFields.indexOf(fieldId) === -1) {
-                    return;
-                }
-
-                if (fieldId === 'customform' || fieldId === 'ntype') {
-                    return;
-                }
 
                 var fieldInfo = extractFieldMetadata(tempRecord, fieldId, displayOrder++);
                 if (fieldInfo) {
@@ -824,6 +815,8 @@ function(record, search, log, cache) {
                     }
                 }
             });
+
+            log.debug('extractFormSchema', 'Extracted ' + bodyFields.length + ' body fields, ' + customFields.length + ' custom fields');
 
             // Extract sublists
             var standardLayout = STANDARD_LAYOUTS[normalizedType] || { sublists: [] };
