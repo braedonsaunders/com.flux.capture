@@ -392,32 +392,32 @@ function main() {
         return;
     }
 
-    // Full deploy mode - deploy Objects via SDF, then upload files
+    // Full deploy mode - upload files first, then deploy Objects
     if (deployMode) {
         log('Deploy mode: running full deployment...');
 
-        // Step 1: Deploy Objects via SDF project:deploy
+        // Step 1: Upload all FileCabinet files first (Objects reference these)
+        log('Step 1: Uploading FileCabinet files...');
+        const filesToSync = getAllFiles(FILE_CABINET_PATH);
+        const { success, failed } = uploadFiles(filesToSync);
+
+        if (failed > 0) {
+            log(`File upload completed with errors: ${success} uploaded, ${failed} failed`, 'warn');
+            process.exit(1);
+        }
+        log(`File upload completed: ${success} files uploaded`, 'success');
+
+        // Step 2: Deploy Objects via SDF project:deploy
         if (hasObjectFiles()) {
-            log('Step 1: Deploying Objects (custom records, scripts)...');
+            log('Step 2: Deploying Objects (custom records, scripts)...');
             const objectSuccess = runProjectDeploy();
             if (!objectSuccess) {
                 log('Object deployment failed', 'error');
                 process.exit(1);
             }
+            log('Full deployment completed successfully', 'success');
         } else {
             log('No Object files found in src/Objects/, skipping Object deployment', 'warn');
-        }
-
-        // Step 2: Upload all FileCabinet files
-        log('Step 2: Uploading FileCabinet files...');
-        const filesToSync = getAllFiles(FILE_CABINET_PATH);
-        const { success, failed } = uploadFiles(filesToSync);
-
-        if (failed > 0) {
-            log(`Completed with errors: ${success} uploaded, ${failed} failed`, 'warn');
-            process.exit(1);
-        } else {
-            log(`Full deployment completed: ${success} files uploaded`, 'success');
         }
         return;
     }
@@ -460,7 +460,10 @@ function main() {
         state.fileHashes = { ...state.fileHashes, ...newHashes };
     }
 
-    // If Objects need deployment, deploy them first via SDF
+    // Upload new/changed files first (Objects may reference these)
+    const { success: uploadSuccess, failed: uploadFailed } = uploadFiles(filesToSync);
+
+    // If Objects need deployment, deploy them after files are uploaded
     if (needsObjectDeploy) {
         log('Deploying Objects via SDF project:deploy...', 'info');
         const deploySuccess = runProjectDeploy();
@@ -469,11 +472,7 @@ function main() {
             process.exit(1);
         }
         log('Object deployment completed', 'success');
-        // Continue to upload files below
     }
-
-    // Upload new/changed files
-    const { success: uploadSuccess, failed: uploadFailed } = uploadFiles(filesToSync);
 
     // Delete removed files
     const { success: deleteSuccess, failed: deleteFailed } = deleteFiles(filesToDelete);
