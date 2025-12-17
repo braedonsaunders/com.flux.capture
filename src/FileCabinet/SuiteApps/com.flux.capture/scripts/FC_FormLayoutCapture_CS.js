@@ -10,8 +10,9 @@
  * on pageInit and sends to Flux Capture API for caching.
  */
 
-define(['N/currentRecord', 'N/url', 'N/https'],
-function(currentRecord, url, https) {
+define(['N/currentRecord', 'N/url'],
+function(currentRecord, url) {
+    'use strict';
 
     // Cache check - only extract once per form per session
     var EXTRACTED_FORMS = {};
@@ -20,9 +21,10 @@ function(currentRecord, url, https) {
      * Page Init - Extract form layout automatically
      */
     function pageInit(context) {
-        console.log('[FC_FormLayoutCapture] pageInit triggered, mode:', context.mode);
-
         try {
+            console.log('[FC_FormLayoutCapture] === SCRIPT LOADED ===');
+            console.log('[FC_FormLayoutCapture] pageInit triggered, mode:', context.mode);
+
             var rec = context.currentRecord;
             var recordType = rec.type;
             var formId = getFormId(rec);
@@ -42,7 +44,7 @@ function(currentRecord, url, https) {
             }, 2000);
 
         } catch (e) {
-            console.error('[FC_FormLayoutCapture] pageInit error:', e.message);
+            console.error('[FC_FormLayoutCapture] pageInit error:', e);
         }
     }
 
