@@ -20,6 +20,46 @@ define([
 
     'use strict';
 
+    // ==================== Status Constants ====================
+    // These match the INTEGER values stored in NetSuite custom records
+
+    const DocStatus = Object.freeze({
+        PENDING: 1,
+        PROCESSING: 2,
+        EXTRACTED: 3,
+        NEEDS_REVIEW: 4,
+        REJECTED: 5,
+        COMPLETED: 6,
+        ERROR: 7
+    });
+
+    const BatchStatus = Object.freeze({
+        PENDING: 1,
+        PROCESSING: 2,
+        COMPLETED: 3,
+        PARTIAL_ERROR: 4,
+        FAILED: 5,
+        CANCELLED: 6
+    });
+
+    const DocType = Object.freeze({
+        INVOICE: 1,
+        RECEIPT: 2,
+        CREDIT_MEMO: 3,
+        EXPENSE_REPORT: 4,
+        PURCHASE_ORDER: 5,
+        UNKNOWN: 6
+    });
+
+    const Source = Object.freeze({
+        UPLOAD: 1,
+        EMAIL: 2,
+        DRAG_DROP: 3,
+        API: 4,
+        SCANNER: 5,
+        MOBILE: 6
+    });
+
     // ==================== Main Entry Point ====================
 
     function onRequest(context) {
@@ -1426,9 +1466,9 @@ define([
             const sql = `
                 SELECT
                     COUNT(*) as total,
-                    SUM(CASE WHEN custrecord_dm_status IN (1,2,3,4) THEN 1 ELSE 0 END) as pending,
-                    SUM(CASE WHEN custrecord_dm_status = 6 THEN 1 ELSE 0 END) as completed,
-                    SUM(CASE WHEN custrecord_dm_status = 6 AND custrecord_dm_confidence_score >= 85 THEN 1 ELSE 0 END) as autoProcessed,
+                    SUM(CASE WHEN custrecord_dm_status IN (${DocStatus.PENDING}, ${DocStatus.PROCESSING}, ${DocStatus.EXTRACTED}, ${DocStatus.NEEDS_REVIEW}) THEN 1 ELSE 0 END) as pending,
+                    SUM(CASE WHEN custrecord_dm_status = ${DocStatus.COMPLETED} THEN 1 ELSE 0 END) as completed,
+                    SUM(CASE WHEN custrecord_dm_status = ${DocStatus.COMPLETED} AND custrecord_dm_confidence_score >= 85 THEN 1 ELSE 0 END) as autoProcessed,
                     SUM(custrecord_dm_total_amount) as totalValue
                 FROM customrecord_dm_captured_document
                 WHERE custrecord_dm_created_date >= ADD_MONTHS(SYSDATE, -1)
@@ -1487,7 +1527,7 @@ define([
                 FROM customrecord_dm_captured_document
                 WHERE custrecord_dm_anomalies IS NOT NULL
                 AND custrecord_dm_anomalies != '[]'
-                AND custrecord_dm_status NOT IN (5, 6)
+                AND custrecord_dm_status NOT IN (${DocStatus.REJECTED}, ${DocStatus.COMPLETED})
                 ORDER BY custrecord_dm_created_date DESC
                 FETCH FIRST ${limit * 2} ROWS ONLY
             `;
@@ -1686,7 +1726,15 @@ define([
     }
 
     function getStatusClass(status) {
-        const classes = { 1: 'pending', 2: 'processing', 3: 'extracted', 4: 'review', 5: 'rejected', 6: 'completed', 7: 'error' };
+        const classes = {
+            [DocStatus.PENDING]: 'pending',
+            [DocStatus.PROCESSING]: 'processing',
+            [DocStatus.EXTRACTED]: 'extracted',
+            [DocStatus.NEEDS_REVIEW]: 'review',
+            [DocStatus.REJECTED]: 'rejected',
+            [DocStatus.COMPLETED]: 'completed',
+            [DocStatus.ERROR]: 'error'
+        };
         return classes[status] || 'pending';
     }
 
