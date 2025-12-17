@@ -785,7 +785,8 @@
     padding: var(--space-md) var(--space-lg);
     background: var(--surface-card);
     border-bottom: 1px solid var(--border-color);
-    margin: calc(-1 * var(--space-lg)) calc(-1 * var(--space-xl)) var(--space-lg);
+    margin: 0;
+    flex-shrink: 0;
 }
 
 .toolbar-title {
@@ -808,15 +809,23 @@
     gap: var(--space-sm);
 }
 
+.view-review {
+    display: flex;
+    flex-direction: column;
+    height: 100vh;
+    overflow: hidden;
+}
+
 .review-content {
     display: flex;
     gap: 0;
-    height: calc(100vh - 250px);
+    flex: 1;
+    overflow: hidden;
 }
 
 .preview-panel {
     background: var(--gray-900);
-    border-radius: var(--radius-lg);
+    border-radius: 0;
     overflow: hidden;
     display: flex;
     flex-direction: column;
@@ -1782,7 +1791,7 @@
 
 .extraction-panel {
     padding: var(--space-lg);
-    max-height: calc(100vh - 180px);
+    flex: 1;
     overflow-y: auto;
 }
 
@@ -2112,7 +2121,7 @@
 .view-rail {
     display: flex;
     flex-direction: column;
-    height: calc(100vh - 60px);
+    height: 100vh;
     overflow: hidden;
     position: relative;
 }
@@ -2122,7 +2131,7 @@
     display: flex;
     align-items: center;
     justify-content: space-between;
-    padding: var(--space-sm) var(--space-lg);
+    padding: var(--space-sm) var(--space-md);
     background: var(--surface-card);
     border-bottom: 1px solid var(--border-color);
     gap: var(--space-md);
@@ -2137,7 +2146,7 @@
 
 .rail-toolbar .toolbar-center {
     flex: 1;
-    max-width: 400px;
+    max-width: 600px;
 }
 
 .rail-toolbar .toolbar-right {
@@ -2173,7 +2182,7 @@
     color: var(--color-success);
 }
 
-/* Search Bar */
+/* Search Bar - Full Width */
 .search-bar {
     display: flex;
     align-items: center;
@@ -2184,10 +2193,18 @@
     gap: var(--space-sm);
     cursor: pointer;
     transition: all 0.15s ease;
+    width: 100%;
+    min-width: 300px;
 }
 
-.search-bar:hover {
-    border-color: var(--border-color);
+.toolbar-center {
+    flex: 1;
+    max-width: 600px;
+}
+
+.search-bar:hover,
+.search-bar:focus-within {
+    border-color: var(--color-primary);
     background: var(--surface-card);
 }
 
@@ -2201,7 +2218,12 @@
     background: none;
     font-size: var(--font-size-sm);
     outline: none;
-    cursor: pointer;
+    cursor: text;
+    width: 100%;
+}
+
+.search-bar input::placeholder {
+    color: var(--text-muted);
 }
 
 .search-bar kbd {
@@ -2221,17 +2243,17 @@
     position: relative;
 }
 
-/* Document Zones - Horizontal Flow, Full Width */
+/* Document Zones - Horizontal Flow, Full Width, No Gaps */
 .rail-zones {
     display: flex;
     flex: 1;
-    gap: var(--space-md);
-    padding: var(--space-md);
+    gap: 0;
+    padding: 0;
     overflow-x: auto;
-    background: var(--gray-50);
+    background: var(--gray-100);
 }
 
-/* Individual Zone */
+/* Individual Zone - Full width, no gaps */
 .zone {
     flex: 1;
     min-width: 200px;
@@ -2239,9 +2261,14 @@
     display: flex;
     flex-direction: column;
     background: var(--surface-card);
-    border-radius: var(--radius-lg);
-    border: 1px solid var(--border-color);
+    border-radius: 0;
+    border: none;
+    border-right: 1px solid var(--border-color);
     overflow: hidden;
+}
+
+.zone:last-child {
+    border-right: none;
 }
 
 .zone-header {
@@ -3465,4 +3492,17 @@ body.fullscreen-mode .sidebar-expand-btn {
     .field-group .group-content {
         padding: var(--space-sm);
     }
+}
+
+/* ==========================================
+   VIEW PADDING - Standard views get padding
+   Rail/Review stay edge-to-edge
+   ========================================== */
+.view-dashboard,
+.view-upload,
+.view-queue,
+.view-batch,
+.view-settings,
+.view-documents {
+    padding: var(--space-lg) var(--space-xl);
 }
