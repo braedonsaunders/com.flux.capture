@@ -439,8 +439,8 @@
                 </div>
             </div>
 
-            <div class="review-content">
-                <div class="preview-panel">
+            <div class="review-content" id="review-content">
+                <div class="preview-panel" id="preview-panel" style="flex: 0 0 35%;">
                     <div class="preview-tools">
                         <button class="btn btn-icon btn-ghost" id="btn-zoom-out" title="Zoom Out (-)">
                             <i class="fas fa-minus"></i>
@@ -467,7 +467,11 @@
                     </div>
                 </div>
 
-                <div class="extraction-panel" id="extraction-panel">
+                <div class="panel-resizer" id="panel-resizer" title="Drag to resize">
+                    <div class="resizer-handle"></div>
+                </div>
+
+                <div class="extraction-panel" id="extraction-panel" style="flex: 1;">
                     <!-- Extraction form renders here -->
                 </div>
             </div>
