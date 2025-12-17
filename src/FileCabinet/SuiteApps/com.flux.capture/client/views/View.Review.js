@@ -310,8 +310,8 @@
             overlay.addEventListener('mousemove', doResize);
             overlay.addEventListener('mouseup', stopResize);
 
-            // Set initial width - use saved preference or default to 45%
-            var DEFAULT_PREVIEW_WIDTH = 45;
+            // Set initial width - use saved preference or default to 40%
+            var DEFAULT_PREVIEW_WIDTH = 40;
             try {
                 var savedWidth = localStorage.getItem('fc_preview_width');
                 var widthToUse = savedWidth ? parseFloat(savedWidth) : DEFAULT_PREVIEW_WIDTH;

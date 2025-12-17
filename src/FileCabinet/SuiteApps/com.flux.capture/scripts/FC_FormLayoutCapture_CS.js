@@ -99,11 +99,17 @@ function(currentRecord, url) {
             layout.tabs.forEach(function(tab) {
                 console.log('[FC_FormLayoutCapture] Tab:', tab.label);
                 tab.fieldGroups.forEach(function(group) {
-                    console.log('[FC_FormLayoutCapture]   Group:', group.label, '- Fields:', group.fields.join(', '));
+                    var fieldList = group.fields.map(function(f) {
+                        return typeof f === 'object' ? f.id + ' (' + f.label + ')' : f;
+                    }).join(', ');
+                    console.log('[FC_FormLayoutCapture]   Group:', group.label, '- Fields:', fieldList);
                 });
                 console.log('[FC_FormLayoutCapture]   Sublists:', tab.sublists.join(', '));
             });
-            console.log('[FC_FormLayoutCapture] Sublists detail:', JSON.stringify(layout.sublists, null, 2));
+            console.log('[FC_FormLayoutCapture] Sublists found:', layout.sublists.length);
+            layout.sublists.forEach(function(sl) {
+                console.log('[FC_FormLayoutCapture]   Sublist:', sl.id, '- Columns:', sl.visibleColumns.join(', '));
+            });
 
             // Get RESTlet URL
             var restletUrl = url.resolveScript({
@@ -242,6 +248,7 @@ function(currentRecord, url) {
 
     /**
      * Extract fields from a container - only visible, user-facing fields
+     * Returns array of {id, label} objects
      */
     function extractFieldsFromContainer(container) {
         var fields = [];
@@ -270,8 +277,14 @@ function(currentRecord, url) {
             // Verify the input is visible
             if (!isElementVisible(input)) return;
 
+            // Get the label text
+            var labelText = getLabelText(labelCell);
+
             seen[fieldId] = true;
-            fields.push(fieldId);
+            fields.push({
+                id: fieldId,
+                label: labelText || fieldId
+            });
         });
 
         // If no labeled fields found, fall back to finding inputs in visible rows
@@ -287,13 +300,52 @@ function(currentRecord, url) {
                 if (row && !isElementVisible(row)) return;
                 if (!isElementVisible(input)) return;
 
+                // Try to find label from row
+                var labelText = null;
+                if (row) {
+                    var labelCell = row.querySelector('td.labelSpanEdit, td.labeltd, .uir-label');
+                    if (labelCell) {
+                        labelText = getLabelText(labelCell);
+                    }
+                }
+
                 seen[fieldId] = true;
-                fields.push(fieldId);
+                fields.push({
+                    id: fieldId,
+                    label: labelText || fieldId
+                });
             });
         }
 
-        console.log('[FC_FormLayoutCapture] Extracted fields from container:', fields);
+        console.log('[FC_FormLayoutCapture] Extracted fields from container:', fields.map(function(f) { return f.id; }));
         return fields;
+    }
+
+    /**
+     * Extract label text from a label cell
+     */
+    function getLabelText(labelCell) {
+        if (!labelCell) return null;
+
+        // Get direct text content, excluding child elements that might have other text
+        var text = '';
+        labelCell.childNodes.forEach(function(node) {
+            if (node.nodeType === Node.TEXT_NODE) {
+                text += node.textContent;
+            } else if (node.nodeType === Node.ELEMENT_NODE) {
+                // Include span text but skip help icons, etc.
+                var tagName = node.tagName.toLowerCase();
+                if (tagName === 'span' && !node.classList.contains('help')) {
+                    text += node.textContent;
+                }
+            }
+        });
+
+        text = text.trim();
+        // Remove trailing colon and asterisk (required marker)
+        text = text.replace(/[\*:]+$/, '').trim();
+
+        return text || null;
     }
 
     /**
@@ -360,16 +412,36 @@ function(currentRecord, url) {
         var sublists = [];
         var seen = {};
 
-        // NetSuite sublist machines
-        var machines = container.querySelectorAll('table[id*="line"], table[id*="expense"], table[id*="item"], div.uir-machine');
+        console.log('[FC_FormLayoutCapture] Looking for sublists...');
 
-        machines.forEach(function(machine) {
-            var sublistId = inferSublistId(machine);
+        // NetSuite uses various patterns for sublist containers
+        // Look for the div containers that wrap sublist tables
+        var sublistContainers = container.querySelectorAll(
+            'div[id$="_splits"], ' +                    // expense_splits, item_splits
+            'div[id$="machine"], ' +                    // Various machine divs
+            'div.uir-machine, ' +                       // Machine class
+            'table.uir-machine-table, ' +              // Machine tables
+            'div[id*="expense"], ' +                   // Expense-related
+            'div[id*="item"], ' +                      // Item-related
+            'div[id*="line"]'                          // Line-related
+        );
+
+        console.log('[FC_FormLayoutCapture] Found', sublistContainers.length, 'potential sublist containers');
+
+        sublistContainers.forEach(function(elem) {
+            var sublistId = inferSublistId(elem);
             if (!sublistId || seen[sublistId]) return;
+
+            // Find the actual table within this container
+            var table = elem.tagName === 'TABLE' ? elem : elem.querySelector('table');
+            if (!table) {
+                console.log('[FC_FormLayoutCapture] No table found in container:', elem.id);
+                return;
+            }
 
             seen[sublistId] = true;
 
-            var columns = extractSublistColumns(machine);
+            var columns = extractSublistColumns(table);
             console.log('[FC_FormLayoutCapture] Sublist', sublistId, 'columns:', columns);
 
             sublists.push({
@@ -380,22 +452,70 @@ function(currentRecord, url) {
             });
         });
 
+        // Also try to find sublists by looking for specific NetSuite sublist patterns
+        if (sublists.length === 0) {
+            console.log('[FC_FormLayoutCapture] No sublists found with primary selectors, trying fallback...');
+
+            // Look for any table with machine header row
+            var machineTables = container.querySelectorAll('table');
+            machineTables.forEach(function(table) {
+                var headerRow = table.querySelector('tr.uir-machine-headerrow, tr.machineheaderrow');
+                if (!headerRow) return;
+
+                var sublistId = inferSublistId(table) || inferSublistFromTable(table);
+                if (!sublistId || seen[sublistId]) return;
+
+                seen[sublistId] = true;
+
+                var columns = extractSublistColumns(table);
+                console.log('[FC_FormLayoutCapture] Sublist (fallback)', sublistId, 'columns:', columns);
+
+                sublists.push({
+                    id: sublistId,
+                    label: sublistId.charAt(0).toUpperCase() + sublistId.slice(1),
+                    visibleColumns: columns,
+                    columnOrder: columns
+                });
+            });
+        }
+
         return sublists;
     }
 
     /**
      * Infer sublist ID from table element
      */
-    function inferSublistId(table) {
-        var id = (table.id || '').toLowerCase();
+    function inferSublistId(elem) {
+        var id = (elem.id || '').toLowerCase();
+        var className = (elem.className || '').toLowerCase();
 
         // Direct ID patterns
-        if (id.includes('expense_splits') || id.includes('expenseline')) return 'expense';
-        if (id.includes('item_splits') || id.includes('itemline')) return 'item';
-        if (id.includes('line')) return 'line';
-        if (id.includes('apply')) return 'apply';
+        if (id.includes('expense_splits') || id.includes('expenseline') || id.includes('expense_machine')) return 'expense';
+        if (id.includes('item_splits') || id.includes('itemline') || id.includes('item_machine')) return 'item';
+        if (id.includes('apply_machine') || id.includes('apply_splits')) return 'apply';
+        if (id.includes('line_machine') || id.includes('line_splits')) return 'line';
         if (id.includes('expense')) return 'expense';
         if (id.includes('item')) return 'item';
+        if (id.includes('apply')) return 'apply';
+        if (id.includes('line')) return 'line';
+
+        return null;
+    }
+
+    /**
+     * Infer sublist ID from table content (fallback)
+     */
+    function inferSublistFromTable(table) {
+        // Look at header cells to determine sublist type
+        var headers = table.querySelectorAll('th, td.listheadertextb');
+        var headerText = '';
+        headers.forEach(function(h) {
+            headerText += ' ' + (h.textContent || '').toLowerCase();
+        });
+
+        if (headerText.includes('expense') || headerText.includes('receipt')) return 'expense';
+        if (headerText.includes('item') || headerText.includes('quantity')) return 'item';
+        if (headerText.includes('amount') && headerText.includes('account')) return 'expense';
 
         return null;
     }
