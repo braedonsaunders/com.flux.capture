@@ -83,16 +83,17 @@
             this.isLoading = true;
             this.showLoadingState();
 
-            // Load document, form fields, accounts, and items in parallel
+            // Load document, form schema, accounts, and items in parallel
+            // Using formschema for complete tab/group/field structure
             Promise.all([
                 API.get('document', { id: this.docId }),
-                API.get('formfields', { transactionType: this.transactionType }),
+                API.get('formschema', { transactionType: this.transactionType }),
                 API.get('accounts', { accountType: 'Expense' }),
                 API.get('items', {})
             ])
                 .then(function(results) {
                     var data = results[0];
-                    var formFieldsData = results[1];
+                    var formSchemaData = results[1];
                     var accountsData = results[2] || [];
                     var itemsData = results[3] || [];
 
@@ -100,7 +101,7 @@
                     self.lineItems = data.lineItems || [];
                     self.fieldConfidences = data.fieldConfidences || {};
                     self.totalPages = data.pageCount || 1;
-                    self.formFields = formFieldsData;
+                    self.formFields = formSchemaData; // Now contains layout, config, etc.
 
                     // Inject accounts into expense sublist 'account' field
                     // Inject items into item sublist 'item' field
@@ -462,7 +463,12 @@
             var formFields = this.formFields || {};
             var bodyFields = formFields.bodyFields || [];
             var sublists = formFields.sublists || [];
-            var fieldGroups = formFields.fieldGroups || [];
+            var layout = formFields.layout || {};
+            var tabs = layout.tabs || [];
+            var config = formFields.config || {};
+
+            // Get column limit from config (default 10)
+            this.sublistColumnLimit = config.sublistColumnLimit || 10;
 
             var html = '';
 
@@ -491,7 +497,6 @@
                 html += '<div class="form-section anomaly-section">' +
                     '<div class="anomaly-header"><i class="fas fa-triangle-exclamation"></i> ' + anomalies.length + ' Alert' + (anomalies.length > 1 ? 's' : '') + '</div>' +
                     anomalies.map(function(a) {
-                        var severityClass = a.severity === 'high' ? 'danger' : a.severity === 'medium' ? 'warning' : 'primary';
                         return '<div class="anomaly-item anomaly-' + a.severity + '">' +
                             '<i class="fas fa-' + (a.severity === 'high' ? 'exclamation-circle' : 'info-circle') + '"></i>' +
                             '<span>' + escapeHtml(a.message) + '</span>' +
@@ -514,95 +519,123 @@
                 '</div>' +
             '</div>';
 
-            // ========== RENDER FIELD GROUPS (Dynamic from NetSuite form) ==========
-            fieldGroups.forEach(function(group) {
-                if (group.id === 'custom') return; // Custom fields rendered separately below
-
-                var groupFields = [];
-                group.fields.forEach(function(fieldId) {
-                    var nsField = bodyFields.find(function(f) { return f.id === fieldId; });
-                    if (nsField && !nsField.isHidden) {
-                        groupFields.push(nsField);
-                    }
+            // ========== RENDER TABS (Dynamic from NetSuite form schema) ==========
+            // Filter tabs that have content (fieldGroups or sublists with data)
+            var visibleTabs = tabs.filter(function(tab) {
+                var hasGroups = tab.fieldGroups && tab.fieldGroups.some(function(g) {
+                    return g.fields && g.fields.some(function(fid) {
+                        var field = bodyFields.find(function(f) { return f.id === fid; });
+                        return field && field.isDisplay !== false;
+                    });
                 });
-
-                if (groupFields.length === 0) return;
-
-                var icon = 'fa-file-alt';
-                if (group.id === 'primary') icon = 'fa-file-invoice';
-                else if (group.id === 'classification') icon = 'fa-tags';
-                else if (group.id === 'reference') icon = 'fa-link';
-                else if (group.id === 'accounting') icon = 'fa-credit-card';
-
-                html += '<div class="form-section">' +
-                    '<h4><i class="fas ' + icon + '"></i> ' + escapeHtml(group.label) + '</h4>' +
-                    '<div class="form-grid">';
-
-                // Render fields in rows of 2
-                for (var i = 0; i < groupFields.length; i += 2) {
-                    html += '<div class="form-row">';
-                    html += self.renderNsField(groupFields[i], doc);
-                    if (groupFields[i + 1]) {
-                        html += self.renderNsField(groupFields[i + 1], doc);
-                    }
-                    html += '</div>';
-                }
-
-                html += '</div></div>';
+                var hasSublists = tab.sublists && tab.sublists.length > 0;
+                return hasGroups || hasSublists;
             });
 
-            // ========== CUSTOM FIELDS ==========
-            var customFields = bodyFields.filter(function(f) { return f.isCustom && !f.isHidden; });
-            if (customFields.length > 0) {
-                html += '<div class="form-section">' +
-                    '<h4><i class="fas fa-cog"></i> Custom Fields</h4>' +
-                    '<div class="form-grid">';
-                for (var i = 0; i < customFields.length; i += 2) {
-                    html += '<div class="form-row">';
-                    html += self.renderNsField(customFields[i], doc);
-                    if (customFields[i + 1]) {
-                        html += self.renderNsField(customFields[i + 1], doc);
-                    }
-                    html += '</div>';
-                }
-                html += '</div></div>';
-            }
-
-            // ========== LINE ITEMS WITH TABS (Expense/Item sublists) ==========
-            html += '<div class="form-section line-section">' +
-                '<h4><i class="fas fa-list"></i> Line Items</h4>';
-
-            // Render tabs if multiple sublists
-            if (sublists.length > 1) {
-                html += '<div class="sublist-tabs" id="sublist-tabs">';
-                sublists.forEach(function(sl, idx) {
-                    html += '<button class="sublist-tab' + (idx === 0 ? ' active' : '') + '" data-sublist="' + sl.id + '">' +
-                        '<i class="fas fa-' + (sl.type === 'expense' ? 'receipt' : 'box') + '"></i> ' +
-                        escapeHtml(sl.label) +
-                        '<span class="tab-count" id="count-' + sl.id + '">0</span>' +
+            // Render tab navigation if multiple tabs
+            if (visibleTabs.length > 1) {
+                html += '<div class="form-tabs" id="form-tabs">';
+                visibleTabs.forEach(function(tab, idx) {
+                    html += '<button class="form-tab' + (idx === 0 ? ' active' : '') + '" data-tab="' + tab.id + '">' +
+                        escapeHtml(tab.label) +
                     '</button>';
                 });
                 html += '</div>';
             }
 
-            // Render each sublist container
-            sublists.forEach(function(sl, idx) {
-                var isActive = idx === 0;
-                html += '<div class="sublist-container' + (isActive ? ' active' : '') + '" id="sublist-' + sl.id + '" data-sublist-id="' + sl.id + '">' +
-                    '<div class="sublist-toolbar">' +
-                        '<button class="btn btn-ghost btn-sm btn-add-line" data-sublist="' + sl.id + '">' +
-                            '<i class="fas fa-plus"></i> Add ' + (sl.type === 'expense' ? 'Expense' : 'Item') +
-                        '</button>' +
-                    '</div>' +
-                    '<div class="line-items-table" id="lines-' + sl.id + '">' +
-                        self.renderSublistTable(sl, doc) +
-                    '</div>' +
-                '</div>';
+            // Render tab content panels
+            visibleTabs.forEach(function(tab, tabIdx) {
+                var isActiveTab = tabIdx === 0;
+                html += '<div class="form-tab-content' + (isActiveTab ? ' active' : '') + '" data-tab-content="' + tab.id + '">';
+
+                // Render field groups within this tab
+                if (tab.fieldGroups && tab.fieldGroups.length > 0) {
+                    tab.fieldGroups.forEach(function(group) {
+                        // Get fields for this group from bodyFields
+                        var groupFields = [];
+                        (group.fields || []).forEach(function(fieldId) {
+                            // Skip entity field - we handle it separately with vendor search
+                            if (fieldId === 'entity') return;
+
+                            var nsField = bodyFields.find(function(f) { return f.id === fieldId; });
+                            if (nsField && nsField.isDisplay !== false) {
+                                groupFields.push(nsField);
+                            }
+                        });
+
+                        if (groupFields.length === 0) return;
+
+                        // Determine icon for group
+                        var icon = self.getGroupIcon(group.id);
+
+                        html += '<div class="form-section field-group" data-group="' + group.id + '">' +
+                            '<h4 class="group-header">' +
+                                '<i class="fas ' + icon + '"></i> ' + escapeHtml(group.label) +
+                                '<button class="btn btn-ghost btn-icon btn-xs group-toggle" title="Toggle section">' +
+                                    '<i class="fas fa-chevron-up"></i>' +
+                                '</button>' +
+                            '</h4>' +
+                            '<div class="group-content">' +
+                            '<div class="form-grid">';
+
+                        // Render fields in rows of 2
+                        for (var i = 0; i < groupFields.length; i += 2) {
+                            html += '<div class="form-row">';
+                            html += self.renderNsField(groupFields[i], doc);
+                            if (groupFields[i + 1]) {
+                                html += self.renderNsField(groupFields[i + 1], doc);
+                            }
+                            html += '</div>';
+                        }
+
+                        html += '</div></div></div>';
+                    });
+                }
+
+                // Render sublists in this tab
+                var tabSublists = sublists.filter(function(sl) {
+                    return (tab.sublists || []).indexOf(sl.id) !== -1;
+                });
+
+                if (tabSublists.length > 0) {
+                    html += '<div class="form-section line-section">' +
+                        '<h4><i class="fas fa-list"></i> Line Items</h4>';
+
+                    // Render sublist tabs if multiple
+                    if (tabSublists.length > 1) {
+                        html += '<div class="sublist-tabs" id="sublist-tabs-' + tab.id + '">';
+                        tabSublists.forEach(function(sl, idx) {
+                            html += '<button class="sublist-tab' + (idx === 0 ? ' active' : '') + '" data-sublist="' + sl.id + '">' +
+                                '<i class="fas fa-' + (sl.type === 'expense' ? 'receipt' : 'box') + '"></i> ' +
+                                escapeHtml(sl.label) +
+                                '<span class="tab-count" id="count-' + sl.id + '">0</span>' +
+                            '</button>';
+                        });
+                        html += '</div>';
+                    }
+
+                    // Render each sublist container
+                    tabSublists.forEach(function(sl, idx) {
+                        var isActive = idx === 0;
+                        html += '<div class="sublist-container' + (isActive ? ' active' : '') + '" id="sublist-' + sl.id + '" data-sublist-id="' + sl.id + '">' +
+                            '<div class="sublist-toolbar">' +
+                                '<button class="btn btn-ghost btn-sm btn-add-line" data-sublist="' + sl.id + '">' +
+                                    '<i class="fas fa-plus"></i> Add ' + (sl.type === 'expense' ? 'Expense' : 'Item') +
+                                '</button>' +
+                            '</div>' +
+                            '<div class="line-items-table" id="lines-' + sl.id + '">' +
+                                self.renderSublistTable(sl, doc) +
+                            '</div>' +
+                        '</div>';
+                    });
+
+                    html += '</div>';
+                }
+
+                html += '</div>'; // Close tab content
             });
 
-            html += '</div>';
-
-            // ========== AMOUNTS ==========
+            // ========== AMOUNTS (Always visible) ==========
             html += '<div class="form-section amounts-section">' +
                 '<h4><i class="fas fa-calculator"></i> Amounts</h4>' +
                 '<div class="form-row">' +
@@ -647,6 +680,67 @@
 
             // ========== BIND FORM EVENTS ==========
             this.bindFormEvents();
+            this.bindTabEvents();
+        },
+
+        // Get icon for a field group
+        getGroupIcon: function(groupId) {
+            var icons = {
+                'primary': 'fa-file-invoice',
+                'classification': 'fa-tags',
+                'reference': 'fa-link',
+                'accounting': 'fa-credit-card',
+                'address': 'fa-map-marker-alt',
+                'billing': 'fa-file-invoice-dollar',
+                'shipping': 'fa-truck',
+                'custom': 'fa-cog',
+                'systemnotes': 'fa-info-circle',
+                'other': 'fa-ellipsis-h'
+            };
+            return icons[groupId] || 'fa-folder';
+        },
+
+        // Bind tab navigation events
+        bindTabEvents: function() {
+            var self = this;
+
+            // Form tab navigation
+            var formTabs = el('#form-tabs');
+            if (formTabs) {
+                formTabs.addEventListener('click', function(e) {
+                    var tabBtn = e.target.closest('.form-tab');
+                    if (!tabBtn) return;
+
+                    var tabId = tabBtn.getAttribute('data-tab');
+
+                    // Update active tab button
+                    formTabs.querySelectorAll('.form-tab').forEach(function(t) {
+                        t.classList.remove('active');
+                    });
+                    tabBtn.classList.add('active');
+
+                    // Show corresponding content
+                    document.querySelectorAll('.form-tab-content').forEach(function(content) {
+                        content.classList.toggle('active', content.getAttribute('data-tab-content') === tabId);
+                    });
+                });
+            }
+
+            // Field group collapse/expand
+            document.querySelectorAll('.group-toggle').forEach(function(btn) {
+                btn.addEventListener('click', function(e) {
+                    e.preventDefault();
+                    var section = btn.closest('.field-group');
+                    if (section) {
+                        section.classList.toggle('collapsed');
+                        var icon = btn.querySelector('i');
+                        if (icon) {
+                            icon.classList.toggle('fa-chevron-up');
+                            icon.classList.toggle('fa-chevron-down');
+                        }
+                    }
+                });
+            });
         },
 
         // Render a NetSuite field directly
@@ -758,31 +852,51 @@
             return html;
         },
 
-        // Get visible fields for a sublist (prioritize important fields)
+        // Get visible fields for a sublist using schema configuration
         getVisibleSublistFields: function(sublist) {
+            var self = this;
             var fields = sublist.fields || [];
-            var priorityOrder = [];
+            var visible = [];
 
-            if (sublist.type === 'expense') {
-                priorityOrder = ['account', 'amount', 'memo', 'department', 'class', 'location', 'taxcode'];
+            // Use visibleColumns from schema if available (preferred form configuration)
+            var visibleColumns = sublist.visibleColumns || [];
+            var columnOrder = sublist.columnOrder || visibleColumns;
+
+            if (columnOrder.length > 0) {
+                // Use the form's configured column order
+                columnOrder.forEach(function(fieldId) {
+                    var field = fields.find(function(f) { return f.id === fieldId; });
+                    if (field && field.isDisplay !== false) {
+                        visible.push(field);
+                    }
+                });
             } else {
-                priorityOrder = ['item', 'description', 'quantity', 'rate', 'amount', 'department', 'class', 'location'];
+                // Fallback to priority-based ordering
+                var priorityOrder = [];
+                if (sublist.type === 'expense') {
+                    priorityOrder = ['account', 'amount', 'memo', 'department', 'class', 'location', 'taxcode'];
+                } else {
+                    priorityOrder = ['item', 'description', 'quantity', 'rate', 'amount', 'department', 'class', 'location'];
+                }
+
+                priorityOrder.forEach(function(fieldId) {
+                    var field = fields.find(function(f) { return f.id === fieldId; });
+                    if (field && field.isDisplay !== false) {
+                        visible.push(field);
+                    }
+                });
             }
 
-            var visible = [];
-            priorityOrder.forEach(function(fieldId) {
-                var field = fields.find(function(f) { return f.id === fieldId; });
-                if (field) visible.push(field);
-            });
-
-            // Add any custom fields
+            // Add any custom columns not already included
             fields.forEach(function(f) {
-                if (f.isCustom && !visible.find(function(v) { return v.id === f.id; })) {
+                if (f.isCustom && f.isDisplay !== false && !visible.find(function(v) { return v.id === f.id; })) {
                     visible.push(f);
                 }
             });
 
-            return visible.slice(0, 8); // Limit to 8 columns for readability
+            // Apply configurable column limit (default 10)
+            var limit = this.sublistColumnLimit || 10;
+            return visible.slice(0, limit);
         },
 
         // Render a single cell in the sublist table
@@ -913,25 +1027,33 @@
                 taxEl.addEventListener('input', calcTotal);
             }
 
-            // ========== SUBLIST TAB SWITCHING ==========
-            var tabsContainer = el('#sublist-tabs');
-            if (tabsContainer) {
+            // ========== SUBLIST TAB SWITCHING (Delegated for dynamic tabs) ==========
+            // Use event delegation on all sublist-tabs containers (IDs are now dynamic)
+            els('.sublist-tabs').forEach(function(tabsContainer) {
                 tabsContainer.addEventListener('click', function(e) {
                     var tab = e.target.closest('.sublist-tab');
                     if (!tab) return;
 
                     var sublistId = tab.dataset.sublist;
+                    var parentTabs = tab.closest('.sublist-tabs');
 
-                    // Update active tab
-                    els('.sublist-tab').forEach(function(t) { t.classList.remove('active'); });
+                    // Update active tab within this tabs container only
+                    if (parentTabs) {
+                        parentTabs.querySelectorAll('.sublist-tab').forEach(function(t) {
+                            t.classList.remove('active');
+                        });
+                    }
                     tab.classList.add('active');
 
-                    // Show corresponding container
-                    els('.sublist-container').forEach(function(c) { c.classList.remove('active'); });
+                    // Find the parent tab content and show the correct sublist container
+                    var tabContent = tab.closest('.form-tab-content') || document;
+                    tabContent.querySelectorAll('.sublist-container').forEach(function(c) {
+                        c.classList.remove('active');
+                    });
                     var container = el('#sublist-' + sublistId);
                     if (container) container.classList.add('active');
                 });
-            }
+            });
 
             // ========== LINE ITEM OPERATIONS (Delegated for all sublists) ==========
             var lineSection = el('.line-section');
