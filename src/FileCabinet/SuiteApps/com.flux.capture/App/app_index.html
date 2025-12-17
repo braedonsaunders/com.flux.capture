@@ -70,7 +70,7 @@
             padding: 10px var(--space-md); border-radius: 8px;
             color: rgba(255,255,255,0.65); text-decoration: none; cursor: pointer;
         }
-        .nav-link:hover { background: rgba(255,255,255,0.08); color: rgba(255,255,255,0.9); }
+        .nav-link:hover { background: var(--sidebar-bg-hover, rgba(255,255,255,0.08)); color: rgba(255,255,255,0.9); }
         .nav-link.active { background: var(--color-primary); color: white; }
         .nav-link i { width: 20px; text-align: center; }
         .sidebar-footer { padding: var(--space-md); border-top: 1px solid rgba(255,255,255,0.08); }
@@ -138,31 +138,245 @@
         }
     </style>
 
-    <!-- NetSuite navbar color sync script - receives color from parent frame -->
+    <!-- NetSuite navbar color sync script - detects NS header color and syncs sidebar -->
     <script>
         (function() {
             'use strict';
 
             /**
-             * Apply navbar color to sidebar - uses the color directly
+             * Detects NetSuite's header bar color and syncs the sidebar
+             * Works whether app is in an iframe or embedded directly
              */
-            function applySidebarColor(color) {
-                var sidebar = document.querySelector('.app-sidebar');
-                if (!sidebar) return;
+            function syncNetSuiteColor() {
+                try {
+                    // Try parent document first, fall back to current document
+                    var docs = [];
+                    try {
+                        if (window.parent && window.parent.document) {
+                            docs.push({ doc: window.parent.document, win: window.parent, name: 'parent' });
+                        }
+                    } catch (e) {
+                        // Cross-origin, can't access parent
+                    }
+                    docs.push({ doc: document, win: window, name: 'current' });
 
-                // Apply the navbar color directly as a solid background
-                sidebar.style.background = color;
-                document.documentElement.style.setProperty('--surface-sidebar', color);
+                    // NetSuite header container selectors
+                    var headerContainers = [
+                        '#div__header',          // Redwood theme header
+                        '#ns-header',            // Modern NetSuite header
+                        '#ns_navigation',        // Navigation bar
+                        '.uir-page-header',      // Classic UI header
+                        '#nscm'                  // NetSuite Center Menu
+                    ];
 
-                console.log('[FC] Sidebar color synced with NetSuite navbar:', color);
+                    var detectedColor = null;
+
+                    // Try each document
+                    for (var d = 0; d < docs.length; d++) {
+                        if (detectedColor) break;
+                        var docInfo = docs[d];
+
+                        // Scan header containers and their descendants
+                        for (var h = 0; h < headerContainers.length; h++) {
+                            if (detectedColor) break;
+                            try {
+                                var container = docInfo.doc.querySelector(headerContainers[h]);
+                                if (!container) continue;
+
+                                var allElements = container.querySelectorAll('*');
+                                for (var e = 0; e < allElements.length; e++) {
+                                    var element = allElements[e];
+                                    if (element.id && element.id.indexOf('skeleton') !== -1) continue;
+                                    if (element.classList && element.classList.contains('bgoff')) continue;
+
+                                    var computedStyle = docInfo.win.getComputedStyle(element);
+                                    var bgColor = computedStyle.backgroundColor;
+
+                                    if (bgColor && bgColor !== 'transparent' &&
+                                        bgColor !== 'rgba(0, 0, 0, 0)' &&
+                                        !isLightOrGrey(bgColor)) {
+                                        detectedColor = bgColor;
+                                        break;
+                                    }
+                                }
+                            } catch (err) {
+                                continue;
+                            }
+                        }
+
+                        // Fallback: elementsFromPoint at nav bar height
+                        if (!detectedColor) {
+                            try {
+                                var yPositions = [80, 60, 100, 40];
+                                for (var y = 0; y < yPositions.length; y++) {
+                                    if (detectedColor) break;
+                                    var elements = docInfo.doc.elementsFromPoint(docInfo.win.innerWidth / 2, yPositions[y]);
+                                    for (var i = 0; i < elements.length; i++) {
+                                        var el = elements[i];
+                                        if (el.tagName === 'BODY' || el.tagName === 'HTML') continue;
+                                        if (el.id && el.id.indexOf('skeleton') !== -1) continue;
+
+                                        var style = docInfo.win.getComputedStyle(el);
+                                        var bg = style.backgroundColor;
+
+                                        if (bg && bg !== 'transparent' &&
+                                            bg !== 'rgba(0, 0, 0, 0)' &&
+                                            !isLightOrGrey(bg)) {
+                                            detectedColor = bg;
+                                            break;
+                                        }
+                                    }
+                                }
+                            } catch (err) {}
+                        }
+                    }
+
+                    if (detectedColor) {
+                        return applyDetectedColor(detectedColor);
+                    }
+                    return false;
+                } catch (e) {
+                    return false;
+                }
             }
 
-            // Listen for color message from parent frame
+            /**
+             * Retry with exponential backoff for async-loaded themes
+             */
+            function syncNetSuiteColorWithRetry(maxRetries, initialDelay) {
+                maxRetries = maxRetries || 5;
+                initialDelay = initialDelay || 100;
+                var attempts = 0;
+
+                function attempt() {
+                    attempts++;
+                    var success = syncNetSuiteColor();
+
+                    if (success) return;
+
+                    if (attempts < maxRetries) {
+                        var delay = initialDelay * Math.pow(2, attempts - 1);
+                        setTimeout(attempt, delay);
+                    } else {
+                        // Apply default dark sidebar
+                        applyDetectedColor('rgb(30, 41, 59)');
+                    }
+                }
+                attempt();
+            }
+
+            /**
+             * Check if color is light or grey (skip container backgrounds)
+             */
+            function isLightOrGrey(color) {
+                var rgb = parseRgb(color);
+                if (!rgb) return false;
+
+                var luminance = (0.299 * rgb.r + 0.587 * rgb.g + 0.114 * rgb.b) / 255;
+                var max = Math.max(rgb.r, rgb.g, rgb.b);
+                var min = Math.min(rgb.r, rgb.g, rgb.b);
+                var saturation = max === 0 ? 0 : (max - min) / max;
+
+                if (luminance > 0.85) return true;
+                if (saturation < 0.15 && luminance > 0.5) return true;
+                return false;
+            }
+
+            /**
+             * Parse RGB color string
+             */
+            function parseRgb(color) {
+                var rgbMatch = color.match(/rgb\((\d+),\s*(\d+),\s*(\d+)\)/);
+                if (rgbMatch) {
+                    return { r: parseInt(rgbMatch[1], 10), g: parseInt(rgbMatch[2], 10), b: parseInt(rgbMatch[3], 10) };
+                }
+                var rgbaMatch = color.match(/rgba\((\d+),\s*(\d+),\s*(\d+),\s*[\d.]+\)/);
+                if (rgbaMatch) {
+                    return { r: parseInt(rgbaMatch[1], 10), g: parseInt(rgbaMatch[2], 10), b: parseInt(rgbaMatch[3], 10) };
+                }
+                return null;
+            }
+
+            /**
+             * Get luminance (0 = black, 1 = white)
+             */
+            function getLuminance(rgb) {
+                return (0.299 * rgb.r + 0.587 * rgb.g + 0.114 * rgb.b) / 255;
+            }
+
+            /**
+             * Adjust brightness (-1 to 1)
+             */
+            function adjustBrightness(rgb, amount) {
+                if (amount < 0) {
+                    var factor = 1 + amount;
+                    return {
+                        r: Math.round(Math.max(0, rgb.r * factor)),
+                        g: Math.round(Math.max(0, rgb.g * factor)),
+                        b: Math.round(Math.max(0, rgb.b * factor))
+                    };
+                } else {
+                    return {
+                        r: Math.round(Math.min(255, rgb.r + (255 - rgb.r) * amount)),
+                        g: Math.round(Math.min(255, rgb.g + (255 - rgb.g) * amount)),
+                        b: Math.round(Math.min(255, rgb.b + (255 - rgb.b) * amount))
+                    };
+                }
+            }
+
+            /**
+             * Apply detected color to sidebar
+             */
+            function applyDetectedColor(color) {
+                var rgb = parseRgb(color);
+                if (!rgb) return false;
+
+                var root = document.documentElement;
+                var sidebar = document.querySelector('.app-sidebar');
+
+                // Lighten detected color by 15% for sidebar
+                var sidebarRgb = adjustBrightness(rgb, 0.15);
+                var sidebarColor = 'rgb(' + sidebarRgb.r + ', ' + sidebarRgb.g + ', ' + sidebarRgb.b + ')';
+
+                // Check luminance for text contrast
+                var sidebarLuminance = getLuminance(sidebarRgb);
+                var needsLightTheme = sidebarLuminance > 0.5;
+
+                // Calculate hover and border colors
+                var hoverRgb, borderRgb;
+                if (needsLightTheme) {
+                    hoverRgb = adjustBrightness(sidebarRgb, -0.08);
+                    borderRgb = adjustBrightness(sidebarRgb, -0.12);
+                    if (sidebar) sidebar.classList.add('light-theme');
+                } else {
+                    hoverRgb = adjustBrightness(sidebarRgb, 0.15);
+                    borderRgb = adjustBrightness(sidebarRgb, 0.20);
+                    if (sidebar) sidebar.classList.remove('light-theme');
+                }
+
+                // Apply CSS variables
+                root.style.setProperty('--surface-sidebar', sidebarColor);
+                root.style.setProperty('--sidebar-bg-hover', 'rgb(' + hoverRgb.r + ', ' + hoverRgb.g + ', ' + hoverRgb.b + ')');
+                root.style.setProperty('--sidebar-border', 'rgb(' + borderRgb.r + ', ' + borderRgb.g + ', ' + borderRgb.b + ')');
+
+                // Apply directly to sidebar
+                if (sidebar) {
+                    sidebar.style.background = sidebarColor;
+                }
+
+                console.log('[FC] Sidebar color synced with NetSuite navbar:', color, '->', sidebarColor);
+                return true;
+            }
+
+            // Also listen for postMessage as fallback
             window.addEventListener('message', function(event) {
                 if (event.data && event.data.type === 'FC_NAVBAR_COLOR' && event.data.color) {
-                    applySidebarColor(event.data.color);
+                    applyDetectedColor(event.data.color);
                 }
             });
+
+            // Run color detection immediately
+            syncNetSuiteColorWithRetry();
         })();
     </script>
 
