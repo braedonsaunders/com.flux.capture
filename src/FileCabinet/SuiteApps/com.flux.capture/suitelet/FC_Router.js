@@ -892,8 +892,23 @@ define([
             var docRecord = record.create({ type: 'customrecord_dm_captured_document' });
 
             docId = generateDocumentId();
-            docRecord.setValue({ fieldId: 'name', value: fileName });
+
+            // Set the Name field - this is required for custom records with includename=T
+            // Use the filename, or fallback to document ID if filename is somehow empty
+            var recordName = fileName || docId;
+            log.debug('uploadDocument', 'Setting record name to: ' + recordName);
+            docRecord.setValue({ fieldId: 'name', value: recordName });
+
+            // Store additional fields
             docRecord.setValue({ fieldId: 'custrecord_dm_document_id', value: docId });
+
+            // Try to set original filename field (may not exist in older deployments)
+            try {
+                docRecord.setValue({ fieldId: 'custrecord_dm_original_filename', value: fileName });
+            } catch (e) {
+                log.debug('uploadDocument', 'custrecord_dm_original_filename field not available');
+            }
+
             docRecord.setValue({ fieldId: 'custrecord_dm_status', value: DocStatus.PENDING });
             docRecord.setValue({ fieldId: 'custrecord_dm_source_file', value: fileId });
             docRecord.setValue({ fieldId: 'custrecord_dm_source', value: Source.UPLOAD });
