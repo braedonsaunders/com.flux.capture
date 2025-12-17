@@ -392,15 +392,32 @@ function main() {
         return;
     }
 
-    // Full deploy mode - uses SDF project:deploy for Objects and Files
+    // Full deploy mode - deploy Objects via SDF, then upload files
     if (deployMode) {
-        log('Deploy mode: running full SDF project deployment...');
-        if (!hasObjectFiles()) {
-            log('No Object files found in src/Objects/', 'warn');
+        log('Deploy mode: running full deployment...');
+
+        // Step 1: Deploy Objects via SDF project:deploy
+        if (hasObjectFiles()) {
+            log('Step 1: Deploying Objects (custom records, scripts)...');
+            const objectSuccess = runProjectDeploy();
+            if (!objectSuccess) {
+                log('Object deployment failed', 'error');
+                process.exit(1);
+            }
+        } else {
+            log('No Object files found in src/Objects/, skipping Object deployment', 'warn');
         }
-        const success = runProjectDeploy();
-        if (!success) {
+
+        // Step 2: Upload all FileCabinet files
+        log('Step 2: Uploading FileCabinet files...');
+        const filesToSync = getAllFiles(FILE_CABINET_PATH);
+        const { success, failed } = uploadFiles(filesToSync);
+
+        if (failed > 0) {
+            log(`Completed with errors: ${success} uploaded, ${failed} failed`, 'warn');
             process.exit(1);
+        } else {
+            log(`Full deployment completed: ${success} files uploaded`, 'success');
         }
         return;
     }
@@ -443,16 +460,16 @@ function main() {
         state.fileHashes = { ...state.fileHashes, ...newHashes };
     }
 
-    // If Objects need deployment, use full SDF deploy
+    // If Objects need deployment, deploy them first via SDF
     if (needsObjectDeploy) {
-        log('Objects need deployment - running full SDF project:deploy...', 'info');
+        log('Deploying Objects via SDF project:deploy...', 'info');
         const deploySuccess = runProjectDeploy();
         if (!deploySuccess) {
-            log('Full project deploy failed', 'error');
+            log('Object deployment failed', 'error');
             process.exit(1);
         }
-        log('Full project deployment completed', 'success');
-        return;
+        log('Object deployment completed', 'success');
+        // Continue to upload files below
     }
 
     // Upload new/changed files

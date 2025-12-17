@@ -5,7 +5,6 @@
     <dependencies>
         <features>
             <feature required="true">SERVERSIDESCRIPTING</feature>
-            <feature required="true">SUITESCRIPT</feature>
         </features>
     </dependencies>
 </manifest>

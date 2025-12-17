@@ -6,7 +6,4 @@
         <path>~/Objects/customscript_fc_router.xml</path>
         <path>~/Objects/customscript_fc_suitelet.xml</path>
     </objects>
-    <files>
-        <path>~/FileCabinet/SuiteApps/com.flux.capture/*</path>
-    </files>
 </deploy>
