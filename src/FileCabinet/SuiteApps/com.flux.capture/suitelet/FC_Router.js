@@ -22,8 +22,9 @@ define([
     'N/email',
     'N/format',
     'N/task',
-    '/SuiteApps/com.flux.capture/lib/FC_Engine'
-], function(file, record, search, query, runtime, errorModule, log, encode, email, format, task, FC_Engine) {
+    '/SuiteApps/com.flux.capture/lib/FC_Engine',
+    '/SuiteApps/com.flux.capture/suitelet/FC_FormSchemaExtractor'
+], function(file, record, search, query, runtime, errorModule, log, encode, email, format, task, FC_Engine, FormSchemaExtractor) {
 
     const API_VERSION = '2.0.0';
 
@@ -202,6 +203,9 @@ define([
                 case 'formfields':
                     result = getTransactionFormFields(context.transactionType, context.formId);
                     break;
+                case 'formschema':
+                    result = getFormSchema(context.transactionType, context);
+                    break;
                 case 'health':
                     result = Response.success({ status: 'healthy', version: API_VERSION });
                     break;
@@ -278,6 +282,12 @@ define([
                     break;
                 case 'settings':
                     result = updateSettings(context);
+                    break;
+                case 'formconfig':
+                    result = updateFormSchemaConfig(context.transactionType, context.config);
+                    break;
+                case 'invalidatecache':
+                    result = invalidateFormSchemaCache(context.transactionType);
                     break;
                 default:
                     result = Response.error('INVALID_ACTION', 'Unknown action: ' + action);
@@ -1187,6 +1197,92 @@ define([
             return formLookup.name;
         } catch (e) {
             return 'Form #' + formId;
+        }
+    }
+
+    /**
+     * Get comprehensive form schema with tabs, groups, fields, and sublists
+     * Uses N/cache for high-performance caching
+     * @param {string} transactionType - The transaction type (vendorbill, expensereport, etc.)
+     * @param {Object} context - Request context with options
+     * @returns {Object} Complete form schema with layout
+     */
+    function getFormSchema(transactionType, context) {
+        if (!transactionType) {
+            return Response.error('MISSING_PARAM', 'Transaction type is required');
+        }
+
+        var options = {
+            forceRefresh: context.refresh === 'true' || context.refresh === true,
+            formId: context.formId || null
+        };
+
+        try {
+            var result = FormSchemaExtractor.extractFormSchema(transactionType, options);
+
+            if (!result.success) {
+                return Response.error(result.error, result.message);
+            }
+
+            // Transform to response format
+            var schema = result.data;
+            return Response.success({
+                formInfo: schema.formInfo,
+                bodyFields: schema.bodyFields,
+                sublists: schema.sublists,
+                layout: schema.layout,
+                config: schema.config,
+                hiddenFields: schema.hiddenFields,
+                _cached: schema._cached || false
+            });
+        } catch (e) {
+            log.error('getFormSchema', e);
+            return Response.error('FORM_SCHEMA_ERROR', e.message);
+        }
+    }
+
+    /**
+     * Update form schema configuration
+     * @param {string} transactionType - The transaction type
+     * @param {Object} config - Configuration updates
+     * @returns {Object} Updated configuration
+     */
+    function updateFormSchemaConfig(transactionType, config) {
+        if (!transactionType) {
+            return Response.error('MISSING_PARAM', 'Transaction type is required');
+        }
+
+        try {
+            var result = FormSchemaExtractor.updateConfig(transactionType, config);
+            if (!result.success) {
+                return Response.error('CONFIG_UPDATE_ERROR', result.error);
+            }
+            return Response.success({ config: result.config });
+        } catch (e) {
+            log.error('updateFormSchemaConfig', e);
+            return Response.error('CONFIG_UPDATE_ERROR', e.message);
+        }
+    }
+
+    /**
+     * Invalidate form schema cache
+     * @param {string} transactionType - The transaction type to invalidate
+     * @returns {Object} Success/failure status
+     */
+    function invalidateFormSchemaCache(transactionType) {
+        if (!transactionType) {
+            return Response.error('MISSING_PARAM', 'Transaction type is required');
+        }
+
+        try {
+            var result = FormSchemaExtractor.invalidateCache(transactionType);
+            if (!result.success) {
+                return Response.error('CACHE_INVALIDATE_ERROR', result.error);
+            }
+            return Response.success({ message: 'Cache invalidated for ' + transactionType });
+        } catch (e) {
+            log.error('invalidateFormSchemaCache', e);
+            return Response.error('CACHE_INVALIDATE_ERROR', e.message);
         }
     }
 

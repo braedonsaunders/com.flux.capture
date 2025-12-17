@@ -3284,3 +3284,185 @@ body.fullscreen-mode .sidebar-expand-btn {
     color: var(--color-danger);
     background: var(--color-danger-bg);
 }
+
+/* ==========================================
+   FORM TABS (NetSuite-style tab navigation)
+   ========================================== */
+.form-tabs {
+    display: flex;
+    gap: 0;
+    margin: var(--space-md) 0;
+    border-bottom: 2px solid var(--border-color);
+    background: var(--gray-50);
+    border-radius: var(--radius-md) var(--radius-md) 0 0;
+    padding: 0 var(--space-sm);
+}
+
+.form-tab {
+    padding: var(--space-sm) var(--space-lg);
+    background: transparent;
+    border: none;
+    border-bottom: 3px solid transparent;
+    margin-bottom: -2px;
+    color: var(--text-secondary);
+    font-size: var(--font-size-sm);
+    font-weight: 500;
+    cursor: pointer;
+    transition: all var(--transition);
+    white-space: nowrap;
+}
+
+.form-tab:hover {
+    color: var(--text-primary);
+    background: var(--white);
+}
+
+.form-tab.active {
+    color: var(--color-primary);
+    border-bottom-color: var(--color-primary);
+    background: var(--white);
+}
+
+.form-tab-content {
+    display: none;
+    animation: fadeIn 0.2s ease;
+}
+
+.form-tab-content.active {
+    display: block;
+}
+
+@keyframes fadeIn {
+    from { opacity: 0; transform: translateY(-4px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+/* ==========================================
+   COLLAPSIBLE FIELD GROUPS
+   ========================================== */
+.field-group {
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-md);
+    margin-bottom: var(--space-md);
+    background: var(--white);
+    overflow: hidden;
+}
+
+.field-group .group-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: var(--space-sm) var(--space-md);
+    background: var(--gray-50);
+    margin: 0;
+    font-size: var(--font-size-sm);
+    font-weight: 600;
+    cursor: default;
+    border-bottom: 1px solid var(--border-color);
+}
+
+.field-group .group-header i:first-child {
+    margin-right: var(--space-sm);
+    color: var(--text-tertiary);
+}
+
+.field-group .group-toggle {
+    opacity: 0.5;
+    transition: opacity var(--transition), transform var(--transition);
+}
+
+.field-group .group-toggle:hover {
+    opacity: 1;
+}
+
+.field-group .group-content {
+    padding: var(--space-md);
+    transition: all 0.25s ease;
+}
+
+.field-group.collapsed .group-content {
+    display: none;
+}
+
+.field-group.collapsed .group-header {
+    border-bottom: none;
+}
+
+.field-group.collapsed .group-toggle i {
+    transform: rotate(180deg);
+}
+
+/* Field group nested form grid */
+.field-group .form-grid {
+    margin: 0;
+}
+
+.field-group .form-row {
+    margin-bottom: var(--space-sm);
+}
+
+.field-group .form-row:last-child {
+    margin-bottom: 0;
+}
+
+/* ==========================================
+   ENHANCED FORM SECTION STYLING
+   ========================================== */
+.form-section.field-group {
+    padding: 0;
+}
+
+.form-section.field-group h4 {
+    margin: 0;
+}
+
+/* Group icons color coding */
+.field-group[data-group="primary"] .group-header i:first-child {
+    color: var(--color-primary);
+}
+
+.field-group[data-group="classification"] .group-header i:first-child {
+    color: var(--color-info);
+}
+
+.field-group[data-group="accounting"] .group-header i:first-child {
+    color: var(--color-success);
+}
+
+.field-group[data-group="address"] .group-header i:first-child,
+.field-group[data-group="billing"] .group-header i:first-child,
+.field-group[data-group="shipping"] .group-header i:first-child {
+    color: var(--color-warning);
+}
+
+.field-group[data-group="custom"] .group-header i:first-child {
+    color: var(--purple-500);
+}
+
+/* ==========================================
+   RESPONSIVE FORM TABS
+   ========================================== */
+@media (max-width: 768px) {
+    .form-tabs {
+        overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
+        scrollbar-width: none;
+    }
+
+    .form-tabs::-webkit-scrollbar {
+        display: none;
+    }
+
+    .form-tab {
+        padding: var(--space-sm) var(--space-md);
+        font-size: var(--font-size-xs);
+    }
+
+    .field-group .group-header {
+        padding: var(--space-xs) var(--space-sm);
+    }
+
+    .field-group .group-content {
+        padding: var(--space-sm);
+    }
+}
