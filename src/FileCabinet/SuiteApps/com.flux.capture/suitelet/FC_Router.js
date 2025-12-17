@@ -889,15 +889,35 @@ define([
         var documentId;
         var docId;
         try {
-            var docRecord = record.create({ type: 'customrecord_dm_captured_document' });
-
             docId = generateDocumentId();
 
-            // Set the Name field - this is required for custom records with includename=T
-            // Use the filename, or fallback to document ID if filename is somehow empty
-            var recordName = fileName || docId;
-            log.debug('uploadDocument', 'Setting record name to: ' + recordName);
+            // Generate a guaranteed non-empty name
+            var recordName = fileName && fileName.trim() ? fileName.trim() : docId;
+            if (!recordName || recordName.length === 0) {
+                recordName = 'Document-' + Date.now();
+            }
+
+            log.audit('uploadDocument.createRecord', {
+                fileName: fileName,
+                docId: docId,
+                recordName: recordName,
+                recordNameLength: recordName ? recordName.length : 0
+            });
+
+            var docRecord = record.create({ type: 'customrecord_dm_captured_document' });
+
+            // Set the Name field FIRST - this is required
             docRecord.setValue({ fieldId: 'name', value: recordName });
+
+            // Verify name was set
+            var verifyName = docRecord.getValue({ fieldId: 'name' });
+            log.debug('uploadDocument', 'Name field after setValue: ' + verifyName);
+
+            // If name didn't stick, try again with setText
+            if (!verifyName) {
+                log.warn('uploadDocument', 'Name setValue failed, trying setText');
+                docRecord.setText({ fieldId: 'name', text: recordName });
+            }
 
             // Store additional fields
             docRecord.setValue({ fieldId: 'custrecord_dm_document_id', value: docId });
