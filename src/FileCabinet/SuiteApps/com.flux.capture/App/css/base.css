@@ -206,7 +206,7 @@ body {
 }
 
 .nav-link:hover {
-    background: rgba(255, 255, 255, 0.08);
+    background: var(--sidebar-bg-hover, rgba(255, 255, 255, 0.08));
     color: var(--text-sidebar-hover);
 }
 
@@ -233,7 +233,35 @@ body {
 /* Sidebar Footer */
 .sidebar-footer {
     padding: var(--space-md);
-    border-top: 1px solid rgba(255, 255, 255, 0.08);
+    border-top: 1px solid var(--sidebar-border, rgba(255, 255, 255, 0.08));
+}
+
+/* Light theme sidebar (when NS navbar is light colored) */
+.app-sidebar.light-theme {
+    color: rgba(0, 0, 0, 0.65);
+}
+
+.app-sidebar.light-theme .brand-name,
+.app-sidebar.light-theme .user-name {
+    color: rgba(0, 0, 0, 0.9);
+}
+
+.app-sidebar.light-theme .brand-tagline,
+.app-sidebar.light-theme .user-role,
+.app-sidebar.light-theme .nav-section-title {
+    color: rgba(0, 0, 0, 0.5);
+}
+
+.app-sidebar.light-theme .nav-link {
+    color: rgba(0, 0, 0, 0.65);
+}
+
+.app-sidebar.light-theme .nav-link:hover {
+    color: rgba(0, 0, 0, 0.9);
+}
+
+.app-sidebar.light-theme .sidebar-footer {
+    border-top-color: rgba(0, 0, 0, 0.08);
 }
 
 .sidebar-user {
