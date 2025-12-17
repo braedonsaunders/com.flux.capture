@@ -167,6 +167,13 @@
 
                 <li class="nav-section-title">Documents</li>
                 <li class="nav-item">
+                    <a href="#" class="nav-link" data-route="rail">
+                        <i class="fas fa-stream"></i>
+                        <span>Document Rail</span>
+                        <span class="nav-badge" id="rail-badge" style="display:none;">0</span>
+                    </a>
+                </li>
+                <li class="nav-item">
                     <a href="#" class="nav-link" data-route="upload">
                         <i class="fas fa-cloud-arrow-up"></i>
                         <span>Upload</span>
@@ -175,7 +182,7 @@
                 <li class="nav-item">
                     <a href="#" class="nav-link" data-route="queue">
                         <i class="fas fa-layer-group"></i>
-                        <span>Processing</span>
+                        <span>Queue (Classic)</span>
                         <span class="nav-badge" id="queue-badge" style="display:none;">0</span>
                     </a>
                 </li>
@@ -517,6 +524,109 @@
         </div>
     </script>
 
+    <!-- DOCUMENT RAIL TEMPLATE -->
+    <script type="text/template" id="tpl-rail">
+        <div class="view-rail">
+            <!-- Top toolbar -->
+            <div class="rail-toolbar">
+                <div class="toolbar-left">
+                    <button class="btn btn-primary" id="btn-upload">
+                        <i class="fas fa-cloud-arrow-up"></i> Upload
+                    </button>
+                    <div class="rail-stats" id="rail-stats"></div>
+                </div>
+                <div class="toolbar-center">
+                    <div class="search-bar">
+                        <i class="fas fa-search"></i>
+                        <input type="text" id="rail-search" placeholder="Search or press ⌘K for commands...">
+                        <kbd>⌘K</kbd>
+                    </div>
+                </div>
+                <div class="toolbar-right">
+                    <button class="btn btn-ghost" id="btn-flow-mode">
+                        <i class="fas fa-bolt"></i> Flow Mode
+                    </button>
+                    <button class="btn btn-icon btn-ghost" id="btn-settings" title="Settings">
+                        <i class="fas fa-cog"></i>
+                    </button>
+                </div>
+            </div>
+
+            <!-- Main rail area -->
+            <div class="rail-main">
+                <!-- Document zones (horizontal rail) -->
+                <div class="rail-zones">
+                    <div class="zone" id="zone-incoming">
+                        <div class="zone-header">
+                            <span class="zone-icon"><i class="fas fa-inbox"></i></span>
+                            <span class="zone-label">Incoming</span>
+                            <span class="zone-count">0</span>
+                        </div>
+                        <div class="zone-cards"></div>
+                    </div>
+
+                    <div class="zone" id="zone-extracting">
+                        <div class="zone-header">
+                            <span class="zone-icon"><i class="fas fa-cog fa-spin"></i></span>
+                            <span class="zone-label">Extracting</span>
+                            <span class="zone-count">0</span>
+                        </div>
+                        <div class="zone-cards"></div>
+                    </div>
+
+                    <div class="zone zone-primary" id="zone-review">
+                        <div class="zone-header">
+                            <span class="zone-icon"><i class="fas fa-eye"></i></span>
+                            <span class="zone-label">Review</span>
+                            <span class="zone-count">0</span>
+                        </div>
+                        <div class="zone-cards"></div>
+                    </div>
+
+                    <div class="zone" id="zone-ready">
+                        <div class="zone-header">
+                            <span class="zone-icon"><i class="fas fa-check-circle"></i></span>
+                            <span class="zone-label">Ready</span>
+                            <span class="zone-count">0</span>
+                        </div>
+                        <div class="zone-cards"></div>
+                    </div>
+
+                    <div class="zone zone-done" id="zone-done">
+                        <div class="zone-header">
+                            <span class="zone-icon"><i class="fas fa-check-double"></i></span>
+                            <span class="zone-label">Done</span>
+                            <span class="zone-count">0</span>
+                        </div>
+                        <div class="zone-cards"></div>
+                    </div>
+                </div>
+
+                <!-- Detail panel (right sidebar) -->
+                <div class="rail-detail" id="detail-panel">
+                    <!-- Dashboard or document details render here -->
+                </div>
+            </div>
+
+            <!-- Keyboard hints -->
+            <div class="rail-footer">
+                <div class="keyboard-hints">
+                    <span><kbd>←</kbd><kbd>→</kbd> Navigate</span>
+                    <span><kbd>Enter</kbd> Approve</span>
+                    <span><kbd>F</kbd> Flow Mode</span>
+                    <span><kbd>⌘K</kbd> Commands</span>
+                </div>
+            </div>
+
+            <!-- Flow mode overlay (hidden by default) -->
+            <div class="flow-mode-overlay" id="flow-mode-overlay">
+                <div class="flow-progress">
+                    <div class="flow-progress-bar" id="flow-progress-bar"></div>
+                </div>
+            </div>
+        </div>
+    </script>
+
     <!-- SETTINGS TEMPLATE -->
     <script type="text/template" id="tpl-settings">
         <div class="view-settings">
@@ -620,6 +730,7 @@
     <script src="{{JS_VIEW_UPLOAD_URL}}"></script>
     <script src="{{JS_VIEW_QUEUE_URL}}"></script>
     <script src="{{JS_VIEW_REVIEW_URL}}"></script>
+    <script src="{{JS_VIEW_RAIL_URL}}"></script>
     <script src="{{JS_VIEW_BATCH_URL}}"></script>
     <script src="{{JS_VIEW_SETTINGS_URL}}"></script>
 </body>

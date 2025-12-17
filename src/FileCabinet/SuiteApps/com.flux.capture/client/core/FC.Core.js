@@ -461,6 +461,62 @@
                 document.body.appendChild(modal);
                 requestAnimationFrame(function() { modal.classList.add('visible'); });
             });
+        },
+
+        /**
+         * Show prompt modal with input field
+         * @param {string} message - Prompt message
+         * @param {string} defaultValue - Default input value
+         * @returns {Promise} - Resolves with input value or null if cancelled
+         */
+        prompt: function(message, defaultValue) {
+            defaultValue = defaultValue || '';
+
+            return new Promise(function(resolve) {
+                var modal = document.createElement('div');
+                modal.className = 'modal-overlay';
+                modal.innerHTML =
+                    '<div class="modal">' +
+                        '<div class="modal-header">' +
+                            '<h3>Input Required</h3>' +
+                            '<button class="btn btn-ghost btn-icon modal-close"><i class="fas fa-times"></i></button>' +
+                        '</div>' +
+                        '<div class="modal-body">' +
+                            '<p>' + escapeHtml(message) + '</p>' +
+                            '<input type="text" class="prompt-input" value="' + escapeHtml(defaultValue) + '" style="width:100%; padding:8px 12px; border:1px solid var(--border-color); border-radius:6px; margin-top:12px; font-size:14px;">' +
+                        '</div>' +
+                        '<div class="modal-footer">' +
+                            '<button class="btn btn-secondary modal-cancel">Cancel</button>' +
+                            '<button class="btn btn-primary modal-confirm">OK</button>' +
+                        '</div>' +
+                    '</div>';
+
+                var input = modal.querySelector('.prompt-input');
+
+                function close(result) {
+                    modal.classList.remove('visible');
+                    setTimeout(function() { modal.remove(); }, 200);
+                    resolve(result);
+                }
+
+                modal.querySelector('.modal-close').addEventListener('click', function() { close(null); });
+                modal.querySelector('.modal-cancel').addEventListener('click', function() { close(null); });
+                modal.querySelector('.modal-confirm').addEventListener('click', function() { close(input.value); });
+                input.addEventListener('keydown', function(e) {
+                    if (e.key === 'Enter') close(input.value);
+                    if (e.key === 'Escape') close(null);
+                });
+                modal.addEventListener('click', function(e) {
+                    if (e.target === modal) close(null);
+                });
+
+                document.body.appendChild(modal);
+                requestAnimationFrame(function() {
+                    modal.classList.add('visible');
+                    input.focus();
+                    input.select();
+                });
+            });
         }
     };
 

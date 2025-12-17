@@ -292,19 +292,39 @@ define([
     function _delete(context) {
         var result;
         try {
-            log.debug('_delete', { context: JSON.stringify(context) });
-            var action = context.action || 'document';
+            // Parse context if it's a string (some DELETE implementations)
+            var params = context;
+            if (typeof context === 'string') {
+                try {
+                    params = JSON.parse(context);
+                } catch (e) {
+                    params = context;
+                }
+            }
+
+            log.debug('_delete', {
+                contextType: typeof context,
+                params: JSON.stringify(params),
+                hasId: !!(params && params.id),
+                hasDocumentId: !!(params && params.documentId)
+            });
+
+            var action = (params && params.action) || 'document';
 
             switch (action) {
                 case 'document':
-                    var docId = context.id || context.documentId;
+                    var docId = params && (params.id || params.documentId);
+                    // Handle string numbers
+                    if (docId && typeof docId === 'string') {
+                        docId = parseInt(docId, 10);
+                    }
                     result = deleteDocument(docId);
                     break;
                 case 'batch':
-                    result = deleteBatch(context.batchId);
+                    result = deleteBatch(params && params.batchId);
                     break;
                 case 'clear':
-                    result = clearCompleted(context);
+                    result = clearCompleted(params);
                     break;
                 default:
                     result = Response.error('INVALID_ACTION', 'Unknown action: ' + action);
