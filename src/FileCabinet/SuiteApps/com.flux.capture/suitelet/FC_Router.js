@@ -758,8 +758,7 @@ define([
                     search.createColumn({ name: 'internalid' }),
                     search.createColumn({ name: 'number', sort: search.Sort.ASC }),
                     search.createColumn({ name: 'name' }),
-                    search.createColumn({ name: 'type' }),
-                    search.createColumn({ name: 'currency' })
+                    search.createColumn({ name: 'type' })
                 ]
             });
 
@@ -775,8 +774,7 @@ define([
                     text: number ? number + ' - ' + name : name,
                     number: number,
                     name: name,
-                    type: result.getText('type'),
-                    currency: result.getText('currency')
+                    type: result.getText('type')
                 });
             });
 
