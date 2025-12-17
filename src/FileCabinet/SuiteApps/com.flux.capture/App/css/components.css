@@ -823,6 +823,7 @@
     flex: 1;
     overflow: hidden;
     max-width: 100%;
+    min-width: 0; /* CRITICAL: Forces flex children to respect container bounds */
 }
 
 .preview-panel {
@@ -833,7 +834,8 @@
     flex-direction: column;
     min-width: 250px;
     max-width: 70%;
-    flex-shrink: 0;
+    /* Use flex shorthand - JS will override with specific flex-basis */
+    flex: 0 1 auto;
 }
 
 /* Panel Resizer */
@@ -922,7 +924,8 @@
     overflow-y: auto;
     overflow-x: hidden;
     padding: var(--space-lg);
-    min-width: 0; /* Allow flex item to shrink below content size */
+    min-width: 0; /* CRITICAL: Allow flex item to shrink below content size */
+    flex: 1; /* Takes remaining space after preview-panel */
 }
 
 /* ==========================================
@@ -1842,16 +1845,7 @@
     opacity: 0.3;
 }
 
-/* Review Content Layout Enhancements */
-/* Note: .review-content uses flexbox, not grid */
-
-.extraction-panel {
-    padding: var(--space-lg);
-    flex: 1;
-    min-width: 0; /* Prevent flex item from overflowing */
-    overflow-y: auto;
-}
-
+/* Extraction Panel Scrollbar Styling */
 .extraction-panel::-webkit-scrollbar {
     width: 6px;
 }

@@ -252,8 +252,9 @@
                     var containerWidth = container.offsetWidth;
                     // Constrain to valid range
                     widthPx = Math.max(250, Math.min(containerWidth * 0.7, widthPx));
-                    previewPanel.style.flex = 'none';
-                    previewPanel.style.width = widthPx + 'px';
+                    // Use flex shorthand: flex-grow: 0, flex-shrink: 0, flex-basis: width
+                    previewPanel.style.flex = '0 0 ' + widthPx + 'px';
+                    previewPanel.style.width = ''; // Clear any explicit width
                 }
             } catch (e) { /* ignore */ }
         },
@@ -299,9 +300,9 @@
                 var maxWidth = containerWidth * 0.7;
                 newWidth = Math.max(minWidth, Math.min(maxWidth, newWidth));
 
-                // Use fixed pixel width for stability
-                previewPanel.style.flex = 'none';
-                previewPanel.style.width = newWidth + 'px';
+                // Use flex shorthand for consistent sizing
+                previewPanel.style.flex = '0 0 ' + newWidth + 'px';
+                previewPanel.style.width = ''; // Clear any explicit width
             }
 
             function stopResize() {
@@ -345,8 +346,9 @@
                 var maxWidth = Math.round(containerWidth * 0.7);
                 widthToUse = Math.max(minWidth, Math.min(maxWidth, widthToUse));
 
-                previewPanel.style.flex = 'none';
-                previewPanel.style.width = widthToUse + 'px';
+                // Use flex shorthand for consistent sizing
+                previewPanel.style.flex = '0 0 ' + widthToUse + 'px';
+                previewPanel.style.width = ''; // Clear any explicit width
             } catch (e) {
                 // Fallback to default 40%
                 previewPanel.style.flex = '0 0 40%';
