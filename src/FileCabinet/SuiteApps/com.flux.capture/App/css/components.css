@@ -2322,7 +2322,7 @@
 /* Zone Cards Container */
 .zone-cards {
     flex: 1;
-    overflow-y: auto;
+    overflow: hidden;
     padding: var(--space-sm);
     display: flex;
     flex-direction: column;
@@ -2499,23 +2499,9 @@
 .quick-action[data-action="approve"]:hover { color: var(--color-success); }
 .quick-action[data-action="reject"]:hover { color: var(--color-danger); }
 
-/* Detail Panel - Flyout from Right - Full Height */
+/* Detail Panel - HIDDEN (removed from UI) */
 .rail-detail {
-    position: fixed;
-    top: 0;
-    right: 0;
-    bottom: 0;
-    width: 600px;
-    max-width: 60vw;
-    background: var(--surface-card);
-    border-left: 1px solid var(--border-color);
-    box-shadow: var(--shadow-xl);
-    transform: translateX(100%);
-    transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-    z-index: 1000;
-    display: flex;
-    flex-direction: column;
-    overflow: hidden;
+    display: none;
 }
 
 .rail-detail.open {
@@ -2867,15 +2853,9 @@
     flex: 1;
 }
 
-/* Rail Footer */
+/* Rail Footer - HIDDEN (removed from UI) */
 .rail-footer {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    padding: var(--space-xs) var(--space-lg);
-    background: var(--surface-card);
-    border-top: 1px solid var(--border-color);
-    flex-shrink: 0;
+    display: none;
 }
 
 .keyboard-hints {
