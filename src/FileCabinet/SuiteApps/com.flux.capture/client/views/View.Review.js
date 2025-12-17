@@ -185,6 +185,70 @@
             this.on('#btn-shortcuts', 'click', function() {
                 self.showShortcutsHelp();
             });
+
+            // Panel resizer
+            this.initPanelResizer();
+        },
+
+        initPanelResizer: function() {
+            var resizer = el('#panel-resizer');
+            var previewPanel = el('#preview-panel');
+            var container = el('#review-content');
+
+            if (!resizer || !previewPanel || !container) return;
+
+            var isResizing = false;
+            var startX, startWidth;
+
+            resizer.addEventListener('mousedown', function(e) {
+                isResizing = true;
+                startX = e.clientX;
+                startWidth = previewPanel.offsetWidth;
+                resizer.classList.add('dragging');
+                document.body.style.cursor = 'col-resize';
+                document.body.style.userSelect = 'none';
+                e.preventDefault();
+            });
+
+            document.addEventListener('mousemove', function(e) {
+                if (!isResizing) return;
+
+                var containerWidth = container.offsetWidth;
+                var newWidth = startWidth + (e.clientX - startX);
+
+                // Constrain between 250px and 70% of container
+                var minWidth = 250;
+                var maxWidth = containerWidth * 0.7;
+                newWidth = Math.max(minWidth, Math.min(maxWidth, newWidth));
+
+                var percentage = (newWidth / containerWidth) * 100;
+                previewPanel.style.flex = '0 0 ' + percentage + '%';
+            });
+
+            document.addEventListener('mouseup', function() {
+                if (isResizing) {
+                    isResizing = false;
+                    resizer.classList.remove('dragging');
+                    document.body.style.cursor = '';
+                    document.body.style.userSelect = '';
+
+                    // Save preference to localStorage
+                    try {
+                        var width = previewPanel.style.flex.match(/[\d.]+/);
+                        if (width) {
+                            localStorage.setItem('fc_preview_width', width[0]);
+                        }
+                    } catch (e) { /* ignore */ }
+                }
+            });
+
+            // Restore saved width
+            try {
+                var savedWidth = localStorage.getItem('fc_preview_width');
+                if (savedWidth) {
+                    previewPanel.style.flex = '0 0 ' + savedWidth + '%';
+                }
+            } catch (e) { /* ignore */ }
         },
 
         on: function(selector, event, handler) {

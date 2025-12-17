@@ -21,10 +21,17 @@ define([
     'N/encode',
     'N/email',
     'N/format',
+    'N/task',
     '/SuiteApps/com.flux.capture/lib/FC_Engine'
-], function(file, record, search, query, runtime, errorModule, log, encode, email, format, FC_Engine) {
+], function(file, record, search, query, runtime, errorModule, log, encode, email, format, task, FC_Engine) {
 
     const API_VERSION = '2.0.0';
+
+    // Script IDs for task dispatching
+    const SCRIPT_IDS = {
+        PROCESS_DOCUMENTS_MR: 'customscript_fc_process_docs_mr',
+        PROCESS_DOCUMENTS_DEPLOY: 'customdeploy_fc_process_docs_mr'
+    };
 
     // Engine module - may be null if it failed to load
     function getEngine() {
@@ -926,13 +933,23 @@ define([
             return Response.error('RECORD_CREATE_FAILED', 'Failed to create document record: ' + recordError.message);
         }
 
-        // Step 3: Auto-process if enabled (default: true)
+        // Step 3: Dispatch async processing task
+        var taskId = null;
         if (context.autoProcess !== false) {
             try {
-                processDocument(documentId);
-            } catch (processError) {
-                log.error('uploadDocument.autoProcess', processError);
-                // Don't fail the upload, just log the processing error
+                var mrTask = task.create({
+                    taskType: task.TaskType.MAP_REDUCE,
+                    scriptId: SCRIPT_IDS.PROCESS_DOCUMENTS_MR,
+                    deploymentId: SCRIPT_IDS.PROCESS_DOCUMENTS_DEPLOY
+                });
+                taskId = mrTask.submit();
+                log.audit('uploadDocument.taskDispatched', {
+                    taskId: taskId,
+                    documentId: documentId
+                });
+            } catch (taskError) {
+                log.error('uploadDocument.taskDispatch', taskError.message);
+                // Don't fail the upload - task will be picked up on next scheduled run
             }
         }
 
@@ -941,8 +958,9 @@ define([
             documentCode: docId,
             fileId: fileId,
             fileName: fileName,
-            status: DocStatus.PENDING
-        }, 'Document uploaded successfully');
+            status: DocStatus.PENDING,
+            taskId: taskId
+        }, 'Document uploaded - processing queued');
     }
 
     function uploadBatch(context) {
