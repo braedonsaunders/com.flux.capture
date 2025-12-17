@@ -114,6 +114,34 @@
             });
         },
 
+        filterDocuments: function(query) {
+            var self = this;
+
+            if (!query) {
+                // Reset to show all documents
+                this.filteredDocuments = null;
+                this.renderZones();
+                return;
+            }
+
+            // Filter documents by vendor name, invoice number, amount, or any other attribute
+            this.filteredDocuments = this.documents.filter(function(doc) {
+                var vendorName = (doc.vendorName || '').toLowerCase();
+                var invoiceNumber = (doc.invoiceNumber || '').toLowerCase();
+                var amount = String(doc.totalAmount || '');
+                var memo = (doc.memo || '').toLowerCase();
+                var fileName = (doc.fileName || '').toLowerCase();
+
+                return vendorName.indexOf(query) !== -1 ||
+                       invoiceNumber.indexOf(query) !== -1 ||
+                       amount.indexOf(query) !== -1 ||
+                       memo.indexOf(query) !== -1 ||
+                       fileName.indexOf(query) !== -1;
+            });
+
+            this.renderZones();
+        },
+
         loadData: function() {
             // For backwards compatibility, call refreshQueue
             this.refreshQueue();
@@ -162,10 +190,25 @@
                 self.toggleFlowMode();
             });
 
-            // Command palette
-            this.on('#rail-search', 'click', function() {
-                self.openCommandPalette();
-            });
+            // Search functionality - actual document search
+            var searchInput = document.querySelector('#rail-search');
+            if (searchInput) {
+                var searchTimeout;
+                searchInput.addEventListener('input', function(e) {
+                    var query = e.target.value.trim().toLowerCase();
+                    clearTimeout(searchTimeout);
+                    searchTimeout = setTimeout(function() {
+                        self.filterDocuments(query);
+                    }, 200);
+                });
+
+                searchInput.addEventListener('keydown', function(e) {
+                    if ((e.ctrlKey || e.metaKey) && e.key === 'k') {
+                        e.preventDefault();
+                        self.openCommandPalette();
+                    }
+                });
+            }
 
             // Card clicks - delegated
             document.addEventListener('click', function(e) {
@@ -278,12 +321,14 @@
 
         renderZones: function() {
             var self = this;
+            // Use filtered documents if a search is active
+            var docsToRender = this.filteredDocuments || this.documents;
 
             ZONES.forEach(function(zone) {
                 var container = el('#zone-' + zone.id + ' .zone-cards');
                 if (!container) return;
 
-                var docs = self.documents.filter(function(d) {
+                var docs = docsToRender.filter(function(d) {
                     return zone.statuses.indexOf(String(d.status)) !== -1;
                 });
 

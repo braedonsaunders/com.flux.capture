@@ -83,20 +83,29 @@
             this.isLoading = true;
             this.showLoadingState();
 
-            // Load document and form fields in parallel
+            // Load document, form fields, accounts, and items in parallel
             Promise.all([
                 API.get('document', { id: this.docId }),
-                API.get('formfields', { transactionType: this.transactionType })
+                API.get('formfields', { transactionType: this.transactionType }),
+                API.get('accounts', { accountType: 'Expense' }),
+                API.get('items', {})
             ])
                 .then(function(results) {
                     var data = results[0];
                     var formFieldsData = results[1];
+                    var accountsData = results[2] || [];
+                    var itemsData = results[3] || [];
 
                     self.data = data;
                     self.lineItems = data.lineItems || [];
                     self.fieldConfidences = data.fieldConfidences || {};
                     self.totalPages = data.pageCount || 1;
                     self.formFields = formFieldsData;
+
+                    // Inject accounts into expense sublist 'account' field
+                    // Inject items into item sublist 'item' field
+                    self.injectSublistOptions(accountsData, itemsData);
+
                     self.isLoading = false;
                     self.render();
                 })
@@ -121,6 +130,34 @@
                 .catch(function() {
                     // Silent fail - navigation just won't work
                 });
+        },
+
+        /**
+         * Inject accounts and items into sublist field definitions
+         * This makes the account and item fields render as dropdowns
+         */
+        injectSublistOptions: function(accountsData, itemsData) {
+            if (!this.formFields || !this.formFields.sublists) return;
+
+            var sublists = this.formFields.sublists;
+
+            sublists.forEach(function(sublist) {
+                if (!sublist.fields) return;
+
+                sublist.fields.forEach(function(field) {
+                    // Inject accounts into 'account' field on expense sublist
+                    if (field.id === 'account' && sublist.id === 'expense' && accountsData.length > 0) {
+                        field.type = 'select';
+                        field.options = accountsData;
+                    }
+
+                    // Inject items into 'item' field on item sublist
+                    if (field.id === 'item' && sublist.id === 'item' && itemsData.length > 0) {
+                        field.type = 'select';
+                        field.options = itemsData;
+                    }
+                });
+            });
         },
 
         // ==========================================

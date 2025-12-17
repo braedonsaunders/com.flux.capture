@@ -147,7 +147,7 @@
             display: flex;
             flex-direction: column;
         }
-        #view-container { flex: 1; padding: var(--space-lg) var(--space-xl); }
+        #view-container { flex: 1; padding: 0; }
         .view-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: var(--space-lg); }
         .view-header h1 { font-size: 28px; font-weight: 700; margin: 0; }
         .header-subtitle { color: var(--text-secondary); margin-top: 4px; }
@@ -224,9 +224,15 @@
 
                 <li class="nav-section-title">Documents</li>
                 <li class="nav-item">
+                    <a href="#" class="nav-link" data-route="upload">
+                        <i class="fas fa-cloud-arrow-up"></i>
+                        <span>Upload</span>
+                    </a>
+                </li>
+                <li class="nav-item">
                     <a href="#" class="nav-link" data-route="flow">
                         <i class="fas fa-bolt"></i>
-                        <span>Flow</span>
+                        <span>Review</span>
                         <span class="nav-badge" id="flow-badge" style="display:none;">0</span>
                     </a>
                 </li>
@@ -234,12 +240,6 @@
                     <a href="#" class="nav-link" data-route="documents">
                         <i class="fas fa-folder-open"></i>
                         <span>All Documents</span>
-                    </a>
-                </li>
-                <li class="nav-item">
-                    <a href="#" class="nav-link" data-route="upload">
-                        <i class="fas fa-cloud-arrow-up"></i>
-                        <span>Upload</span>
                     </a>
                 </li>
                 <li class="nav-item">
@@ -615,16 +615,12 @@
                 <div class="toolbar-center">
                     <div class="search-bar">
                         <i class="fas fa-search"></i>
-                        <input type="text" id="rail-search" placeholder="Search or press ⌘K for commands...">
-                        <kbd>⌘K</kbd>
+                        <input type="text" id="rail-search" placeholder="Search documents by vendor, invoice #, amount...">
                     </div>
                 </div>
                 <div class="toolbar-right">
                     <button class="btn btn-ghost" id="btn-flow-mode">
-                        <i class="fas fa-bolt"></i> Flow Mode
-                    </button>
-                    <button class="btn btn-icon btn-ghost" id="btn-settings" title="Settings">
-                        <i class="fas fa-cog"></i>
+                        <i class="fas fa-bolt"></i> Start Review
                     </button>
                 </div>
             </div>
@@ -644,7 +640,7 @@
 
                     <div class="zone" id="zone-extracting">
                         <div class="zone-header">
-                            <span class="zone-icon"><i class="fas fa-cog fa-spin"></i></span>
+                            <span class="zone-icon"><i class="fas fa-microchip"></i></span>
                             <span class="zone-label">Extracting</span>
                             <span class="zone-count">0</span>
                         </div>

@@ -202,6 +202,12 @@ define([
                 case 'formfields':
                     result = getTransactionFormFields(context.transactionType, context.formId);
                     break;
+                case 'accounts':
+                    result = getAccounts(context);
+                    break;
+                case 'items':
+                    result = getItems(context);
+                    break;
                 case 'health':
                     result = Response.success({ status: 'healthy', version: API_VERSION });
                     break;
@@ -703,6 +709,109 @@ define([
         });
 
         return Response.success(vendors);
+    }
+
+    /**
+     * Get expense accounts for line item dropdowns
+     * Returns accounts that can be used on vendor bills (expense type)
+     */
+    function getAccounts(context) {
+        try {
+            var accountType = context.accountType || 'Expense';
+            var searchQuery = context.query || '';
+
+            var sql = 'SELECT id, acctnumber, acctname, accttype, BUILTIN.DF(currency) as currency ' +
+                "FROM account WHERE isinactive = 'F'";
+
+            var params = [];
+
+            // Filter by account type if specified
+            if (accountType) {
+                sql += " AND accttype = ?";
+                params.push(accountType);
+            }
+
+            // Search filter
+            if (searchQuery && searchQuery.length >= 2) {
+                sql += ' AND (LOWER(acctname) LIKE LOWER(?) OR LOWER(acctnumber) LIKE LOWER(?))';
+                var searchPattern = '%' + searchQuery + '%';
+                params.push(searchPattern, searchPattern);
+            }
+
+            sql += ' ORDER BY acctnumber, acctname FETCH FIRST 200 ROWS ONLY';
+
+            var results = query.runSuiteQL({ query: sql, params: params });
+
+            var accounts = results.results.map(function(row) {
+                return {
+                    value: String(row.values[0]),
+                    text: row.values[1] ? row.values[1] + ' - ' + row.values[2] : row.values[2],
+                    number: row.values[1],
+                    name: row.values[2],
+                    type: row.values[3],
+                    currency: row.values[4]
+                };
+            });
+
+            return Response.success(accounts);
+        } catch (e) {
+            log.error('getAccounts Error', e);
+            return Response.error('ACCOUNTS_ERROR', e.message);
+        }
+    }
+
+    /**
+     * Get items for line item dropdowns
+     * Returns inventory/non-inventory items for vendor bills
+     */
+    function getItems(context) {
+        try {
+            var searchQuery = context.query || '';
+            var itemType = context.itemType; // Optional: inventoryitem, noninventoryitem, etc.
+
+            var sql = 'SELECT id, itemid, displayname, description, BUILTIN.DF(purchaseunit) as unit, ' +
+                'cost, BUILTIN.DF(expenseaccount) as expenseAccount ' +
+                "FROM item WHERE isinactive = 'F' AND purchasedescription IS NOT NULL";
+
+            var params = [];
+
+            // Filter by item type if specified
+            if (itemType) {
+                sql += " AND itemtype = ?";
+                params.push(itemType);
+            }
+
+            // Search filter
+            if (searchQuery && searchQuery.length >= 2) {
+                sql += ' AND (LOWER(itemid) LIKE LOWER(?) OR LOWER(displayname) LIKE LOWER(?) OR LOWER(description) LIKE LOWER(?))';
+                var searchPattern = '%' + searchQuery + '%';
+                params.push(searchPattern, searchPattern, searchPattern);
+            }
+
+            sql += ' ORDER BY itemid FETCH FIRST 200 ROWS ONLY';
+
+            var results = query.runSuiteQL({ query: sql, params: params });
+
+            var items = results.results.map(function(row) {
+                var displayText = row.values[1];
+                if (row.values[2]) displayText += ' - ' + row.values[2];
+                return {
+                    value: String(row.values[0]),
+                    text: displayText,
+                    itemId: row.values[1],
+                    displayName: row.values[2],
+                    description: row.values[3],
+                    unit: row.values[4],
+                    cost: row.values[5],
+                    expenseAccount: row.values[6]
+                };
+            });
+
+            return Response.success(items);
+        } catch (e) {
+            log.error('getItems Error', e);
+            return Response.error('ITEMS_ERROR', e.message);
+        }
     }
 
     function searchPurchaseOrders(context) {
