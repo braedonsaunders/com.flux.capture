@@ -242,13 +242,18 @@
         // Preserve resizer width after layout changes (tab switches, etc.)
         preserveResizerWidth: function() {
             var previewPanel = el('#preview-panel');
-            if (!previewPanel) return;
+            var container = el('#review-content');
+            if (!previewPanel || !container) return;
 
             try {
-                var savedWidth = localStorage.getItem('fc_preview_width');
+                var savedWidth = localStorage.getItem('fc_preview_width_px');
                 if (savedWidth) {
-                    var widthToUse = Math.max(25, Math.min(70, parseFloat(savedWidth)));
-                    previewPanel.style.flex = '0 0 ' + widthToUse + '%';
+                    var widthPx = parseInt(savedWidth, 10);
+                    var containerWidth = container.offsetWidth;
+                    // Constrain to valid range
+                    widthPx = Math.max(250, Math.min(containerWidth * 0.7, widthPx));
+                    previewPanel.style.flex = 'none';
+                    previewPanel.style.width = widthPx + 'px';
                 }
             } catch (e) { /* ignore */ }
         },
@@ -294,8 +299,9 @@
                 var maxWidth = containerWidth * 0.7;
                 newWidth = Math.max(minWidth, Math.min(maxWidth, newWidth));
 
-                var percentage = (newWidth / containerWidth) * 100;
-                previewPanel.style.flex = '0 0 ' + percentage + '%';
+                // Use fixed pixel width for stability
+                previewPanel.style.flex = 'none';
+                previewPanel.style.width = newWidth + 'px';
             }
 
             function stopResize() {
@@ -307,13 +313,10 @@
                 document.body.style.userSelect = '';
                 if (previewViewport) previewViewport.style.pointerEvents = '';
 
-                // Save preference to localStorage
+                // Save pixel width to localStorage
                 try {
-                    var flexVal = previewPanel.style.flex;
-                    var percentMatch = flexVal.match(/([\d.]+)%/);
-                    if (percentMatch && percentMatch[1]) {
-                        localStorage.setItem('fc_preview_width', percentMatch[1]);
-                    }
+                    var currentWidth = previewPanel.offsetWidth;
+                    localStorage.setItem('fc_preview_width_px', currentWidth);
                 } catch (e) { /* ignore */ }
             }
 
@@ -324,17 +327,29 @@
             overlay.addEventListener('mousemove', doResize);
             overlay.addEventListener('mouseup', stopResize);
 
-            // Set initial width - use saved preference or default to 40%
-            var DEFAULT_PREVIEW_WIDTH = 40;
+            // Set initial width - use saved pixel width or default to 40% of container
             try {
-                var savedWidth = localStorage.getItem('fc_preview_width');
-                var widthToUse = savedWidth ? parseFloat(savedWidth) : DEFAULT_PREVIEW_WIDTH;
+                var containerWidth = container.offsetWidth;
+                var savedWidthPx = localStorage.getItem('fc_preview_width_px');
+                var widthToUse;
+
+                if (savedWidthPx) {
+                    widthToUse = parseInt(savedWidthPx, 10);
+                } else {
+                    // Default to 40% of container
+                    widthToUse = Math.round(containerWidth * 0.4);
+                }
+
                 // Ensure width is within reasonable bounds
-                widthToUse = Math.max(25, Math.min(70, widthToUse));
-                previewPanel.style.flex = '0 0 ' + widthToUse + '%';
+                var minWidth = 250;
+                var maxWidth = Math.round(containerWidth * 0.7);
+                widthToUse = Math.max(minWidth, Math.min(maxWidth, widthToUse));
+
+                previewPanel.style.flex = 'none';
+                previewPanel.style.width = widthToUse + 'px';
             } catch (e) {
-                // Fallback to default
-                previewPanel.style.flex = '0 0 ' + DEFAULT_PREVIEW_WIDTH + '%';
+                // Fallback to default 40%
+                previewPanel.style.flex = '0 0 40%';
             }
         },
 
