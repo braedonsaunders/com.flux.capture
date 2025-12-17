@@ -262,6 +262,7 @@
          * @param {object} params - Route parameters
          */
         navigate: function(route, params) {
+            console.log('[Router] navigate called:', route, params);
             params = params || {};
 
             // Call cleanup for previous route
@@ -280,6 +281,7 @@
 
             // Clear view container
             var container = el('#view-container');
+            console.log('[Router] view-container element:', container);
             if (container) {
                 container.innerHTML = '';
             }
@@ -317,11 +319,16 @@
      * @param {string} containerId - Container element ID (without #)
      */
     function renderTemplate(templateId, containerId) {
+        console.log('[renderTemplate] Called:', templateId, '->', containerId);
         var template = el('#' + templateId);
         var container = el('#' + containerId);
+        console.log('[renderTemplate] template:', template, 'container:', container);
 
         if (template && container) {
-            container.innerHTML = template.innerHTML;
+            var content = template.innerHTML;
+            console.log('[renderTemplate] Content length:', content.length);
+            container.innerHTML = content;
+            console.log('[renderTemplate] Done, container.innerHTML length:', container.innerHTML.length);
         } else {
             console.warn('[Template] Not found:', templateId, containerId);
         }
@@ -393,8 +400,13 @@
          * Hide loading state
          */
         hideLoading: function() {
+            console.log('[UI] hideLoading called');
             var loading = el('#loading-screen');
-            if (loading) loading.style.display = 'none';
+            console.log('[UI] loading-screen element:', loading);
+            if (loading) {
+                loading.style.display = 'none';
+                console.log('[UI] Loading screen hidden');
+            }
         }
     };
 
