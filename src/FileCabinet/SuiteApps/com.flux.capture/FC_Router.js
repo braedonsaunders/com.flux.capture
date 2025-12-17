@@ -23,9 +23,22 @@ define([
     'N/log',
     'N/encode',
     'N/email',
-    'N/format',
-    './FC_Engine'
-], function(file, record, search, query, runtime, error, log, encode, email, format, Engine) {
+    'N/format'
+], function(file, record, search, query, runtime, error, log, encode, email, format) {
+
+    // Lazy-load Engine only when needed
+    var Engine = null;
+    function getEngine() {
+        if (!Engine) {
+            try {
+                Engine = require('./FC_Engine');
+            } catch (e) {
+                log.error('FC_Engine load error', e.message);
+                Engine = { FluxCaptureEngine: null };
+            }
+        }
+        return Engine;
+    }
 
     const API_VERSION = '2.0.0';
 
@@ -1017,7 +1030,11 @@ define([
             }
 
             // Initialize engine and process
-            const engine = new Engine.FluxCaptureEngine();
+            const EngineModule = getEngine();
+            if (!EngineModule.FluxCaptureEngine) {
+                throw new Error('Document processing engine not available');
+            }
+            const engine = new EngineModule.FluxCaptureEngine();
             const startTime = Date.now();
 
             const result = engine.processDocument(fileId, {
