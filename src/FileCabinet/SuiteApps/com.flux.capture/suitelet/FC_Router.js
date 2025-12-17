@@ -832,49 +832,100 @@ define([
         var fileContent = context.fileContent;
         var fileName = context.fileName;
         var documentType = context.documentType || 'auto';
-        var folderId = context.folderId || getUploadFolder();
+        var folderId = context.folderId;
 
-        if (!fileContent || !fileName) {
-            return Response.error('MISSING_PARAM', 'File content and name are required');
+        // Validate required fields
+        if (!fileContent) {
+            return Response.error('MISSING_PARAM', 'File content is required');
         }
 
+        if (!fileName || typeof fileName !== 'string') {
+            return Response.error('MISSING_PARAM', 'File name is required');
+        }
+
+        // Clean and validate filename
+        fileName = String(fileName).trim();
+        if (!fileName || fileName.length === 0) {
+            return Response.error('INVALID_PARAM', 'File name cannot be empty');
+        }
+
+        // Sanitize filename - remove invalid characters for NetSuite
+        fileName = fileName.replace(/[<>:"/\\|?*]/g, '_');
+
+        // Ensure filename has an extension
         var fileExtension = fileName.split('.').pop().toLowerCase();
-        var supportedTypes = ['pdf', 'png', 'jpg', 'jpeg', 'tiff', 'tif', 'gif', 'bmp'];
+        var supportedTypes = ['pdf', 'png', 'jpg', 'jpeg', 'tiff', 'tif'];
 
         if (supportedTypes.indexOf(fileExtension) < 0) {
-            return Response.error('INVALID_FILE_TYPE', 'File type .' + fileExtension + ' is not supported');
+            return Response.error('INVALID_FILE_TYPE', 'File type .' + fileExtension + ' is not supported. Supported: ' + supportedTypes.join(', '));
         }
 
-        var fileObj = file.create({
-            name: fileName,
-            fileType: getFileType(fileExtension),
-            contents: fileContent,
-            encoding: file.Encoding.BASE_64,
-            folder: folderId,
-            isOnline: true
-        });
+        log.audit('uploadDocument', 'Processing file: ' + fileName + ' (type: ' + documentType + ')');
 
-        var fileId = fileObj.save();
+        // Get or create upload folder
+        if (!folderId) {
+            folderId = getUploadFolder();
+        }
 
-        var docRecord = record.create({ type: 'customrecord_dm_captured_document' });
+        // Step 1: Create file in File Cabinet
+        var fileId;
+        try {
+            var fileObj = file.create({
+                name: fileName,
+                fileType: getFileType(fileExtension),
+                contents: fileContent,
+                encoding: file.Encoding.BASE_64,
+                folder: folderId,
+                isOnline: true
+            });
+            fileId = fileObj.save();
+            log.debug('uploadDocument', 'File saved with ID: ' + fileId);
+        } catch (fileError) {
+            log.error('uploadDocument.fileCreate', fileError);
+            return Response.error('FILE_CREATE_FAILED', 'Failed to save file: ' + fileError.message);
+        }
 
-        var docId = generateDocumentId();
-        docRecord.setValue('name', fileName);
-        docRecord.setValue('custrecord_dm_document_id', docId);
-        docRecord.setValue('custrecord_dm_status', DocStatus.PENDING);
-        docRecord.setValue('custrecord_dm_document_type', documentType === 'auto' ? '' : documentType);
-        docRecord.setValue('custrecord_dm_source_file', fileId);
-        docRecord.setValue('custrecord_dm_source', Source.UPLOAD);
-        docRecord.setValue('custrecord_dm_uploaded_by', runtime.getCurrentUser().id);
-        docRecord.setValue('custrecord_dm_created_date', new Date());
+        // Step 2: Create document record
+        var documentId;
+        var docId;
+        try {
+            var docRecord = record.create({ type: 'customrecord_dm_captured_document' });
 
-        var documentId = docRecord.save();
+            docId = generateDocumentId();
+            docRecord.setValue({ fieldId: 'name', value: fileName });
+            docRecord.setValue({ fieldId: 'custrecord_dm_document_id', value: docId });
+            docRecord.setValue({ fieldId: 'custrecord_dm_status', value: DocStatus.PENDING });
+            docRecord.setValue({ fieldId: 'custrecord_dm_source_file', value: fileId });
+            docRecord.setValue({ fieldId: 'custrecord_dm_source', value: Source.UPLOAD });
+            docRecord.setValue({ fieldId: 'custrecord_dm_uploaded_by', value: runtime.getCurrentUser().id });
+            docRecord.setValue({ fieldId: 'custrecord_dm_created_date', value: new Date() });
 
+            // Only set document type if not 'auto'
+            if (documentType && documentType !== 'auto') {
+                var docTypeValue = parseInt(documentType, 10);
+                if (!isNaN(docTypeValue) && docTypeValue > 0) {
+                    docRecord.setValue({ fieldId: 'custrecord_dm_document_type', value: docTypeValue });
+                }
+            }
+
+            documentId = docRecord.save();
+            log.debug('uploadDocument', 'Document record saved with ID: ' + documentId);
+        } catch (recordError) {
+            log.error('uploadDocument.recordCreate', recordError);
+            // Try to clean up the file we just created
+            try {
+                file.delete({ id: fileId });
+            } catch (e) { /* ignore cleanup errors */ }
+            return Response.error('RECORD_CREATE_FAILED', 'Failed to create document record: ' + recordError.message);
+        }
+
+        // Step 3: Auto-process if enabled (default: true)
         if (context.autoProcess !== false) {
             try {
                 processDocument(documentId);
-            } catch (e) {
-                log.error('Auto-process failed', e);
+            } catch (processError) {
+                log.error('uploadDocument.autoProcess', processError);
+                // Don't fail the upload, just log the processing error
             }
         }
 
