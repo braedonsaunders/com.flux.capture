@@ -3065,6 +3065,26 @@ body.flow-mode-active .rail-toolbar .stat-item {
     color: white;
 }
 
+/* Light theme sidebar controls */
+.app-sidebar.light-theme .sidebar-controls {
+    border-bottom-color: rgba(0,0,0,0.1);
+}
+
+.app-sidebar.light-theme .sidebar-control {
+    background: rgba(0,0,0,0.06);
+    color: rgba(0,0,0,0.6);
+}
+
+.app-sidebar.light-theme .sidebar-control:hover {
+    background: rgba(0,0,0,0.1);
+    color: rgba(0,0,0,0.9);
+}
+
+.app-sidebar.light-theme .sidebar-control.active {
+    background: var(--color-primary);
+    color: white;
+}
+
 /* Expand button when sidebar is collapsed */
 .sidebar-expand-btn {
     position: fixed;
