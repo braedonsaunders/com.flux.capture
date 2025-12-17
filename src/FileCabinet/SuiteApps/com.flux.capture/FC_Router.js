@@ -174,6 +174,8 @@ define([
                     return getAnalytics(context);
                 case 'health':
                     return Response.success({ status: 'healthy', version: API_VERSION });
+                case 'getView':
+                    return getViewContent(context);
                 default:
                     return Response.error('INVALID_ACTION', `Unknown action: ${action}`);
             }
@@ -819,6 +821,303 @@ define([
         }));
 
         return Response.success({ period: period, volumeTrend: volumeTrend });
+    }
+
+    /**
+     * Get View Content for SPA Navigation
+     * Returns HTML content for the requested view
+     */
+    function getViewContent(context) {
+        const view = context.view || 'dashboard';
+        const docId = context.docId;
+        const page = parseInt(context.page) || 1;
+        const status = context.status || '';
+
+        let html = '';
+        let data = {};
+
+        try {
+            switch (view) {
+                case 'dashboard':
+                    data = {
+                        stats: getDashboardStatsData(),
+                        recentDocs: getRecentDocumentsData(8),
+                        anomalies: getAnomaliesData(5)
+                    };
+                    html = renderDashboardHTML(data);
+                    break;
+
+                case 'upload':
+                    html = renderUploadHTML();
+                    break;
+
+                case 'queue':
+                    data = {
+                        queue: getQueueData(page, 25, status),
+                        page: page,
+                        statusFilter: status
+                    };
+                    html = renderQueueHTML(data);
+                    break;
+
+                case 'review':
+                    if (docId) {
+                        data = { document: getDocumentData(docId) };
+                    }
+                    html = renderReviewHTML(data, docId);
+                    break;
+
+                case 'batch':
+                    data = { batches: getBatchesData(10) };
+                    html = renderBatchHTML(data);
+                    break;
+
+                case 'settings':
+                    html = renderSettingsHTML();
+                    break;
+
+                default:
+                    html = '<div class="empty-state"><p>View not found</p></div>';
+            }
+
+            return Response.success({ html: html, view: view });
+        } catch (e) {
+            log.error('getViewContent', e);
+            return Response.error('VIEW_ERROR', e.message);
+        }
+    }
+
+    // View Data Functions
+    function getDashboardStatsData() {
+        try {
+            const sql = `
+                SELECT COUNT(*) as total,
+                    SUM(CASE WHEN custrecord_dm_status IN (1,2,3,4) THEN 1 ELSE 0 END) as pending,
+                    SUM(CASE WHEN custrecord_dm_status = 6 THEN 1 ELSE 0 END) as completed,
+                    SUM(CASE WHEN custrecord_dm_status = 6 AND custrecord_dm_confidence_score >= 85 THEN 1 ELSE 0 END) as autoProcessed,
+                    SUM(custrecord_dm_total_amount) as totalValue
+                FROM customrecord_dm_captured_document
+                WHERE custrecord_dm_created_date >= ADD_MONTHS(SYSDATE, -1)
+            `;
+            const result = query.runSuiteQL({ query: sql });
+            const vals = result.results[0]?.values || [0, 0, 0, 0, 0];
+            return {
+                total: vals[0] || 0,
+                pending: vals[1] || 0,
+                completed: vals[2] || 0,
+                autoProcessed: vals[3] || 0,
+                totalValue: vals[4] || 0,
+                autoRate: vals[0] > 0 ? Math.round((vals[3] / vals[0]) * 100) : 0
+            };
+        } catch (e) { return { total: 0, pending: 0, completed: 0, autoProcessed: 0, totalValue: 0, autoRate: 0 }; }
+    }
+
+    function getRecentDocumentsData(limit) {
+        try {
+            const sql = `
+                SELECT id, name, custrecord_dm_status, BUILTIN.DF(custrecord_dm_status) as statusText,
+                    BUILTIN.DF(custrecord_dm_vendor) as vendorName, custrecord_dm_invoice_number,
+                    custrecord_dm_total_amount, TO_CHAR(custrecord_dm_created_date, 'Mon DD') as createdDate
+                FROM customrecord_dm_captured_document
+                ORDER BY custrecord_dm_created_date DESC
+                FETCH FIRST ${limit} ROWS ONLY
+            `;
+            const result = query.runSuiteQL({ query: sql });
+            return result.results.map(r => ({
+                id: r.values[0], name: r.values[1], status: r.values[2], statusText: r.values[3],
+                vendorName: r.values[4], invoiceNumber: r.values[5], amount: r.values[6] || 0, date: r.values[7]
+            }));
+        } catch (e) { return []; }
+    }
+
+    function getAnomaliesData(limit) {
+        try {
+            const sql = `
+                SELECT id, custrecord_dm_anomalies, BUILTIN.DF(custrecord_dm_vendor) as vendorName
+                FROM customrecord_dm_captured_document
+                WHERE custrecord_dm_anomalies IS NOT NULL AND custrecord_dm_anomalies != '[]'
+                AND custrecord_dm_status NOT IN (5, 6)
+                ORDER BY custrecord_dm_created_date DESC
+                FETCH FIRST ${limit * 2} ROWS ONLY
+            `;
+            const result = query.runSuiteQL({ query: sql });
+            const anomalies = [];
+            result.results.forEach(r => {
+                const docAnomalies = JSON.parse(r.values[1] || '[]');
+                docAnomalies.forEach(a => anomalies.push({ documentId: r.values[0], vendorName: r.values[2], ...a }));
+            });
+            return anomalies.slice(0, limit);
+        } catch (e) { return []; }
+    }
+
+    function getQueueData(page, pageSize, statusFilter) {
+        try {
+            let sql = `
+                SELECT id, name, custrecord_dm_status, BUILTIN.DF(custrecord_dm_status) as statusText,
+                    BUILTIN.DF(custrecord_dm_vendor) as vendorName, custrecord_dm_invoice_number,
+                    custrecord_dm_total_amount, custrecord_dm_confidence_score, custrecord_dm_anomalies,
+                    TO_CHAR(custrecord_dm_created_date, 'Mon DD HH24:MI') as createdDate
+                FROM customrecord_dm_captured_document WHERE 1=1
+            `;
+            const statusMap = { 'pending': '1', 'processing': '2', 'review': '4', 'completed': '6' };
+            if (statusFilter && statusMap[statusFilter]) sql += ` AND custrecord_dm_status = ${statusMap[statusFilter]}`;
+            sql += ` ORDER BY custrecord_dm_created_date DESC OFFSET ${(page - 1) * pageSize} ROWS FETCH NEXT ${pageSize} ROWS ONLY`;
+
+            const result = query.runSuiteQL({ query: sql });
+            const countResult = query.runSuiteQL({ query: `SELECT COUNT(*) FROM customrecord_dm_captured_document WHERE 1=1` });
+            const total = countResult.results[0]?.values[0] || 0;
+
+            return {
+                documents: result.results.map(r => ({
+                    id: r.values[0], name: r.values[1], status: r.values[2], statusText: r.values[3],
+                    vendorName: r.values[4], invoiceNumber: r.values[5], amount: r.values[6] || 0,
+                    confidence: r.values[7] || 0, hasAnomalies: r.values[8] && r.values[8] !== '[]', date: r.values[9]
+                })),
+                total: total, totalPages: Math.ceil(total / pageSize)
+            };
+        } catch (e) { return { documents: [], total: 0, totalPages: 0 }; }
+    }
+
+    function getDocumentData(docId) {
+        try {
+            const docRecord = record.load({ type: 'customrecord_dm_captured_document', id: docId });
+            const fileId = docRecord.getValue('custrecord_dm_source_file');
+            let fileUrl = '';
+            if (fileId) { try { fileUrl = file.load({ id: fileId }).url; } catch (e) {} }
+
+            const vendorId = docRecord.getValue('custrecord_dm_vendor');
+            const vendorSuggestions = [];
+            if (vendorId) {
+                try {
+                    const vendor = search.lookupFields({ type: 'vendor', id: vendorId, columns: ['companyname'] });
+                    vendorSuggestions.push({ id: vendorId, name: vendor.companyname });
+                } catch (e) {}
+            }
+
+            const confidence = docRecord.getValue('custrecord_dm_confidence_score') || 0;
+            return {
+                id: docId, name: docRecord.getValue('name'), status: docRecord.getValue('custrecord_dm_status'),
+                vendorId: vendorId, vendorName: docRecord.getText('custrecord_dm_vendor'), vendorSuggestions: vendorSuggestions,
+                invoiceNumber: docRecord.getValue('custrecord_dm_invoice_number'),
+                invoiceDate: docRecord.getValue('custrecord_dm_invoice_date'),
+                dueDate: docRecord.getValue('custrecord_dm_due_date'),
+                poNumber: docRecord.getValue('custrecord_dm_po_number'),
+                subtotal: docRecord.getValue('custrecord_dm_subtotal') || 0,
+                taxAmount: docRecord.getValue('custrecord_dm_tax_amount') || 0,
+                totalAmount: docRecord.getValue('custrecord_dm_total_amount') || 0,
+                currency: docRecord.getValue('custrecord_dm_currency'),
+                confidence: confidence,
+                confidenceLevel: confidence >= 85 ? 'HIGH' : confidence >= 60 ? 'MEDIUM' : 'LOW',
+                lineItems: JSON.parse(docRecord.getValue('custrecord_dm_line_items') || '[]'),
+                anomalies: JSON.parse(docRecord.getValue('custrecord_dm_anomalies') || '[]'),
+                fileId: fileId, fileUrl: fileUrl
+            };
+        } catch (e) { return null; }
+    }
+
+    function getBatchesData(limit) {
+        try {
+            const sql = `
+                SELECT id, name, custrecord_dm_batch_status, BUILTIN.DF(custrecord_dm_batch_status) as statusText,
+                    custrecord_dm_batch_document_count, custrecord_dm_batch_processed_count,
+                    TO_CHAR(custrecord_dm_batch_created_date, 'Mon DD') as createdDate
+                FROM customrecord_dm_batch ORDER BY custrecord_dm_batch_created_date DESC
+                FETCH FIRST ${limit} ROWS ONLY
+            `;
+            const result = query.runSuiteQL({ query: sql });
+            return result.results.map(r => ({
+                id: r.values[0], name: r.values[1], status: r.values[2], statusText: r.values[3],
+                total: r.values[4] || 0, processed: r.values[5] || 0,
+                progress: r.values[4] > 0 ? Math.round((r.values[5] / r.values[4]) * 100) : 0, date: r.values[6]
+            }));
+        } catch (e) { return []; }
+    }
+
+    // Helper functions for view rendering
+    function escapeHtml(str) {
+        if (!str) return '';
+        return String(str).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#039;');
+    }
+
+    function formatNum(num) {
+        return (num || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    }
+
+    function formatDateIn(date) {
+        if (!date) return '';
+        return new Date(date).toISOString().split('T')[0];
+    }
+
+    function getStatClass(status) {
+        const c = { 1: 'pending', 2: 'processing', 3: 'extracted', 4: 'review', 5: 'rejected', 6: 'completed', 7: 'error' };
+        return c[status] || 'pending';
+    }
+
+    function getConfClass(conf) {
+        return conf >= 85 ? 'high' : conf >= 60 ? 'medium' : 'low';
+    }
+
+    // HTML Render Functions
+    function renderDashboardHTML(data) {
+        const stats = data.stats || {};
+        const docs = data.recentDocs || [];
+        const anomalies = data.anomalies || [];
+
+        return `
+            <header class="page-header">
+                <div class="page-header-content">
+                    <h1><i class="fas fa-th-large"></i> Dashboard</h1>
+                    <p class="page-header-subtitle">AI-Powered Document Intelligence</p>
+                </div>
+                <div class="page-header-actions">
+                    <button class="action-btn primary" onclick="FluxApp.navigate('upload')"><i class="fas fa-cloud-upload-alt"></i> Upload Documents</button>
+                </div>
+            </header>
+            <div class="page-body">
+                <div class="quick-actions">
+                    <button class="action-btn primary" onclick="FluxApp.navigate('upload')"><i class="fas fa-cloud-upload-alt"></i> Upload Documents</button>
+                    <button class="action-btn" onclick="FluxApp.navigate('queue')"><i class="fas fa-inbox"></i> Processing Queue${stats.pending > 0 ? ' <span class="badge">' + stats.pending + '</span>' : ''}</button>
+                </div>
+                <div class="stats-grid">
+                    <div class="stat-card blue"><div class="stat-header"><div class="stat-icon blue"><i class="fas fa-file-invoice"></i></div></div><div class="stat-content"><span class="stat-value">${stats.total}</span><span class="stat-label">Documents Processed</span></div></div>
+                    <div class="stat-card green"><div class="stat-header"><div class="stat-icon green"><i class="fas fa-check-circle"></i></div><span class="stat-trend up"><i class="fas fa-arrow-up"></i> ${stats.autoRate}%</span></div><div class="stat-content"><span class="stat-value">${stats.completed}</span><span class="stat-label">Completed</span></div><div class="stat-footer"><span class="stat-link">${stats.autoRate}% auto-processed</span></div></div>
+                    <div class="stat-card orange"><div class="stat-header"><div class="stat-icon orange"><i class="fas fa-clock"></i></div></div><div class="stat-content"><span class="stat-value">${stats.pending}</span><span class="stat-label">Pending Review</span></div><div class="stat-footer"><a href="#" onclick="FluxApp.navigate('queue'); return false;" class="stat-link">Review Now <i class="fas fa-arrow-right"></i></a></div></div>
+                    <div class="stat-card purple"><div class="stat-header"><div class="stat-icon purple"><i class="fas fa-dollar-sign"></i></div></div><div class="stat-content"><span class="stat-value">$${formatNum(stats.totalValue)}</span><span class="stat-label">Total Value (30d)</span></div></div>
+                </div>
+                <div class="content-grid">
+                    <div class="card"><div class="card-header"><h3 class="card-title"><i class="fas fa-history"></i> Recent Documents</h3><a href="#" onclick="FluxApp.navigate('queue'); return false;">View All</a></div><div class="card-body">${docs.length > 0 ? '<div class="doc-list">' + docs.map(d => '<div class="doc-item" onclick="FluxApp.reviewDoc(' + d.id + ')"><div class="doc-icon ' + getStatClass(d.status) + '"><i class="fas fa-file-invoice"></i></div><div class="doc-info"><span class="doc-name">' + escapeHtml(d.vendorName || 'Unknown') + '</span><span class="doc-meta">' + escapeHtml(d.invoiceNumber || '-') + ' &bull; ' + escapeHtml(d.date) + '</span></div><div class="doc-amount">$' + formatNum(d.amount) + '</div><span class="status-badge ' + getStatClass(d.status) + '">' + escapeHtml(d.statusText) + '</span></div>').join('') + '</div>' : '<div class="empty-state"><div class="empty-state-icon"><i class="fas fa-inbox"></i></div><h4 class="empty-state-title">No documents yet</h4></div>'}</div></div>
+                    <div class="card"><div class="card-header"><h3 class="card-title"><i class="fas fa-exclamation-triangle"></i> Anomaly Alerts</h3><span class="alert-count ${anomalies.length > 0 ? 'has-alerts' : ''}">${anomalies.length}</span></div><div class="card-body">${anomalies.length > 0 ? '<div class="anomaly-list">' + anomalies.map(a => '<div class="anomaly-item ' + (a.severity || '') + '"><i class="fas fa-exclamation-circle"></i><div class="anomaly-info"><span class="anomaly-title">' + escapeHtml(a.message) + '</span><span class="anomaly-meta">' + escapeHtml(a.vendorName || 'Document') + ' &bull; ' + escapeHtml(a.type) + '</span></div><button class="btn-sm" onclick="FluxApp.reviewDoc(' + a.documentId + ')">Review</button></div>').join('') + '</div>' : '<div class="empty-state"><div class="empty-state-icon"><i class="fas fa-shield-alt"></i></div><h4 class="empty-state-title">All Clear</h4></div>'}</div></div>
+                </div>
+            </div>`;
+    }
+
+    function renderUploadHTML() {
+        return `<header class="page-header"><div class="page-header-content"><h1><i class="fas fa-cloud-upload-alt"></i> Upload Documents</h1><p class="page-header-subtitle">Drag & drop or click to upload</p></div></header><div class="page-body"><div class="upload-container"><div class="type-selector"><label class="type-option active" data-type="auto"><input type="radio" name="docType" value="auto" checked><i class="fas fa-magic"></i><span>Auto-Detect</span></label><label class="type-option" data-type="INVOICE"><input type="radio" name="docType" value="INVOICE"><i class="fas fa-file-invoice-dollar"></i><span>Invoice</span></label><label class="type-option" data-type="RECEIPT"><input type="radio" name="docType" value="RECEIPT"><i class="fas fa-receipt"></i><span>Receipt</span></label><label class="type-option" data-type="EXPENSE_REPORT"><input type="radio" name="docType" value="EXPENSE_REPORT"><i class="fas fa-wallet"></i><span>Expense</span></label></div><div class="upload-zone" id="uploadZone"><div class="upload-content"><i class="fas fa-cloud-upload-alt upload-icon"></i><h2>Drag & Drop Documents Here</h2><p>or click to browse</p><div class="supported-formats"><span>Supported:</span><span class="format-badge">PDF</span><span class="format-badge">PNG</span><span class="format-badge">JPG</span><span class="format-badge">TIFF</span></div></div><input type="file" id="fileInput" multiple accept=".pdf,.png,.jpg,.jpeg,.tiff,.tif" hidden></div><div class="upload-queue" id="uploadQueue" hidden><div class="queue-header"><h3><i class="fas fa-list"></i> Upload Queue</h3><button class="btn-text" onclick="FluxApp.clearQueue()">Clear All</button></div><div class="queue-list" id="queueList"></div><div class="queue-actions"><button class="btn" onclick="document.getElementById('fileInput').click()"><i class="fas fa-plus"></i> Add More</button><button class="btn primary" onclick="FluxApp.processQueue()"><i class="fas fa-play"></i> Process All (<span id="fileCount">0</span>)</button></div></div><div class="upload-progress" id="uploadProgress" hidden><div class="progress-content"><div class="spinner"></div><h3 id="progressTitle">Uploading...</h3><p id="progressText">Preparing...</p><div class="progress-bar"><div class="progress-fill" id="progressFill"></div></div></div></div></div></div>`;
+    }
+
+    function renderQueueHTML(data) {
+        const q = data.queue || { documents: [], total: 0, totalPages: 0 };
+        const page = data.page || 1;
+        const sf = data.statusFilter || '';
+
+        return `<header class="page-header"><div class="page-header-content"><h1><i class="fas fa-inbox"></i> Processing Queue</h1><p class="page-header-subtitle">${q.total} documents</p></div><div class="page-header-actions"><button class="btn" onclick="FluxApp.navigate('upload')"><i class="fas fa-plus"></i> Upload</button></div></header><div class="page-body"><div class="queue-filters"><div class="filter-tabs"><button class="filter-tab ${!sf ? 'active' : ''}" data-status="" onclick="FluxApp.filterQueue('')">All</button><button class="filter-tab ${sf === 'pending' ? 'active' : ''}" data-status="pending" onclick="FluxApp.filterQueue('pending')">Pending</button><button class="filter-tab ${sf === 'processing' ? 'active' : ''}" data-status="processing" onclick="FluxApp.filterQueue('processing')">Processing</button><button class="filter-tab ${sf === 'review' ? 'active' : ''}" data-status="review" onclick="FluxApp.filterQueue('review')">Needs Review</button><button class="filter-tab ${sf === 'completed' ? 'active' : ''}" data-status="completed" onclick="FluxApp.filterQueue('completed')">Completed</button></div></div><div class="queue-table"><table><thead><tr><th style="width:40px;"><input type="checkbox" id="selectAll" onchange="FluxApp.toggleSelectAll()"></th><th>Document</th><th>Vendor</th><th>Invoice #</th><th>Amount</th><th>Confidence</th><th>Status</th><th>Date</th><th style="width:100px;">Actions</th></tr></thead><tbody>${q.documents.length > 0 ? q.documents.map(d => '<tr class="' + (d.hasAnomalies ? 'has-anomaly' : '') + '"><td><input type="checkbox" class="doc-select" value="' + d.id + '"></td><td class="doc-name-cell">' + escapeHtml(d.name) + '</td><td>' + escapeHtml(d.vendorName || '-') + '</td><td>' + escapeHtml(d.invoiceNumber || '-') + '</td><td><strong>$' + formatNum(d.amount) + '</strong></td><td><div class="confidence-bar ' + getConfClass(d.confidence) + '"><div class="confidence-fill" style="width:' + d.confidence + '%"></div><span>' + d.confidence + '%</span></div></td><td><span class="status-badge ' + getStatClass(d.status) + '">' + escapeHtml(d.statusText) + '</span></td><td>' + escapeHtml(d.date) + '</td><td><button class="btn-icon" onclick="FluxApp.reviewDoc(' + d.id + ')" title="Review"><i class="fas fa-eye"></i></button><button class="btn-icon" onclick="FluxApp.deleteDoc(' + d.id + ')" title="Delete"><i class="fas fa-trash"></i></button></td></tr>').join('') : '<tr><td colspan="9" style="text-align:center;padding:60px;"><div class="empty-state"><div class="empty-state-icon"><i class="fas fa-inbox"></i></div><h4 class="empty-state-title">No documents found</h4></div></td></tr>'}</tbody></table></div>${q.totalPages > 1 ? '<div class="pagination"><button ' + (page <= 1 ? 'disabled' : '') + ' onclick="FluxApp.goToPage(' + (page - 1) + ')"><i class="fas fa-chevron-left"></i></button><span>Page ' + page + ' of ' + q.totalPages + '</span><button ' + (page >= q.totalPages ? 'disabled' : '') + ' onclick="FluxApp.goToPage(' + (page + 1) + ')"><i class="fas fa-chevron-right"></i></button></div>' : ''}</div>`;
+    }
+
+    function renderReviewHTML(data, docId) {
+        const doc = data.document || {};
+        if (!doc.id) return '<div class="page-body"><div class="empty-state"><div class="empty-state-icon"><i class="fas fa-file-alt"></i></div><h4 class="empty-state-title">Document not found</h4><button class="btn primary" onclick="FluxApp.navigate(\'queue\')">Back to Queue</button></div></div>';
+
+        const confLevel = (doc.confidenceLevel || 'low').toLowerCase();
+        return `<div class="review-mode"><div class="review-header"><button class="btn-back" onclick="FluxApp.navigate('queue')"><i class="fas fa-arrow-left"></i> Back to Queue</button><div class="review-actions"><button class="btn danger" onclick="FluxApp.rejectDocument(${doc.id})"><i class="fas fa-times"></i> Reject</button><button class="btn success" onclick="FluxApp.approveDocument(${doc.id})"><i class="fas fa-check"></i> Approve & Create</button></div></div><div class="review-container"><div class="document-preview"><div class="preview-toolbar"><button class="tool-btn" onclick="FluxApp.zoomIn()"><i class="fas fa-search-plus"></i></button><button class="tool-btn" onclick="FluxApp.zoomOut()"><i class="fas fa-search-minus"></i></button><button class="tool-btn" onclick="FluxApp.downloadFile(${doc.fileId})"><i class="fas fa-download"></i></button></div><div class="preview-frame">${doc.fileUrl ? '<iframe src="' + doc.fileUrl + '" id="docPreview"></iframe>' : '<p style="padding:40px;text-align:center;color:#666;">No preview</p>'}</div></div><div class="extraction-panel"><div class="confidence-banner ${confLevel}"><div class="confidence-score"><div class="score-circle"><svg viewBox="0 0 36 36"><path class="score-bg" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"/><path class="score-fill" stroke-dasharray="${doc.confidence || 0}, 100" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"/><text x="18" y="21" class="score-text">${doc.confidence || 0}%</text></svg></div><span class="score-label">${doc.confidenceLevel || 'Low'} Confidence</span></div></div>${(doc.anomalies || []).length > 0 ? '<div class="anomaly-warnings">' + doc.anomalies.map(a => '<div class="warning-item ' + (a.severity || '') + '"><i class="fas fa-exclamation-triangle"></i><span>' + escapeHtml(a.message) + '</span></div>').join('') + '</div>' : ''}<div class="extracted-fields"><h3>Extracted Information</h3><div class="field-group"><label>Vendor</label><select id="vendor" onchange="FluxApp.trackChange('vendor', this.value)"><option value="">-- Select Vendor --</option>${(doc.vendorSuggestions || []).map(v => '<option value="' + v.id + '"' + (v.id == doc.vendorId ? ' selected' : '') + '>' + escapeHtml(v.name) + '</option>').join('')}</select></div><div class="field-row"><div class="field-group"><label>Invoice Number</label><input type="text" id="invoiceNumber" value="${escapeHtml(doc.invoiceNumber || '')}" onchange="FluxApp.trackChange('invoiceNumber', this.value)"></div><div class="field-group"><label>Invoice Date</label><input type="date" id="invoiceDate" value="${formatDateIn(doc.invoiceDate)}" onchange="FluxApp.trackChange('invoiceDate', this.value)"></div></div><div class="field-row"><div class="field-group"><label>Due Date</label><input type="date" id="dueDate" value="${formatDateIn(doc.dueDate)}" onchange="FluxApp.trackChange('dueDate', this.value)"></div><div class="field-group"><label>PO Number</label><input type="text" id="poNumber" value="${escapeHtml(doc.poNumber || '')}" onchange="FluxApp.trackChange('poNumber', this.value)"></div></div></div><div class="amount-fields"><h3>Amounts</h3><div class="amount-grid"><div class="amount-field"><label>Subtotal</label><input type="number" step="0.01" id="subtotal" value="${doc.subtotal || 0}" onchange="FluxApp.trackChange('subtotal', this.value); FluxApp.calculateTotal()"></div><div class="amount-field"><label>Tax</label><input type="number" step="0.01" id="taxAmount" value="${doc.taxAmount || 0}" onchange="FluxApp.trackChange('taxAmount', this.value); FluxApp.calculateTotal()"></div><div class="amount-field total"><label>Total</label><input type="number" step="0.01" id="totalAmount" value="${doc.totalAmount || 0}" onchange="FluxApp.trackChange('totalAmount', this.value)"></div></div></div>${(doc.lineItems || []).length > 0 ? '<div class="line-items"><h3>Line Items (' + doc.lineItems.length + ')</h3><table class="line-items-table"><thead><tr><th>Description</th><th style="width:60px;">Qty</th><th style="width:80px;">Price</th><th style="width:80px;">Amount</th></tr></thead><tbody>' + doc.lineItems.map(item => '<tr><td><input type="text" value="' + escapeHtml(item.description || '') + '"></td><td><input type="number" value="' + (item.quantity || 0) + '"></td><td><input type="number" step="0.01" value="' + (item.unitPrice || 0) + '"></td><td><input type="number" step="0.01" value="' + (item.amount || 0) + '"></td></tr>').join('') + '</tbody></table></div>' : ''}</div></div></div>`;
+    }
+
+    function renderBatchHTML(data) {
+        const batches = data.batches || [];
+        return `<header class="page-header"><div class="page-header-content"><h1><i class="fas fa-layer-group"></i> Batch Processing</h1><p class="page-header-subtitle">Process multiple documents at once</p></div></header><div class="page-body"><div class="batch-upload"><div class="upload-zone" id="batchZone" onclick="document.getElementById('batchInput').click()"><div class="upload-content"><i class="fas fa-layer-group upload-icon"></i><h2>Upload Batch</h2><p>Drop multiple files here</p></div><input type="file" id="batchInput" multiple accept=".pdf,.png,.jpg,.jpeg,.tiff" hidden></div></div><div class="batch-list"><h3>Recent Batches</h3><table><thead><tr><th>Batch Name</th><th>Documents</th><th>Progress</th><th>Status</th><th>Created</th><th style="width:80px;">Actions</th></tr></thead><tbody>${batches.length > 0 ? batches.map(b => '<tr><td><strong>' + escapeHtml(b.name) + '</strong></td><td>' + b.processed + '/' + b.total + '</td><td><div class="progress-bar" style="width:120px;display:inline-block;"><div class="progress-fill" style="width:' + b.progress + '%"></div></div></td><td><span class="status-badge ' + b.status + '">' + escapeHtml(b.statusText) + '</span></td><td>' + escapeHtml(b.date) + '</td><td><button class="btn-icon"><i class="fas fa-eye"></i></button></td></tr>').join('') : '<tr><td colspan="6" style="text-align:center;padding:40px;"><div class="empty-state"><div class="empty-state-icon"><i class="fas fa-layer-group"></i></div><h4 class="empty-state-title">No batches yet</h4></div></td></tr>'}</tbody></table></div></div>`;
+    }
+
+    function renderSettingsHTML() {
+        return `<header class="page-header"><div class="page-header-content"><h1><i class="fas fa-cog"></i> Settings</h1><p class="page-header-subtitle">Configure Flux Capture</p></div></header><div class="page-body"><div class="settings-grid"><div class="settings-section"><h3><i class="fas fa-robot"></i> Processing</h3><div class="setting-item"><label>Auto-approve Threshold</label><div style="display:flex;align-items:center;gap:12px;"><input type="range" min="70" max="100" value="85" id="autoThreshold" oninput="document.getElementById('thresholdValue').textContent=this.value+'%'"><span id="thresholdValue" style="min-width:45px;">85%</span></div></div><div class="setting-item"><label>Default Document Type</label><select id="defaultType"><option value="auto">Auto-Detect</option><option value="INVOICE">Invoice</option><option value="RECEIPT">Receipt</option></select></div></div><div class="settings-section"><h3><i class="fas fa-envelope"></i> Email Import</h3><div class="setting-item"><label>Enable Email Import</label><label class="toggle-switch"><input type="checkbox" id="emailEnabled" checked><span class="toggle-slider"></span></label></div><div class="setting-item"><label>Import Address</label><input type="text" value="flux@netsuite.com" readonly style="width:250px;"></div></div><div class="settings-section"><h3><i class="fas fa-shield-alt"></i> Fraud Detection</h3><div class="setting-item"><label>Duplicate Detection</label><label class="toggle-switch"><input type="checkbox" id="duplicateDetection" checked><span class="toggle-slider"></span></label></div><div class="setting-item"><label>Amount Validation</label><label class="toggle-switch"><input type="checkbox" id="amountValidation" checked><span class="toggle-slider"></span></label></div></div><div class="settings-section"><h3><i class="fas fa-bell"></i> Notifications</h3><div class="setting-item"><label>Email Notifications</label><label class="toggle-switch"><input type="checkbox" id="emailNotifications" checked><span class="toggle-slider"></span></label></div><div class="setting-item"><label>Anomaly Alerts</label><label class="toggle-switch"><input type="checkbox" id="anomalyAlerts" checked><span class="toggle-slider"></span></label></div></div></div><div class="settings-actions"><button class="btn primary" onclick="alert('Settings saved!')"><i class="fas fa-save"></i> Save Settings</button></div></div>`;
     }
 
     // ==================== POST Implementations ====================
