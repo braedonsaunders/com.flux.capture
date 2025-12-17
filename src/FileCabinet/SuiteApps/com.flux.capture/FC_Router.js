@@ -3,7 +3,7 @@
  * @NScriptType Restlet
  * @NModuleScope SameAccount
  *
- * Flux Capture - MINIMAL TEST VERSION
+ * Flux Capture - DIAGNOSTIC VERSION
  */
 
 define(['N/log'], function(log) {
@@ -11,55 +11,66 @@ define(['N/log'], function(log) {
     var API_VERSION = '2.0.0';
 
     function get(context) {
-        log.debug('FC_Router GET', JSON.stringify(context));
+        log.debug('FC_Router GET START', JSON.stringify(context));
 
-        var action = context.action || 'health';
+        try {
+            var action = context.action || 'health';
+            log.debug('FC_Router action', action);
 
-        if (action === 'health') {
-            return {
-                success: true,
-                version: API_VERSION,
-                message: 'Minimal test - healthy'
-            };
-        }
+            var response = null;
 
-        if (action === 'stats') {
-            return {
-                success: true,
-                version: API_VERSION,
-                data: {
-                    summary: {
-                        totalProcessed: 0,
-                        completed: 0,
-                        autoProcessed: 0,
-                        pendingReview: 0,
-                        rejected: 0,
-                        errors: 0,
-                        avgConfidence: 0,
-                        totalValue: 0
-                    },
-                    typeBreakdown: {},
-                    trend: [],
-                    autoProcessRate: 0
-                }
-            };
-        }
-
-        if (action === 'anomalies') {
-            return {
-                success: true,
-                version: API_VERSION,
-                data: []
-            };
-        }
-
-        return {
-            success: false,
-            error: {
-                code: 'UNKNOWN_ACTION',
-                message: 'Unknown action: ' + action
+            if (action === 'health') {
+                response = {
+                    success: true,
+                    version: API_VERSION,
+                    message: 'Diagnostic test - healthy'
+                };
+            } else if (action === 'stats') {
+                response = {
+                    success: true,
+                    version: API_VERSION,
+                    data: {
+                        summary: {
+                            totalProcessed: 0,
+                            completed: 0,
+                            autoProcessed: 0,
+                            pendingReview: 0,
+                            rejected: 0,
+                            errors: 0,
+                            avgConfidence: 0,
+                            totalValue: 0
+                        },
+                        typeBreakdown: {},
+                        trend: [],
+                        autoProcessRate: 0
+                    }
+                };
+            } else if (action === 'anomalies') {
+                response = {
+                    success: true,
+                    version: API_VERSION,
+                    data: []
+                };
+            } else {
+                response = {
+                    success: false,
+                    error: {
+                        code: 'UNKNOWN_ACTION',
+                        message: 'Unknown action: ' + action
+                    }
+                };
             }
-        };
+
+            log.debug('FC_Router RESPONSE', JSON.stringify(response));
+            return response;
+
+        } catch (e) {
+            log.error('FC_Router CATCH ERROR', e.message + ' | ' + e.stack);
+            return {
+                success: false,
+                error: { code: 'CAUGHT_ERROR', message: e.message }
+            };
+        }
     }
 
     function post(context) {
