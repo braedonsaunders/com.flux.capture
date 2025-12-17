@@ -293,13 +293,18 @@
                 }
             });
 
-            // Restore saved width
+            // Set initial width - use saved preference or default to 45%
+            var DEFAULT_PREVIEW_WIDTH = 45;
             try {
                 var savedWidth = localStorage.getItem('fc_preview_width');
-                if (savedWidth) {
-                    previewPanel.style.flex = '0 0 ' + savedWidth + '%';
-                }
-            } catch (e) { /* ignore */ }
+                var widthToUse = savedWidth ? parseFloat(savedWidth) : DEFAULT_PREVIEW_WIDTH;
+                // Ensure width is within reasonable bounds
+                widthToUse = Math.max(25, Math.min(70, widthToUse));
+                previewPanel.style.flex = '0 0 ' + widthToUse + '%';
+            } catch (e) {
+                // Fallback to default
+                previewPanel.style.flex = '0 0 ' + DEFAULT_PREVIEW_WIDTH + '%';
+            }
         },
 
         on: function(selector, event, handler) {
