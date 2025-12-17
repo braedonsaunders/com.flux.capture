@@ -4,7 +4,7 @@
  * @NModuleScope SameAccount
  *
  * Flux Capture - Main Suitelet
- * Embeds SPA directly into NetSuite form to preserve navbar
+ * Uses iframe to preserve NetSuite menu while serving app
  */
 define(['N/file', 'N/runtime', 'N/url', 'N/ui/serverWidget', 'N/search'], function(file, runtime, url, serverWidget, search) {
 
@@ -36,13 +36,12 @@ define(['N/file', 'N/runtime', 'N/url', 'N/ui/serverWidget', 'N/search'], functi
         }
 
         try {
-            // Check if this is the content-only request (for direct access)
-            var isContentOnly = context.request.parameters.fc_mode === 'content';
+            var isInnerFrame = context.request.parameters.fc_mode === 'content';
 
-            if (isContentOnly) {
+            if (isInnerFrame) {
                 serveAppContent(context);
             } else {
-                serveWithNavbar(context);
+                serveWrapper(context);
             }
         } catch (error) {
             log.error('Suitelet Error', { message: error.message, stack: error.stack });
@@ -51,34 +50,149 @@ define(['N/file', 'N/runtime', 'N/url', 'N/ui/serverWidget', 'N/search'], functi
     }
 
     /**
-     * Mode 1: Serve app embedded in NetSuite form (with navbar)
-     * Injects app HTML directly into the page, no iframe needed
+     * MODE 1: NETSUITE WRAPPER (Preserves Menu)
+     * Creates a form with iframe pointing to content mode
      */
-    function serveWithNavbar(context) {
+    function serveWrapper(context) {
         var form = serverWidget.createForm({ title: 'Flux Capture' });
 
-        // Get all file URLs and config
-        var fileUrls = resolveFileUrls();
-        var routerUrl = url.resolveScript({
-            scriptId: 'customscript_fc_router',
-            deploymentId: 'customdeploy_fc_router'
-        });
+        // Get the URL of *this* Suitelet with content mode flag
+        var currentScript = runtime.getCurrentScript();
+        var suiteletUrl = url.resolveScript({
+            scriptId: currentScript.id,
+            deploymentId: currentScript.deploymentId
+        }) + '&fc_mode=content';
 
-        // Build the embedded app HTML
-        var appHtml = buildEmbeddedAppHtml(fileUrls, routerUrl);
-
-        var htmlField = form.addField({
-            id: 'custpage_fc_app',
+        // Add an Inline HTML field to host the iframe
+        var field = form.addField({
+            id: 'custpage_fc_frame',
             type: serverWidget.FieldType.INLINEHTML,
             label: ' '
         });
 
-        htmlField.defaultValue = appHtml;
+        // Styling for full-width iframe below NS header
+        // Use visibility:hidden (not display:none) so NetSuite can still reference elements
+        field.defaultValue = '\
+            <style>\
+                /* === Hide form title elements without breaking iframe === */\
+                #main_form > table:first-child,\
+                .uir-page-title-secondline,\
+                .uir-page-title,\
+                .uir-page-title-firstline,\
+                #main_form > tbody > tr:first-child,\
+                #main_form > table > tbody > tr:first-child {\
+                    visibility: hidden !important;\
+                    pointer-events: none !important;\
+                    height: 0 !important;\
+                    min-height: 0 !important;\
+                    max-height: 0 !important;\
+                    overflow: visible !important;\
+                    padding: 0 !important;\
+                    margin: 0 !important;\
+                    border: none !important;\
+                    line-height: 0 !important;\
+                    font-size: 0 !important;\
+                }\
+                \
+                /* Iframe container - full width, positioned below NS header */\
+                .fc-frame-wrapper {\
+                    position: fixed;\
+                    left: 0;\
+                    right: 0;\
+                    bottom: 0;\
+                    top: 103px;\
+                    width: 100vw;\
+                    z-index: 100;\
+                    visibility: visible !important;\
+                    opacity: 1 !important;\
+                    pointer-events: auto !important;\
+                }\
+                \
+                .fc-iframe {\
+                    width: 100%;\
+                    height: 100%;\
+                    border: none;\
+                    display: block;\
+                    visibility: visible !important;\
+                    opacity: 1 !important;\
+                    pointer-events: auto !important;\
+                }\
+            </style>\
+            <div class="fc-frame-wrapper">\
+                <iframe\
+                    src="' + suiteletUrl + '"\
+                    class="fc-iframe"\
+                    title="Flux Capture"\
+                ></iframe>\
+            </div>\
+            <script>\
+                (function() {\
+                    function adjustIframePosition() {\
+                        var wrapper = document.querySelector(".fc-frame-wrapper");\
+                        if (!wrapper) return false;\
+                        \
+                        var headerSelectors = [\
+                            "#div__header",\
+                            "#ns-header",\
+                            "#ns_navigation",\
+                            ".uir-page-header",\
+                            "#nscm"\
+                        ];\
+                        \
+                        var headerBottom = 0;\
+                        \
+                        for (var i = 0; i < headerSelectors.length; i++) {\
+                            var header = document.querySelector(headerSelectors[i]);\
+                            if (header) {\
+                                var rect = header.getBoundingClientRect();\
+                                if (rect.bottom > headerBottom) {\
+                                    headerBottom = rect.bottom;\
+                                }\
+                            }\
+                        }\
+                        \
+                        if (headerBottom === 0) {\
+                            var yPositions = [40, 60, 80, 100];\
+                            for (var j = 0; j < yPositions.length; j++) {\
+                                var elements = document.elementsFromPoint(window.innerWidth / 2, yPositions[j]);\
+                                for (var k = 0; k < elements.length; k++) {\
+                                    var el = elements[k];\
+                                    if (el.tagName === "BODY" || el.tagName === "HTML") continue;\
+                                    var rect = el.getBoundingClientRect();\
+                                    if (rect.bottom > headerBottom && rect.bottom < 200) {\
+                                        headerBottom = rect.bottom;\
+                                    }\
+                                }\
+                            }\
+                        }\
+                        \
+                        if (headerBottom > 0) {\
+                            headerBottom = Math.max(80, Math.min(120, headerBottom));\
+                            wrapper.style.top = headerBottom + "px";\
+                            return true;\
+                        }\
+                        \
+                        return false;\
+                    }\
+                    \
+                    var success = adjustIframePosition();\
+                    \
+                    if (!success) {\
+                        var retries = [100, 200, 400, 800];\
+                        retries.forEach(function(delay) {\
+                            setTimeout(adjustIframePosition, delay);\
+                        });\
+                    }\
+                    \
+                    window.addEventListener("resize", adjustIframePosition);\
+                })();\
+            </script>';
+
         context.response.writePage(form);
     }
 
     /**
-     * Mode 2: Serve raw HTML app content (content-only mode)
+     * MODE 2: APP CONTENT (Raw HTML inside iframe)
      */
     function serveAppContent(context) {
         // 1. Resolve all file URLs
@@ -129,125 +243,6 @@ define(['N/file', 'N/runtime', 'N/url', 'N/ui/serverWidget', 'N/search'], functi
 
         // 7. Serve raw HTML
         context.response.write(htmlContent);
-    }
-
-    /**
-     * Build embedded app HTML for injection into NetSuite form
-     */
-    function buildEmbeddedAppHtml(fileUrls, routerUrl) {
-        var currentUser = runtime.getCurrentUser();
-
-        // CSS to hide NetSuite form elements and position our app
-        var wrapperCss = '\
-<style>\
-    /* Hide NetSuite form elements */\
-    #main_form > table:first-child,\
-    .uir-page-title-secondline,\
-    .uir-page-title,\
-    .uir-page-title-firstline,\
-    #main_form > tbody > tr:first-child,\
-    #main_form > table > tbody > tr:first-child,\
-    .uir-machine-headerrow {\
-        display: none !important;\
-    }\
-    \
-    /* App container positioning */\
-    .fc-app-container {\
-        position: fixed;\
-        left: 0;\
-        right: 0;\
-        bottom: 0;\
-        top: 0;\
-        width: 100vw;\
-        height: 100vh;\
-        z-index: 100;\
-        background: #f8fafc;\
-    }\
-</style>';
-
-        // Runtime config script
-        var configScript = '\
-<script>\
-window.FC_CONFIG = {\
-    apiUrl: "' + routerUrl + '",\
-    accountId: "' + runtime.accountId + '",\
-    user: {\
-        id: ' + currentUser.id + ',\
-        name: "' + escapeJs(currentUser.name) + '",\
-        email: "' + escapeJs(currentUser.email) + '",\
-        role: ' + currentUser.role + '\
-    }\
-};\
-</script>';
-
-        // Load external resources
-        var externalResources = '\
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">\
-<link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">\
-<link rel="stylesheet" href="' + (fileUrls['css_base'] || '') + '">\
-<link rel="stylesheet" href="' + (fileUrls['css_components'] || '') + '">';
-
-        // Load the app HTML template and extract body content
-        var htmlPath = CONFIG.basePath + '/App/app_index.html';
-        var htmlFile = file.load({ id: htmlPath });
-        var htmlContent = htmlFile.getContents();
-
-        // Extract body content (between <body> and </body>)
-        var bodyMatch = htmlContent.match(/<body[^>]*>([\s\S]*)<\/body>/i);
-        var bodyContent = bodyMatch ? bodyMatch[1] : '';
-
-        // Extract inline styles from head
-        var styleMatch = htmlContent.match(/<style>([\s\S]*?)<\/style>/i);
-        var inlineStyles = styleMatch ? '<style>' + styleMatch[1] + '</style>' : '';
-
-        // Build JS script tags
-        var jsScripts = '\
-<script src="' + (fileUrls['js_core'] || '') + '"></script>\
-<script src="' + (fileUrls['js_main'] || '') + '"></script>\
-<script src="' + (fileUrls['js_view_dashboard'] || '') + '"></script>\
-<script src="' + (fileUrls['js_view_upload'] || '') + '"></script>\
-<script src="' + (fileUrls['js_view_queue'] || '') + '"></script>\
-<script src="' + (fileUrls['js_view_review'] || '') + '"></script>\
-<script src="' + (fileUrls['js_view_batch'] || '') + '"></script>\
-<script src="' + (fileUrls['js_view_settings'] || '') + '"></script>';
-
-        // Script to adjust for NetSuite header
-        var adjustScript = '\
-<script>\
-(function() {\
-    function adjustAppPosition() {\
-        var container = document.querySelector(".fc-app-container");\
-        if (!container) return;\
-        var headerSelectors = ["#div__header", "#ns-header", "#ns_navigation", ".uir-page-header"];\
-        var headerBottom = 0;\
-        for (var i = 0; i < headerSelectors.length; i++) {\
-            var header = document.querySelector(headerSelectors[i]);\
-            if (header) {\
-                var rect = header.getBoundingClientRect();\
-                if (rect.bottom > headerBottom) headerBottom = rect.bottom;\
-            }\
-        }\
-        if (headerBottom > 0) {\
-            container.style.top = headerBottom + "px";\
-            container.style.height = "calc(100vh - " + headerBottom + "px)";\
-        }\
-    }\
-    adjustAppPosition();\
-    [100, 200, 400, 800, 1500].forEach(function(d) { setTimeout(adjustAppPosition, d); });\
-    window.addEventListener("resize", adjustAppPosition);\
-})();\
-</script>';
-
-        // Combine everything
-        return wrapperCss +
-               externalResources +
-               inlineStyles +
-               configScript +
-               '<div class="fc-app-container">' +
-               bodyContent +
-               '</div>' +
-               jsScripts +
-               adjustScript;
     }
 
     /**
