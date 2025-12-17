@@ -30,7 +30,7 @@ define([
     function getEngine() {
         if (!EngineCache) {
             try {
-                EngineCache = require('../lib/FC_Engine');
+                EngineCache = require('/SuiteApps/com.flux.capture/lib/FC_Engine');
             } catch (e) {
                 log.error('FC_Engine load error', e.message);
                 EngineCache = { FluxCaptureEngine: null };
@@ -396,7 +396,7 @@ define([
         var sortBy = context.sortBy || 'created';
         var sortDir = context.sortDir === 'asc' ? 'ASC' : 'DESC';
 
-        var sql = 'SELECT id, custrecord_dm_original_filename as name, custrecord_dm_status as status, custrecord_dm_document_type as documentType, ' +
+        var sql = 'SELECT id, custrecord_dm_document_id as name, custrecord_dm_status as status, custrecord_dm_document_type as documentType, ' +
             'custrecord_dm_confidence_score as confidence, custrecord_dm_vendor as vendorId, ' +
             'BUILTIN.DF(custrecord_dm_vendor) as vendorName, custrecord_dm_invoice_number as invoiceNumber, ' +
             'custrecord_dm_total_amount as totalAmount, custrecord_dm_anomalies as anomalies, ' +
@@ -478,58 +478,66 @@ define([
         var page = parseInt(context.page) || 1;
         var pageSize = Math.min(parseInt(context.pageSize) || 50, 100);
 
-        var sql = 'SELECT id, custrecord_dm_original_filename as name, custrecord_dm_status as status, custrecord_dm_document_type as documentType, ' +
-            'custrecord_dm_confidence_score as confidence, BUILTIN.DF(custrecord_dm_vendor) as vendorName, ' +
-            'custrecord_dm_invoice_number as invoiceNumber, custrecord_dm_total_amount as totalAmount, ' +
-            'custrecord_dm_created_date as createdDate, custrecord_dm_batch_id as batchId, ' +
-            'custrecord_dm_anomalies as anomalies FROM customrecord_dm_captured_document ' +
-            'WHERE custrecord_dm_status IN (' + DocStatus.PENDING + ', ' + DocStatus.PROCESSING + ', ' +
-            DocStatus.EXTRACTED + ', ' + DocStatus.NEEDS_REVIEW + ') ' +
-            'ORDER BY CASE custrecord_dm_status WHEN ' + DocStatus.NEEDS_REVIEW + ' THEN 1 ' +
-            'WHEN ' + DocStatus.EXTRACTED + ' THEN 2 WHEN ' + DocStatus.PROCESSING + ' THEN 3 ' +
-            'WHEN ' + DocStatus.PENDING + ' THEN 4 END, custrecord_dm_created_date ASC ' +
-            'OFFSET ' + ((page - 1) * pageSize) + ' ROWS FETCH NEXT ' + pageSize + ' ROWS ONLY';
+        try {
+            // Use COALESCE to handle cases where custrecord_dm_original_filename might not exist
+            var sql = 'SELECT id, custrecord_dm_document_id as name, custrecord_dm_status as status, custrecord_dm_document_type as documentType, ' +
+                'custrecord_dm_confidence_score as confidence, BUILTIN.DF(custrecord_dm_vendor) as vendorName, ' +
+                'custrecord_dm_invoice_number as invoiceNumber, custrecord_dm_total_amount as totalAmount, ' +
+                'custrecord_dm_created_date as createdDate, custrecord_dm_batch_id as batchId, ' +
+                'custrecord_dm_anomalies as anomalies FROM customrecord_dm_captured_document ' +
+                'WHERE custrecord_dm_status IN (' + DocStatus.PENDING + ', ' + DocStatus.PROCESSING + ', ' +
+                DocStatus.EXTRACTED + ', ' + DocStatus.NEEDS_REVIEW + ') ' +
+                'ORDER BY CASE custrecord_dm_status WHEN ' + DocStatus.NEEDS_REVIEW + ' THEN 1 ' +
+                'WHEN ' + DocStatus.EXTRACTED + ' THEN 2 WHEN ' + DocStatus.PROCESSING + ' THEN 3 ' +
+                'WHEN ' + DocStatus.PENDING + ' THEN 4 END, custrecord_dm_created_date ASC ' +
+                'OFFSET ' + ((page - 1) * pageSize) + ' ROWS FETCH NEXT ' + pageSize + ' ROWS ONLY';
 
-        var results = query.runSuiteQL({ query: sql });
+            log.debug('getProcessingQueue', 'SQL: ' + sql);
+            var results = query.runSuiteQL({ query: sql });
+            log.debug('getProcessingQueue', 'Results count: ' + (results.results ? results.results.length : 0));
 
-        var queue = results.results.map(function(row) {
-            var v = row.values;
-            var docAnomalies = v[10] ? JSON.parse(v[10]) : [];
-            return {
-                id: v[0],
-                name: v[1],
-                status: v[2],
-                documentType: v[3],
-                confidence: v[4],
-                vendorName: v[5],
-                invoiceNumber: v[6],
-                totalAmount: v[7],
-                createdDate: v[8],
-                batchId: v[9],
-                hasAnomalies: docAnomalies.length > 0
-            };
-        });
+            var queue = results.results.map(function(row) {
+                var v = row.values;
+                var docAnomalies = v[10] ? JSON.parse(v[10]) : [];
+                return {
+                    id: v[0],
+                    name: v[1] || ('Document ' + v[0]),
+                    status: v[2],
+                    documentType: v[3],
+                    confidence: v[4],
+                    vendorName: v[5],
+                    invoiceNumber: v[6],
+                    totalAmount: v[7],
+                    createdDate: v[8],
+                    batchId: v[9],
+                    hasAnomalies: docAnomalies.length > 0
+                };
+            });
 
-        var countSql = 'SELECT custrecord_dm_status as status, COUNT(*) as count FROM customrecord_dm_captured_document ' +
-            'WHERE custrecord_dm_status IN (' + DocStatus.PENDING + ', ' + DocStatus.PROCESSING + ', ' +
-            DocStatus.EXTRACTED + ', ' + DocStatus.NEEDS_REVIEW + ') GROUP BY custrecord_dm_status';
+            var countSql = 'SELECT custrecord_dm_status as status, COUNT(*) as count FROM customrecord_dm_captured_document ' +
+                'WHERE custrecord_dm_status IN (' + DocStatus.PENDING + ', ' + DocStatus.PROCESSING + ', ' +
+                DocStatus.EXTRACTED + ', ' + DocStatus.NEEDS_REVIEW + ') GROUP BY custrecord_dm_status';
 
-        var countResults = query.runSuiteQL({ query: countSql });
-        var statusCounts = {};
-        countResults.results.forEach(function(row) {
-            statusCounts[row.values[0]] = row.values[1];
-        });
+            var countResults = query.runSuiteQL({ query: countSql });
+            var statusCounts = {};
+            countResults.results.forEach(function(row) {
+                statusCounts[row.values[0]] = row.values[1];
+            });
 
-        var totalCount = 0;
-        Object.keys(statusCounts).forEach(function(key) {
-            totalCount += statusCounts[key];
-        });
+            var totalCount = 0;
+            Object.keys(statusCounts).forEach(function(key) {
+                totalCount += statusCounts[key];
+            });
 
-        return Response.success({
-            queue: queue,
-            counts: statusCounts,
-            total: totalCount
-        });
+            return Response.success({
+                queue: queue,
+                counts: statusCounts,
+                total: totalCount
+            });
+        } catch (e) {
+            log.error('getProcessingQueue', { message: e.message, stack: e.stack });
+            return Response.error('QUEUE_ERROR', 'Failed to fetch queue: ' + e.message);
+        }
     }
 
     function getDashboardStats() {
@@ -597,7 +605,7 @@ define([
         try {
             var limit = Math.min(parseInt(context.limit) || 10, 50);
 
-            var sql = 'SELECT id, custrecord_dm_original_filename as name, BUILTIN.DF(custrecord_dm_vendor) as vendorName, ' +
+            var sql = 'SELECT id, custrecord_dm_document_id as name, BUILTIN.DF(custrecord_dm_vendor) as vendorName, ' +
                 'custrecord_dm_anomalies as anomalies, custrecord_dm_created_date as createdDate, ' +
                 'custrecord_dm_confidence_score as confidence FROM customrecord_dm_captured_document ' +
                 "WHERE custrecord_dm_anomalies IS NOT NULL AND custrecord_dm_anomalies != '[]' " +
@@ -770,7 +778,7 @@ define([
             avgConfidence: batchRecord.getValue('custrecord_dm_batch_avg_confidence')
         };
 
-        var docSql = 'SELECT id, custrecord_dm_original_filename as name, custrecord_dm_status as status, custrecord_dm_confidence_score as confidence, ' +
+        var docSql = 'SELECT id, custrecord_dm_document_id as name, custrecord_dm_status as status, custrecord_dm_confidence_score as confidence, ' +
             'BUILTIN.DF(custrecord_dm_vendor) as vendorName, custrecord_dm_total_amount as amount ' +
             'FROM customrecord_dm_captured_document WHERE custrecord_dm_batch_id = ? ORDER BY id';
 
