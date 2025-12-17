@@ -3311,3 +3311,16 @@ body.fullscreen-mode .sidebar-expand-btn {
     color: var(--color-danger);
     background: var(--color-danger-bg);
 }
+
+/* ==========================================
+   VIEW PADDING - Standard views get padding
+   Rail/Review stay edge-to-edge
+   ========================================== */
+.view-dashboard,
+.view-upload,
+.view-queue,
+.view-batch,
+.view-settings,
+.view-documents {
+    padding: var(--space-lg) var(--space-xl);
+}
