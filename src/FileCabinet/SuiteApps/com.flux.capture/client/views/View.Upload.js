@@ -1,16 +1,34 @@
 /**
- * Flux Capture - Upload View Controller
+ * Flux Capture - Enhanced Upload View Controller
+ * World-class upload experience with detailed progress tracking
  */
 (function() {
     'use strict';
 
     var UploadController = {
         files: [],
+        fileStatuses: [], // Track individual file upload status
         docType: 'auto',
+        isUploading: false,
+        isCancelled: false,
+        uploadStartTime: null,
+        successCount: 0,
+        errorCount: 0,
 
         init: function() {
             renderTemplate('tpl-upload', 'view-container');
             this.bindEvents();
+            this.reset();
+        },
+
+        reset: function() {
+            this.files = [];
+            this.fileStatuses = [];
+            this.isUploading = false;
+            this.isCancelled = false;
+            this.uploadStartTime = null;
+            this.successCount = 0;
+            this.errorCount = 0;
         },
 
         bindEvents: function() {
@@ -63,25 +81,23 @@
             }
 
             // Queue buttons
-            var clearBtn = el('#btn-clear-queue');
-            if (clearBtn) {
-                clearBtn.addEventListener('click', function() {
-                    self.clearQueue();
-                });
-            }
+            this.on('#btn-clear-queue', 'click', function() {
+                self.clearQueue();
+            });
 
-            var addMoreBtn = el('#btn-add-more');
-            if (addMoreBtn) {
-                addMoreBtn.addEventListener('click', function() {
-                    fileInput.click();
-                });
-            }
+            this.on('#btn-add-more', 'click', function() {
+                fileInput.click();
+            });
 
-            var processBtn = el('#btn-process');
-            if (processBtn) {
-                processBtn.addEventListener('click', function() {
-                    self.processQueue();
-                });
+            this.on('#btn-process', 'click', function() {
+                self.processQueue();
+            });
+        },
+
+        on: function(selector, event, handler) {
+            var element = el(selector);
+            if (element) {
+                element.addEventListener(event, handler);
             }
         },
 
@@ -91,17 +107,39 @@
 
             // Filter valid file types
             var validTypes = ['pdf', 'png', 'jpg', 'jpeg', 'tiff', 'tif'];
-            newFiles = newFiles.filter(function(f) {
+            var validFiles = [];
+            var invalidFiles = [];
+
+            newFiles.forEach(function(f) {
                 var ext = f.name.split('.').pop().toLowerCase();
-                return validTypes.indexOf(ext) >= 0;
+                if (validTypes.indexOf(ext) >= 0) {
+                    validFiles.push(f);
+                } else {
+                    invalidFiles.push(f.name);
+                }
             });
 
-            if (newFiles.length === 0) {
-                UI.toast('No valid files selected', 'warning');
+            if (invalidFiles.length > 0) {
+                UI.toast('Skipped ' + invalidFiles.length + ' unsupported file(s)', 'warning');
+            }
+
+            if (validFiles.length === 0) {
                 return;
             }
 
-            this.files = this.files.concat(newFiles);
+            // Add files with status tracking
+            validFiles.forEach(function(f) {
+                self.files.push(f);
+                self.fileStatuses.push({
+                    name: f.name,
+                    size: f.size,
+                    status: 'pending', // pending, uploading, processing, success, error
+                    progress: 0,
+                    error: null,
+                    documentId: null
+                });
+            });
+
             this.renderQueue();
         },
 
@@ -123,20 +161,32 @@
             if (countEl) countEl.textContent = this.files.length;
 
             if (list) {
-                list.innerHTML = this.files.map(function(f, i) {
-                    var ext = f.name.split('.').pop().toUpperCase();
+                list.innerHTML = this.fileStatuses.map(function(fs, i) {
+                    var ext = fs.name.split('.').pop().toUpperCase();
                     var isPdf = ext === 'PDF';
-                    return '<div class="queue-file-item">' +
+                    var statusClass = 'status-' + fs.status;
+                    var statusIcon = self.getStatusIcon(fs.status);
+
+                    return '<div class="queue-file-item ' + statusClass + '" data-index="' + i + '">' +
                         '<div class="file-icon" style="background:' + (isPdf ? 'var(--color-danger-bg);color:var(--color-danger)' : 'var(--color-primary-bg);color:var(--color-primary)') + '">' +
                             '<i class="fas fa-file-' + (isPdf ? 'pdf' : 'image') + '"></i>' +
                         '</div>' +
                         '<div class="file-info">' +
-                            '<span class="file-name">' + escapeHtml(f.name) + '</span>' +
-                            '<span class="file-size">' + (f.size / 1024 / 1024).toFixed(2) + ' MB</span>' +
+                            '<span class="file-name">' + escapeHtml(fs.name) + '</span>' +
+                            '<span class="file-meta">' +
+                                '<span class="file-size">' + self.formatFileSize(fs.size) + '</span>' +
+                                (fs.error ? '<span class="file-error">' + escapeHtml(fs.error) + '</span>' : '') +
+                            '</span>' +
+                            (fs.status === 'uploading' || fs.status === 'processing' ?
+                                '<div class="file-progress"><div class="file-progress-bar" style="width:' + fs.progress + '%"></div></div>' : '') +
                         '</div>' +
-                        '<button class="btn btn-icon btn-ghost" data-remove="' + i + '" title="Remove">' +
-                            '<i class="fas fa-xmark"></i>' +
-                        '</button>' +
+                        '<div class="file-status-icon ' + statusClass + '">' +
+                            statusIcon +
+                        '</div>' +
+                        (fs.status === 'pending' && !self.isUploading ?
+                            '<button class="btn btn-icon btn-ghost" data-remove="' + i + '" title="Remove">' +
+                                '<i class="fas fa-xmark"></i>' +
+                            '</button>' : '') +
                     '</div>';
                 }).join('');
 
@@ -145,79 +195,247 @@
                     btn.addEventListener('click', function() {
                         var idx = parseInt(this.dataset.remove);
                         self.files.splice(idx, 1);
+                        self.fileStatuses.splice(idx, 1);
                         self.renderQueue();
                     });
                 });
             }
         },
 
+        getStatusIcon: function(status) {
+            switch (status) {
+                case 'pending':
+                    return '<i class="fas fa-clock"></i>';
+                case 'uploading':
+                    return '<i class="fas fa-arrow-up fa-spin"></i>';
+                case 'processing':
+                    return '<i class="fas fa-cog fa-spin"></i>';
+                case 'success':
+                    return '<i class="fas fa-check-circle"></i>';
+                case 'error':
+                    return '<i class="fas fa-exclamation-circle"></i>';
+                default:
+                    return '';
+            }
+        },
+
+        formatFileSize: function(bytes) {
+            if (bytes < 1024) return bytes + ' B';
+            if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
+            return (bytes / 1024 / 1024).toFixed(2) + ' MB';
+        },
+
         clearQueue: function() {
-            this.files = [];
+            if (this.isUploading) {
+                if (!confirm('Cancel current upload?')) return;
+                this.isCancelled = true;
+            }
+            this.reset();
             this.renderQueue();
         },
 
         processQueue: function() {
             var self = this;
-            if (this.files.length === 0) return;
+            if (this.files.length === 0 || this.isUploading) return;
 
-            var dropzone = el('#upload-zone');
+            this.isUploading = true;
+            this.isCancelled = false;
+            this.uploadStartTime = Date.now();
+            this.successCount = 0;
+            this.errorCount = 0;
+
+            // Show progress view
             var queue = el('#upload-queue');
             var progress = el('#upload-progress');
             var progressTitle = el('#progress-title');
             var progressText = el('#progress-text');
             var progressBar = el('#progress-bar');
+            var progressDetails = el('#progress-details');
 
             if (queue) queue.style.display = 'none';
             if (progress) progress.style.display = 'block';
+
+            // Create detailed progress UI
+            if (progressDetails) {
+                progressDetails.innerHTML = this.renderProgressDetails();
+            }
 
             var files = this.files.slice();
             var total = files.length;
             var current = 0;
 
-            function processNext() {
-                if (current >= total) {
-                    if (progressTitle) progressTitle.textContent = 'Complete!';
-                    if (progressText) progressText.textContent = 'All files uploaded successfully';
-                    self.files = [];
+            function updateProgress() {
+                var percent = total > 0 ? ((current / total) * 100) : 0;
+                if (progressBar) progressBar.style.width = percent + '%';
 
-                    setTimeout(function() {
-                        Router.navigate('queue');
-                    }, 1500);
+                var elapsed = Date.now() - self.uploadStartTime;
+                var avgTime = current > 0 ? elapsed / current : 0;
+                var remaining = Math.round((total - current) * avgTime / 1000);
+
+                if (progressTitle) progressTitle.textContent = 'Uploading ' + current + ' of ' + total;
+                if (progressText) {
+                    var text = self.successCount + ' successful, ' + self.errorCount + ' failed';
+                    if (remaining > 0 && current < total) {
+                        text += ' • ~' + self.formatTime(remaining) + ' remaining';
+                    }
+                    progressText.textContent = text;
+                }
+
+                if (progressDetails) {
+                    progressDetails.innerHTML = self.renderProgressDetails();
+                }
+            }
+
+            function processNext() {
+                if (self.isCancelled) {
+                    self.showUploadComplete('Upload cancelled', 'cancelled');
+                    return;
+                }
+
+                if (current >= total) {
+                    self.showUploadComplete();
                     return;
                 }
 
                 var f = files[current];
-                if (progressTitle) progressTitle.textContent = 'Uploading...';
-                if (progressText) progressText.textContent = 'Processing ' + (current + 1) + ' of ' + total + ': ' + f.name;
-                if (progressBar) progressBar.style.width = ((current + 1) / total * 100) + '%';
+                var fileStatus = self.fileStatuses[current];
+
+                // Update status to uploading
+                fileStatus.status = 'uploading';
+                fileStatus.progress = 0;
+                updateProgress();
 
                 var reader = new FileReader();
                 reader.onload = function() {
                     var base64 = reader.result.split(',')[1];
+
+                    // Simulate progress while waiting for API
+                    fileStatus.progress = 30;
+                    updateProgress();
+
                     API.post('upload', {
                         fileName: f.name,
                         fileContent: base64,
                         documentType: self.docType
                     })
-                    .then(function() {
+                    .then(function(response) {
+                        fileStatus.status = 'success';
+                        fileStatus.progress = 100;
+                        fileStatus.documentId = response.data ? response.data.documentId : null;
+                        self.successCount++;
                         current++;
-                        processNext();
+                        updateProgress();
+
+                        // Small delay for visual feedback
+                        setTimeout(processNext, 100);
                     })
                     .catch(function(err) {
                         console.error('[Upload] Error:', err);
+                        fileStatus.status = 'error';
+                        fileStatus.progress = 100;
+                        fileStatus.error = err.message || 'Upload failed';
+                        self.errorCount++;
                         current++;
-                        processNext();
+                        updateProgress();
+
+                        setTimeout(processNext, 100);
                     });
                 };
+
+                reader.onerror = function() {
+                    fileStatus.status = 'error';
+                    fileStatus.error = 'Failed to read file';
+                    self.errorCount++;
+                    current++;
+                    updateProgress();
+                    setTimeout(processNext, 100);
+                };
+
+                reader.onprogress = function(e) {
+                    if (e.lengthComputable) {
+                        fileStatus.progress = Math.round((e.loaded / e.total) * 30);
+                        updateProgress();
+                    }
+                };
+
                 reader.readAsDataURL(f);
             }
 
             processNext();
         },
 
+        renderProgressDetails: function() {
+            var self = this;
+            return this.fileStatuses.map(function(fs, i) {
+                var statusClass = 'file-status-' + fs.status;
+                var icon = self.getStatusIcon(fs.status);
+
+                return '<div class="progress-file-item ' + statusClass + '">' +
+                    '<span class="progress-file-icon">' + icon + '</span>' +
+                    '<span class="progress-file-name">' + escapeHtml(fs.name) + '</span>' +
+                    (fs.status === 'uploading' || fs.status === 'processing' ?
+                        '<span class="progress-file-percent">' + fs.progress + '%</span>' : '') +
+                    (fs.status === 'error' ?
+                        '<span class="progress-file-error" title="' + escapeHtml(fs.error || '') + '"><i class="fas fa-triangle-exclamation"></i></span>' : '') +
+                '</div>';
+            }).join('');
+        },
+
+        formatTime: function(seconds) {
+            if (seconds < 60) return seconds + 's';
+            var mins = Math.floor(seconds / 60);
+            var secs = seconds % 60;
+            return mins + 'm ' + secs + 's';
+        },
+
+        showUploadComplete: function(customTitle, status) {
+            var self = this;
+            var progressTitle = el('#progress-title');
+            var progressText = el('#progress-text');
+            var progressBar = el('#progress-bar');
+            var progressSpinner = el('#progress-spinner');
+            var progressComplete = el('#progress-complete');
+
+            var isSuccess = this.errorCount === 0 && !status;
+            var title = customTitle || (isSuccess ? 'Upload Complete!' : 'Upload Finished');
+            var iconClass = isSuccess ? 'success' : (status === 'cancelled' ? 'cancelled' : 'partial');
+
+            if (progressTitle) progressTitle.textContent = title;
+            if (progressBar) progressBar.style.width = '100%';
+            if (progressSpinner) progressSpinner.style.display = 'none';
+
+            // Summary message
+            var summary = '';
+            if (status === 'cancelled') {
+                summary = 'Upload was cancelled. ' + this.successCount + ' file(s) uploaded.';
+            } else {
+                summary = this.successCount + ' file(s) uploaded successfully';
+                if (this.errorCount > 0) {
+                    summary += ', ' + this.errorCount + ' failed';
+                }
+            }
+            if (progressText) progressText.textContent = summary;
+
+            // Show completion icon
+            if (progressComplete) {
+                progressComplete.innerHTML = '<div class="complete-icon ' + iconClass + '">' +
+                    '<i class="fas fa-' + (isSuccess ? 'check-circle' : status === 'cancelled' ? 'stop-circle' : 'exclamation-circle') + '"></i>' +
+                '</div>';
+                progressComplete.style.display = 'flex';
+            }
+
+            // Reset state
+            this.isUploading = false;
+
+            // Navigate after delay
+            setTimeout(function() {
+                self.reset();
+                Router.navigate('queue');
+            }, 2000);
+        },
+
         cleanup: function() {
-            this.files = [];
-            this.docType = 'auto';
+            this.reset();
         }
     };
 
@@ -226,6 +444,6 @@
         function() { UploadController.cleanup(); }
     );
 
-    console.log('[View.Upload] Loaded');
+    console.log('[View.Upload] Enhanced Upload Loaded');
 
 })();

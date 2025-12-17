@@ -336,12 +336,14 @@
 
                 <div class="upload-progress" id="upload-progress" style="display:none;">
                     <div class="progress-visual">
-                        <div class="progress-spinner"></div>
+                        <div class="progress-spinner" id="progress-spinner"></div>
+                        <div id="progress-complete"></div>
                         <h3 id="progress-title">Processing...</h3>
                         <p id="progress-text">Preparing files...</p>
                         <div class="progress-track">
                             <div class="progress-bar" id="progress-bar"></div>
                         </div>
+                        <div id="progress-details"></div>
                     </div>
                 </div>
             </div>
@@ -400,18 +402,29 @@
     <script type="text/template" id="tpl-review">
         <div class="view-review">
             <div class="review-toolbar">
-                <button class="btn btn-ghost" id="btn-back">
-                    <i class="fas fa-arrow-left"></i> Back
-                </button>
+                <div class="toolbar-left">
+                    <button class="btn btn-ghost" id="btn-back">
+                        <i class="fas fa-arrow-left"></i> Back
+                    </button>
+                    <div class="toolbar-nav">
+                        <button class="btn btn-ghost btn-icon" id="btn-doc-prev" title="Previous Document (Ctrl+←)" disabled>
+                            <i class="fas fa-chevron-left"></i>
+                        </button>
+                        <span class="doc-counter" id="doc-counter" style="display:none;">1 of 1</span>
+                        <button class="btn btn-ghost btn-icon" id="btn-doc-next" title="Next Document (Ctrl+→)" disabled>
+                            <i class="fas fa-chevron-right"></i>
+                        </button>
+                    </div>
+                </div>
                 <div class="toolbar-title">
                     <span class="doc-type-badge" id="doc-type-badge">Invoice</span>
                     <span id="doc-title">Document Review</span>
                 </div>
                 <div class="toolbar-actions">
-                    <button class="btn btn-danger" id="btn-reject">
+                    <button class="btn btn-danger" id="btn-reject" title="Reject (Ctrl+R)">
                         <i class="fas fa-xmark"></i> Reject
                     </button>
-                    <button class="btn btn-success" id="btn-approve">
+                    <button class="btn btn-success" id="btn-approve" title="Approve (Enter)">
                         <i class="fas fa-check"></i> Approve & Create
                     </button>
                 </div>
@@ -420,15 +433,25 @@
             <div class="review-content">
                 <div class="preview-panel">
                     <div class="preview-tools">
-                        <button class="btn btn-icon btn-ghost" id="btn-zoom-out" title="Zoom Out">
+                        <button class="btn btn-icon btn-ghost" id="btn-zoom-out" title="Zoom Out (-)">
                             <i class="fas fa-minus"></i>
                         </button>
-                        <button class="btn btn-icon btn-ghost" id="btn-zoom-in" title="Zoom In">
+                        <span class="zoom-level" id="zoom-level">100%</span>
+                        <button class="btn btn-icon btn-ghost" id="btn-zoom-in" title="Zoom In (+)">
                             <i class="fas fa-plus"></i>
+                        </button>
+                        <button class="btn btn-icon btn-ghost" id="btn-zoom-reset" title="Reset Zoom (Ctrl+0)">
+                            <i class="fas fa-expand"></i>
+                        </button>
+                        <div class="preview-divider"></div>
+                        <button class="btn btn-icon btn-ghost" id="btn-rotate" title="Rotate">
+                            <i class="fas fa-rotate-right"></i>
                         </button>
                         <button class="btn btn-icon btn-ghost" id="btn-download" title="Download">
                             <i class="fas fa-download"></i>
                         </button>
+                        <div class="preview-divider"></div>
+                        <span class="page-display" id="page-display">1 / 1</span>
                     </div>
                     <div class="preview-viewport" id="preview-viewport">
                         <!-- Document preview renders here -->

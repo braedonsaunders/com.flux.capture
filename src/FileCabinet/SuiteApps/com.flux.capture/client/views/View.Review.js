@@ -1,22 +1,69 @@
 /**
- * Flux Capture - Review View Controller
+ * Flux Capture - World-Class Review View Controller
+ * Premium document review experience with keyboard shortcuts,
+ * vendor search, editable line items, and batch navigation
  */
 (function() {
     'use strict';
 
+    // ==========================================
+    // KEYBOARD SHORTCUTS CONFIGURATION
+    // ==========================================
+    var SHORTCUTS = {
+        'Tab': { action: 'nextField', description: 'Next field' },
+        'Shift+Tab': { action: 'prevField', description: 'Previous field' },
+        'Enter': { action: 'approve', description: 'Approve & next' },
+        'Escape': { action: 'back', description: 'Back to queue' },
+        'ArrowRight': { action: 'nextDoc', description: 'Next document', ctrl: true },
+        'ArrowLeft': { action: 'prevDoc', description: 'Previous document', ctrl: true },
+        'KeyS': { action: 'save', description: 'Save changes', ctrl: true },
+        'KeyR': { action: 'reject', description: 'Reject document', ctrl: true },
+        'Equal': { action: 'zoomIn', description: 'Zoom in' },
+        'Minus': { action: 'zoomOut', description: 'Zoom out' },
+        'Digit0': { action: 'zoomReset', description: 'Reset zoom', ctrl: true }
+    };
+
+    // ==========================================
+    // REVIEW CONTROLLER
+    // ==========================================
     var ReviewController = {
         data: null,
         docId: null,
         changes: {},
         zoom: 1,
+        rotation: 0,
+        currentPage: 1,
+        totalPages: 1,
+        lineItems: [],
+        vendorSuggestions: [],
+        queueIds: [],
+        queueIndex: -1,
+        isLoading: false,
+        isSaving: false,
+        fieldConfidences: {},
 
+        // ==========================================
+        // INITIALIZATION
+        // ==========================================
         init: function(params) {
+            var self = this;
             this.docId = params.docId;
             this.changes = {};
             this.zoom = 1;
+            this.rotation = 0;
+            this.currentPage = 1;
+            this.lineItems = [];
+            this.isLoading = true;
 
+            // Render base template
             renderTemplate('tpl-review', 'view-container');
+
+            // Load queue context for prev/next navigation
+            this.loadQueueContext();
+
+            // Bind events and keyboard shortcuts
             this.bindEvents();
+            this.bindKeyboardShortcuts();
 
             if (this.docId) {
                 this.loadData();
@@ -25,101 +72,268 @@
             }
         },
 
-        bindEvents: function() {
-            var self = this;
-
-            // Back button
-            var backBtn = el('#btn-back');
-            if (backBtn) {
-                backBtn.addEventListener('click', function() {
-                    Router.navigate('queue');
-                });
-            }
-
-            // Approve button
-            var approveBtn = el('#btn-approve');
-            if (approveBtn) {
-                approveBtn.addEventListener('click', function() {
-                    self.approveDocument();
-                });
-            }
-
-            // Reject button
-            var rejectBtn = el('#btn-reject');
-            if (rejectBtn) {
-                rejectBtn.addEventListener('click', function() {
-                    self.rejectDocument();
-                });
-            }
-
-            // Zoom controls
-            var zoomIn = el('#btn-zoom-in');
-            var zoomOut = el('#btn-zoom-out');
-            if (zoomIn) {
-                zoomIn.addEventListener('click', function() {
-                    self.setZoom(self.zoom + 0.25);
-                });
-            }
-            if (zoomOut) {
-                zoomOut.addEventListener('click', function() {
-                    self.setZoom(self.zoom - 0.25);
-                });
-            }
-
-            // Download button
-            var downloadBtn = el('#btn-download');
-            if (downloadBtn) {
-                downloadBtn.addEventListener('click', function() {
-                    if (self.data && self.data.sourceFile) {
-                        window.open('/core/media/media.nl?id=' + self.data.sourceFile, '_blank');
-                    }
-                });
-            }
-        },
-
+        // ==========================================
+        // DATA LOADING
+        // ==========================================
         loadData: function() {
             var self = this;
+            this.isLoading = true;
+            this.showLoadingState();
 
             API.get('document', { id: this.docId })
                 .then(function(data) {
                     self.data = data;
+                    self.lineItems = data.lineItems || [];
+                    self.fieldConfidences = data.fieldConfidences || {};
+                    self.totalPages = data.pageCount || 1;
+                    self.isLoading = false;
                     self.render();
                 })
                 .catch(function(err) {
                     console.error('[Review] Load error:', err);
+                    self.isLoading = false;
                     self.showError(err.message);
                 });
         },
 
+        loadQueueContext: function() {
+            var self = this;
+            // Load list of documents for prev/next navigation
+            API.get('list', { status: '4', pageSize: 100 }) // NEEDS_REVIEW
+                .then(function(data) {
+                    if (data && data.length > 0) {
+                        self.queueIds = data.map(function(d) { return d.id; });
+                        self.queueIndex = self.queueIds.indexOf(parseInt(self.docId, 10));
+                        self.updateNavigationButtons();
+                    }
+                })
+                .catch(function() {
+                    // Silent fail - navigation just won't work
+                });
+        },
+
+        // ==========================================
+        // EVENT BINDING
+        // ==========================================
+        bindEvents: function() {
+            var self = this;
+
+            // Back button
+            this.on('#btn-back', 'click', function() {
+                self.navigateBack();
+            });
+
+            // Approve button
+            this.on('#btn-approve', 'click', function() {
+                self.approveDocument();
+            });
+
+            // Reject button
+            this.on('#btn-reject', 'click', function() {
+                self.rejectDocument();
+            });
+
+            // Save button
+            this.on('#btn-save', 'click', function() {
+                self.saveChanges();
+            });
+
+            // Zoom controls
+            this.on('#btn-zoom-in', 'click', function() {
+                self.setZoom(self.zoom + 0.25);
+            });
+
+            this.on('#btn-zoom-out', 'click', function() {
+                self.setZoom(self.zoom - 0.25);
+            });
+
+            this.on('#btn-zoom-reset', 'click', function() {
+                self.setZoom(1);
+            });
+
+            // Rotate controls
+            this.on('#btn-rotate', 'click', function() {
+                self.rotate();
+            });
+
+            // Page navigation
+            this.on('#btn-page-prev', 'click', function() {
+                self.goToPage(self.currentPage - 1);
+            });
+
+            this.on('#btn-page-next', 'click', function() {
+                self.goToPage(self.currentPage + 1);
+            });
+
+            // Document navigation
+            this.on('#btn-doc-prev', 'click', function() {
+                self.goToPrevDocument();
+            });
+
+            this.on('#btn-doc-next', 'click', function() {
+                self.goToNextDocument();
+            });
+
+            // Download button
+            this.on('#btn-download', 'click', function() {
+                if (self.data && self.data.sourceFile) {
+                    window.open('/core/media/media.nl?id=' + self.data.sourceFile, '_blank');
+                }
+            });
+
+            // Show shortcuts help
+            this.on('#btn-shortcuts', 'click', function() {
+                self.showShortcutsHelp();
+            });
+        },
+
+        on: function(selector, event, handler) {
+            var el = document.querySelector(selector);
+            if (el) {
+                el.addEventListener(event, handler);
+            }
+        },
+
+        bindKeyboardShortcuts: function() {
+            var self = this;
+
+            document.addEventListener('keydown', function(e) {
+                // Don't trigger shortcuts when typing in inputs
+                if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA' || e.target.tagName === 'SELECT') {
+                    // Allow specific shortcuts even in inputs
+                    if (e.key === 'Escape') {
+                        e.target.blur();
+                        return;
+                    }
+                    if (e.ctrlKey && e.key === 's') {
+                        e.preventDefault();
+                        self.saveChanges();
+                        return;
+                    }
+                    return;
+                }
+
+                var key = e.code || e.key;
+                var shortcut = SHORTCUTS[key];
+
+                if (!shortcut) return;
+
+                // Check modifier requirements
+                if (shortcut.ctrl && !e.ctrlKey && !e.metaKey) return;
+                if (e.ctrlKey && !shortcut.ctrl) {
+                    // Some shortcuts need ctrl, some don't
+                    if (key === 'ArrowRight' || key === 'ArrowLeft' || key === 'KeyS' || key === 'KeyR' || key === 'Digit0') {
+                        // These need ctrl
+                    } else {
+                        return;
+                    }
+                }
+
+                e.preventDefault();
+
+                switch (shortcut.action) {
+                    case 'nextField': self.focusNextField(1); break;
+                    case 'prevField': self.focusNextField(-1); break;
+                    case 'approve': self.approveDocument(); break;
+                    case 'back': self.navigateBack(); break;
+                    case 'nextDoc': self.goToNextDocument(); break;
+                    case 'prevDoc': self.goToPrevDocument(); break;
+                    case 'save': self.saveChanges(); break;
+                    case 'reject': self.rejectDocument(); break;
+                    case 'zoomIn': self.setZoom(self.zoom + 0.25); break;
+                    case 'zoomOut': self.setZoom(self.zoom - 0.25); break;
+                    case 'zoomReset': self.setZoom(1); break;
+                }
+            });
+        },
+
+        // ==========================================
+        // RENDERING
+        // ==========================================
         render: function() {
             if (!this.data) return;
 
-            var doc = this.data;
-
             // Update toolbar
-            var titleEl = el('#doc-title');
-            var badgeEl = el('#doc-type-badge');
-            if (titleEl) titleEl.textContent = doc.invoiceNumber || 'Document Review';
-            if (badgeEl) badgeEl.textContent = doc.documentTypeText || 'Document';
+            this.renderToolbar();
 
-            // Render preview
+            // Render document preview
             this.renderPreview();
 
             // Render extraction form
             this.renderExtractionForm();
+
+            // Update navigation buttons
+            this.updateNavigationButtons();
+
+            // Focus first field
+            setTimeout(function() {
+                var firstInput = document.querySelector('.extraction-panel input:not([type="hidden"])');
+                if (firstInput) firstInput.focus();
+            }, 100);
+        },
+
+        showLoadingState: function() {
+            var panel = el('#extraction-panel');
+            if (panel) {
+                panel.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:300px;">' +
+                    '<div class="spinner"></div>' +
+                    '</div>';
+            }
+        },
+
+        renderToolbar: function() {
+            var doc = this.data;
+
+            // Update title and badge
+            var titleEl = el('#doc-title');
+            var badgeEl = el('#doc-type-badge');
+            if (titleEl) titleEl.textContent = doc.invoiceNumber || doc.name || 'Document Review';
+            if (badgeEl) badgeEl.textContent = doc.documentTypeText || 'Invoice';
+
+            // Update document counter
+            var counterEl = el('#doc-counter');
+            if (counterEl && this.queueIndex >= 0) {
+                counterEl.textContent = (this.queueIndex + 1) + ' of ' + this.queueIds.length;
+                counterEl.style.display = 'inline';
+            }
         },
 
         renderPreview: function() {
+            var self = this;
             var viewport = el('#preview-viewport');
             if (!viewport) return;
 
             if (this.data.fileUrl) {
-                viewport.innerHTML = '<iframe src="' + this.data.fileUrl + '" id="doc-preview" style="width:100%;height:100%;border:none;background:white;"></iframe>';
+                var iframeStyle = 'width:100%;height:100%;border:none;background:white;' +
+                    'transform:scale(' + this.zoom + ') rotate(' + this.rotation + 'deg);' +
+                    'transform-origin:center center;';
+
+                viewport.innerHTML = '<iframe src="' + this.data.fileUrl + '" id="doc-preview" style="' + iframeStyle + '"></iframe>';
+            } else if (this.data.sourceFile) {
+                var fileUrl = '/core/media/media.nl?id=' + this.data.sourceFile;
+                var iframeStyle = 'width:100%;height:100%;border:none;background:white;' +
+                    'transform:scale(' + this.zoom + ') rotate(' + this.rotation + 'deg);' +
+                    'transform-origin:center center;';
+
+                viewport.innerHTML = '<iframe src="' + fileUrl + '" id="doc-preview" style="' + iframeStyle + '"></iframe>';
             } else {
-                viewport.innerHTML = '<div class="empty-state" style="color:var(--text-inverse)">' +
+                viewport.innerHTML = '<div class="empty-state" style="color:var(--text-inverse);padding:60px;">' +
                     '<div class="empty-icon"><i class="fas fa-file-image"></i></div>' +
                     '<h4>Preview not available</h4>' +
-                '</div>';
+                    '<p>The document file could not be loaded</p>' +
+                    '</div>';
+            }
+
+            // Update zoom display
+            var zoomDisplay = el('#zoom-level');
+            if (zoomDisplay) {
+                zoomDisplay.textContent = Math.round(this.zoom * 100) + '%';
+            }
+
+            // Update page display
+            var pageDisplay = el('#page-display');
+            if (pageDisplay) {
+                pageDisplay.textContent = this.currentPage + ' / ' + this.totalPages;
             }
         },
 
@@ -134,126 +348,459 @@
 
             var html = '';
 
-            // Confidence header
-            html += '<div class="form-section">' +
-                '<div style="display:flex;align-items:center;gap:16px;padding:16px;background:var(--gray-50);border-radius:8px;margin-bottom:16px;">' +
-                    '<div style="width:60px;height:60px;position:relative;">' +
-                        '<svg viewBox="0 0 36 36" style="width:100%;height:100%">' +
+            // ========== CONFIDENCE HEADER ==========
+            html += '<div class="form-section confidence-section">' +
+                '<div class="confidence-header">' +
+                    '<div class="confidence-gauge">' +
+                        '<svg viewBox="0 0 36 36" class="gauge-svg">' +
                             '<circle cx="18" cy="18" r="15.5" fill="none" stroke="var(--gray-200)" stroke-width="3"/>' +
                             '<circle cx="18" cy="18" r="15.5" fill="none" stroke="var(--color-' + (confClass === 'high' ? 'success' : confClass === 'medium' ? 'warning' : 'danger') + ')" stroke-width="3" stroke-dasharray="' + (doc.confidence || 0) + ' 100" transform="rotate(-90 18 18)"/>' +
                         '</svg>' +
-                        '<div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:14px;">' + (doc.confidence || 0) + '</div>' +
+                        '<div class="gauge-value">' + (doc.confidence || 0) + '</div>' +
                     '</div>' +
-                    '<div>' +
-                        '<div style="font-weight:600;">' + (confClass === 'high' ? 'High' : confClass === 'medium' ? 'Medium' : 'Low') + ' Confidence</div>' +
-                        '<div style="font-size:12px;color:var(--text-secondary);">AI extraction accuracy</div>' +
+                    '<div class="confidence-info">' +
+                        '<div class="confidence-level ' + confClass + '">' + (confClass === 'high' ? 'High' : confClass === 'medium' ? 'Medium' : 'Low') + ' Confidence</div>' +
+                        '<div class="confidence-subtitle">AI extraction accuracy</div>' +
                     '</div>' +
+                    '<button class="btn btn-ghost btn-sm" id="btn-shortcuts" title="Keyboard Shortcuts">' +
+                        '<i class="fas fa-keyboard"></i>' +
+                    '</button>' +
                 '</div>' +
             '</div>';
 
-            // Anomalies
+            // ========== ANOMALY ALERTS ==========
             if (anomalies.length > 0) {
-                html += '<div class="form-section">' +
+                html += '<div class="form-section anomaly-section">' +
+                    '<div class="anomaly-header"><i class="fas fa-triangle-exclamation"></i> ' + anomalies.length + ' Alert' + (anomalies.length > 1 ? 's' : '') + '</div>' +
                     anomalies.map(function(a) {
-                        return '<div style="display:flex;align-items:center;gap:8px;padding:10px;background:var(--color-warning-bg);border-radius:6px;margin-bottom:8px;">' +
-                            '<i class="fas fa-triangle-exclamation" style="color:var(--color-warning)"></i>' +
-                            '<span style="font-size:13px;">' + escapeHtml(a.message) + '</span>' +
+                        var severityClass = a.severity === 'high' ? 'danger' : a.severity === 'medium' ? 'warning' : 'primary';
+                        return '<div class="anomaly-item anomaly-' + a.severity + '">' +
+                            '<i class="fas fa-' + (a.severity === 'high' ? 'exclamation-circle' : 'info-circle') + '"></i>' +
+                            '<span>' + escapeHtml(a.message) + '</span>' +
                         '</div>';
                     }).join('') +
                 '</div>';
             }
 
-            // Vendor info
+            // ========== VENDOR SECTION ==========
             html += '<div class="form-section">' +
-                '<h4>Vendor Information</h4>' +
-                '<div class="form-field">' +
-                    '<label>Vendor Name</label>' +
-                    '<input type="text" id="field-vendor" value="' + escapeHtml(doc.vendorName || '') + '">' +
+                '<h4><i class="fas fa-building"></i> Vendor</h4>' +
+                '<div class="form-field vendor-field">' +
+                    '<label>Vendor Name ' + this.renderConfidenceBadge('vendorName') + '</label>' +
+                    '<div class="vendor-search-wrapper">' +
+                        '<input type="text" id="field-vendor" class="vendor-input" value="' + escapeHtml(doc.vendorName || '') + '" placeholder="Search or enter vendor name..." autocomplete="off">' +
+                        '<div class="vendor-dropdown" id="vendor-dropdown" style="display:none;"></div>' +
+                    '</div>' +
+                    (doc.vendorId ? '<input type="hidden" id="field-vendorId" value="' + doc.vendorId + '">' : '') +
+                    (doc.vendorMatchConfidence ? '<div class="field-match-info"><i class="fas fa-check-circle"></i> Matched with ' + Math.round(doc.vendorMatchConfidence * 100) + '% confidence</div>' : '') +
                 '</div>' +
             '</div>';
 
-            // Invoice details
+            // ========== INVOICE DETAILS ==========
             html += '<div class="form-section">' +
-                '<h4>Invoice Details</h4>' +
+                '<h4><i class="fas fa-file-invoice"></i> Invoice Details</h4>' +
                 '<div class="form-row">' +
                     '<div class="form-field">' +
-                        '<label>Invoice Number</label>' +
-                        '<input type="text" id="field-invoiceNumber" value="' + escapeHtml(doc.invoiceNumber || '') + '">' +
+                        '<label>Invoice Number ' + this.renderConfidenceBadge('invoiceNumber') + '</label>' +
+                        '<input type="text" id="field-invoiceNumber" value="' + escapeHtml(doc.invoiceNumber || '') + '" placeholder="INV-0001">' +
                     '</div>' +
                     '<div class="form-field">' +
-                        '<label>Invoice Date</label>' +
+                        '<label>Invoice Date ' + this.renderConfidenceBadge('invoiceDate') + '</label>' +
                         '<input type="date" id="field-invoiceDate" value="' + formatDateInput(doc.invoiceDate) + '">' +
                     '</div>' +
                 '</div>' +
                 '<div class="form-row">' +
                     '<div class="form-field">' +
-                        '<label>Due Date</label>' +
+                        '<label>Due Date ' + this.renderConfidenceBadge('dueDate') + '</label>' +
                         '<input type="date" id="field-dueDate" value="' + formatDateInput(doc.dueDate) + '">' +
                     '</div>' +
                     '<div class="form-field">' +
-                        '<label>PO Number</label>' +
-                        '<input type="text" id="field-poNumber" value="' + escapeHtml(doc.poNumber || '') + '">' +
+                        '<label>PO Number ' + this.renderConfidenceBadge('poNumber') + '</label>' +
+                        '<input type="text" id="field-poNumber" value="' + escapeHtml(doc.poNumber || '') + '" placeholder="PO-0001">' +
                     '</div>' +
                 '</div>' +
             '</div>';
 
-            // Amounts
+            // ========== LINE ITEMS TABLE ==========
             html += '<div class="form-section">' +
-                '<h4>Amounts</h4>' +
+                '<h4><i class="fas fa-list"></i> Line Items <button class="btn btn-ghost btn-sm" id="btn-add-line" style="margin-left:auto;"><i class="fas fa-plus"></i> Add</button></h4>' +
+                '<div class="line-items-table" id="line-items-container">' +
+                    this.renderLineItemsTable() +
+                '</div>' +
+            '</div>';
+
+            // ========== AMOUNTS ==========
+            html += '<div class="form-section amounts-section">' +
+                '<h4><i class="fas fa-calculator"></i> Amounts</h4>' +
                 '<div class="form-row">' +
                     '<div class="form-field">' +
-                        '<label>Subtotal</label>' +
-                        '<input type="number" step="0.01" id="field-subtotal" value="' + (doc.subtotal || 0) + '">' +
+                        '<label>Subtotal ' + this.renderConfidenceBadge('subtotal') + '</label>' +
+                        '<div class="input-with-prefix">' +
+                            '<span class="input-prefix">$</span>' +
+                            '<input type="number" step="0.01" id="field-subtotal" value="' + (doc.subtotal || 0).toFixed(2) + '">' +
+                        '</div>' +
                     '</div>' +
                     '<div class="form-field">' +
-                        '<label>Tax</label>' +
-                        '<input type="number" step="0.01" id="field-taxAmount" value="' + (doc.taxAmount || 0) + '">' +
+                        '<label>Tax ' + this.renderConfidenceBadge('taxAmount') + '</label>' +
+                        '<div class="input-with-prefix">' +
+                            '<span class="input-prefix">$</span>' +
+                            '<input type="number" step="0.01" id="field-taxAmount" value="' + (doc.taxAmount || 0).toFixed(2) + '">' +
+                        '</div>' +
                     '</div>' +
                 '</div>' +
-                '<div class="form-field">' +
-                    '<label>Total Amount</label>' +
-                    '<input type="number" step="0.01" id="field-totalAmount" value="' + (doc.totalAmount || 0) + '" style="font-weight:600;font-size:18px;">' +
+                '<div class="form-field total-field">' +
+                    '<label>Total Amount ' + this.renderConfidenceBadge('totalAmount') + '</label>' +
+                    '<div class="input-with-prefix total-input">' +
+                        '<span class="input-prefix">$</span>' +
+                        '<input type="number" step="0.01" id="field-totalAmount" value="' + (doc.totalAmount || 0).toFixed(2) + '">' +
+                    '</div>' +
                 '</div>' +
+            '</div>';
+
+            // ========== ACTION BUTTONS ==========
+            html += '<div class="form-section action-section">' +
+                '<button class="btn btn-secondary btn-block" id="btn-save">' +
+                    '<i class="fas fa-save"></i> Save Changes <span class="shortcut-hint">Ctrl+S</span>' +
+                '</button>' +
             '</div>';
 
             panel.innerHTML = html;
 
-            // Bind change tracking
-            panel.querySelectorAll('input').forEach(function(input) {
+            // ========== BIND FORM EVENTS ==========
+            this.bindFormEvents();
+        },
+
+        renderConfidenceBadge: function(field) {
+            var conf = this.fieldConfidences[field];
+            if (!conf && conf !== 0) return '';
+
+            var percent = Math.round(conf * 100);
+            var confClass = percent >= 85 ? 'high' : percent >= 60 ? 'medium' : 'low';
+
+            return '<span class="field-confidence ' + confClass + '" title="AI Confidence: ' + percent + '%">' + percent + '%</span>';
+        },
+
+        renderLineItemsTable: function() {
+            var self = this;
+            var items = this.lineItems || [];
+
+            if (items.length === 0) {
+                return '<div class="empty-line-items">' +
+                    '<i class="fas fa-receipt"></i>' +
+                    '<span>No line items extracted</span>' +
+                    '</div>';
+            }
+
+            var html = '<table class="line-items">' +
+                '<thead><tr>' +
+                    '<th class="col-desc">Description</th>' +
+                    '<th class="col-qty">Qty</th>' +
+                    '<th class="col-price">Price</th>' +
+                    '<th class="col-amount">Amount</th>' +
+                    '<th class="col-action"></th>' +
+                '</tr></thead>' +
+                '<tbody>';
+
+            items.forEach(function(item, idx) {
+                html += '<tr data-idx="' + idx + '">' +
+                    '<td><input type="text" class="line-desc" value="' + escapeHtml(item.description || '') + '" data-field="description"></td>' +
+                    '<td><input type="number" class="line-qty" value="' + (item.quantity || 0) + '" step="0.01" data-field="quantity"></td>' +
+                    '<td><input type="number" class="line-price" value="' + (item.unitPrice || 0).toFixed(2) + '" step="0.01" data-field="unitPrice"></td>' +
+                    '<td><input type="number" class="line-amount" value="' + (item.amount || 0).toFixed(2) + '" step="0.01" data-field="amount"></td>' +
+                    '<td><button class="btn btn-ghost btn-icon btn-sm btn-remove-line" title="Remove"><i class="fas fa-times"></i></button></td>' +
+                '</tr>';
+            });
+
+            html += '</tbody></table>';
+
+            // Line items total
+            var total = items.reduce(function(sum, item) { return sum + (item.amount || 0); }, 0);
+            html += '<div class="line-items-total">Line Total: <strong>$' + total.toFixed(2) + '</strong></div>';
+
+            return html;
+        },
+
+        bindFormEvents: function() {
+            var self = this;
+
+            // Track all field changes
+            var panel = el('#extraction-panel');
+            if (!panel) return;
+
+            panel.querySelectorAll('input:not(.line-desc):not(.line-qty):not(.line-price):not(.line-amount), select').forEach(function(input) {
                 input.addEventListener('change', function() {
                     var field = this.id.replace('field-', '');
                     self.changes[field] = this.value;
+                    self.markUnsaved();
                 });
             });
 
-            // Auto-calculate total
+            // Vendor search
+            var vendorInput = el('#field-vendor');
+            if (vendorInput) {
+                var searchTimeout;
+                vendorInput.addEventListener('input', function() {
+                    var query = this.value.trim();
+                    clearTimeout(searchTimeout);
+                    if (query.length >= 2) {
+                        searchTimeout = setTimeout(function() {
+                            self.searchVendors(query);
+                        }, 300);
+                    } else {
+                        self.hideVendorDropdown();
+                    }
+                    self.changes.vendorName = query;
+                    self.markUnsaved();
+                });
+
+                vendorInput.addEventListener('focus', function() {
+                    if (self.vendorSuggestions.length > 0) {
+                        self.showVendorDropdown();
+                    }
+                });
+
+                vendorInput.addEventListener('blur', function() {
+                    // Delay hide to allow click on dropdown
+                    setTimeout(function() {
+                        self.hideVendorDropdown();
+                    }, 200);
+                });
+            }
+
+            // Auto-calculate total from subtotal + tax
             var subtotalEl = el('#field-subtotal');
             var taxEl = el('#field-taxAmount');
             var totalEl = el('#field-totalAmount');
+
             if (subtotalEl && taxEl && totalEl) {
                 var calcTotal = function() {
                     var subtotal = parseFloat(subtotalEl.value) || 0;
                     var tax = parseFloat(taxEl.value) || 0;
                     totalEl.value = (subtotal + tax).toFixed(2);
                     self.changes.totalAmount = totalEl.value;
+                    self.markUnsaved();
                 };
                 subtotalEl.addEventListener('input', calcTotal);
                 taxEl.addEventListener('input', calcTotal);
             }
+
+            // Add line item button
+            this.on('#btn-add-line', 'click', function() {
+                self.addLineItem();
+            });
+
+            // Line item events (delegated)
+            var container = el('#line-items-container');
+            if (container) {
+                container.addEventListener('input', function(e) {
+                    if (e.target.matches('.line-desc, .line-qty, .line-price, .line-amount')) {
+                        self.updateLineItem(e.target);
+                    }
+                });
+
+                container.addEventListener('click', function(e) {
+                    if (e.target.closest('.btn-remove-line')) {
+                        var row = e.target.closest('tr');
+                        if (row) {
+                            var idx = parseInt(row.dataset.idx, 10);
+                            self.removeLineItem(idx);
+                        }
+                    }
+                });
+            }
+
+            // Shortcuts help
+            this.on('#btn-shortcuts', 'click', function() {
+                self.showShortcutsHelp();
+            });
         },
 
-        setZoom: function(level) {
-            this.zoom = Math.max(0.5, Math.min(3, level));
-            var iframe = el('#doc-preview');
-            if (iframe) {
-                iframe.style.transform = 'scale(' + this.zoom + ')';
-                iframe.style.transformOrigin = 'top left';
+        // ==========================================
+        // VENDOR SEARCH
+        // ==========================================
+        searchVendors: function(query) {
+            var self = this;
+
+            API.get('vendors', { query: query })
+                .then(function(vendors) {
+                    self.vendorSuggestions = vendors || [];
+                    if (self.vendorSuggestions.length > 0) {
+                        self.showVendorDropdown();
+                    } else {
+                        self.hideVendorDropdown();
+                    }
+                })
+                .catch(function() {
+                    self.hideVendorDropdown();
+                });
+        },
+
+        showVendorDropdown: function() {
+            var dropdown = el('#vendor-dropdown');
+            if (!dropdown) return;
+
+            var html = this.vendorSuggestions.map(function(v) {
+                return '<div class="vendor-option" data-id="' + v.id + '" data-name="' + escapeHtml(v.companyName || v.entityId) + '">' +
+                    '<div class="vendor-option-name">' + escapeHtml(v.companyName || v.entityId) + '</div>' +
+                    (v.email ? '<div class="vendor-option-email">' + escapeHtml(v.email) + '</div>' : '') +
+                '</div>';
+            }).join('');
+
+            dropdown.innerHTML = html;
+            dropdown.style.display = 'block';
+
+            // Bind click handlers
+            dropdown.querySelectorAll('.vendor-option').forEach(function(opt) {
+                opt.addEventListener('click', function() {
+                    var id = this.dataset.id;
+                    var name = this.dataset.name;
+                    var input = el('#field-vendor');
+                    var hiddenInput = el('#field-vendorId');
+
+                    if (input) input.value = name;
+                    if (hiddenInput) {
+                        hiddenInput.value = id;
+                    } else {
+                        var hidden = document.createElement('input');
+                        hidden.type = 'hidden';
+                        hidden.id = 'field-vendorId';
+                        hidden.value = id;
+                        input.parentNode.appendChild(hidden);
+                    }
+
+                    ReviewController.changes.vendorName = name;
+                    ReviewController.changes.vendorId = id;
+                    ReviewController.markUnsaved();
+                    ReviewController.hideVendorDropdown();
+                });
+            });
+        },
+
+        hideVendorDropdown: function() {
+            var dropdown = el('#vendor-dropdown');
+            if (dropdown) dropdown.style.display = 'none';
+        },
+
+        // ==========================================
+        // LINE ITEMS
+        // ==========================================
+        addLineItem: function() {
+            this.lineItems.push({
+                description: '',
+                quantity: 1,
+                unitPrice: 0,
+                amount: 0
+            });
+            this.changes.lineItems = this.lineItems;
+            this.markUnsaved();
+            this.refreshLineItems();
+        },
+
+        removeLineItem: function(idx) {
+            this.lineItems.splice(idx, 1);
+            this.changes.lineItems = this.lineItems;
+            this.markUnsaved();
+            this.refreshLineItems();
+        },
+
+        updateLineItem: function(input) {
+            var row = input.closest('tr');
+            if (!row) return;
+
+            var idx = parseInt(row.dataset.idx, 10);
+            var field = input.dataset.field;
+            var value = input.value;
+
+            if (field === 'quantity' || field === 'unitPrice' || field === 'amount') {
+                value = parseFloat(value) || 0;
             }
+
+            this.lineItems[idx][field] = value;
+
+            // Auto-calculate amount if qty or price changed
+            if (field === 'quantity' || field === 'unitPrice') {
+                var qty = parseFloat(row.querySelector('.line-qty').value) || 0;
+                var price = parseFloat(row.querySelector('.line-price').value) || 0;
+                var amount = qty * price;
+                this.lineItems[idx].amount = amount;
+                row.querySelector('.line-amount').value = amount.toFixed(2);
+            }
+
+            this.changes.lineItems = this.lineItems;
+            this.markUnsaved();
+
+            // Update total display
+            this.updateLineItemsTotal();
+        },
+
+        refreshLineItems: function() {
+            var container = el('#line-items-container');
+            if (container) {
+                container.innerHTML = this.renderLineItemsTable();
+            }
+        },
+
+        updateLineItemsTotal: function() {
+            var total = this.lineItems.reduce(function(sum, item) { return sum + (item.amount || 0); }, 0);
+            var totalEl = document.querySelector('.line-items-total strong');
+            if (totalEl) {
+                totalEl.textContent = '$' + total.toFixed(2);
+            }
+        },
+
+        // ==========================================
+        // DOCUMENT ACTIONS
+        // ==========================================
+        saveChanges: function() {
+            var self = this;
+            if (this.isSaving || Object.keys(this.changes).length === 0) return;
+
+            this.isSaving = true;
+            var saveBtn = el('#btn-save');
+            if (saveBtn) {
+                saveBtn.disabled = true;
+                saveBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Saving...';
+            }
+
+            API.put('update', { documentId: this.docId, updates: this.changes })
+                .then(function() {
+                    self.changes = {};
+                    self.isSaving = false;
+                    self.markSaved();
+                    UI.toast('Changes saved', 'success');
+                    if (saveBtn) {
+                        saveBtn.disabled = false;
+                        saveBtn.innerHTML = '<i class="fas fa-save"></i> Save Changes <span class="shortcut-hint">Ctrl+S</span>';
+                    }
+                })
+                .catch(function(err) {
+                    self.isSaving = false;
+                    UI.toast('Error: ' + err.message, 'error');
+                    if (saveBtn) {
+                        saveBtn.disabled = false;
+                        saveBtn.innerHTML = '<i class="fas fa-save"></i> Save Changes <span class="shortcut-hint">Ctrl+S</span>';
+                    }
+                });
         },
 
         approveDocument: function() {
             var self = this;
-            if (!confirm('Create transaction from this document?')) return;
+
+            // Check for required fields
+            var vendorName = el('#field-vendor');
+            var totalAmount = el('#field-totalAmount');
+
+            if (!vendorName || !vendorName.value.trim()) {
+                UI.toast('Vendor name is required', 'warning');
+                if (vendorName) vendorName.focus();
+                return;
+            }
+
+            if (!totalAmount || parseFloat(totalAmount.value) <= 0) {
+                UI.toast('Total amount is required', 'warning');
+                if (totalAmount) totalAmount.focus();
+                return;
+            }
 
             // Save any pending changes first
             var savePromise = Object.keys(this.changes).length > 0
@@ -264,9 +811,15 @@
                 .then(function() {
                     return API.put('approve', { documentId: self.docId, createTransaction: true });
                 })
-                .then(function() {
-                    UI.toast('Document approved!', 'success');
-                    Router.navigate('queue');
+                .then(function(result) {
+                    UI.toast('Document approved! Transaction created.', 'success');
+
+                    // Go to next document or back to queue
+                    if (self.queueIndex >= 0 && self.queueIndex < self.queueIds.length - 1) {
+                        self.goToNextDocument();
+                    } else {
+                        Router.navigate('queue');
+                    }
                 })
                 .catch(function(err) {
                     UI.toast('Error: ' + err.message, 'error');
@@ -275,17 +828,158 @@
 
         rejectDocument: function() {
             var self = this;
-            var reason = prompt('Reason for rejection:');
-            if (!reason) return;
 
-            API.put('reject', { documentId: this.docId, reason: reason })
+            // Show rejection modal
+            var reason = prompt('Reason for rejection:');
+            if (!reason || !reason.trim()) return;
+
+            API.put('reject', { documentId: this.docId, reason: reason.trim() })
                 .then(function() {
                     UI.toast('Document rejected', 'success');
-                    Router.navigate('queue');
+
+                    // Go to next document or back to queue
+                    if (self.queueIndex >= 0 && self.queueIndex < self.queueIds.length - 1) {
+                        self.goToNextDocument();
+                    } else {
+                        Router.navigate('queue');
+                    }
                 })
                 .catch(function(err) {
                     UI.toast('Error: ' + err.message, 'error');
                 });
+        },
+
+        // ==========================================
+        // NAVIGATION
+        // ==========================================
+        navigateBack: function() {
+            if (Object.keys(this.changes).length > 0) {
+                if (!confirm('You have unsaved changes. Discard and go back?')) {
+                    return;
+                }
+            }
+            Router.navigate('queue');
+        },
+
+        goToNextDocument: function() {
+            if (this.queueIndex < 0 || this.queueIndex >= this.queueIds.length - 1) return;
+
+            var nextId = this.queueIds[this.queueIndex + 1];
+            Router.navigate('review', { docId: nextId });
+        },
+
+        goToPrevDocument: function() {
+            if (this.queueIndex <= 0) return;
+
+            var prevId = this.queueIds[this.queueIndex - 1];
+            Router.navigate('review', { docId: prevId });
+        },
+
+        updateNavigationButtons: function() {
+            var prevBtn = el('#btn-doc-prev');
+            var nextBtn = el('#btn-doc-next');
+
+            if (prevBtn) {
+                prevBtn.disabled = this.queueIndex <= 0;
+            }
+            if (nextBtn) {
+                nextBtn.disabled = this.queueIndex < 0 || this.queueIndex >= this.queueIds.length - 1;
+            }
+        },
+
+        // ==========================================
+        // PREVIEW CONTROLS
+        // ==========================================
+        setZoom: function(level) {
+            this.zoom = Math.max(0.5, Math.min(3, level));
+            var iframe = el('#doc-preview');
+            if (iframe) {
+                iframe.style.transform = 'scale(' + this.zoom + ') rotate(' + this.rotation + 'deg)';
+            }
+            var zoomDisplay = el('#zoom-level');
+            if (zoomDisplay) {
+                zoomDisplay.textContent = Math.round(this.zoom * 100) + '%';
+            }
+        },
+
+        rotate: function() {
+            this.rotation = (this.rotation + 90) % 360;
+            var iframe = el('#doc-preview');
+            if (iframe) {
+                iframe.style.transform = 'scale(' + this.zoom + ') rotate(' + this.rotation + 'deg)';
+            }
+        },
+
+        goToPage: function(page) {
+            if (page < 1 || page > this.totalPages) return;
+            this.currentPage = page;
+            // Page navigation would require PDF.js or similar
+            var pageDisplay = el('#page-display');
+            if (pageDisplay) {
+                pageDisplay.textContent = this.currentPage + ' / ' + this.totalPages;
+            }
+        },
+
+        // ==========================================
+        // FIELD NAVIGATION
+        // ==========================================
+        focusNextField: function(direction) {
+            var inputs = Array.from(document.querySelectorAll('.extraction-panel input:not([type="hidden"]), .extraction-panel select'));
+            var current = document.activeElement;
+            var idx = inputs.indexOf(current);
+
+            if (idx === -1) {
+                inputs[0].focus();
+            } else {
+                var nextIdx = idx + direction;
+                if (nextIdx >= 0 && nextIdx < inputs.length) {
+                    inputs[nextIdx].focus();
+                }
+            }
+        },
+
+        // ==========================================
+        // UI STATE
+        // ==========================================
+        markUnsaved: function() {
+            var saveBtn = el('#btn-save');
+            if (saveBtn && !saveBtn.classList.contains('has-changes')) {
+                saveBtn.classList.add('has-changes');
+                saveBtn.innerHTML = '<i class="fas fa-save"></i> Save Changes* <span class="shortcut-hint">Ctrl+S</span>';
+            }
+        },
+
+        markSaved: function() {
+            var saveBtn = el('#btn-save');
+            if (saveBtn) {
+                saveBtn.classList.remove('has-changes');
+                saveBtn.innerHTML = '<i class="fas fa-save"></i> Save Changes <span class="shortcut-hint">Ctrl+S</span>';
+            }
+        },
+
+        showShortcutsHelp: function() {
+            var html = '<div class="shortcuts-modal">' +
+                '<div class="shortcuts-content">' +
+                    '<h3><i class="fas fa-keyboard"></i> Keyboard Shortcuts</h3>' +
+                    '<div class="shortcuts-grid">' +
+                        '<div class="shortcut-item"><kbd>Tab</kbd> <span>Next field</span></div>' +
+                        '<div class="shortcut-item"><kbd>Shift+Tab</kbd> <span>Previous field</span></div>' +
+                        '<div class="shortcut-item"><kbd>Enter</kbd> <span>Approve & next</span></div>' +
+                        '<div class="shortcut-item"><kbd>Esc</kbd> <span>Back to queue</span></div>' +
+                        '<div class="shortcut-item"><kbd>Ctrl+S</kbd> <span>Save changes</span></div>' +
+                        '<div class="shortcut-item"><kbd>Ctrl+R</kbd> <span>Reject</span></div>' +
+                        '<div class="shortcut-item"><kbd>Ctrl+←</kbd> <span>Previous doc</span></div>' +
+                        '<div class="shortcut-item"><kbd>Ctrl+→</kbd> <span>Next doc</span></div>' +
+                        '<div class="shortcut-item"><kbd>+/-</kbd> <span>Zoom in/out</span></div>' +
+                        '<div class="shortcut-item"><kbd>Ctrl+0</kbd> <span>Reset zoom</span></div>' +
+                    '</div>' +
+                    '<button class="btn btn-primary btn-block" onclick="this.closest(\'.shortcuts-modal\').remove()">Got it!</button>' +
+                '</div>' +
+            '</div>';
+
+            var modal = document.createElement('div');
+            modal.innerHTML = html;
+            document.body.appendChild(modal.firstChild);
         },
 
         showError: function(message) {
@@ -304,19 +998,28 @@
             }
         },
 
+        // ==========================================
+        // CLEANUP
+        // ==========================================
         cleanup: function() {
             this.data = null;
             this.docId = null;
             this.changes = {};
             this.zoom = 1;
+            this.rotation = 0;
+            this.lineItems = [];
+            this.vendorSuggestions = [];
+            this.queueIds = [];
+            this.queueIndex = -1;
         }
     };
 
+    // Register the controller
     Router.register('review',
         function(params) { ReviewController.init(params); },
         function() { ReviewController.cleanup(); }
     );
 
-    console.log('[View.Review] Loaded');
+    console.log('[View.Review] World-Class Review Loaded');
 
 })();
