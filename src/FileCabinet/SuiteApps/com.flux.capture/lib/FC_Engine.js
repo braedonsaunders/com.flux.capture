@@ -5,6 +5,8 @@
  *
  * Flux Capture - Intelligent Document Processing Engine
  * Core library for document extraction, vendor matching, and anomaly detection
+ *
+ * Uses N/documentCapture module (NetSuite 2025.2+) with OCI Document Understanding
  */
 
 define([
@@ -21,7 +23,6 @@ define([
     'use strict';
 
     // ==================== Constants ====================
-    // These match the INTEGER values stored in NetSuite custom records
 
     const DocStatus = Object.freeze({
         PENDING: 1,
@@ -57,7 +58,24 @@ define([
         LOW: { min: 0, label: 'Low', color: '#ef4444' }
     });
 
-    const SUPPORTED_FILE_TYPES = ['pdf', 'png', 'jpg', 'jpeg', 'tiff', 'tif', 'gif', 'bmp'];
+    const SUPPORTED_FILE_TYPES = ['pdf', 'png', 'jpg', 'jpeg', 'tiff', 'tif'];
+
+    // Field label mappings for OCI Document Understanding
+    // Maps N/documentCapture field label names to our internal field names
+    // Based on NetSuite's AI extraction which returns standardized field names
+    const FIELD_LABEL_MAPPINGS = {
+        // Primary mappings (exact names from N/documentCapture)
+        vendorName: ['vendorname', 'vendor name', 'vendor', 'suppliername', 'supplier name', 'supplier', 'company name', 'company', 'from', 'bill from', 'sold by', 'merchant'],
+        vendorAddress: ['vendoraddress', 'vendor address', 'supplier address', 'company address', 'address', 'bill from address', 'merchant address'],
+        invoiceNumber: ['invoiceid', 'invoice id', 'billnumber', 'bill number', 'invoice number', 'invoice no', 'invoice #', 'document number', 'doc no', 'reference', 'ref', 'receipt number'],
+        invoiceDate: ['invoicedate', 'invoice date', 'date', 'document date', 'bill date', 'issue date', 'issued', 'transaction date', 'receipt date'],
+        dueDate: ['duedate', 'due date', 'payment due', 'pay by', 'due by', 'payment date'],
+        poNumber: ['purchaseorder', 'purchase order', 'po number', 'po #', 'po', 'order number', 'order #'],
+        subtotal: ['subtotal', 'sub total', 'sub-total', 'net amount', 'net total', 'amount before tax'],
+        taxAmount: ['taxamount', 'tax amount', 'tax', 'vat', 'gst', 'sales tax', 'tax total', 'total tax'],
+        totalAmount: ['totalamount', 'total amount', 'total', 'amount due', 'grand total', 'balance due', 'total due', 'invoice total', 'amount', 'total paid'],
+        currency: ['currency', 'currency code']
+    };
 
     // ==================== Flux Capture Engine ====================
 
@@ -66,6 +84,7 @@ define([
             this.enableLearning = options.enableLearning !== false;
             this.enableFraudDetection = options.enableFraudDetection !== false;
             this.vendorCache = null;
+            this.docCaptureModule = null;
         }
 
         /**
@@ -75,11 +94,15 @@ define([
          * @returns {Object} - Extraction results
          */
         processDocument(fileId, options = {}) {
+            const startTime = Date.now();
+
             try {
                 const fileObj = file.load({ id: fileId });
                 this._validateFile(fileObj);
 
-                // Extract text and structure from document
+                log.audit('FluxCapture.processDocument', `Processing file: ${fileObj.name} (${fileObj.size} bytes)`);
+
+                // Extract text and structure from document using N/documentCapture
                 const extractionResult = this._extractDocumentData(fileObj, options);
 
                 // Match vendor from extracted data
@@ -97,6 +120,9 @@ define([
                 // Calculate confidence scores
                 const confidence = this._calculateConfidence(extractionResult, vendorMatch);
 
+                const processingTime = Date.now() - startTime;
+                log.audit('FluxCapture.processDocument', `Completed in ${processingTime}ms. Confidence: ${confidence.overall}%`);
+
                 return {
                     success: true,
                     extraction: {
@@ -108,12 +134,13 @@ define([
                         confidence: confidence,
                         amountValidation: amountValidation,
                         rawText: extractionResult.rawText,
-                        pageCount: extractionResult.pageCount
+                        pageCount: extractionResult.pageCount,
+                        processingTime: processingTime
                     }
                 };
 
             } catch (error) {
-                log.error('FluxCaptureEngine.processDocument', error);
+                log.error('FluxCaptureEngine.processDocument', { message: error.message, stack: error.stack });
                 return {
                     success: false,
                     error: error.message
@@ -129,172 +156,524 @@ define([
             const extension = fileName.split('.').pop();
 
             if (!SUPPORTED_FILE_TYPES.includes(extension)) {
-                throw new Error(`Unsupported file type: ${extension}`);
+                throw new Error(`Unsupported file type: ${extension}. Supported: ${SUPPORTED_FILE_TYPES.join(', ')}`);
             }
 
-            if (fileObj.size > 10485760) {
-                throw new Error('File size exceeds 10MB limit');
+            // N/documentCapture supports files up to 5 pages for synchronous processing
+            if (fileObj.size > 20971520) { // 20MB
+                throw new Error('File size exceeds 20MB limit');
             }
         }
 
         /**
-         * Extract document data using native NetSuite document capture
+         * Load the N/documentCapture module
+         * @returns {Object} The documentCapture module or null if unavailable
+         */
+        _getDocCaptureModule() {
+            if (this.docCaptureModule !== null) {
+                return this.docCaptureModule;
+            }
+
+            try {
+                this.docCaptureModule = require('N/documentCapture');
+                log.debug('N/documentCapture', 'Module loaded successfully');
+                return this.docCaptureModule;
+            } catch (e) {
+                log.error('N/documentCapture', `Module not available: ${e.message}`);
+                this.docCaptureModule = false;
+                return null;
+            }
+        }
+
+        /**
+         * Extract document data using N/documentCapture (OCI Document Understanding)
+         * @param {file.File} fileObj - The file object to process
+         * @param {Object} options - Processing options
+         * @returns {Object} Normalized extraction result
          */
         _extractDocumentData(fileObj, options) {
+            const docCapture = this._getDocCaptureModule();
+
+            if (!docCapture) {
+                log.audit('FluxCapture', 'N/documentCapture not available, using fallback');
+                return this._simulateExtraction(fileObj);
+            }
+
             try {
-                // Try to use NetSuite's native document capture
-                const docCapture = require('N/documentCapture');
+                // Determine document type for optimization
+                let captureDocType = docCapture.DocumentType.INVOICE;
+                if (options.documentType === DocumentType.RECEIPT ||
+                    options.documentType === DocumentType.EXPENSE_REPORT ||
+                    options.documentType === 'RECEIPT' ||
+                    options.documentType === 'EXPENSE_REPORT') {
+                    captureDocType = docCapture.DocumentType.RECEIPT;
+                }
 
-                const docType = options.documentType === 'EXPENSE_REPORT' ?
-                    docCapture.DocumentType.RECEIPT : docCapture.DocumentType.INVOICE;
-
-                const result = docCapture.documentToStructure({
+                // Build extraction options
+                const extractOptions = {
                     file: fileObj,
-                    documentType: docType,
-                    language: options.language || 'ENG'
-                });
+                    documentType: captureDocType,
+                    features: [
+                        docCapture.Feature.FIELD_EXTRACTION,
+                        docCapture.Feature.TABLE_EXTRACTION,
+                        docCapture.Feature.TEXT_EXTRACTION
+                    ]
+                };
 
-                return this._normalizeExtractionResult(result);
+                // Add language if specified
+                if (options.language && docCapture.Language[options.language]) {
+                    extractOptions.language = docCapture.Language[options.language];
+                }
+
+                // Set timeout for larger documents (minimum 30000ms)
+                if (options.timeout) {
+                    extractOptions.timeout = Math.max(30000, options.timeout);
+                }
+
+                log.debug('FluxCapture.extract', `Calling documentToStructure with type: ${captureDocType}`);
+
+                // Call the OCI Document Understanding API
+                const result = docCapture.documentToStructure(extractOptions);
+
+                log.debug('FluxCapture.extract', `Received result with ${result.pages ? result.pages.length : 0} pages`);
+
+                return this._normalizeExtractionResult(result, docCapture);
 
             } catch (e) {
-                // Fallback: Return simulated extraction for demo/testing
-                log.debug('Document capture fallback', e.message);
+                log.error('FluxCapture._extractDocumentData', {
+                    message: e.message,
+                    stack: e.stack,
+                    name: e.name
+                });
+
+                // Check for specific error types
+                if (e.message && e.message.includes('usage')) {
+                    throw new Error('Document capture usage limit reached. Please try again later or configure OCI credentials.');
+                }
+
+                // Fall back to simulation for development/testing
+                log.audit('FluxCapture', `Extraction failed, using fallback: ${e.message}`);
                 return this._simulateExtraction(fileObj);
             }
         }
 
         /**
-         * Normalize extraction results to standard format
+         * Normalize extraction results from N/documentCapture to standard format
+         *
+         * N/documentCapture returns:
+         * - result.pages[] - array of Page objects
+         * - page.fields[] - array of Field objects with label (FieldLabel) and value (FieldValue)
+         * - page.tables[] - array of Table objects with headerRows, bodyRows, footerRows
+         * - page.lines[] - array of Line objects
+         * - page.getText() - method to get all text on page
+         *
+         * Field structure:
+         * - field.label: FieldLabel with .name (string) and .confidence (number)
+         * - field.value: FieldValue - could be direct value or object with .text
+         * - field.type: string (date, number, string)
+         *
+         * Table structure:
+         * - table.headerRows: array of header rows
+         * - table.bodyRows: array of data rows (TableRow objects)
+         * - table.footerRows: array of footer rows (totals)
+         * - Each row contains .cells[] array
+         * - Each cell has .text (string) and .confidence (number)
+         *
+         * @param {documentCapture.Document} result - The raw result from documentToStructure
+         * @param {Object} docCapture - The documentCapture module reference
+         * @returns {Object} Normalized extraction result
          */
-        _normalizeExtractionResult(rawResult) {
-            const extractField = (result, ...names) => {
-                for (const name of names) {
-                    if (result.fields) {
-                        const field = result.fields.find(f =>
-                            f.name?.toLowerCase().includes(name.toLowerCase())
-                        );
-                        if (field) return field.value;
+        _normalizeExtractionResult(result, docCapture) {
+            const fields = {
+                vendorName: null,
+                vendorAddress: null,
+                invoiceNumber: null,
+                invoiceDate: null,
+                dueDate: null,
+                poNumber: null,
+                subtotal: 0,
+                taxAmount: 0,
+                totalAmount: 0,
+                currency: 'USD'
+            };
+
+            let rawText = '';
+            let allLineItems = [];
+            const pageCount = result.pages ? result.pages.length : 1;
+            const fieldConfidences = {};
+
+            // Process each page
+            if (result.pages && result.pages.length > 0) {
+                result.pages.forEach((page, pageIndex) => {
+                    // Extract text from page
+                    if (typeof page.getText === 'function') {
+                        rawText += page.getText() + '\n';
+                    } else if (page.lines) {
+                        // Fallback: concatenate lines
+                        page.lines.forEach(line => {
+                            const lineText = line.text || (line.words ? line.words.map(w => w.text || w).join(' ') : '');
+                            if (lineText) rawText += lineText + '\n';
+                        });
                     }
-                    if (result[name]) return result[name];
-                }
-                return null;
-            };
 
-            const parseAmount = (value) => {
-                if (!value) return 0;
-                const cleaned = String(value).replace(/[^0-9.-]/g, '');
-                return parseFloat(cleaned) || 0;
-            };
+                    // Process extracted fields
+                    if (page.fields && page.fields.length > 0) {
+                        page.fields.forEach(field => {
+                            // Extract label name - could be field.label.name or field.label directly
+                            const labelName = this._extractLabelName(field.label);
+                            const labelConfidence = this._extractLabelConfidence(field.label);
 
-            const parseDate = (value) => {
-                if (!value) return null;
-                try {
-                    return format.parse({ value: value, type: format.Type.DATE });
-                } catch (e) {
-                    return null;
-                }
-            };
+                            // Extract field value - could be field.value.text, field.value directly, etc.
+                            const fieldValue = this._extractFieldValue(field.value);
+
+                            // Map to our internal field name
+                            const mappedField = this._mapFieldLabel(labelName);
+
+                            if (mappedField && fieldValue) {
+                                // Parse the value based on field type
+                                const parsedValue = this._parseFieldValue(mappedField, fieldValue);
+
+                                if (parsedValue !== null && parsedValue !== undefined) {
+                                    // Only overwrite if we don't have a value yet or this has higher confidence
+                                    const existingConfidence = fieldConfidences[mappedField] || 0;
+                                    const newConfidence = labelConfidence || 0.5;
+
+                                    if (!fields[mappedField] || newConfidence > existingConfidence) {
+                                        fields[mappedField] = parsedValue;
+                                        fieldConfidences[mappedField] = newConfidence;
+                                    }
+                                }
+                            }
+
+                            log.debug('FluxCapture.field', `Page ${pageIndex + 1}: "${labelName}" = "${fieldValue}" (conf: ${labelConfidence || 'N/A'})`);
+                        });
+                    }
+
+                    // Process tables for line items
+                    if (page.tables && page.tables.length > 0) {
+                        page.tables.forEach((table, tableIndex) => {
+                            log.debug('FluxCapture.table', `Page ${pageIndex + 1}, Table ${tableIndex + 1}: ${table.bodyRows ? table.bodyRows.length : 0} body rows`);
+                            const tableItems = this._extractLineItemsFromTable(table);
+                            if (tableItems.length > 0) {
+                                allLineItems = allLineItems.concat(tableItems);
+                            }
+                        });
+                    }
+                });
+            }
+
+            // Detect document type from text content
+            const documentType = this._detectDocumentType({ text: rawText });
+
+            log.audit('FluxCapture.normalize', `Extracted ${Object.keys(fields).filter(k => fields[k]).length} fields, ${allLineItems.length} line items from ${pageCount} pages`);
 
             return {
-                documentType: this._detectDocumentType(rawResult),
-                fields: {
-                    vendorName: extractField(rawResult, 'vendor_name', 'supplier_name', 'company'),
-                    vendorAddress: extractField(rawResult, 'vendor_address', 'supplier_address'),
-                    invoiceNumber: extractField(rawResult, 'invoice_number', 'invoice_no', 'document_number'),
-                    invoiceDate: parseDate(extractField(rawResult, 'invoice_date', 'document_date', 'date')),
-                    dueDate: parseDate(extractField(rawResult, 'due_date', 'payment_due')),
-                    poNumber: extractField(rawResult, 'po_number', 'purchase_order'),
-                    subtotal: parseAmount(extractField(rawResult, 'subtotal', 'sub_total')),
-                    taxAmount: parseAmount(extractField(rawResult, 'tax', 'tax_amount', 'vat')),
-                    totalAmount: parseAmount(extractField(rawResult, 'total', 'total_amount', 'amount_due')),
-                    currency: extractField(rawResult, 'currency') || 'USD'
-                },
-                lineItems: this._extractLineItems(rawResult),
-                rawText: rawResult.text || '',
-                pageCount: rawResult.pageCount || 1
+                documentType: documentType,
+                fields: fields,
+                fieldConfidences: fieldConfidences,
+                lineItems: allLineItems,
+                rawText: rawText.trim(),
+                pageCount: pageCount,
+                mimeType: result.mimeType || null
             };
         }
 
         /**
-         * Extract line items from tables
+         * Extract label name from a FieldLabel object or string
+         * @param {Object|string} label - The label from N/documentCapture
+         * @returns {string} The label name
          */
-        _extractLineItems(result) {
-            const items = [];
+        _extractLabelName(label) {
+            if (!label) return '';
+            if (typeof label === 'string') return label;
+            if (typeof label === 'object') {
+                // FieldLabel object has .name property
+                return label.name || label.text || label.label || String(label);
+            }
+            return String(label);
+        }
 
-            if (!result.tables || result.tables.length === 0) {
-                return items;
+        /**
+         * Extract confidence from a FieldLabel object
+         * @param {Object|string} label - The label from N/documentCapture
+         * @returns {number} The confidence (0-1)
+         */
+        _extractLabelConfidence(label) {
+            if (!label || typeof label !== 'object') return 0.5;
+            return label.confidence || 0.5;
+        }
+
+        /**
+         * Extract value from a FieldValue object or string
+         * @param {Object|string|number} value - The value from N/documentCapture
+         * @returns {string} The value as string
+         */
+        _extractFieldValue(value) {
+            if (value === null || value === undefined) return null;
+            if (typeof value === 'string' || typeof value === 'number') return String(value);
+            if (typeof value === 'object') {
+                // FieldValue object might have .text, .value, or other properties
+                return value.text || value.value || value.content || String(value);
+            }
+            return String(value);
+        }
+
+        /**
+         * Map an OCR field label to our internal field name
+         * @param {string} label - The field label from OCR
+         * @returns {string|null} The internal field name or null if not recognized
+         */
+        _mapFieldLabel(label) {
+            if (!label) return null;
+
+            const normalizedLabel = label.toLowerCase().trim();
+
+            for (const [fieldName, labels] of Object.entries(FIELD_LABEL_MAPPINGS)) {
+                if (labels.some(l => normalizedLabel.includes(l) || l.includes(normalizedLabel))) {
+                    return fieldName;
+                }
             }
 
-            // Find line items table
-            const itemTable = result.tables.find(t => {
-                const headers = (t.headers || t.rows?.[0] || [])
-                    .map(h => String(h.value || h).toLowerCase());
-                return headers.some(h =>
-                    h.includes('description') || h.includes('item') || h.includes('qty')
-                );
-            });
+            return null;
+        }
 
-            if (!itemTable || !itemTable.rows) return items;
+        /**
+         * Parse a field value based on its type
+         * @param {string} fieldName - The internal field name
+         * @param {string} rawValue - The raw value from OCR
+         * @returns {*} The parsed value
+         */
+        _parseFieldValue(fieldName, rawValue) {
+            if (!rawValue) return null;
 
-            const headers = (itemTable.headers || itemTable.rows[0] || [])
-                .map(h => String(h.value || h).toLowerCase());
-            const dataRows = itemTable.headers ? itemTable.rows : itemTable.rows.slice(1);
+            const value = String(rawValue).trim();
 
-            const findIndex = (...keywords) => {
-                return headers.findIndex(h => keywords.some(k => h.includes(k)));
+            // Date fields
+            if (fieldName === 'invoiceDate' || fieldName === 'dueDate') {
+                return this._parseDate(value);
+            }
+
+            // Amount fields
+            if (['subtotal', 'taxAmount', 'totalAmount'].includes(fieldName)) {
+                return this._parseAmount(value);
+            }
+
+            // String fields
+            return value;
+        }
+
+        /**
+         * Parse a date string to a Date object
+         * @param {string} value - The date string
+         * @returns {Date|null} The parsed date or null
+         */
+        _parseDate(value) {
+            if (!value) return null;
+
+            try {
+                // Try NetSuite format first
+                return format.parse({ value: value, type: format.Type.DATE });
+            } catch (e) {
+                // Try common date formats
+                const datePatterns = [
+                    /(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{2,4})/,  // MM/DD/YYYY or DD/MM/YYYY
+                    /(\d{4})[\/\-](\d{1,2})[\/\-](\d{1,2})/,    // YYYY-MM-DD
+                    /(\w+)\s+(\d{1,2}),?\s+(\d{4})/              // Month DD, YYYY
+                ];
+
+                for (const pattern of datePatterns) {
+                    const match = value.match(pattern);
+                    if (match) {
+                        try {
+                            const parsed = new Date(value);
+                            if (!isNaN(parsed.getTime())) {
+                                return parsed;
+                            }
+                        } catch (e2) {
+                            continue;
+                        }
+                    }
+                }
+
+                return null;
+            }
+        }
+
+        /**
+         * Parse an amount string to a number
+         * @param {string} value - The amount string
+         * @returns {number} The parsed amount
+         */
+        _parseAmount(value) {
+            if (!value) return 0;
+
+            // Remove currency symbols and thousands separators
+            const cleaned = String(value)
+                .replace(/[^0-9.,\-]/g, '')  // Keep only digits, dots, commas, minus
+                .replace(/,(\d{3})/g, '$1')   // Remove thousands separator commas
+                .replace(/,/g, '.');          // Convert remaining commas to dots (European format)
+
+            const amount = parseFloat(cleaned);
+            return isNaN(amount) ? 0 : Math.round(amount * 100) / 100;
+        }
+
+        /**
+         * Extract line items from a table structure
+         *
+         * N/documentCapture Table structure:
+         * - table.headerRows: array of rows containing column headers
+         * - table.bodyRows: array of TableRow objects (line item data)
+         * - table.footerRows: array of rows containing totals/summaries
+         * - Each row has .cells[] array
+         * - Each cell has .text (string) and .confidence (number)
+         *
+         * @param {documentCapture.Table} table - The table object from OCR
+         * @returns {Array} Array of line item objects
+         */
+        _extractLineItemsFromTable(table) {
+            const items = [];
+
+            if (!table) return items;
+
+            // Helper to extract cell text from various formats
+            const getCellText = (cell) => {
+                if (!cell) return '';
+                if (typeof cell === 'string') return cell;
+                // Cell object has .text property
+                return cell.text || cell.value || cell.content || String(cell);
             };
 
-            const descIdx = findIndex('description', 'item', 'particulars');
-            const qtyIdx = findIndex('qty', 'quantity', 'units');
-            const priceIdx = findIndex('price', 'rate', 'unit');
-            const amountIdx = findIndex('amount', 'total', 'extended');
+            // Helper to extract cells from a row (row might be array or have .cells property)
+            const getRowCells = (row) => {
+                if (!row) return [];
+                if (Array.isArray(row)) return row;
+                if (row.cells && Array.isArray(row.cells)) return row.cells;
+                return [];
+            };
 
-            for (const row of dataRows) {
-                const getValue = (idx) => idx >= 0 && row[idx] ? (row[idx].value || row[idx]) : null;
-                const getNumber = (idx) => {
-                    const val = getValue(idx);
-                    if (!val) return 0;
-                    return parseFloat(String(val).replace(/[^0-9.-]/g, '')) || 0;
-                };
+            // Get headers from headerRows
+            let headers = [];
+            if (table.headerRows && table.headerRows.length > 0) {
+                const headerRow = table.headerRows[0];
+                const headerCells = getRowCells(headerRow);
+                headers = headerCells.map(cell => getCellText(cell).toLowerCase().trim());
+            }
 
-                const item = {
-                    description: getValue(descIdx),
-                    quantity: getNumber(qtyIdx),
-                    unitPrice: getNumber(priceIdx),
-                    amount: getNumber(amountIdx)
-                };
-
-                if (item.description || item.amount) {
-                    items.push(item);
+            // If no headers found, try first body row as header
+            if (headers.length === 0 && table.bodyRows && table.bodyRows.length > 1) {
+                const firstRow = getRowCells(table.bodyRows[0]);
+                const looksLikeHeader = firstRow.some(cell => {
+                    const text = getCellText(cell).toLowerCase();
+                    return text.includes('description') || text.includes('item') ||
+                           text.includes('qty') || text.includes('amount');
+                });
+                if (looksLikeHeader) {
+                    headers = firstRow.map(cell => getCellText(cell).toLowerCase().trim());
+                    // Remove first row from body rows for processing
+                    table.bodyRows = table.bodyRows.slice(1);
                 }
+            }
+
+            log.debug('FluxCapture.tableHeaders', `Found ${headers.length} headers: ${headers.join(', ')}`);
+
+            // Find column indices based on common keywords
+            const findColumnIndex = (...keywords) => {
+                return headers.findIndex(h =>
+                    keywords.some(k => h.includes(k))
+                );
+            };
+
+            const descIdx = findColumnIndex('description', 'item', 'product', 'service', 'particulars', 'name', 'details');
+            const qtyIdx = findColumnIndex('qty', 'quantity', 'units', 'count', 'pcs');
+            const priceIdx = findColumnIndex('price', 'rate', 'unit price', 'unit cost', 'each', 'unit');
+            const amountIdx = findColumnIndex('amount', 'total', 'extended', 'line total', 'ext', 'sum');
+
+            // Process body rows
+            if (table.bodyRows && table.bodyRows.length > 0) {
+                table.bodyRows.forEach((row, rowIndex) => {
+                    const cells = getRowCells(row);
+
+                    const getCellValue = (idx) => {
+                        if (idx < 0 || idx >= cells.length) return null;
+                        return getCellText(cells[idx]) || null;
+                    };
+
+                    const getCellNumber = (idx) => {
+                        const val = getCellValue(idx);
+                        if (!val) return 0;
+                        return this._parseAmount(val);
+                    };
+
+                    // Get cell confidence (average of cells used)
+                    const getCellConfidence = (idx) => {
+                        if (idx < 0 || idx >= cells.length || !cells[idx]) return null;
+                        return cells[idx].confidence || null;
+                    };
+
+                    const item = {
+                        description: getCellValue(descIdx >= 0 ? descIdx : 0), // Default to first column
+                        quantity: getCellNumber(qtyIdx),
+                        unitPrice: getCellNumber(priceIdx),
+                        amount: getCellNumber(amountIdx >= 0 ? amountIdx : cells.length - 1), // Default to last column
+                        confidence: getCellConfidence(amountIdx) || table.confidence || null
+                    };
+
+                    // Only add if we have meaningful content (description or non-zero amount)
+                    if ((item.description && item.description.trim().length > 0) || item.amount > 0) {
+                        // Calculate amount if missing but we have qty and price
+                        if (!item.amount && item.quantity && item.unitPrice) {
+                            item.amount = Math.round(item.quantity * item.unitPrice * 100) / 100;
+                        }
+                        items.push(item);
+                        log.debug('FluxCapture.lineItem', `Row ${rowIndex + 1}: "${item.description}" x${item.quantity} @ ${item.unitPrice} = ${item.amount}`);
+                    }
+                });
             }
 
             return items;
         }
 
         /**
-         * Detect document type from content
+         * Detect document type from text content
+         * @param {Object} result - Object containing text property
+         * @returns {number} Document type constant
          */
         _detectDocumentType(result) {
             const text = (result.text || '').toLowerCase();
 
-            if (text.includes('credit') || text.includes('refund')) {
+            // Credit memo indicators
+            if (text.includes('credit memo') || text.includes('credit note') ||
+                text.includes('refund') || text.includes('credit adjustment')) {
                 return DocumentType.CREDIT_MEMO;
             }
-            if (text.includes('expense') || text.includes('receipt')) {
+
+            // Receipt/expense indicators
+            if (text.includes('receipt') || text.includes('expense') ||
+                text.includes('cash register') || text.includes('thank you for your purchase')) {
                 return DocumentType.RECEIPT;
             }
+
+            // Purchase order indicators
+            if (text.includes('purchase order') || text.includes('p.o.') ||
+                (text.includes('order') && !text.includes('invoice'))) {
+                return DocumentType.PURCHASE_ORDER;
+            }
+
+            // Default to invoice
             return DocumentType.INVOICE;
         }
 
         /**
-         * Simulate extraction for testing/demo
+         * Simulate extraction for testing/demo when N/documentCapture is unavailable
          */
         _simulateExtraction(fileObj) {
+            log.audit('FluxCapture.simulate', `Simulating extraction for: ${fileObj.name}`);
+
             return {
                 documentType: DocumentType.INVOICE,
                 fields: {
                     vendorName: null,
+                    vendorAddress: null,
                     invoiceNumber: null,
                     invoiceDate: null,
                     dueDate: null,
@@ -304,34 +683,48 @@ define([
                     totalAmount: 0,
                     currency: 'USD'
                 },
+                fieldConfidences: {},
                 lineItems: [],
-                rawText: '',
-                pageCount: 1
+                rawText: '[Document capture not available - manual entry required]',
+                pageCount: 1,
+                mimeType: null
             };
         }
 
         /**
-         * Match vendor from extracted name
+         * Match vendor from extracted name using fuzzy search
+         * @param {string} vendorName - The extracted vendor name
+         * @returns {Object} Vendor match result with suggestions
          */
         _matchVendor(vendorName) {
             if (!vendorName) {
-                return { vendorId: null, confidence: 0, suggestions: [] };
+                return { vendorId: null, vendorName: null, confidence: 0, suggestions: [] };
             }
 
             const searchName = String(vendorName).toLowerCase().trim();
 
-            // Search for exact and fuzzy matches
+            // Remove common suffixes for better matching
+            const cleanedName = searchName
+                .replace(/\s*(inc\.?|llc\.?|ltd\.?|corp\.?|co\.?|company|incorporated|limited)$/i, '')
+                .trim();
+
             const sql = `
-                SELECT id, companyname, entityid
+                SELECT id, companyname, entityid, email
                 FROM vendor
                 WHERE isinactive = 'F'
                 AND (
                     LOWER(companyname) LIKE ? OR
                     LOWER(entityid) LIKE ? OR
+                    LOWER(companyname) = ? OR
                     LOWER(companyname) = ?
                 )
                 ORDER BY
-                    CASE WHEN LOWER(companyname) = ? THEN 0 ELSE 1 END,
+                    CASE
+                        WHEN LOWER(companyname) = ? THEN 0
+                        WHEN LOWER(companyname) = ? THEN 1
+                        WHEN LOWER(companyname) LIKE ? THEN 2
+                        ELSE 3
+                    END,
                     companyname
                 FETCH FIRST 5 ROWS ONLY
             `;
@@ -339,32 +732,51 @@ define([
             try {
                 const results = query.runSuiteQL({
                     query: sql,
-                    params: [`%${searchName}%`, `%${searchName}%`, searchName, searchName]
+                    params: [
+                        `%${searchName}%`,
+                        `%${searchName}%`,
+                        searchName,
+                        cleanedName,
+                        searchName,
+                        cleanedName,
+                        `${searchName}%`
+                    ]
                 });
 
-                if (results.results.length === 0) {
-                    return { vendorId: null, confidence: 0, suggestions: [] };
+                if (!results.results || results.results.length === 0) {
+                    return { vendorId: null, vendorName: vendorName, confidence: 0, suggestions: [] };
                 }
 
                 const suggestions = results.results.map(r => ({
                     id: r.values[0],
                     companyName: r.values[1],
-                    entityId: r.values[2]
+                    entityId: r.values[2],
+                    email: r.values[3]
                 }));
 
                 const bestMatch = suggestions[0];
-                const isExactMatch = bestMatch.companyName.toLowerCase() === searchName;
+                const bestMatchName = bestMatch.companyName.toLowerCase();
+
+                // Calculate confidence based on match quality
+                let confidence = 0.5;
+                if (bestMatchName === searchName || bestMatchName === cleanedName) {
+                    confidence = 0.98;
+                } else if (bestMatchName.startsWith(searchName) || searchName.startsWith(bestMatchName)) {
+                    confidence = 0.85;
+                } else if (bestMatchName.includes(searchName) || searchName.includes(bestMatchName)) {
+                    confidence = 0.70;
+                }
 
                 return {
                     vendorId: bestMatch.id,
                     vendorName: bestMatch.companyName,
-                    confidence: isExactMatch ? 0.95 : 0.75,
+                    confidence: confidence,
                     suggestions: suggestions
                 };
 
             } catch (e) {
-                log.debug('Vendor match error', e.message);
-                return { vendorId: null, confidence: 0, suggestions: [] };
+                log.error('FluxCapture._matchVendor', e.message);
+                return { vendorId: null, vendorName: vendorName, confidence: 0, suggestions: [] };
             }
         }
 
@@ -375,81 +787,119 @@ define([
             const anomalies = [];
             const fields = extraction.fields;
 
-            // Check for missing required fields
+            // Missing invoice number
             if (!fields.invoiceNumber) {
                 anomalies.push({
                     type: 'missing_field',
+                    field: 'invoiceNumber',
                     severity: 'medium',
                     message: 'Invoice number not detected'
                 });
             }
 
+            // Missing or zero total
             if (!fields.totalAmount || fields.totalAmount === 0) {
                 anomalies.push({
                     type: 'missing_amount',
+                    field: 'totalAmount',
                     severity: 'high',
                     message: 'Total amount not detected or is zero'
                 });
             }
 
-            // Check for vendor match issues
+            // Vendor not found
             if (!vendorMatch.vendorId) {
                 anomalies.push({
                     type: 'vendor_not_found',
+                    field: 'vendorName',
                     severity: 'medium',
-                    message: 'Vendor not found in system'
+                    message: `Vendor "${fields.vendorName || 'Unknown'}" not found in system`
                 });
             } else if (vendorMatch.confidence < 0.8) {
                 anomalies.push({
                     type: 'low_vendor_confidence',
+                    field: 'vendorName',
                     severity: 'low',
-                    message: 'Vendor match confidence is low'
+                    message: `Vendor match confidence is ${Math.round(vendorMatch.confidence * 100)}%`
                 });
             }
 
-            // Check for amount validation issues
+            // Amount mismatch
             if (fields.subtotal && fields.taxAmount) {
                 const calculated = fields.subtotal + fields.taxAmount;
                 const diff = Math.abs(calculated - fields.totalAmount);
-                if (diff > 0.01 && diff / fields.totalAmount > 0.02) {
+                if (fields.totalAmount > 0 && diff > 0.01 && (diff / fields.totalAmount) > 0.02) {
                     anomalies.push({
                         type: 'amount_mismatch',
+                        field: 'totalAmount',
                         severity: 'medium',
-                        message: `Calculated total ($${calculated.toFixed(2)}) differs from extracted ($${fields.totalAmount.toFixed(2)})`
+                        message: `Subtotal + Tax ($${calculated.toFixed(2)}) differs from Total ($${fields.totalAmount.toFixed(2)})`
                     });
                 }
             }
 
-            // Check for future dates
-            if (fields.invoiceDate && fields.invoiceDate > new Date()) {
-                anomalies.push({
-                    type: 'future_date',
-                    severity: 'high',
-                    message: 'Invoice date is in the future'
-                });
+            // Future invoice date
+            if (fields.invoiceDate) {
+                const today = new Date();
+                today.setHours(23, 59, 59, 999);
+                if (fields.invoiceDate > today) {
+                    anomalies.push({
+                        type: 'future_date',
+                        field: 'invoiceDate',
+                        severity: 'high',
+                        message: 'Invoice date is in the future'
+                    });
+                }
             }
 
-            // Check for duplicate invoice (if vendor matched)
+            // Past due date
+            if (fields.dueDate && fields.invoiceDate) {
+                if (fields.dueDate < fields.invoiceDate) {
+                    anomalies.push({
+                        type: 'invalid_due_date',
+                        field: 'dueDate',
+                        severity: 'medium',
+                        message: 'Due date is before invoice date'
+                    });
+                }
+            }
+
+            // Duplicate invoice check
             if (vendorMatch.vendorId && fields.invoiceNumber) {
                 const isDuplicate = this._checkDuplicateInvoice(vendorMatch.vendorId, fields.invoiceNumber);
                 if (isDuplicate) {
                     anomalies.push({
                         type: 'duplicate_invoice',
+                        field: 'invoiceNumber',
                         severity: 'high',
                         message: 'Invoice number already exists for this vendor'
                     });
                 }
             }
 
-            // Benford's Law check for large amounts
+            // Benford's Law check for suspicious amounts (large values)
             if (fields.totalAmount > 10000) {
                 const firstDigit = parseInt(String(Math.floor(fields.totalAmount))[0]);
-                const benfordExpected = [0, 30.1, 17.6, 12.5, 9.7, 7.9, 6.7, 5.8, 5.1, 4.6];
+                // Digits 7, 8, 9 are statistically rare as first digits
                 if (firstDigit >= 7) {
                     anomalies.push({
                         type: 'benford_anomaly',
+                        field: 'totalAmount',
                         severity: 'low',
-                        message: 'Amount pattern unusual (Benford analysis)'
+                        message: 'Amount first digit pattern unusual (statistical check)'
+                    });
+                }
+            }
+
+            // Line items don't match total
+            if (extraction.lineItems && extraction.lineItems.length > 0) {
+                const lineTotal = extraction.lineItems.reduce((sum, item) => sum + (item.amount || 0), 0);
+                if (fields.totalAmount > 0 && Math.abs(lineTotal - fields.totalAmount) > fields.totalAmount * 0.1) {
+                    anomalies.push({
+                        type: 'line_total_mismatch',
+                        field: 'lineItems',
+                        severity: 'low',
+                        message: `Line items total ($${lineTotal.toFixed(2)}) differs significantly from invoice total`
                     });
                 }
             }
@@ -466,12 +916,13 @@ define([
                     SELECT COUNT(*) as cnt
                     FROM customrecord_dm_captured_document
                     WHERE custrecord_dm_vendor = ?
-                    AND custrecord_dm_invoice_number = ?
-                    AND custrecord_dm_status IN (${DocStatus.EXTRACTED}, ${DocStatus.COMPLETED})
+                    AND LOWER(custrecord_dm_invoice_number) = LOWER(?)
+                    AND custrecord_dm_status IN (${DocStatus.EXTRACTED}, ${DocStatus.NEEDS_REVIEW}, ${DocStatus.COMPLETED})
                 `;
                 const result = query.runSuiteQL({ query: sql, params: [vendorId, invoiceNumber] });
                 return result.results[0].values[0] > 0;
             } catch (e) {
+                log.debug('FluxCapture._checkDuplicateInvoice', e.message);
                 return false;
             }
         }
@@ -481,17 +932,13 @@ define([
          */
         _validateAmounts(extraction) {
             const fields = extraction.fields;
-            const lineItems = extraction.lineItems;
+            const lineItems = extraction.lineItems || [];
 
-            let lineTotal = 0;
-            lineItems.forEach(item => {
-                lineTotal += item.amount || 0;
-            });
-
-            const calculatedTotal = fields.subtotal + fields.taxAmount;
+            const lineTotal = lineItems.reduce((sum, item) => sum + (item.amount || 0), 0);
+            const calculatedTotal = (fields.subtotal || 0) + (fields.taxAmount || 0);
 
             return {
-                valid: Math.abs(fields.totalAmount - calculatedTotal) < 0.02,
+                valid: calculatedTotal === 0 || Math.abs(fields.totalAmount - calculatedTotal) < 0.02,
                 extractedTotal: fields.totalAmount,
                 calculatedTotal: calculatedTotal,
                 lineItemsTotal: lineTotal,
@@ -505,6 +952,8 @@ define([
          */
         _calculateConfidence(extraction, vendorMatch) {
             const fields = extraction.fields;
+            const fieldConfidences = extraction.fieldConfidences || {};
+
             let totalScore = 0;
             let maxScore = 0;
 
@@ -517,20 +966,34 @@ define([
                 vendorMatch: 15
             };
 
-            // Score each field
-            if (fields.vendorName) totalScore += weights.vendorName;
+            // Score each field based on presence and OCR confidence
+            if (fields.vendorName) {
+                const conf = fieldConfidences.vendorName || 0.7;
+                totalScore += weights.vendorName * conf;
+            }
             maxScore += weights.vendorName;
 
-            if (fields.invoiceNumber) totalScore += weights.invoiceNumber;
+            if (fields.invoiceNumber) {
+                const conf = fieldConfidences.invoiceNumber || 0.7;
+                totalScore += weights.invoiceNumber * conf;
+            }
             maxScore += weights.invoiceNumber;
 
-            if (fields.invoiceDate) totalScore += weights.invoiceDate;
+            if (fields.invoiceDate) {
+                const conf = fieldConfidences.invoiceDate || 0.7;
+                totalScore += weights.invoiceDate * conf;
+            }
             maxScore += weights.invoiceDate;
 
-            if (fields.totalAmount > 0) totalScore += weights.totalAmount;
+            if (fields.totalAmount > 0) {
+                const conf = fieldConfidences.totalAmount || 0.7;
+                totalScore += weights.totalAmount * conf;
+            }
             maxScore += weights.totalAmount;
 
-            if (extraction.lineItems.length > 0) totalScore += weights.lineItems;
+            if (extraction.lineItems && extraction.lineItems.length > 0) {
+                totalScore += weights.lineItems * 0.8;
+            }
             maxScore += weights.lineItems;
 
             if (vendorMatch.vendorId) {
@@ -544,14 +1007,30 @@ define([
                 overall: overall,
                 level: overall >= 85 ? 'HIGH' : overall >= 60 ? 'MEDIUM' : 'LOW',
                 breakdown: {
-                    vendorName: fields.vendorName ? 100 : 0,
-                    invoiceNumber: fields.invoiceNumber ? 100 : 0,
-                    invoiceDate: fields.invoiceDate ? 100 : 0,
-                    totalAmount: fields.totalAmount > 0 ? 100 : 0,
-                    lineItems: extraction.lineItems.length > 0 ? 100 : 0,
+                    vendorName: fields.vendorName ? Math.round((fieldConfidences.vendorName || 0.7) * 100) : 0,
+                    invoiceNumber: fields.invoiceNumber ? Math.round((fieldConfidences.invoiceNumber || 0.7) * 100) : 0,
+                    invoiceDate: fields.invoiceDate ? Math.round((fieldConfidences.invoiceDate || 0.7) * 100) : 0,
+                    totalAmount: fields.totalAmount > 0 ? Math.round((fieldConfidences.totalAmount || 0.7) * 100) : 0,
+                    lineItems: extraction.lineItems && extraction.lineItems.length > 0 ? 80 : 0,
                     vendorMatch: Math.round(vendorMatch.confidence * 100)
                 }
             };
+        }
+
+        /**
+         * Check remaining free usage for the month
+         * @returns {number|null} Remaining usage or null if unavailable
+         */
+        getRemainingUsage() {
+            const docCapture = this._getDocCaptureModule();
+            if (docCapture && typeof docCapture.getRemainingFreeUsage === 'function') {
+                try {
+                    return docCapture.getRemainingFreeUsage();
+                } catch (e) {
+                    log.debug('getRemainingUsage', e.message);
+                }
+            }
+            return null;
         }
     }
 
@@ -560,6 +1039,8 @@ define([
     return {
         FluxCaptureEngine: FluxCaptureEngine,
         DocumentType: DocumentType,
+        DocumentTypeLabels: DocumentTypeLabels,
+        DocStatus: DocStatus,
         ConfidenceLevel: ConfidenceLevel,
         SUPPORTED_FILE_TYPES: SUPPORTED_FILE_TYPES
     };
