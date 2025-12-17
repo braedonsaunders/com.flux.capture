@@ -352,6 +352,15 @@ define([
                 case 'clear':
                     result = clearCompleted(params);
                     break;
+                case 'clearcache':
+                    // Clear form layout cache
+                    var cacheType = params && params.cacheType;
+                    if (cacheType === 'formlayout') {
+                        result = FormSchemaExtractor.clearAllCache();
+                    } else {
+                        result = Response.error('INVALID_CACHE_TYPE', 'Unknown cache type: ' + cacheType);
+                    }
+                    break;
                 default:
                     result = Response.error('INVALID_ACTION', 'Unknown action: ' + action);
             }

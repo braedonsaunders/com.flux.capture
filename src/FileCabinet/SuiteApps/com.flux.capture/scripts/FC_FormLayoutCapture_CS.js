@@ -641,6 +641,7 @@ function(currentRecord, url) {
 
     /**
      * Extract visible columns from sublist header
+     * Note: Don't filter by visibility - hidden sublists still have valid column structure
      */
     function extractSublistColumns(table) {
         var columns = [];
@@ -658,8 +659,9 @@ function(currentRecord, url) {
 
         var cells = headerRow.querySelectorAll('td, th');
         cells.forEach(function(cell, idx) {
-            // Skip if not visible
-            if (!isElementVisible(cell)) return;
+            // Don't filter by visibility - hidden sublists still have valid columns
+            // Just skip cells with display:none inline style
+            if (cell.style.display === 'none') return;
 
             // NetSuite puts column info in data-label or data-nsps-label attributes
             var colLabel = cell.getAttribute('data-label') ||

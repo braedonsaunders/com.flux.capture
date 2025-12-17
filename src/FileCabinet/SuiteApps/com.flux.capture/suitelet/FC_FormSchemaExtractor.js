@@ -459,6 +459,38 @@ function(record, search, log, cache) {
     }
 
     /**
+     * Clear all form layout and schema caches
+     * Used when user wants to force re-extraction of all forms
+     */
+    function clearAllCache() {
+        try {
+            var schemaCache = getSchemaCache();
+            var recordTypes = Object.keys(RECORD_SUBLISTS);
+            var cleared = 0;
+
+            recordTypes.forEach(function(recordType) {
+                try {
+                    // Clear schema cache (no form ID)
+                    schemaCache.remove({ key: getSchemaKey(recordType, null) });
+                    cleared++;
+
+                    // Clear layout cache (no form ID)
+                    schemaCache.remove({ key: getLayoutKey(recordType, null) });
+                    cleared++;
+                } catch (e) {
+                    // Ignore errors for individual keys (might not exist)
+                }
+            });
+
+            log.debug('clearAllCache', 'Cleared ' + cleared + ' cache entries');
+            return { success: true, cleared: cleared };
+        } catch (e) {
+            log.error('clearAllCache', e.message);
+            return { success: false, error: e.message };
+        }
+    }
+
+    /**
      * Update configuration
      */
     function updateConfig(recordType, formId, newConfig) {
@@ -485,6 +517,7 @@ function(record, search, log, cache) {
         extractFormSchema: extractFormSchema,
         saveFormLayout: saveFormLayout,
         invalidateCache: invalidateCache,
+        clearAllCache: clearAllCache,
         updateConfig: updateConfig,
         getCachedSchema: getCachedSchema,
         getCachedLayout: getCachedLayout,
