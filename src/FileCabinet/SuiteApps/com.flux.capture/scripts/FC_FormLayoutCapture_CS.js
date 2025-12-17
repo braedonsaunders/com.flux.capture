@@ -99,12 +99,17 @@ function(currentRecord, url) {
             layout.tabs.forEach(function(tab) {
                 console.log('[FC_FormLayoutCapture] Tab:', tab.label);
                 tab.fieldGroups.forEach(function(group) {
-                    var fieldList = group.fields.map(function(f) {
-                        return typeof f === 'object' ? f.id + ' (' + f.label + ')' : f;
-                    }).join(', ');
-                    console.log('[FC_FormLayoutCapture]   Group:', group.label, '- Fields:', fieldList);
+                    console.log('[FC_FormLayoutCapture]   Group:', group.label, '(' + group.fields.length + ' fields)');
+                    group.fields.forEach(function(f) {
+                        var info = f.id + ' [' + f.type + ']';
+                        if (f.required) info += ' *required*';
+                        if (f.mode === 'view') info += ' (readonly)';
+                        console.log('[FC_FormLayoutCapture]     -', info, ':', f.label);
+                    });
                 });
-                console.log('[FC_FormLayoutCapture]   Sublists:', tab.sublists.join(', '));
+                if (tab.sublists && tab.sublists.length > 0) {
+                    console.log('[FC_FormLayoutCapture]   Tab sublists:', tab.sublists.join(', '));
+                }
             });
             console.log('[FC_FormLayoutCapture] Sublists found:', layout.sublists.length);
             layout.sublists.forEach(function(sl) {
@@ -168,17 +173,26 @@ function(currentRecord, url) {
 
         if (tabs.length === 0) {
             // No tabs found - create a single main tab
-            var fields = extractFieldsFromContainer(mainForm);
+            // First try to extract field groups
+            var fieldGroups = extractFieldGroups(mainForm);
+
+            // If no field groups found, extract all fields into a default group
+            if (fieldGroups.length === 0) {
+                var fields = extractFieldsFromContainer(mainForm);
+                fieldGroups = [{
+                    id: 'primary',
+                    label: 'Primary Information',
+                    displayOrder: 0,
+                    collapsed: false,
+                    fields: fields
+                }];
+            }
+
             tabs.push({
                 id: 'main',
                 label: 'Main',
                 displayOrder: 0,
-                fieldGroups: [{
-                    id: 'primary',
-                    label: 'Primary Information',
-                    displayOrder: 0,
-                    fields: fields
-                }],
+                fieldGroups: fieldGroups,
                 sublists: []
             });
         }
@@ -218,23 +232,83 @@ function(currentRecord, url) {
 
             // Find the tab content
             var tabContent = findTabContent(tabId, container);
-            var fields = tabContent ? extractFieldsFromContainer(tabContent) : [];
+
+            // Extract field groups within this tab
+            var fieldGroups = tabContent ? extractFieldGroups(tabContent) : [];
+
+            // If no field groups found, create a default one with all fields
+            if (fieldGroups.length === 0 && tabContent) {
+                var fields = extractFieldsFromContainer(tabContent);
+                fieldGroups = [{
+                    id: 'group_' + idx,
+                    label: tabLabel,
+                    displayOrder: 0,
+                    collapsed: false,
+                    fields: fields
+                }];
+            }
 
             tabs.push({
                 id: tabId,
                 label: tabLabel,
                 displayOrder: idx,
-                fieldGroups: [{
-                    id: 'group_' + idx,
-                    label: tabLabel,
-                    displayOrder: 0,
-                    fields: fields
-                }],
+                fieldGroups: fieldGroups,
                 sublists: []
             });
         });
 
         return tabs;
+    }
+
+    /**
+     * Extract field groups from container using data attributes
+     * NetSuite field groups have data-nsps-type="fieldgroup" and data-nsps-label
+     */
+    function extractFieldGroups(container) {
+        var fieldGroups = [];
+
+        // Find field group headers
+        var groupHeaders = container.querySelectorAll('[data-nsps-type="fieldgroup"]');
+
+        console.log('[FC_FormLayoutCapture] Found', groupHeaders.length, 'field groups');
+
+        groupHeaders.forEach(function(header, idx) {
+            var groupLabel = header.getAttribute('data-nsps-label') || 'Group ' + (idx + 1);
+            var groupId = header.getAttribute('data-nsps-id') || header.id || 'fieldgroup_' + idx;
+            var isCollapsed = header.getAttribute('aria-expanded') === 'false';
+
+            // Find the content row that follows this group header
+            // NetSuite uses tr.uir-fieldgroup-content with id="tr_" + header.id
+            var contentRow = null;
+            if (header.id) {
+                contentRow = container.querySelector('#tr_' + header.id);
+            }
+            if (!contentRow) {
+                // Try to find the next sibling row
+                var parentRow = header.closest('tr');
+                if (parentRow) {
+                    contentRow = parentRow.nextElementSibling;
+                }
+            }
+
+            // Extract fields from this group's content
+            var fields = [];
+            if (contentRow) {
+                fields = extractFieldsFromContainer(contentRow);
+            }
+
+            console.log('[FC_FormLayoutCapture] Group:', groupLabel, '| Fields:', fields.length, '| Collapsed:', isCollapsed);
+
+            fieldGroups.push({
+                id: groupId,
+                label: groupLabel,
+                displayOrder: idx,
+                collapsed: isCollapsed,
+                fields: fields
+            });
+        });
+
+        return fieldGroups;
     }
 
     /**
@@ -247,93 +321,108 @@ function(currentRecord, url) {
     }
 
     /**
-     * Extract fields from a container - only visible, user-facing fields
-     * Returns array of {id, label} objects
+     * Extract fields from a container using NetSuite's data attributes
+     * Returns array of field objects with id, label, type, required, mode
      */
     function extractFieldsFromContainer(container) {
         var fields = [];
         var seen = {};
 
-        // Look for labeled fields - these are the real form fields
-        // NetSuite puts field labels in specific table cells
-        var labelCells = container.querySelectorAll('td.labelSpanEdit, td.labeltd, .uir-label, span.smallgraytextnolink');
+        // NetSuite wraps each field in a div with data attributes
+        // data-field-name = field ID (e.g., "entity", "trandate", "memo")
+        // data-nsps-label = display label (e.g., "Vendor", "Date", "Memo")
+        // data-field-type = field type (select, date, text, currency, checkbox, textarea)
+        // data-required = "true" or "false"
+        // data-mode = "edit" or "view"
+        var fieldWrappers = container.querySelectorAll('div.uir-field-wrapper[data-field-name]');
 
-        labelCells.forEach(function(labelCell) {
-            // Find the input associated with this label
-            var row = labelCell.closest('tr');
-            if (!row) return;
+        console.log('[FC_FormLayoutCapture] Found', fieldWrappers.length, 'field wrappers with data-field-name');
 
-            // Check row visibility
-            if (!isElementVisible(row)) return;
-
-            // Find input in the same row or next cell
-            var input = row.querySelector('input[id]:not([type="hidden"]), select[id], textarea[id]');
-            if (!input) return;
-
-            var fieldId = cleanFieldId(input.id);
+        fieldWrappers.forEach(function(wrapper) {
+            var fieldId = wrapper.getAttribute('data-field-name');
             if (!fieldId || seen[fieldId]) return;
             if (shouldSkipField(fieldId)) return;
 
-            // Verify the input is visible
-            if (!isElementVisible(input)) return;
+            // Check visibility
+            if (!isElementVisible(wrapper)) return;
 
-            // Get the label text
-            var labelText = getLabelText(labelCell);
+            var fieldLabel = wrapper.getAttribute('data-nsps-label') || fieldId;
+            var fieldType = wrapper.getAttribute('data-field-type') || 'text';
+            var isRequired = wrapper.getAttribute('data-required') === 'true';
+            var mode = wrapper.getAttribute('data-mode') || 'edit';
 
             seen[fieldId] = true;
             fields.push({
                 id: fieldId,
-                label: labelText || fieldId
+                label: fieldLabel,
+                type: fieldType,
+                required: isRequired,
+                mode: mode
             });
+
+            console.log('[FC_FormLayoutCapture] Field:', fieldId, '| Label:', fieldLabel, '| Type:', fieldType, '| Required:', isRequired);
         });
 
-        // If no labeled fields found, fall back to finding inputs in visible rows
+        // Fallback: if no data attributes found, try legacy extraction
         if (fields.length === 0) {
-            var inputs = container.querySelectorAll('input[id]:not([type="hidden"]), select[id], textarea[id]');
-            inputs.forEach(function(input) {
-                var fieldId = cleanFieldId(input.id);
-                if (!fieldId || seen[fieldId]) return;
-                if (shouldSkipField(fieldId)) return;
-
-                // Must be in a visible table row
-                var row = input.closest('tr');
-                if (row && !isElementVisible(row)) return;
-                if (!isElementVisible(input)) return;
-
-                // Try to find label from row
-                var labelText = null;
-                if (row) {
-                    var labelCell = row.querySelector('td.labelSpanEdit, td.labeltd, .uir-label');
-                    if (labelCell) {
-                        labelText = getLabelText(labelCell);
-                    }
-                }
-
-                seen[fieldId] = true;
-                fields.push({
-                    id: fieldId,
-                    label: labelText || fieldId
-                });
-            });
+            console.log('[FC_FormLayoutCapture] No data-field-name wrappers found, trying legacy extraction...');
+            fields = extractFieldsLegacy(container);
         }
 
-        console.log('[FC_FormLayoutCapture] Extracted fields from container:', fields.map(function(f) { return f.id; }));
+        console.log('[FC_FormLayoutCapture] Extracted', fields.length, 'fields');
         return fields;
     }
 
     /**
-     * Extract label text from a label cell
+     * Legacy field extraction for older NetSuite versions
+     */
+    function extractFieldsLegacy(container) {
+        var fields = [];
+        var seen = {};
+
+        var inputs = container.querySelectorAll('input[id]:not([type="hidden"]), select[id], textarea[id]');
+        inputs.forEach(function(input) {
+            var fieldId = cleanFieldId(input.id);
+            if (!fieldId || seen[fieldId]) return;
+            if (shouldSkipField(fieldId)) return;
+
+            var row = input.closest('tr');
+            if (row && !isElementVisible(row)) return;
+            if (!isElementVisible(input)) return;
+
+            // Try to find label
+            var labelText = null;
+            if (row) {
+                var labelCell = row.querySelector('td.labelSpanEdit, td.labeltd, .uir-label');
+                if (labelCell) {
+                    labelText = getLabelText(labelCell);
+                }
+            }
+
+            seen[fieldId] = true;
+            fields.push({
+                id: fieldId,
+                label: labelText || fieldId,
+                type: 'text',
+                required: false,
+                mode: 'edit'
+            });
+        });
+
+        return fields;
+    }
+
+    /**
+     * Extract label text from a label cell (legacy fallback)
      */
     function getLabelText(labelCell) {
         if (!labelCell) return null;
 
-        // Get direct text content, excluding child elements that might have other text
         var text = '';
         labelCell.childNodes.forEach(function(node) {
             if (node.nodeType === Node.TEXT_NODE) {
                 text += node.textContent;
             } else if (node.nodeType === Node.ELEMENT_NODE) {
-                // Include span text but skip help icons, etc.
                 var tagName = node.tagName.toLowerCase();
                 if (tagName === 'span' && !node.classList.contains('help')) {
                     text += node.textContent;
@@ -342,7 +431,6 @@ function(currentRecord, url) {
         });
 
         text = text.trim();
-        // Remove trailing colon and asterisk (required marker)
         text = text.replace(/[\*:]+$/, '').trim();
 
         return text || null;
