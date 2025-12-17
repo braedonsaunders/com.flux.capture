@@ -7,12 +7,16 @@
     var QueueController = {
         data: null,
         params: {},
+        autoRefreshInterval: null,
+        autoRefreshEnabled: true,
+        REFRESH_INTERVAL: 10000, // 10 seconds
 
         init: function(params) {
             this.params = params || {};
             renderTemplate('tpl-queue', 'view-container');
             this.bindEvents();
             this.loadData();
+            this.startAutoRefresh();
         },
 
         bindEvents: function() {
@@ -23,6 +27,29 @@
             if (uploadBtn) {
                 uploadBtn.addEventListener('click', function() {
                     Router.navigate('upload');
+                });
+            }
+
+            // Refresh button
+            var refreshBtn = el('#btn-refresh');
+            if (refreshBtn) {
+                refreshBtn.addEventListener('click', function() {
+                    self.loadData();
+                    UI.toast('Queue refreshed', 'success');
+                });
+            }
+
+            // Auto-refresh toggle
+            var autoRefreshToggle = el('#auto-refresh-toggle');
+            if (autoRefreshToggle) {
+                autoRefreshToggle.checked = this.autoRefreshEnabled;
+                autoRefreshToggle.addEventListener('change', function() {
+                    self.autoRefreshEnabled = this.checked;
+                    if (self.autoRefreshEnabled) {
+                        self.startAutoRefresh();
+                    } else {
+                        self.stopAutoRefresh();
+                    }
                 });
             }
 
@@ -201,7 +228,26 @@
                 });
         },
 
+        // Auto-refresh methods
+        startAutoRefresh: function() {
+            var self = this;
+            this.stopAutoRefresh(); // Clear any existing interval
+            if (this.autoRefreshEnabled) {
+                this.autoRefreshInterval = setInterval(function() {
+                    self.loadData();
+                }, this.REFRESH_INTERVAL);
+            }
+        },
+
+        stopAutoRefresh: function() {
+            if (this.autoRefreshInterval) {
+                clearInterval(this.autoRefreshInterval);
+                this.autoRefreshInterval = null;
+            }
+        },
+
         cleanup: function() {
+            this.stopAutoRefresh();
             this.data = null;
             this.params = {};
         }
