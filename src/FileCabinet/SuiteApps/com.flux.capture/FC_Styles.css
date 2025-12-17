@@ -153,7 +153,8 @@ a:hover {
    ============================================ */
 .sidebar {
     width: var(--fc-sidebar-width);
-    background: var(--fc-sidebar-bg);
+    background-color: #1e1b4b;
+    background-image: linear-gradient(180deg, #1e1b4b 0%, #312e81 50%, #3730a3 100%);
     position: fixed;
     left: 0;
     top: 0;
@@ -208,14 +209,14 @@ a:hover {
 .sidebar-brand-name {
     font-size: 18px;
     font-weight: 700;
-    color: var(--fc-sidebar-text-active);
+    color: #ffffff;
     letter-spacing: -0.02em;
     white-space: nowrap;
 }
 
 .sidebar-brand-tagline {
     font-size: 11px;
-    color: var(--fc-sidebar-text);
+    color: rgba(255, 255, 255, 0.7);
     text-transform: uppercase;
     letter-spacing: 0.05em;
     white-space: nowrap;
@@ -240,10 +241,9 @@ a:hover {
     font-weight: 600;
     text-transform: uppercase;
     letter-spacing: 0.1em;
-    color: var(--fc-sidebar-text);
+    color: rgba(255, 255, 255, 0.5);
     padding: var(--fc-space-2) var(--fc-space-4);
     margin-bottom: var(--fc-space-1);
-    opacity: 0.6;
 }
 
 .nav-item {
@@ -251,7 +251,7 @@ a:hover {
     align-items: center;
     gap: var(--fc-space-3);
     padding: var(--fc-space-3) var(--fc-space-4);
-    color: var(--fc-sidebar-text);
+    color: rgba(255, 255, 255, 0.7);
     border-radius: var(--fc-radius-md);
     cursor: pointer;
     transition: all var(--fc-transition-fast);
@@ -268,19 +268,19 @@ a:hover {
     transform: translateY(-50%) scaleY(0);
     width: 3px;
     height: 24px;
-    background: var(--fc-primary-light);
+    background: #818cf8;
     border-radius: 0 3px 3px 0;
     transition: transform var(--fc-transition-fast);
 }
 
 .nav-item:hover {
-    background: var(--fc-sidebar-hover);
-    color: var(--fc-sidebar-text-active);
+    background: rgba(255, 255, 255, 0.08);
+    color: #ffffff;
 }
 
 .nav-item.active {
-    background: var(--fc-sidebar-active);
-    color: var(--fc-sidebar-text-active);
+    background: rgba(255, 255, 255, 0.12);
+    color: #ffffff;
 }
 
 .nav-item.active::before {
@@ -319,7 +319,7 @@ a:hover {
 
 .sidebar-footer {
     padding: var(--fc-space-4) var(--fc-space-6);
-    border-top: 1px solid var(--fc-sidebar-surface);
+    border-top: 1px solid rgba(255, 255, 255, 0.1);
     position: relative;
     z-index: 1;
 }
@@ -329,7 +329,7 @@ a:hover {
     align-items: center;
     gap: var(--fc-space-3);
     padding: var(--fc-space-3);
-    background: var(--fc-sidebar-surface);
+    background: rgba(255, 255, 255, 0.05);
     border-radius: var(--fc-radius-md);
 }
 
@@ -354,7 +354,7 @@ a:hover {
 .sidebar-user-name {
     font-size: 13px;
     font-weight: 600;
-    color: var(--fc-sidebar-text-active);
+    color: #ffffff;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -362,7 +362,7 @@ a:hover {
 
 .sidebar-user-role {
     font-size: 11px;
-    color: var(--fc-sidebar-text);
+    color: rgba(255, 255, 255, 0.7);
     white-space: nowrap;
 }
 

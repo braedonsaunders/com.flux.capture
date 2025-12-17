@@ -277,11 +277,19 @@ define([
             let viewCache = {};
             let pendingChanges = {};
 
+            // Build API URL with query params (handles existing ? in URL)
+            function buildApiUrl(params) {
+                const queryString = new URLSearchParams(params).toString();
+                const separator = API_URL.includes('?') ? '&' : '?';
+                return API_URL + separator + queryString;
+            }
+
             // Initialize
             function init() {
                 syncNetSuiteTheme();
                 setupEventListeners();
                 window.addEventListener('popstate', handlePopState);
+                initViewHandlers(currentView);
             }
 
             // NetSuite Theme Synchronization
@@ -372,19 +380,25 @@ define([
 
             // Fetch view content via API
             async function fetchView(view, params = {}) {
-                const queryParams = new URLSearchParams({
+                const apiUrl = buildApiUrl({
                     action: 'getView',
                     view: view,
                     ...params
                 });
 
-                const response = await fetch(API_URL + '?' + queryParams.toString());
-                const result = await response.json();
+                const response = await fetch(apiUrl);
+                const text = await response.text();
 
-                if (result.success) {
-                    return result.data.html;
+                try {
+                    const result = JSON.parse(text);
+                    if (result.success) {
+                        return result.data.html;
+                    }
+                    throw new Error(result.error?.message || 'Failed to load view');
+                } catch (e) {
+                    console.error('API Response:', text);
+                    throw new Error('API Error: ' + (text.substring(0, 100) || 'Unknown error'));
                 }
-                throw new Error(result.error?.message || 'Failed to load view');
             }
 
             // Review document
@@ -396,8 +410,10 @@ define([
                 });
 
                 try {
-                    const response = await fetch(API_URL + '?action=getView&view=review&docId=' + docId);
-                    const result = await response.json();
+                    const apiUrl = buildApiUrl({ action: 'getView', view: 'review', docId: docId });
+                    const response = await fetch(apiUrl);
+                    const text = await response.text();
+                    const result = JSON.parse(text);
 
                     if (result.success) {
                         const container = document.getElementById('viewContainer');
