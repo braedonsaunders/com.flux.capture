@@ -641,12 +641,12 @@ define([
         try {
             var limit = Math.min(parseInt(context.limit) || 10, 50);
 
-            var sql = 'SELECT id, custrecord_dm_document_id as name, BUILTIN.DF(custrecord_dm_vendor) as vendorName, ' +
+            var sql = 'SELECT * FROM (SELECT id, custrecord_dm_document_id as name, BUILTIN.DF(custrecord_dm_vendor) as vendorName, ' +
                 'custrecord_dm_anomalies as anomalies, custrecord_dm_created_date as createdDate, ' +
                 'custrecord_dm_confidence_score as confidence FROM customrecord_dm_captured_document ' +
                 "WHERE custrecord_dm_anomalies IS NOT NULL AND custrecord_dm_anomalies != '[]' " +
                 'AND custrecord_dm_status NOT IN (' + DocStatus.REJECTED + ', ' + DocStatus.COMPLETED + ') ' +
-                'ORDER BY custrecord_dm_created_date DESC FETCH FIRST ' + limit + ' ROWS ONLY';
+                'ORDER BY custrecord_dm_created_date DESC) WHERE ROWNUM <= ' + limit;
 
             var results = query.runSuiteQL({ query: sql });
 
@@ -690,9 +690,9 @@ define([
             return Response.error('INVALID_QUERY', 'Search query must be at least 2 characters');
         }
 
-        var sql = 'SELECT id, companyname, entityid, email, phone, BUILTIN.DF(currency) as currency FROM vendor ' +
+        var sql = 'SELECT * FROM (SELECT id, companyname, entityid, email, phone, BUILTIN.DF(currency) as currency FROM vendor ' +
             "WHERE isinactive = 'F' AND (LOWER(companyname) LIKE LOWER(?) OR LOWER(entityid) LIKE LOWER(?)) " +
-            'ORDER BY companyname FETCH FIRST 20 ROWS ONLY';
+            'ORDER BY companyname) WHERE ROWNUM <= 20';
 
         var searchPattern = '%' + queryText + '%';
         var results = query.runSuiteQL({ query: sql, params: [searchPattern, searchPattern] });
@@ -720,25 +720,26 @@ define([
             var accountType = context.accountType || 'Expense';
             var searchQuery = context.query || '';
 
-            var sql = 'SELECT id, acctnumber, acctname, accttype, BUILTIN.DF(currency) as currency ' +
+            var innerSql = 'SELECT id, acctnumber, acctname, accttype, BUILTIN.DF(currency) as currency ' +
                 "FROM account WHERE isinactive = 'F'";
 
             var params = [];
 
             // Filter by account type if specified
             if (accountType) {
-                sql += " AND accttype = ?";
+                innerSql += " AND accttype = ?";
                 params.push(accountType);
             }
 
             // Search filter
             if (searchQuery && searchQuery.length >= 2) {
-                sql += ' AND (LOWER(acctname) LIKE LOWER(?) OR LOWER(acctnumber) LIKE LOWER(?))';
+                innerSql += ' AND (LOWER(acctname) LIKE LOWER(?) OR LOWER(acctnumber) LIKE LOWER(?))';
                 var searchPattern = '%' + searchQuery + '%';
                 params.push(searchPattern, searchPattern);
             }
 
-            sql += ' ORDER BY acctnumber, acctname FETCH FIRST 200 ROWS ONLY';
+            innerSql += ' ORDER BY acctnumber, acctname';
+            var sql = 'SELECT * FROM (' + innerSql + ') WHERE ROWNUM <= 200';
 
             var results = query.runSuiteQL({ query: sql, params: params });
 
@@ -769,7 +770,7 @@ define([
             var searchQuery = context.query || '';
             var itemType = context.itemType; // Optional: inventoryitem, noninventoryitem, etc.
 
-            var sql = 'SELECT id, itemid, displayname, description, BUILTIN.DF(purchaseunit) as unit, ' +
+            var innerSql = 'SELECT id, itemid, displayname, description, BUILTIN.DF(purchaseunit) as unit, ' +
                 'cost, BUILTIN.DF(expenseaccount) as expenseAccount ' +
                 "FROM item WHERE isinactive = 'F' AND purchasedescription IS NOT NULL";
 
@@ -777,18 +778,19 @@ define([
 
             // Filter by item type if specified
             if (itemType) {
-                sql += " AND itemtype = ?";
+                innerSql += " AND itemtype = ?";
                 params.push(itemType);
             }
 
             // Search filter
             if (searchQuery && searchQuery.length >= 2) {
-                sql += ' AND (LOWER(itemid) LIKE LOWER(?) OR LOWER(displayname) LIKE LOWER(?) OR LOWER(description) LIKE LOWER(?))';
+                innerSql += ' AND (LOWER(itemid) LIKE LOWER(?) OR LOWER(displayname) LIKE LOWER(?) OR LOWER(description) LIKE LOWER(?))';
                 var searchPattern = '%' + searchQuery + '%';
                 params.push(searchPattern, searchPattern, searchPattern);
             }
 
-            sql += ' ORDER BY itemid FETCH FIRST 200 ROWS ONLY';
+            innerSql += ' ORDER BY itemid';
+            var sql = 'SELECT * FROM (' + innerSql + ') WHERE ROWNUM <= 200';
 
             var results = query.runSuiteQL({ query: sql, params: params });
 
@@ -818,22 +820,23 @@ define([
         var poNumber = context.poNumber;
         var vendorId = context.vendorId;
 
-        var sql = 'SELECT id, tranid, BUILTIN.DF(entity) as vendorName, entity as vendorId, ' +
+        var innerSql = 'SELECT id, tranid, BUILTIN.DF(entity) as vendorName, entity as vendorId, ' +
             'trandate, total, status, BUILTIN.DF(status) as statusText FROM transaction ' +
             "WHERE type = 'PurchOrd' AND status NOT IN ('Closed', 'Cancelled')";
 
         var params = [];
 
         if (poNumber) {
-            sql += ' AND LOWER(tranid) LIKE LOWER(?)';
+            innerSql += ' AND LOWER(tranid) LIKE LOWER(?)';
             params.push('%' + poNumber + '%');
         }
         if (vendorId) {
-            sql += ' AND entity = ?';
+            innerSql += ' AND entity = ?';
             params.push(vendorId);
         }
 
-        sql += ' ORDER BY trandate DESC FETCH FIRST 20 ROWS ONLY';
+        innerSql += ' ORDER BY trandate DESC';
+        var sql = 'SELECT * FROM (' + innerSql + ') WHERE ROWNUM <= 20';
 
         var results = query.runSuiteQL({ query: sql, params: params });
 
