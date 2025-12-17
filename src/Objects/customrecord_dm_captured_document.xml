@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <customrecordtype scriptid="customrecord_dm_captured_document">
     <recordname>DM Captured Document</recordname>
-    <includename>T</includename>
+    <includename>F</includename>
     <showid>T</showid>
     <shownotes>T</shownotes>
     <allowattachments>T</allowattachments>
@@ -9,9 +9,7 @@
     <allowinlinedeleting>F</allowinlinedeleting>
     <allowquicksearch>T</allowquicksearch>
     <hierarchical>F</hierarchical>
-    <enablenumbering>T</enablenumbering>
-    <numberingprefix>DMD-</numberingprefix>
-    <numberingmindigits>6</numberingmindigits>
+    <enablenumbering>F</enablenumbering>
     <enablekeywords>T</enablekeywords>
     <isordered>F</isordered>
     <description>Flux Capture Document - Stores captured documents with extraction data</description>

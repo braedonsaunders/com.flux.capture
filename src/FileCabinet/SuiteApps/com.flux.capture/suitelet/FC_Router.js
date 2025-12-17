@@ -898,23 +898,7 @@ define([
 
             var docRecord = record.create({ type: 'customrecord_dm_captured_document' });
 
-            // Set the Name field - required by NetSuite
-            var recordName = String(fileName || ('Document-' + docId));
-            log.debug('uploadDocument', 'Setting name to: ' + recordName);
-            try {
-                docRecord.setValue({ fieldId: 'name', value: recordName });
-            } catch (nameErr1) {
-                log.debug('uploadDocument', 'setValue failed, trying setText: ' + nameErr1.message);
-                try {
-                    docRecord.setText({ fieldId: 'name', text: recordName });
-                } catch (nameErr2) {
-                    log.debug('uploadDocument', 'setText failed, trying altname: ' + nameErr2.message);
-                    docRecord.setValue({ fieldId: 'altname', value: recordName });
-                }
-            }
-            log.debug('uploadDocument', 'Name field value after set: ' + docRecord.getValue({ fieldId: 'name' }));
-
-            // Store the document ID and original filename in our custom fields
+            // Set custom fields (no Name field - record uses includename=F)
             docRecord.setValue({ fieldId: 'custrecord_dm_document_id', value: docId });
             docRecord.setValue({ fieldId: 'custrecord_dm_original_filename', value: fileName || '' });
             docRecord.setValue({ fieldId: 'custrecord_dm_status', value: DocStatus.PENDING });
