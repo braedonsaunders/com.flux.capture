@@ -396,7 +396,7 @@ define([
         var sortBy = context.sortBy || 'created';
         var sortDir = context.sortDir === 'asc' ? 'ASC' : 'DESC';
 
-        var sql = 'SELECT id, name, custrecord_dm_status as status, custrecord_dm_document_type as documentType, ' +
+        var sql = 'SELECT id, custrecord_dm_original_filename as name, custrecord_dm_status as status, custrecord_dm_document_type as documentType, ' +
             'custrecord_dm_confidence_score as confidence, custrecord_dm_vendor as vendorId, ' +
             'BUILTIN.DF(custrecord_dm_vendor) as vendorName, custrecord_dm_invoice_number as invoiceNumber, ' +
             'custrecord_dm_total_amount as totalAmount, custrecord_dm_anomalies as anomalies, ' +
@@ -478,7 +478,7 @@ define([
         var page = parseInt(context.page) || 1;
         var pageSize = Math.min(parseInt(context.pageSize) || 50, 100);
 
-        var sql = 'SELECT id, name, custrecord_dm_status as status, custrecord_dm_document_type as documentType, ' +
+        var sql = 'SELECT id, custrecord_dm_original_filename as name, custrecord_dm_status as status, custrecord_dm_document_type as documentType, ' +
             'custrecord_dm_confidence_score as confidence, BUILTIN.DF(custrecord_dm_vendor) as vendorName, ' +
             'custrecord_dm_invoice_number as invoiceNumber, custrecord_dm_total_amount as totalAmount, ' +
             'custrecord_dm_created_date as createdDate, custrecord_dm_batch_id as batchId, ' +
@@ -597,7 +597,7 @@ define([
         try {
             var limit = Math.min(parseInt(context.limit) || 10, 50);
 
-            var sql = 'SELECT id, name, BUILTIN.DF(custrecord_dm_vendor) as vendorName, ' +
+            var sql = 'SELECT id, custrecord_dm_original_filename as name, BUILTIN.DF(custrecord_dm_vendor) as vendorName, ' +
                 'custrecord_dm_anomalies as anomalies, custrecord_dm_created_date as createdDate, ' +
                 'custrecord_dm_confidence_score as confidence FROM customrecord_dm_captured_document ' +
                 "WHERE custrecord_dm_anomalies IS NOT NULL AND custrecord_dm_anomalies != '[]' " +
@@ -770,7 +770,7 @@ define([
             avgConfidence: batchRecord.getValue('custrecord_dm_batch_avg_confidence')
         };
 
-        var docSql = 'SELECT id, name, custrecord_dm_status as status, custrecord_dm_confidence_score as confidence, ' +
+        var docSql = 'SELECT id, custrecord_dm_original_filename as name, custrecord_dm_status as status, custrecord_dm_confidence_score as confidence, ' +
             'BUILTIN.DF(custrecord_dm_vendor) as vendorName, custrecord_dm_total_amount as amount ' +
             'FROM customrecord_dm_captured_document WHERE custrecord_dm_batch_id = ? ORDER BY id';
 
