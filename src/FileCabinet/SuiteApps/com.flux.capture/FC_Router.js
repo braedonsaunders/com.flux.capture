@@ -3,108 +3,1699 @@
  * @NScriptType Restlet
  * @NModuleScope SameAccount
  *
- * Flux Capture - DIAGNOSTIC VERSION
+ * Flux Capture - Main API Router
+ * Single RESTlet that handles all API operations for simplified deployment
+ *
+ * IMPORTANT: All handlers must return JSON.stringify() result, not raw objects.
+ * NetSuite's automatic object serialization causes UNEXPECTED_ERROR.
  */
 
-define(['N/log'], function(log) {
+define([
+    'N/file',
+    'N/record',
+    'N/search',
+    'N/query',
+    'N/runtime',
+    'N/error',
+    'N/log',
+    'N/encode',
+    'N/email',
+    'N/format'
+], function(file, record, search, query, runtime, errorModule, log, encode, email, format) {
 
-    var API_VERSION = '2.0.0';
+    const API_VERSION = '2.0.0';
+
+    // Lazy-load Engine only when needed
+    var EngineCache = null;
+    function getEngine() {
+        if (!EngineCache) {
+            try {
+                EngineCache = require('./FC_Engine');
+            } catch (e) {
+                log.error('FC_Engine load error', e.message);
+                EngineCache = { FluxCaptureEngine: null };
+            }
+        }
+        return EngineCache;
+    }
+
+    // ==================== Status Constants ====================
+
+    const DocStatus = Object.freeze({
+        PENDING: 1,
+        PROCESSING: 2,
+        EXTRACTED: 3,
+        NEEDS_REVIEW: 4,
+        REJECTED: 5,
+        COMPLETED: 6,
+        ERROR: 7
+    });
+
+    const DocStatusLabels = Object.freeze({
+        1: 'Pending',
+        2: 'Processing',
+        3: 'Extracted',
+        4: 'Needs Review',
+        5: 'Rejected',
+        6: 'Completed',
+        7: 'Error'
+    });
+
+    const BatchStatus = Object.freeze({
+        PENDING: 1,
+        PROCESSING: 2,
+        COMPLETED: 3,
+        PARTIAL_ERROR: 4,
+        FAILED: 5,
+        CANCELLED: 6
+    });
+
+    const BatchStatusLabels = Object.freeze({
+        1: 'Pending',
+        2: 'Processing',
+        3: 'Completed',
+        4: 'Partial Error',
+        5: 'Failed',
+        6: 'Cancelled'
+    });
+
+    const DocType = Object.freeze({
+        INVOICE: 1,
+        RECEIPT: 2,
+        CREDIT_MEMO: 3,
+        EXPENSE_REPORT: 4,
+        PURCHASE_ORDER: 5,
+        UNKNOWN: 6
+    });
+
+    const DocTypeLabels = Object.freeze({
+        1: 'Invoice',
+        2: 'Receipt',
+        3: 'Credit Memo',
+        4: 'Expense Report',
+        5: 'Purchase Order',
+        6: 'Unknown'
+    });
+
+    const Source = Object.freeze({
+        UPLOAD: 1,
+        EMAIL: 2,
+        DRAG_DROP: 3,
+        API: 4,
+        SCANNER: 5,
+        MOBILE: 6
+    });
+
+    const SourceLabels = Object.freeze({
+        1: 'Manual Upload',
+        2: 'Email Import',
+        3: 'Drag and Drop',
+        4: 'API Integration',
+        5: 'Scanner',
+        6: 'Mobile App'
+    });
+
+    // ==================== Response Helpers ====================
+
+    const Response = {
+        success: function(data, message) {
+            return {
+                success: true,
+                version: API_VERSION,
+                timestamp: new Date().toISOString(),
+                message: message || 'Success',
+                data: data
+            };
+        },
+
+        error: function(code, message, details) {
+            return {
+                success: false,
+                version: API_VERSION,
+                timestamp: new Date().toISOString(),
+                error: {
+                    code: code,
+                    message: message,
+                    details: details || null
+                }
+            };
+        },
+
+        paginated: function(data, page, pageSize, total) {
+            return {
+                success: true,
+                version: API_VERSION,
+                timestamp: new Date().toISOString(),
+                data: data,
+                pagination: {
+                    page: page,
+                    pageSize: pageSize,
+                    total: total,
+                    totalPages: Math.ceil(total / pageSize),
+                    hasMore: (page * pageSize) < total
+                }
+            };
+        }
+    };
+
+    // ==================== Main Handlers ====================
+    // CRITICAL: Return JSON.stringify() to avoid NetSuite serialization bug
 
     function get(context) {
-        log.debug('FC_Router GET START', JSON.stringify(context));
-
+        var result;
         try {
-            var action = context.action || 'health';
-            log.debug('FC_Router action', action);
+            var action = context.action || 'list';
 
-            var response = null;
+            switch (action) {
+                case 'document':
+                    result = getDocument(context.id);
+                    break;
+                case 'list':
+                    result = getDocumentList(context);
+                    break;
+                case 'queue':
+                    result = getProcessingQueue(context);
+                    break;
+                case 'stats':
+                    result = getDashboardStats();
+                    break;
+                case 'anomalies':
+                    result = getRecentAnomalies(context);
+                    break;
+                case 'vendors':
+                    result = searchVendors(context.query);
+                    break;
+                case 'purchaseorders':
+                    result = searchPurchaseOrders(context);
+                    break;
+                case 'batches':
+                    result = getBatches(context);
+                    break;
+                case 'batch':
+                    result = getBatchDetails(context.id);
+                    break;
+                case 'settings':
+                    result = getSettings();
+                    break;
+                case 'analytics':
+                    result = getAnalytics(context);
+                    break;
+                case 'health':
+                    result = Response.success({ status: 'healthy', version: API_VERSION });
+                    break;
+                default:
+                    result = Response.error('INVALID_ACTION', 'Unknown action: ' + action);
+            }
+        } catch (e) {
+            log.error('GET Error', e);
+            result = Response.error('GET_FAILED', e.message);
+        }
+        return JSON.stringify(result);
+    }
 
-            if (action === 'health') {
-                response = {
-                    success: true,
-                    version: API_VERSION,
-                    message: 'Diagnostic test - healthy'
-                };
-            } else if (action === 'stats') {
-                response = {
-                    success: true,
-                    version: API_VERSION,
-                    data: {
-                        summary: {
-                            totalProcessed: 0,
-                            completed: 0,
-                            autoProcessed: 0,
-                            pendingReview: 0,
-                            rejected: 0,
-                            errors: 0,
-                            avgConfidence: 0,
-                            totalValue: 0
-                        },
-                        typeBreakdown: {},
-                        trend: [],
-                        autoProcessRate: 0
-                    }
-                };
-            } else if (action === 'anomalies') {
-                response = {
-                    success: true,
-                    version: API_VERSION,
-                    data: []
-                };
-            } else {
-                response = {
-                    success: false,
-                    error: {
-                        code: 'UNKNOWN_ACTION',
-                        message: 'Unknown action: ' + action
-                    }
-                };
+    function post(context) {
+        var result;
+        try {
+            var action = context.action || 'upload';
+
+            switch (action) {
+                case 'upload':
+                    result = uploadDocument(context);
+                    break;
+                case 'batch':
+                    result = uploadBatch(context);
+                    break;
+                case 'process':
+                    result = processDocument(context.documentId);
+                    break;
+                case 'processBatch':
+                    result = processBatchDocuments(context);
+                    break;
+                case 'reprocess':
+                    result = reprocessDocument(context.documentId);
+                    break;
+                case 'emailImport':
+                    result = importFromEmail(context);
+                    break;
+                case 'checkEmails':
+                    result = checkEmailInbox(context);
+                    break;
+                case 'learn':
+                    result = submitCorrection(context);
+                    break;
+                default:
+                    result = Response.error('INVALID_ACTION', 'Unknown action: ' + action);
+            }
+        } catch (e) {
+            log.error('POST Error', e);
+            result = Response.error('POST_FAILED', e.message);
+        }
+        return JSON.stringify(result);
+    }
+
+    function put(context) {
+        var result;
+        try {
+            var action = context.action || 'update';
+
+            switch (action) {
+                case 'update':
+                    result = updateDocument(context);
+                    break;
+                case 'approve':
+                    result = approveDocument(context);
+                    break;
+                case 'reject':
+                    result = rejectDocument(context);
+                    break;
+                case 'status':
+                    result = updateStatus(context);
+                    break;
+                case 'assign':
+                    result = assignDocument(context);
+                    break;
+                case 'settings':
+                    result = updateSettings(context);
+                    break;
+                default:
+                    result = Response.error('INVALID_ACTION', 'Unknown action: ' + action);
+            }
+        } catch (e) {
+            log.error('PUT Error', e);
+            result = Response.error('PUT_FAILED', e.message);
+        }
+        return JSON.stringify(result);
+    }
+
+    function _delete(context) {
+        var result;
+        try {
+            var action = context.action || 'document';
+
+            switch (action) {
+                case 'document':
+                    result = deleteDocument(context.id);
+                    break;
+                case 'batch':
+                    result = deleteBatch(context.batchId);
+                    break;
+                case 'clear':
+                    result = clearCompleted(context);
+                    break;
+                default:
+                    result = Response.error('INVALID_ACTION', 'Unknown action: ' + action);
+            }
+        } catch (e) {
+            log.error('DELETE Error', e);
+            result = Response.error('DELETE_FAILED', e.message);
+        }
+        return JSON.stringify(result);
+    }
+
+    // ==================== GET Implementations ====================
+
+    function getDocument(documentId) {
+        if (!documentId) {
+            return Response.error('MISSING_PARAM', 'Document ID is required');
+        }
+
+        var docRecord = record.load({
+            type: 'customrecord_dm_captured_document',
+            id: documentId
+        });
+
+        var lineItems = JSON.parse(docRecord.getValue('custrecord_dm_line_items') || '[]');
+        var anomalies = JSON.parse(docRecord.getValue('custrecord_dm_anomalies') || '[]');
+        var status = docRecord.getValue('custrecord_dm_status');
+
+        var document = {
+            id: documentId,
+            name: docRecord.getValue('name'),
+            status: status,
+            statusText: getStatusDisplayText(status),
+            documentType: docRecord.getValue('custrecord_dm_document_type'),
+            documentTypeText: getDocTypeDisplayText(docRecord.getValue('custrecord_dm_document_type')),
+            sourceFile: docRecord.getValue('custrecord_dm_source_file'),
+            documentId: docRecord.getValue('custrecord_dm_document_id'),
+            batchId: docRecord.getValue('custrecord_dm_batch_id'),
+            uploadedBy: docRecord.getValue('custrecord_dm_uploaded_by'),
+            uploadedByName: docRecord.getText('custrecord_dm_uploaded_by'),
+            createdDate: docRecord.getValue('custrecord_dm_created_date'),
+            modifiedDate: docRecord.getValue('custrecord_dm_modified_date'),
+            confidence: docRecord.getValue('custrecord_dm_confidence_score'),
+            vendor: docRecord.getValue('custrecord_dm_vendor'),
+            vendorName: docRecord.getText('custrecord_dm_vendor'),
+            vendorMatchConfidence: docRecord.getValue('custrecord_dm_vendor_match_confidence'),
+            invoiceNumber: docRecord.getValue('custrecord_dm_invoice_number'),
+            invoiceDate: docRecord.getValue('custrecord_dm_invoice_date'),
+            dueDate: docRecord.getValue('custrecord_dm_due_date'),
+            poNumber: docRecord.getValue('custrecord_dm_po_number'),
+            subtotal: docRecord.getValue('custrecord_dm_subtotal'),
+            taxAmount: docRecord.getValue('custrecord_dm_tax_amount'),
+            totalAmount: docRecord.getValue('custrecord_dm_total_amount'),
+            currency: docRecord.getValue('custrecord_dm_currency'),
+            currencyText: docRecord.getText('custrecord_dm_currency'),
+            paymentTerms: docRecord.getValue('custrecord_dm_payment_terms'),
+            lineItems: lineItems,
+            anomalies: anomalies,
+            amountValidated: docRecord.getValue('custrecord_dm_amount_validated'),
+            createdTransaction: docRecord.getValue('custrecord_dm_created_transaction'),
+            source: docRecord.getValue('custrecord_dm_source'),
+            sourceText: getSourceDisplayText(docRecord.getValue('custrecord_dm_source')),
+            emailSender: docRecord.getValue('custrecord_dm_email_sender'),
+            emailSubject: docRecord.getValue('custrecord_dm_email_subject'),
+            rejectionReason: docRecord.getValue('custrecord_dm_rejection_reason'),
+            errorMessage: docRecord.getValue('custrecord_dm_error_message'),
+            processingTime: docRecord.getValue('custrecord_dm_processing_time')
+        };
+
+        if (document.sourceFile) {
+            try {
+                var fileObj = file.load({ id: document.sourceFile });
+                document.fileUrl = fileObj.url;
+                document.fileName = fileObj.name;
+                document.fileSize = fileObj.size;
+                document.fileType = fileObj.fileType;
+            } catch (e) {
+                log.debug('File load error', e.message);
+            }
+        }
+
+        return Response.success(document);
+    }
+
+    function getDocumentList(context) {
+        var page = parseInt(context.page) || 1;
+        var pageSize = Math.min(parseInt(context.pageSize) || 25, 100);
+        var status = context.status;
+        var docType = context.documentType;
+        var dateFrom = context.dateFrom;
+        var dateTo = context.dateTo;
+        var vendorId = context.vendorId;
+        var batchId = context.batchId;
+        var sortBy = context.sortBy || 'created';
+        var sortDir = context.sortDir === 'asc' ? 'ASC' : 'DESC';
+
+        var sql = 'SELECT id, name, custrecord_dm_status as status, custrecord_dm_document_type as documentType, ' +
+            'custrecord_dm_confidence_score as confidence, custrecord_dm_vendor as vendorId, ' +
+            'BUILTIN.DF(custrecord_dm_vendor) as vendorName, custrecord_dm_invoice_number as invoiceNumber, ' +
+            'custrecord_dm_total_amount as totalAmount, custrecord_dm_anomalies as anomalies, ' +
+            'custrecord_dm_created_date as createdDate, custrecord_dm_uploaded_by as uploadedBy, ' +
+            'BUILTIN.DF(custrecord_dm_uploaded_by) as uploadedByName, custrecord_dm_source as source ' +
+            'FROM customrecord_dm_captured_document WHERE 1=1';
+
+        var params = [];
+
+        if (status) {
+            sql += ' AND custrecord_dm_status = ?';
+            params.push(status);
+        }
+        if (docType) {
+            sql += ' AND custrecord_dm_document_type = ?';
+            params.push(docType);
+        }
+        if (vendorId) {
+            sql += ' AND custrecord_dm_vendor = ?';
+            params.push(vendorId);
+        }
+        if (batchId) {
+            sql += ' AND custrecord_dm_batch_id = ?';
+            params.push(batchId);
+        }
+        if (dateFrom) {
+            sql += " AND custrecord_dm_created_date >= TO_DATE(?, 'YYYY-MM-DD')";
+            params.push(dateFrom);
+        }
+        if (dateTo) {
+            sql += " AND custrecord_dm_created_date <= TO_DATE(?, 'YYYY-MM-DD')";
+            params.push(dateTo);
+        }
+
+        var countSql = sql.replace(/SELECT[\s\S]*?FROM/, 'SELECT COUNT(*) as total FROM');
+        var countResult = query.runSuiteQL({ query: countSql, params: params });
+        var total = countResult.results.length > 0 ? countResult.results[0].values[0] : 0;
+
+        var sortColumns = {
+            'created': 'custrecord_dm_created_date',
+            'confidence': 'custrecord_dm_confidence_score',
+            'vendor': 'custrecord_dm_vendor',
+            'status': 'custrecord_dm_status',
+            'amount': 'custrecord_dm_total_amount'
+        };
+        var sortColumn = sortColumns[sortBy] || 'custrecord_dm_created_date';
+
+        sql += ' ORDER BY ' + sortColumn + ' ' + sortDir;
+        sql += ' OFFSET ' + ((page - 1) * pageSize) + ' ROWS FETCH NEXT ' + pageSize + ' ROWS ONLY';
+
+        var results = query.runSuiteQL({ query: sql, params: params });
+
+        var documents = results.results.map(function(row) {
+            var v = row.values;
+            var docAnomalies = v[9] ? JSON.parse(v[9]) : [];
+            return {
+                id: v[0],
+                name: v[1],
+                status: v[2],
+                documentType: v[3],
+                confidence: v[4],
+                vendorId: v[5],
+                vendorName: v[6],
+                invoiceNumber: v[7],
+                totalAmount: v[8],
+                hasAnomalies: docAnomalies.length > 0,
+                anomalyCount: docAnomalies.length,
+                createdDate: v[10],
+                uploadedBy: v[11],
+                uploadedByName: v[12],
+                source: v[13]
+            };
+        });
+
+        return Response.paginated(documents, page, pageSize, total);
+    }
+
+    function getProcessingQueue(context) {
+        var page = parseInt(context.page) || 1;
+        var pageSize = Math.min(parseInt(context.pageSize) || 50, 100);
+
+        var sql = 'SELECT id, name, custrecord_dm_status as status, custrecord_dm_document_type as documentType, ' +
+            'custrecord_dm_confidence_score as confidence, BUILTIN.DF(custrecord_dm_vendor) as vendorName, ' +
+            'custrecord_dm_invoice_number as invoiceNumber, custrecord_dm_total_amount as totalAmount, ' +
+            'custrecord_dm_created_date as createdDate, custrecord_dm_batch_id as batchId, ' +
+            'custrecord_dm_anomalies as anomalies FROM customrecord_dm_captured_document ' +
+            'WHERE custrecord_dm_status IN (' + DocStatus.PENDING + ', ' + DocStatus.PROCESSING + ', ' +
+            DocStatus.EXTRACTED + ', ' + DocStatus.NEEDS_REVIEW + ') ' +
+            'ORDER BY CASE custrecord_dm_status WHEN ' + DocStatus.NEEDS_REVIEW + ' THEN 1 ' +
+            'WHEN ' + DocStatus.EXTRACTED + ' THEN 2 WHEN ' + DocStatus.PROCESSING + ' THEN 3 ' +
+            'WHEN ' + DocStatus.PENDING + ' THEN 4 END, custrecord_dm_created_date ASC ' +
+            'OFFSET ' + ((page - 1) * pageSize) + ' ROWS FETCH NEXT ' + pageSize + ' ROWS ONLY';
+
+        var results = query.runSuiteQL({ query: sql });
+
+        var queue = results.results.map(function(row) {
+            var v = row.values;
+            var docAnomalies = v[10] ? JSON.parse(v[10]) : [];
+            return {
+                id: v[0],
+                name: v[1],
+                status: v[2],
+                documentType: v[3],
+                confidence: v[4],
+                vendorName: v[5],
+                invoiceNumber: v[6],
+                totalAmount: v[7],
+                createdDate: v[8],
+                batchId: v[9],
+                hasAnomalies: docAnomalies.length > 0
+            };
+        });
+
+        var countSql = 'SELECT custrecord_dm_status as status, COUNT(*) as count FROM customrecord_dm_captured_document ' +
+            'WHERE custrecord_dm_status IN (' + DocStatus.PENDING + ', ' + DocStatus.PROCESSING + ', ' +
+            DocStatus.EXTRACTED + ', ' + DocStatus.NEEDS_REVIEW + ') GROUP BY custrecord_dm_status';
+
+        var countResults = query.runSuiteQL({ query: countSql });
+        var statusCounts = {};
+        countResults.results.forEach(function(row) {
+            statusCounts[row.values[0]] = row.values[1];
+        });
+
+        var totalCount = 0;
+        Object.keys(statusCounts).forEach(function(key) {
+            totalCount += statusCounts[key];
+        });
+
+        return Response.success({
+            queue: queue,
+            counts: statusCounts,
+            total: totalCount
+        });
+    }
+
+    function getDashboardStats() {
+        try {
+            var statsSql = 'SELECT COUNT(*) as total, ' +
+                'SUM(CASE WHEN custrecord_dm_status = ' + DocStatus.COMPLETED + ' THEN 1 ELSE 0 END) as completed, ' +
+                'SUM(CASE WHEN custrecord_dm_status = ' + DocStatus.COMPLETED + ' AND custrecord_dm_confidence_score >= 85 THEN 1 ELSE 0 END) as autoProcessed, ' +
+                'SUM(CASE WHEN custrecord_dm_status IN (' + DocStatus.PENDING + ', ' + DocStatus.PROCESSING + ', ' + DocStatus.EXTRACTED + ', ' + DocStatus.NEEDS_REVIEW + ') THEN 1 ELSE 0 END) as pending, ' +
+                'SUM(CASE WHEN custrecord_dm_status = ' + DocStatus.REJECTED + ' THEN 1 ELSE 0 END) as rejected, ' +
+                'SUM(CASE WHEN custrecord_dm_status = ' + DocStatus.ERROR + ' THEN 1 ELSE 0 END) as errors, ' +
+                'AVG(custrecord_dm_confidence_score) as avgConfidence, ' +
+                'SUM(custrecord_dm_total_amount) as totalValue ' +
+                'FROM customrecord_dm_captured_document WHERE custrecord_dm_created_date >= ADD_MONTHS(SYSDATE, -1)';
+
+            var statsResult = query.runSuiteQL({ query: statsSql });
+            var stats = (statsResult.results && statsResult.results[0]) ? statsResult.results[0].values : [0,0,0,0,0,0,0,0];
+
+            var typeSql = 'SELECT custrecord_dm_document_type as docType, COUNT(*) as count FROM customrecord_dm_captured_document ' +
+                'WHERE custrecord_dm_created_date >= ADD_MONTHS(SYSDATE, -1) GROUP BY custrecord_dm_document_type';
+
+            var typeResults = query.runSuiteQL({ query: typeSql });
+            var typeBreakdown = {};
+            if (typeResults.results) {
+                typeResults.results.forEach(function(row) {
+                    typeBreakdown[row.values[0] || 'Unknown'] = row.values[1];
+                });
             }
 
-            log.debug('FC_Router RESPONSE', JSON.stringify(response));
-            // Return as string - NetSuite will set Content-Type to text/plain
-            return JSON.stringify(response);
+            var trendSql = "SELECT TO_CHAR(custrecord_dm_created_date, 'YYYY-MM-DD') as day, COUNT(*) as count " +
+                'FROM customrecord_dm_captured_document WHERE custrecord_dm_created_date >= SYSDATE - 7 ' +
+                "GROUP BY TO_CHAR(custrecord_dm_created_date, 'YYYY-MM-DD') ORDER BY day";
 
+            var trendResults = query.runSuiteQL({ query: trendSql });
+            var trend = trendResults.results ? trendResults.results.map(function(row) {
+                return { date: row.values[0], count: row.values[1] };
+            }) : [];
+
+            return Response.success({
+                summary: {
+                    totalProcessed: stats[0] || 0,
+                    completed: stats[1] || 0,
+                    autoProcessed: stats[2] || 0,
+                    pendingReview: stats[3] || 0,
+                    rejected: stats[4] || 0,
+                    errors: stats[5] || 0,
+                    avgConfidence: Math.round(stats[6] || 0),
+                    totalValue: stats[7] || 0
+                },
+                typeBreakdown: typeBreakdown,
+                trend: trend,
+                autoProcessRate: stats[0] > 0 ? Math.round((stats[2] / stats[0]) * 100) : 0
+            });
         } catch (e) {
-            log.error('FC_Router CATCH ERROR', e.message + ' | ' + e.stack);
-            return JSON.stringify({
-                success: false,
-                error: { code: 'CAUGHT_ERROR', message: e.message }
+            log.error('getDashboardStats Error', { message: e.message, stack: e.stack });
+            return Response.success({
+                summary: { totalProcessed: 0, completed: 0, autoProcessed: 0, pendingReview: 0, rejected: 0, errors: 0, avgConfidence: 0, totalValue: 0 },
+                typeBreakdown: {},
+                trend: [],
+                autoProcessRate: 0
             });
         }
     }
 
-    function post(context) {
-        log.debug('FC_Router POST', JSON.stringify(context));
-        return JSON.stringify({
-            success: true,
-            version: API_VERSION,
-            message: 'POST received'
+    function getRecentAnomalies(context) {
+        try {
+            var limit = Math.min(parseInt(context.limit) || 10, 50);
+
+            var sql = 'SELECT id, name, BUILTIN.DF(custrecord_dm_vendor) as vendorName, ' +
+                'custrecord_dm_anomalies as anomalies, custrecord_dm_created_date as createdDate, ' +
+                'custrecord_dm_confidence_score as confidence FROM customrecord_dm_captured_document ' +
+                "WHERE custrecord_dm_anomalies IS NOT NULL AND custrecord_dm_anomalies != '[]' " +
+                'AND custrecord_dm_status NOT IN (' + DocStatus.REJECTED + ', ' + DocStatus.COMPLETED + ') ' +
+                'ORDER BY custrecord_dm_created_date DESC FETCH FIRST ' + limit + ' ROWS ONLY';
+
+            var results = query.runSuiteQL({ query: sql });
+
+            var anomalies = [];
+            if (results.results) {
+                results.results.forEach(function(row) {
+                    try {
+                        var docAnomalies = JSON.parse(row.values[3] || '[]');
+                        docAnomalies.forEach(function(anomaly) {
+                            anomalies.push({
+                                documentId: row.values[0],
+                                documentName: row.values[1],
+                                vendorName: row.values[2],
+                                type: anomaly.type,
+                                severity: anomaly.severity,
+                                message: anomaly.message,
+                                createdDate: row.values[4],
+                                confidence: row.values[5]
+                            });
+                        });
+                    } catch (parseErr) {
+                        log.debug('Anomaly parse error', parseErr.message);
+                    }
+                });
+            }
+
+            var severityOrder = { high: 0, medium: 1, low: 2 };
+            anomalies.sort(function(a, b) {
+                return (severityOrder[a.severity] || 2) - (severityOrder[b.severity] || 2);
+            });
+
+            return Response.success(anomalies.slice(0, limit));
+        } catch (e) {
+            log.error('getRecentAnomalies Error', { message: e.message, stack: e.stack });
+            return Response.success([]);
+        }
+    }
+
+    function searchVendors(queryText) {
+        if (!queryText || queryText.length < 2) {
+            return Response.error('INVALID_QUERY', 'Search query must be at least 2 characters');
+        }
+
+        var sql = 'SELECT id, companyname, entityid, email, phone, BUILTIN.DF(currency) as currency FROM vendor ' +
+            "WHERE isinactive = 'F' AND (LOWER(companyname) LIKE LOWER(?) OR LOWER(entityid) LIKE LOWER(?)) " +
+            'ORDER BY companyname FETCH FIRST 20 ROWS ONLY';
+
+        var searchPattern = '%' + queryText + '%';
+        var results = query.runSuiteQL({ query: sql, params: [searchPattern, searchPattern] });
+
+        var vendors = results.results.map(function(row) {
+            return {
+                id: row.values[0],
+                companyName: row.values[1],
+                entityId: row.values[2],
+                email: row.values[3],
+                phone: row.values[4],
+                currency: row.values[5]
+            };
+        });
+
+        return Response.success(vendors);
+    }
+
+    function searchPurchaseOrders(context) {
+        var poNumber = context.poNumber;
+        var vendorId = context.vendorId;
+
+        var sql = 'SELECT id, tranid, BUILTIN.DF(entity) as vendorName, entity as vendorId, ' +
+            'trandate, total, status, BUILTIN.DF(status) as statusText FROM transaction ' +
+            "WHERE type = 'PurchOrd' AND status NOT IN ('Closed', 'Cancelled')";
+
+        var params = [];
+
+        if (poNumber) {
+            sql += ' AND LOWER(tranid) LIKE LOWER(?)';
+            params.push('%' + poNumber + '%');
+        }
+        if (vendorId) {
+            sql += ' AND entity = ?';
+            params.push(vendorId);
+        }
+
+        sql += ' ORDER BY trandate DESC FETCH FIRST 20 ROWS ONLY';
+
+        var results = query.runSuiteQL({ query: sql, params: params });
+
+        var purchaseOrders = results.results.map(function(row) {
+            return {
+                id: row.values[0],
+                poNumber: row.values[1],
+                vendorName: row.values[2],
+                vendorId: row.values[3],
+                date: row.values[4],
+                total: row.values[5],
+                status: row.values[6],
+                statusText: row.values[7]
+            };
+        });
+
+        return Response.success(purchaseOrders);
+    }
+
+    function getBatches(context) {
+        var page = parseInt(context.page) || 1;
+        var pageSize = Math.min(parseInt(context.pageSize) || 25, 100);
+        var status = context.status;
+
+        var sql = 'SELECT id, name, custrecord_dm_batch_status as status, ' +
+            'custrecord_dm_batch_document_count as documentCount, custrecord_dm_batch_processed_count as processedCount, ' +
+            'custrecord_dm_batch_error_count as errorCount, custrecord_dm_batch_created_date as createdDate, ' +
+            'custrecord_dm_batch_completed_date as completedDate, BUILTIN.DF(custrecord_dm_batch_created_by) as createdBy, ' +
+            'custrecord_dm_batch_total_value as totalValue FROM customrecord_dm_batch WHERE 1=1';
+
+        var params = [];
+        if (status) {
+            sql += ' AND custrecord_dm_batch_status = ?';
+            params.push(status);
+        }
+
+        sql += ' ORDER BY custrecord_dm_batch_created_date DESC';
+        sql += ' OFFSET ' + ((page - 1) * pageSize) + ' ROWS FETCH NEXT ' + pageSize + ' ROWS ONLY';
+
+        var results = query.runSuiteQL({ query: sql, params: params });
+
+        var batches = results.results.map(function(row) {
+            return {
+                id: row.values[0],
+                name: row.values[1],
+                status: row.values[2],
+                documentCount: row.values[3],
+                processedCount: row.values[4],
+                errorCount: row.values[5],
+                createdDate: row.values[6],
+                completedDate: row.values[7],
+                createdBy: row.values[8],
+                totalValue: row.values[9],
+                progress: row.values[3] > 0 ? Math.round((row.values[4] / row.values[3]) * 100) : 0
+            };
+        });
+
+        return Response.success(batches);
+    }
+
+    function getBatchDetails(batchId) {
+        if (!batchId) {
+            return Response.error('MISSING_PARAM', 'Batch ID is required');
+        }
+
+        var batchRecord = record.load({ type: 'customrecord_dm_batch', id: batchId });
+        var status = batchRecord.getValue('custrecord_dm_batch_status');
+
+        var batch = {
+            id: batchId,
+            name: batchRecord.getValue('name'),
+            status: status,
+            statusText: getBatchStatusDisplayText(status),
+            documentCount: batchRecord.getValue('custrecord_dm_batch_document_count'),
+            processedCount: batchRecord.getValue('custrecord_dm_batch_processed_count'),
+            errorCount: batchRecord.getValue('custrecord_dm_batch_error_count'),
+            createdDate: batchRecord.getValue('custrecord_dm_batch_created_date'),
+            completedDate: batchRecord.getValue('custrecord_dm_batch_completed_date'),
+            createdBy: batchRecord.getText('custrecord_dm_batch_created_by'),
+            totalValue: batchRecord.getValue('custrecord_dm_batch_total_value'),
+            avgConfidence: batchRecord.getValue('custrecord_dm_batch_avg_confidence')
+        };
+
+        var docSql = 'SELECT id, name, custrecord_dm_status as status, custrecord_dm_confidence_score as confidence, ' +
+            'BUILTIN.DF(custrecord_dm_vendor) as vendorName, custrecord_dm_total_amount as amount ' +
+            'FROM customrecord_dm_captured_document WHERE custrecord_dm_batch_id = ? ORDER BY id';
+
+        var docResults = query.runSuiteQL({ query: docSql, params: [batchId] });
+        batch.documents = docResults.results.map(function(row) {
+            return {
+                id: row.values[0],
+                name: row.values[1],
+                status: row.values[2],
+                confidence: row.values[3],
+                vendorName: row.values[4],
+                amount: row.values[5]
+            };
+        });
+
+        return Response.success(batch);
+    }
+
+    function getSettings() {
+        var settings = {
+            autoApproveThreshold: 85,
+            defaultDocumentType: 'auto',
+            emailImportEnabled: true,
+            emailAddress: 'flux-' + runtime.accountId + '@netsuite.com',
+            duplicateDetection: true,
+            amountValidation: true,
+            maxFileSize: 10485760,
+            supportedFileTypes: ['pdf', 'png', 'jpg', 'jpeg', 'tiff', 'tif', 'gif', 'bmp']
+        };
+
+        return Response.success(settings);
+    }
+
+    function getAnalytics(context) {
+        var period = parseInt(context.period) || 30;
+
+        var volumeSql = "SELECT TO_CHAR(custrecord_dm_created_date, 'YYYY-MM-DD') as day, COUNT(*) as total, " +
+            'SUM(CASE WHEN custrecord_dm_status = ' + DocStatus.COMPLETED + ' THEN 1 ELSE 0 END) as completed, ' +
+            'AVG(custrecord_dm_confidence_score) as avgConfidence FROM customrecord_dm_captured_document ' +
+            'WHERE custrecord_dm_created_date >= SYSDATE - ' + period + ' ' +
+            "GROUP BY TO_CHAR(custrecord_dm_created_date, 'YYYY-MM-DD') ORDER BY day";
+
+        var volumeResults = query.runSuiteQL({ query: volumeSql });
+        var volumeTrend = volumeResults.results.map(function(row) {
+            return {
+                date: row.values[0],
+                total: row.values[1],
+                completed: row.values[2],
+                avgConfidence: Math.round(row.values[3] || 0)
+            };
+        });
+
+        return Response.success({ period: period, volumeTrend: volumeTrend });
+    }
+
+    // ==================== POST Implementations ====================
+
+    function uploadDocument(context) {
+        var fileContent = context.fileContent;
+        var fileName = context.fileName;
+        var documentType = context.documentType || 'auto';
+        var folderId = context.folderId || getUploadFolder();
+
+        if (!fileContent || !fileName) {
+            return Response.error('MISSING_PARAM', 'File content and name are required');
+        }
+
+        var fileExtension = fileName.split('.').pop().toLowerCase();
+        var supportedTypes = ['pdf', 'png', 'jpg', 'jpeg', 'tiff', 'tif', 'gif', 'bmp'];
+
+        if (supportedTypes.indexOf(fileExtension) < 0) {
+            return Response.error('INVALID_FILE_TYPE', 'File type .' + fileExtension + ' is not supported');
+        }
+
+        var fileObj = file.create({
+            name: fileName,
+            fileType: getFileType(fileExtension),
+            contents: fileContent,
+            encoding: file.Encoding.BASE_64,
+            folder: folderId,
+            isOnline: true
+        });
+
+        var fileId = fileObj.save();
+
+        var docRecord = record.create({ type: 'customrecord_dm_captured_document' });
+
+        var docId = generateDocumentId();
+        docRecord.setValue('name', fileName);
+        docRecord.setValue('custrecord_dm_document_id', docId);
+        docRecord.setValue('custrecord_dm_status', DocStatus.PENDING);
+        docRecord.setValue('custrecord_dm_document_type', documentType === 'auto' ? '' : documentType);
+        docRecord.setValue('custrecord_dm_source_file', fileId);
+        docRecord.setValue('custrecord_dm_source', Source.UPLOAD);
+        docRecord.setValue('custrecord_dm_uploaded_by', runtime.getCurrentUser().id);
+        docRecord.setValue('custrecord_dm_created_date', new Date());
+
+        var documentId = docRecord.save();
+
+        if (context.autoProcess !== false) {
+            try {
+                processDocument(documentId);
+            } catch (e) {
+                log.error('Auto-process failed', e);
+            }
+        }
+
+        return Response.success({
+            documentId: documentId,
+            documentCode: docId,
+            fileId: fileId,
+            fileName: fileName,
+            status: DocStatus.PENDING
+        }, 'Document uploaded successfully');
+    }
+
+    function uploadBatch(context) {
+        var files = context.files;
+        var batchName = context.batchName || 'Batch-' + new Date().toISOString().slice(0,10);
+
+        if (!files || !Array.isArray(files) || files.length === 0) {
+            return Response.error('MISSING_PARAM', 'Files array is required');
+        }
+
+        var batchRecord = record.create({ type: 'customrecord_dm_batch' });
+        batchRecord.setValue('name', batchName);
+        batchRecord.setValue('custrecord_dm_batch_status', BatchStatus.PENDING);
+        batchRecord.setValue('custrecord_dm_batch_document_count', files.length);
+        batchRecord.setValue('custrecord_dm_batch_processed_count', 0);
+        batchRecord.setValue('custrecord_dm_batch_created_date', new Date());
+        batchRecord.setValue('custrecord_dm_batch_created_by', runtime.getCurrentUser().id);
+        batchRecord.setValue('custrecord_dm_batch_source', Source.UPLOAD);
+
+        var batchId = batchRecord.save();
+
+        var uploadResults = [];
+        var folderId = getUploadFolder();
+
+        files.forEach(function(fileData, index) {
+            try {
+                var result = uploadDocument({
+                    fileContent: fileData.fileContent,
+                    fileName: fileData.fileName,
+                    documentType: fileData.documentType || 'auto',
+                    folderId: folderId,
+                    autoProcess: false
+                });
+
+                if (result.success) {
+                    record.submitFields({
+                        type: 'customrecord_dm_captured_document',
+                        id: result.data.documentId,
+                        values: { 'custrecord_dm_batch_id': batchId }
+                    });
+
+                    uploadResults.push({
+                        success: true,
+                        index: index,
+                        documentId: result.data.documentId,
+                        fileName: fileData.fileName
+                    });
+                } else {
+                    uploadResults.push({
+                        success: false,
+                        index: index,
+                        fileName: fileData.fileName,
+                        error: result.error.message
+                    });
+                }
+            } catch (e) {
+                uploadResults.push({
+                    success: false,
+                    index: index,
+                    fileName: fileData.fileName,
+                    error: e.message
+                });
+            }
+        });
+
+        record.submitFields({
+            type: 'customrecord_dm_batch',
+            id: batchId,
+            values: { 'custrecord_dm_batch_status': BatchStatus.PROCESSING }
+        });
+
+        return Response.success({
+            batchId: batchId,
+            batchName: batchName,
+            totalFiles: files.length,
+            successCount: uploadResults.filter(function(r) { return r.success; }).length,
+            failedCount: uploadResults.filter(function(r) { return !r.success; }).length,
+            results: uploadResults
+        }, 'Batch uploaded successfully');
+    }
+
+    function processDocument(documentId) {
+        if (!documentId) {
+            return Response.error('MISSING_PARAM', 'Document ID is required');
+        }
+
+        record.submitFields({
+            type: 'customrecord_dm_captured_document',
+            id: documentId,
+            values: { 'custrecord_dm_status': DocStatus.PROCESSING }
+        });
+
+        try {
+            var docRecord = record.load({
+                type: 'customrecord_dm_captured_document',
+                id: documentId
+            });
+
+            var fileId = docRecord.getValue('custrecord_dm_source_file');
+            var documentType = docRecord.getValue('custrecord_dm_document_type');
+
+            if (!fileId) {
+                throw new Error('No file attached to document');
+            }
+
+            var EngineModule = getEngine();
+            if (!EngineModule.FluxCaptureEngine) {
+                throw new Error('Document processing engine not available');
+            }
+            var engine = new EngineModule.FluxCaptureEngine();
+            var startTime = Date.now();
+
+            var result = engine.processDocument(fileId, {
+                documentType: documentType,
+                enableFraudDetection: true,
+                enableLearning: true
+            });
+
+            var processingTime = Date.now() - startTime;
+
+            if (result.success) {
+                var extraction = result.extraction;
+
+                var newStatus = DocStatus.NEEDS_REVIEW;
+                if (extraction.confidence.overall >= 85 && extraction.anomalies.length === 0) {
+                    newStatus = DocStatus.EXTRACTED;
+                }
+
+                record.submitFields({
+                    type: 'customrecord_dm_captured_document',
+                    id: documentId,
+                    values: {
+                        'custrecord_dm_status': newStatus,
+                        'custrecord_dm_document_type': extraction.documentType || documentType,
+                        'custrecord_dm_vendor': extraction.vendorMatch && extraction.vendorMatch.vendorId ? extraction.vendorMatch.vendorId : null,
+                        'custrecord_dm_vendor_match_confidence': extraction.vendorMatch ? extraction.vendorMatch.confidence : 0,
+                        'custrecord_dm_invoice_number': extraction.fields && extraction.fields.invoiceNumber ? extraction.fields.invoiceNumber : '',
+                        'custrecord_dm_invoice_date': extraction.fields && extraction.fields.invoiceDate ? extraction.fields.invoiceDate : null,
+                        'custrecord_dm_due_date': extraction.fields && extraction.fields.dueDate ? extraction.fields.dueDate : null,
+                        'custrecord_dm_subtotal': extraction.fields && extraction.fields.subtotal ? extraction.fields.subtotal : 0,
+                        'custrecord_dm_tax_amount': extraction.fields && extraction.fields.taxAmount ? extraction.fields.taxAmount : 0,
+                        'custrecord_dm_total_amount': extraction.fields && extraction.fields.totalAmount ? extraction.fields.totalAmount : 0,
+                        'custrecord_dm_currency': extraction.fields && extraction.fields.currency ? extraction.fields.currency : null,
+                        'custrecord_dm_po_number': extraction.fields && extraction.fields.poNumber ? extraction.fields.poNumber : '',
+                        'custrecord_dm_line_items': JSON.stringify(extraction.lineItems || []),
+                        'custrecord_dm_anomalies': JSON.stringify(extraction.anomalies || []),
+                        'custrecord_dm_confidence_score': extraction.confidence.overall,
+                        'custrecord_dm_amount_validated': extraction.amountValidation ? extraction.amountValidation.valid : false,
+                        'custrecord_dm_processing_time': processingTime,
+                        'custrecord_dm_modified_date': new Date()
+                    }
+                });
+
+                return Response.success({
+                    documentId: documentId,
+                    status: newStatus === DocStatus.EXTRACTED ? 'extracted' : 'needs_review',
+                    confidence: extraction.confidence.overall,
+                    anomalyCount: extraction.anomalies.length,
+                    processingTime: processingTime
+                }, 'Document processed successfully');
+            } else {
+                record.submitFields({
+                    type: 'customrecord_dm_captured_document',
+                    id: documentId,
+                    values: {
+                        'custrecord_dm_status': DocStatus.ERROR,
+                        'custrecord_dm_error_message': result.error
+                    }
+                });
+
+                return Response.error('PROCESSING_FAILED', result.error);
+            }
+        } catch (e) {
+            log.error('Document processing error', e);
+
+            record.submitFields({
+                type: 'customrecord_dm_captured_document',
+                id: documentId,
+                values: {
+                    'custrecord_dm_status': DocStatus.ERROR,
+                    'custrecord_dm_error_message': e.message
+                }
+            });
+
+            return Response.error('PROCESSING_ERROR', e.message);
+        }
+    }
+
+    function processBatchDocuments(context) {
+        var batchId = context.batchId;
+        var documentIds = context.documentIds;
+
+        var docsToProcess = [];
+
+        if (batchId) {
+            var sql = 'SELECT id FROM customrecord_dm_captured_document WHERE custrecord_dm_batch_id = ? AND custrecord_dm_status = ' + DocStatus.PENDING;
+            var results = query.runSuiteQL({ query: sql, params: [batchId] });
+            docsToProcess = results.results.map(function(r) { return r.values[0]; });
+        } else if (documentIds && Array.isArray(documentIds)) {
+            docsToProcess = documentIds;
+        } else {
+            return Response.error('MISSING_PARAM', 'Batch ID or document IDs required');
+        }
+
+        var processResults = [];
+        var processed = 0;
+        var errors = 0;
+
+        docsToProcess.forEach(function(docId) {
+            try {
+                var result = processDocument(docId);
+                if (result.success) {
+                    processed++;
+                    processResults.push({ documentId: docId, success: true });
+                } else {
+                    errors++;
+                    processResults.push({ documentId: docId, success: false, error: result.error.message });
+                }
+            } catch (e) {
+                errors++;
+                processResults.push({ documentId: docId, success: false, error: e.message });
+            }
+        });
+
+        if (batchId) {
+            updateBatchProgress(batchId);
+        }
+
+        return Response.success({
+            total: docsToProcess.length,
+            processed: processed,
+            errors: errors,
+            results: processResults
+        }, 'Batch processing complete');
+    }
+
+    function reprocessDocument(documentId) {
+        if (!documentId) {
+            return Response.error('MISSING_PARAM', 'Document ID is required');
+        }
+
+        record.submitFields({
+            type: 'customrecord_dm_captured_document',
+            id: documentId,
+            values: {
+                'custrecord_dm_status': DocStatus.PENDING,
+                'custrecord_dm_line_items': '[]',
+                'custrecord_dm_anomalies': '[]',
+                'custrecord_dm_confidence_score': 0,
+                'custrecord_dm_error_message': ''
+            }
+        });
+
+        return processDocument(documentId);
+    }
+
+    function importFromEmail(context) {
+        var attachments = context.attachments;
+        var emailSender = context.emailSender;
+        var emailSubject = context.emailSubject;
+
+        if (!attachments || attachments.length === 0) {
+            return Response.error('NO_ATTACHMENTS', 'No attachments found');
+        }
+
+        var results = [];
+
+        attachments.forEach(function(att) {
+            try {
+                var result = uploadDocument({
+                    fileContent: att.content,
+                    fileName: att.name,
+                    documentType: 'auto',
+                    autoProcess: true
+                });
+
+                if (result.success) {
+                    record.submitFields({
+                        type: 'customrecord_dm_captured_document',
+                        id: result.data.documentId,
+                        values: {
+                            'custrecord_dm_source': Source.EMAIL,
+                            'custrecord_dm_email_sender': emailSender,
+                            'custrecord_dm_email_subject': emailSubject,
+                            'custrecord_dm_email_received': new Date()
+                        }
+                    });
+
+                    results.push({ success: true, documentId: result.data.documentId });
+                } else {
+                    results.push({ success: false, error: result.error.message });
+                }
+            } catch (e) {
+                results.push({ success: false, error: e.message });
+            }
+        });
+
+        return Response.success({
+            importedCount: results.filter(function(r) { return r.success; }).length,
+            failedCount: results.filter(function(r) { return !r.success; }).length,
+            results: results
         });
     }
 
-    function put(context) {
-        log.debug('FC_Router PUT', JSON.stringify(context));
-        return JSON.stringify({
-            success: true,
-            version: API_VERSION,
-            message: 'PUT received'
+    function checkEmailInbox(context) {
+        return Response.success({ message: 'Email check endpoint ready' });
+    }
+
+    function submitCorrection(context) {
+        var documentId = context.documentId;
+        var fieldName = context.fieldName;
+        var originalValue = context.originalValue;
+        var correctedValue = context.correctedValue;
+
+        if (!documentId || !fieldName) {
+            return Response.error('MISSING_PARAM', 'Document ID and field name required');
+        }
+
+        try {
+            var docRecord = record.load({
+                type: 'customrecord_dm_captured_document',
+                id: documentId
+            });
+
+            var existingCorrections = JSON.parse(docRecord.getValue('custrecord_dm_user_corrections') || '[]');
+
+            var correction = {
+                field: fieldName,
+                original: String(originalValue),
+                corrected: String(correctedValue),
+                date: new Date().toISOString(),
+                user: runtime.getCurrentUser().id
+            };
+
+            var existingIndex = -1;
+            for (var i = 0; i < existingCorrections.length; i++) {
+                if (existingCorrections[i].field === fieldName) {
+                    existingIndex = i;
+                    break;
+                }
+            }
+
+            if (existingIndex >= 0) {
+                existingCorrections[existingIndex] = correction;
+            } else {
+                existingCorrections.push(correction);
+            }
+
+            record.submitFields({
+                type: 'customrecord_dm_captured_document',
+                id: documentId,
+                values: {
+                    'custrecord_dm_user_corrections': JSON.stringify(existingCorrections),
+                    'custrecord_dm_modified_date': new Date()
+                }
+            });
+
+            return Response.success({ documentId: documentId, corrections: existingCorrections }, 'Correction recorded');
+        } catch (e) {
+            return Response.error('CORRECTION_FAILED', e.message);
+        }
+    }
+
+    // ==================== PUT Implementations ====================
+
+    function updateDocument(context) {
+        var documentId = context.documentId;
+        var updates = context.updates;
+
+        if (!documentId || !updates) {
+            return Response.error('MISSING_PARAM', 'Document ID and updates required');
+        }
+
+        try {
+            var fieldMap = {
+                'vendor': 'custrecord_dm_vendor',
+                'invoiceNumber': 'custrecord_dm_invoice_number',
+                'invoiceDate': 'custrecord_dm_invoice_date',
+                'dueDate': 'custrecord_dm_due_date',
+                'subtotal': 'custrecord_dm_subtotal',
+                'taxAmount': 'custrecord_dm_tax_amount',
+                'totalAmount': 'custrecord_dm_total_amount',
+                'currency': 'custrecord_dm_currency',
+                'poNumber': 'custrecord_dm_po_number',
+                'documentType': 'custrecord_dm_document_type',
+                'lineItems': 'custrecord_dm_line_items'
+            };
+
+            var values = { 'custrecord_dm_modified_date': new Date() };
+
+            Object.keys(updates).forEach(function(key) {
+                if (fieldMap[key]) {
+                    var value = updates[key];
+                    if (key === 'lineItems' && typeof value === 'object') {
+                        value = JSON.stringify(value);
+                    }
+                    values[fieldMap[key]] = value;
+                }
+            });
+
+            record.submitFields({
+                type: 'customrecord_dm_captured_document',
+                id: documentId,
+                values: values
+            });
+
+            return Response.success({ documentId: documentId }, 'Document updated');
+        } catch (e) {
+            return Response.error('UPDATE_FAILED', e.message);
+        }
+    }
+
+    function approveDocument(context) {
+        var documentId = context.documentId;
+        var createTransaction = context.createTransaction !== false;
+        var transactionType = context.transactionType;
+
+        if (!documentId) {
+            return Response.error('MISSING_PARAM', 'Document ID required');
+        }
+
+        try {
+            var docRecord = record.load({
+                type: 'customrecord_dm_captured_document',
+                id: documentId
+            });
+
+            var vendorId = docRecord.getValue('custrecord_dm_vendor');
+            var documentType = docRecord.getValue('custrecord_dm_document_type');
+
+            var transactionId = null;
+            var actualTransactionType = transactionType;
+
+            if (createTransaction && vendorId) {
+                if (!actualTransactionType) {
+                    if (documentType === DocType.EXPENSE_REPORT) {
+                        actualTransactionType = 'expensereport';
+                    } else if (documentType === DocType.CREDIT_MEMO) {
+                        actualTransactionType = 'vendorcredit';
+                    } else {
+                        actualTransactionType = 'vendorbill';
+                    }
+                }
+
+                transactionId = createTransactionFromDocument(docRecord, actualTransactionType);
+            }
+
+            record.submitFields({
+                type: 'customrecord_dm_captured_document',
+                id: documentId,
+                values: {
+                    'custrecord_dm_status': DocStatus.COMPLETED,
+                    'custrecord_dm_created_transaction': transactionId ? String(transactionId) : '',
+                    'custrecord_dm_modified_date': new Date()
+                }
+            });
+
+            var batchId = docRecord.getValue('custrecord_dm_batch_id');
+            if (batchId) {
+                updateBatchProgress(batchId);
+            }
+
+            return Response.success({
+                documentId: documentId,
+                transactionId: transactionId,
+                transactionType: actualTransactionType,
+                status: DocStatus.COMPLETED
+            }, 'Document approved');
+        } catch (e) {
+            log.error('Approve error', e);
+            return Response.error('APPROVE_FAILED', e.message);
+        }
+    }
+
+    function rejectDocument(context) {
+        var documentId = context.documentId;
+        var reason = context.reason || 'Rejected by user';
+
+        if (!documentId) {
+            return Response.error('MISSING_PARAM', 'Document ID required');
+        }
+
+        try {
+            var docRecord = record.load({
+                type: 'customrecord_dm_captured_document',
+                id: documentId
+            });
+
+            var batchId = docRecord.getValue('custrecord_dm_batch_id');
+
+            record.submitFields({
+                type: 'customrecord_dm_captured_document',
+                id: documentId,
+                values: {
+                    'custrecord_dm_status': DocStatus.REJECTED,
+                    'custrecord_dm_rejection_reason': reason,
+                    'custrecord_dm_modified_date': new Date()
+                }
+            });
+
+            if (batchId) {
+                updateBatchProgress(batchId);
+            }
+
+            return Response.success({
+                documentId: documentId,
+                status: DocStatus.REJECTED,
+                reason: reason
+            }, 'Document rejected');
+        } catch (e) {
+            return Response.error('REJECT_FAILED', e.message);
+        }
+    }
+
+    function updateStatus(context) {
+        var documentId = context.documentId;
+        var status = context.status;
+
+        if (!documentId || !status) {
+            return Response.error('MISSING_PARAM', 'Document ID and status required');
+        }
+
+        record.submitFields({
+            type: 'customrecord_dm_captured_document',
+            id: documentId,
+            values: {
+                'custrecord_dm_status': status,
+                'custrecord_dm_modified_date': new Date()
+            }
+        });
+
+        return Response.success({ documentId: documentId, status: status });
+    }
+
+    function assignDocument(context) {
+        var documentId = context.documentId;
+        var assigneeId = context.assigneeId;
+
+        if (!documentId) {
+            return Response.error('MISSING_PARAM', 'Document ID required');
+        }
+
+        record.submitFields({
+            type: 'customrecord_dm_captured_document',
+            id: documentId,
+            values: { 'custrecord_dm_uploaded_by': assigneeId }
+        });
+
+        return Response.success({ documentId: documentId, assigneeId: assigneeId });
+    }
+
+    function updateSettings(context) {
+        return Response.success({ message: 'Settings endpoint ready' });
+    }
+
+    // ==================== DELETE Implementations ====================
+
+    function deleteDocument(documentId) {
+        if (!documentId) {
+            return Response.error('MISSING_PARAM', 'Document ID required');
+        }
+
+        try {
+            var docRecord = record.load({
+                type: 'customrecord_dm_captured_document',
+                id: documentId
+            });
+
+            var fileId = docRecord.getValue('custrecord_dm_source_file');
+            var batchId = docRecord.getValue('custrecord_dm_batch_id');
+
+            record.delete({ type: 'customrecord_dm_captured_document', id: documentId });
+
+            if (fileId) {
+                try {
+                    file.delete({ id: fileId });
+                } catch (e) {
+                    log.debug('File delete skipped', e.message);
+                }
+            }
+
+            if (batchId) {
+                updateBatchProgress(batchId);
+            }
+
+            return Response.success({ documentId: documentId }, 'Document deleted');
+        } catch (e) {
+            return Response.error('DELETE_FAILED', e.message);
+        }
+    }
+
+    function deleteBatch(batchId) {
+        if (!batchId) {
+            return Response.error('MISSING_PARAM', 'Batch ID required');
+        }
+
+        try {
+            var docSearch = search.create({
+                type: 'customrecord_dm_captured_document',
+                filters: [['custrecord_dm_batch_id', 'is', batchId]],
+                columns: ['internalid', 'custrecord_dm_source_file']
+            });
+
+            var deletedDocs = 0;
+
+            docSearch.run().each(function(result) {
+                var fileId = result.getValue('custrecord_dm_source_file');
+
+                record.delete({ type: 'customrecord_dm_captured_document', id: result.id });
+                deletedDocs++;
+
+                if (fileId) {
+                    try { file.delete({ id: fileId }); } catch (e) { }
+                }
+
+                return true;
+            });
+
+            record.delete({ type: 'customrecord_dm_batch', id: batchId });
+
+            return Response.success({
+                batchId: batchId,
+                deletedDocuments: deletedDocs
+            }, 'Batch deleted');
+        } catch (e) {
+            return Response.error('BATCH_DELETE_FAILED', e.message);
+        }
+    }
+
+    function clearCompleted(context) {
+        var olderThanDays = parseInt(context.olderThanDays) || 30;
+
+        try {
+            var docSearch = search.create({
+                type: 'customrecord_dm_captured_document',
+                filters: [
+                    ['custrecord_dm_status', 'anyof', [DocStatus.REJECTED, DocStatus.COMPLETED]],
+                    'AND',
+                    ['custrecord_dm_modified_date', 'before', 'daysago' + olderThanDays]
+                ],
+                columns: ['internalid']
+            });
+
+            var deletedCount = 0;
+
+            docSearch.run().each(function(result) {
+                record.delete({ type: 'customrecord_dm_captured_document', id: result.id });
+                deletedCount++;
+                return true;
+            });
+
+            return Response.success({
+                deletedDocuments: deletedCount,
+                olderThanDays: olderThanDays
+            }, 'Completed documents cleared');
+        } catch (e) {
+            return Response.error('CLEAR_FAILED', e.message);
+        }
+    }
+
+    // ==================== Helper Functions ====================
+
+    function getUploadFolder() {
+        var folderSearch = search.create({
+            type: 'folder',
+            filters: [['name', 'is', 'Flux Capture Uploads']],
+            columns: ['internalid']
+        });
+
+        var results = folderSearch.run().getRange({ start: 0, end: 1 });
+
+        if (results.length > 0) {
+            return results[0].id;
+        }
+
+        var folderRecord = record.create({ type: 'folder' });
+        folderRecord.setValue('name', 'Flux Capture Uploads');
+        folderRecord.setValue('description', 'Documents uploaded via Flux Capture');
+        return folderRecord.save();
+    }
+
+    function getFileType(extension) {
+        var typeMap = {
+            'pdf': file.Type.PDF,
+            'png': file.Type.PNGIMAGE,
+            'jpg': file.Type.JPGIMAGE,
+            'jpeg': file.Type.JPGIMAGE,
+            'tiff': file.Type.TIFFIMAGE,
+            'tif': file.Type.TIFFIMAGE,
+            'gif': file.Type.GIFIMAGE,
+            'bmp': file.Type.BMPIMAGE
+        };
+        return typeMap[extension.toLowerCase()] || file.Type.PDF;
+    }
+
+    function generateDocumentId() {
+        var timestamp = Date.now().toString(36);
+        var random = Math.random().toString(36).substring(2, 8);
+        return ('FC-' + timestamp + '-' + random).toUpperCase();
+    }
+
+    function updateBatchProgress(batchId) {
+        var sql = 'SELECT COUNT(*) as total, ' +
+            'SUM(CASE WHEN custrecord_dm_status IN (' + DocStatus.REJECTED + ', ' + DocStatus.COMPLETED + ') THEN 1 ELSE 0 END) as processed, ' +
+            'SUM(CASE WHEN custrecord_dm_status = ' + DocStatus.ERROR + ' THEN 1 ELSE 0 END) as errors ' +
+            'FROM customrecord_dm_captured_document WHERE custrecord_dm_batch_id = ?';
+
+        var results = query.runSuiteQL({ query: sql, params: [batchId] });
+        var total = results.results[0].values[0] || 0;
+        var processed = results.results[0].values[1] || 0;
+        var errors = results.results[0].values[2] || 0;
+
+        var updates = {
+            'custrecord_dm_batch_processed_count': processed,
+            'custrecord_dm_batch_error_count': errors
+        };
+
+        if (processed >= total && total > 0) {
+            updates['custrecord_dm_batch_status'] = BatchStatus.COMPLETED;
+            updates['custrecord_dm_batch_completed_date'] = new Date();
+        }
+
+        record.submitFields({
+            type: 'customrecord_dm_batch',
+            id: batchId,
+            values: updates
         });
     }
 
-    function doDelete(context) {
-        log.debug('FC_Router DELETE', JSON.stringify(context));
-        return JSON.stringify({
-            success: true,
-            version: API_VERSION,
-            message: 'DELETE received'
-        });
+    function createTransactionFromDocument(docRecord, transactionType) {
+        var vendorId = docRecord.getValue('custrecord_dm_vendor');
+        var invoiceNumber = docRecord.getValue('custrecord_dm_invoice_number');
+        var invoiceDate = docRecord.getValue('custrecord_dm_invoice_date');
+        var dueDate = docRecord.getValue('custrecord_dm_due_date');
+        var totalAmount = docRecord.getValue('custrecord_dm_total_amount');
+        var currency = docRecord.getValue('custrecord_dm_currency');
+        var lineItems = JSON.parse(docRecord.getValue('custrecord_dm_line_items') || '[]');
+
+        var txnRecord;
+
+        if (transactionType === 'vendorbill') {
+            txnRecord = record.create({ type: record.Type.VENDOR_BILL, isDynamic: true });
+            txnRecord.setValue('entity', vendorId);
+            if (invoiceNumber) txnRecord.setValue('tranid', invoiceNumber);
+            if (invoiceDate) txnRecord.setValue('trandate', invoiceDate);
+            if (dueDate) txnRecord.setValue('duedate', dueDate);
+            if (currency) txnRecord.setValue('currency', currency);
+
+            lineItems.forEach(function(line) {
+                txnRecord.selectNewLine({ sublistId: 'expense' });
+                if (line.account) txnRecord.setCurrentSublistValue({ sublistId: 'expense', fieldId: 'account', value: line.account });
+                txnRecord.setCurrentSublistValue({ sublistId: 'expense', fieldId: 'amount', value: line.amount || 0 });
+                if (line.description) txnRecord.setCurrentSublistValue({ sublistId: 'expense', fieldId: 'memo', value: line.description });
+                txnRecord.commitLine({ sublistId: 'expense' });
+            });
+
+            if (lineItems.length === 0 && totalAmount) {
+                txnRecord.selectNewLine({ sublistId: 'expense' });
+                txnRecord.setCurrentSublistValue({ sublistId: 'expense', fieldId: 'amount', value: totalAmount });
+                txnRecord.setCurrentSublistValue({ sublistId: 'expense', fieldId: 'memo', value: 'Flux Capture Import' });
+                txnRecord.commitLine({ sublistId: 'expense' });
+            }
+        } else if (transactionType === 'vendorcredit') {
+            txnRecord = record.create({ type: record.Type.VENDOR_CREDIT, isDynamic: true });
+            txnRecord.setValue('entity', vendorId);
+            if (invoiceDate) txnRecord.setValue('trandate', invoiceDate);
+            if (currency) txnRecord.setValue('currency', currency);
+
+            lineItems.forEach(function(line) {
+                txnRecord.selectNewLine({ sublistId: 'expense' });
+                if (line.account) txnRecord.setCurrentSublistValue({ sublistId: 'expense', fieldId: 'account', value: line.account });
+                txnRecord.setCurrentSublistValue({ sublistId: 'expense', fieldId: 'amount', value: line.amount || 0 });
+                txnRecord.commitLine({ sublistId: 'expense' });
+            });
+        } else if (transactionType === 'expensereport') {
+            txnRecord = record.create({ type: record.Type.EXPENSE_REPORT, isDynamic: true });
+            txnRecord.setValue('entity', runtime.getCurrentUser().id);
+            if (invoiceDate) txnRecord.setValue('trandate', invoiceDate);
+
+            lineItems.forEach(function(line) {
+                txnRecord.selectNewLine({ sublistId: 'expense' });
+                if (invoiceDate) txnRecord.setCurrentSublistValue({ sublistId: 'expense', fieldId: 'expensedate', value: invoiceDate });
+                if (line.category) txnRecord.setCurrentSublistValue({ sublistId: 'expense', fieldId: 'category', value: line.category });
+                txnRecord.setCurrentSublistValue({ sublistId: 'expense', fieldId: 'amount', value: line.amount || 0 });
+                txnRecord.commitLine({ sublistId: 'expense' });
+            });
+        }
+
+        return txnRecord ? txnRecord.save() : null;
+    }
+
+    function getStatusDisplayText(status) {
+        return DocStatusLabels[status] || status;
+    }
+
+    function getBatchStatusDisplayText(status) {
+        return BatchStatusLabels[status] || status;
+    }
+
+    function getSourceDisplayText(source) {
+        return SourceLabels[source] || source;
+    }
+
+    function getDocTypeDisplayText(docType) {
+        return DocTypeLabels[docType] || docType;
     }
 
     return {
         get: get,
         post: post,
         put: put,
-        'delete': doDelete
+        'delete': _delete
     };
 });
