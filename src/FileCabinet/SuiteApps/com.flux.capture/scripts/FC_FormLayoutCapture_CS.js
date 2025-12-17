@@ -8,12 +8,10 @@
  * Deployed on transaction forms (vendorbill, expensereport, purchaseorder)
  * Automatically extracts form layout (tabs, groups, fields, visibility)
  * on pageInit and sends to Flux Capture API for caching.
- *
- * This runs invisibly - users don't know it's happening.
  */
 
-define(['N/currentRecord', 'N/url', 'N/https', 'N/runtime', 'N/log'],
-function(currentRecord, url, https, runtime, log) {
+define(['N/currentRecord', 'N/url', 'N/https'],
+function(currentRecord, url, https) {
 
     // Cache check - only extract once per form per session
     var EXTRACTED_FORMS = {};
@@ -22,23 +20,29 @@ function(currentRecord, url, https, runtime, log) {
      * Page Init - Extract form layout automatically
      */
     function pageInit(context) {
+        console.log('[FC_FormLayoutCapture] pageInit triggered, mode:', context.mode);
+
         try {
             var rec = context.currentRecord;
             var recordType = rec.type;
             var formId = getFormId(rec);
 
+            console.log('[FC_FormLayoutCapture] Record type:', recordType, 'Form ID:', formId);
+
             // Skip if already extracted this session
             var cacheKey = recordType + '_' + (formId || 'default');
             if (EXTRACTED_FORMS[cacheKey]) {
+                console.log('[FC_FormLayoutCapture] Already extracted this session:', cacheKey);
                 return;
             }
 
-            // Check server cache first
-            checkAndExtractLayout(recordType, formId, cacheKey);
+            // Wait for DOM to render, then extract
+            setTimeout(function() {
+                extractAndSaveLayout(recordType, formId, cacheKey);
+            }, 2000);
 
         } catch (e) {
-            // Silently fail - don't disrupt user experience
-            log.debug('FC_FormLayoutCapture', 'pageInit error: ' + e.message);
+            console.error('[FC_FormLayoutCapture] pageInit error:', e.message);
         }
     }
 
@@ -54,77 +58,52 @@ function(currentRecord, url, https, runtime, log) {
     }
 
     /**
-     * Check if layout exists, extract if not
-     */
-    function checkAndExtractLayout(recordType, formId, cacheKey) {
-        // Get RESTlet URL
-        var restletUrl = url.resolveScript({
-            scriptId: 'customscript_fc_router',
-            deploymentId: 'customdeploy_fc_router'
-        });
-
-        // Check if layout already cached
-        var checkUrl = restletUrl + '&action=formlayout&transactionType=' + recordType;
-        if (formId) {
-            checkUrl += '&formId=' + formId;
-        }
-
-        https.get.promise({
-            url: checkUrl
-        }).then(function(response) {
-            var result = JSON.parse(response.body);
-
-            // If no layout cached, extract and save
-            if (!result.success || !result.data || !result.data.tabs || result.data.tabs.length === 0) {
-                // Wait for DOM to fully render
-                setTimeout(function() {
-                    extractAndSaveLayout(recordType, formId, restletUrl, cacheKey);
-                }, 1500);
-            } else {
-                // Already cached
-                EXTRACTED_FORMS[cacheKey] = true;
-                log.debug('FC_FormLayoutCapture', 'Layout already cached for ' + cacheKey);
-            }
-
-        }).catch(function(e) {
-            // If check fails, try to extract anyway
-            setTimeout(function() {
-                extractAndSaveLayout(recordType, formId, restletUrl, cacheKey);
-            }, 1500);
-        });
-    }
-
-    /**
      * Extract layout from DOM and save to server
      */
-    function extractAndSaveLayout(recordType, formId, restletUrl, cacheKey) {
+    function extractAndSaveLayout(recordType, formId, cacheKey) {
         try {
+            console.log('[FC_FormLayoutCapture] Extracting layout...');
+
             var layout = extractFormLayout(recordType, formId);
 
             if (!layout || !layout.tabs || layout.tabs.length === 0) {
-                log.debug('FC_FormLayoutCapture', 'No layout extracted');
+                console.log('[FC_FormLayoutCapture] No layout extracted');
                 return;
             }
 
-            // Save to server
-            https.put.promise({
-                url: restletUrl,
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    action: 'saveformlayout',
-                    transactionType: recordType,
-                    formId: formId,
-                    layout: layout
-                })
-            }).then(function(response) {
-                EXTRACTED_FORMS[cacheKey] = true;
-                log.audit('FC_FormLayoutCapture', 'Layout saved for ' + recordType + ' form ' + formId);
-            }).catch(function(e) {
-                log.debug('FC_FormLayoutCapture', 'Save error: ' + e.message);
+            console.log('[FC_FormLayoutCapture] Layout extracted:', layout.tabs.length, 'tabs');
+
+            // Get RESTlet URL
+            var restletUrl = url.resolveScript({
+                scriptId: 'customscript_fc_router',
+                deploymentId: 'customdeploy_fc_router'
             });
 
+            console.log('[FC_FormLayoutCapture] Saving to:', restletUrl);
+
+            // Save to server using XHR (more reliable in client scripts)
+            var xhr = new XMLHttpRequest();
+            xhr.open('PUT', restletUrl, true);
+            xhr.setRequestHeader('Content-Type', 'application/json');
+            xhr.onreadystatechange = function() {
+                if (xhr.readyState === 4) {
+                    if (xhr.status === 200) {
+                        EXTRACTED_FORMS[cacheKey] = true;
+                        console.log('[FC_FormLayoutCapture] Layout saved successfully');
+                    } else {
+                        console.error('[FC_FormLayoutCapture] Save failed:', xhr.status, xhr.responseText);
+                    }
+                }
+            };
+            xhr.send(JSON.stringify({
+                action: 'saveformlayout',
+                transactionType: recordType,
+                formId: formId,
+                layout: layout
+            }));
+
         } catch (e) {
-            log.debug('FC_FormLayoutCapture', 'Extract error: ' + e.message);
+            console.error('[FC_FormLayoutCapture] Extract error:', e.message);
         }
     }
 
@@ -140,163 +119,46 @@ function(currentRecord, url, https, runtime, log) {
             recordType: recordType
         };
 
-        // Extract tabs
-        layout.tabs = extractTabs();
+        // Extract main tab with all visible fields
+        var mainTab = {
+            id: 'main',
+            label: 'Main',
+            displayOrder: 0,
+            fieldGroups: [],
+            sublists: []
+        };
+
+        // Extract visible fields
+        var fields = extractVisibleFields();
+        console.log('[FC_FormLayoutCapture] Found', fields.length, 'visible fields');
+
+        if (fields.length > 0) {
+            mainTab.fieldGroups.push({
+                id: 'primary',
+                label: 'Primary Information',
+                displayOrder: 0,
+                fields: fields
+            });
+        }
 
         // Extract sublists
-        layout.sublists = extractSublists();
+        var sublists = extractSublists();
+        console.log('[FC_FormLayoutCapture] Found', sublists.length, 'sublists');
+
+        sublists.forEach(function(sl) {
+            mainTab.sublists.push(sl.id);
+        });
+
+        layout.tabs.push(mainTab);
+        layout.sublists = sublists;
 
         return layout;
     }
 
     /**
-     * Extract tabs from the form
+     * Extract visible fields from the form
      */
-    function extractTabs() {
-        var tabs = [];
-
-        // NetSuite tabs are in .uir-machine-headerrow or similar containers
-        var tabElements = document.querySelectorAll(
-            '.uir-machine-headerrow, ' +
-            '.machine_headerrow, ' +
-            '[data-walkthrough-target^="tab"], ' +
-            '.uir_tab'
-        );
-
-        if (tabElements.length === 0) {
-            // Single tab form - create Main tab
-            tabs.push(extractMainTab());
-            return tabs;
-        }
-
-        tabElements.forEach(function(tabEl, idx) {
-            var tabId = tabEl.id || tabEl.getAttribute('data-tab-id') || 'tab_' + idx;
-            var tabLabel = getTabLabel(tabEl) || 'Tab ' + (idx + 1);
-
-            tabs.push({
-                id: tabId,
-                label: tabLabel,
-                displayOrder: idx,
-                fieldGroups: extractFieldGroups(tabEl),
-                sublists: getSublistsInTab(tabEl)
-            });
-        });
-
-        // If no tabs extracted, create main tab
-        if (tabs.length === 0) {
-            tabs.push(extractMainTab());
-        }
-
-        return tabs;
-    }
-
-    /**
-     * Extract main tab for single-tab forms
-     */
-    function extractMainTab() {
-        var mainContent = document.querySelector(
-            '#main_form, ' +
-            '.uir-machine-table-container, ' +
-            '#div__body, ' +
-            'form[name="main_form"]'
-        ) || document.body;
-
-        return {
-            id: 'main',
-            label: 'Main',
-            displayOrder: 0,
-            fieldGroups: extractFieldGroups(mainContent),
-            sublists: getAllSublistIds()
-        };
-    }
-
-    /**
-     * Get tab label
-     */
-    function getTabLabel(tabEl) {
-        var label = tabEl.getAttribute('data-label') || tabEl.getAttribute('title');
-        if (!label) {
-            var labelEl = tabEl.querySelector('.uir-machine-header-text, .tab-text, a');
-            if (labelEl) {
-                label = labelEl.textContent.trim();
-            }
-        }
-        return label;
-    }
-
-    /**
-     * Extract field groups from container
-     */
-    function extractFieldGroups(container) {
-        var groups = [];
-
-        // Look for fieldsets and field group containers
-        var groupElements = container.querySelectorAll(
-            'fieldset, ' +
-            '.uir-field-group, ' +
-            '.uir-machine-row-group, ' +
-            '[data-field-group]'
-        );
-
-        if (groupElements.length === 0) {
-            // No explicit groups - create single group
-            var allFields = extractFieldsFromContainer(container);
-            if (allFields.length > 0) {
-                groups.push({
-                    id: 'main_fields',
-                    label: 'Fields',
-                    displayOrder: 0,
-                    fields: allFields
-                });
-            }
-            return groups;
-        }
-
-        groupElements.forEach(function(groupEl, idx) {
-            var groupId = groupEl.id || groupEl.getAttribute('data-field-group') || 'group_' + idx;
-            var groupLabel = getGroupLabel(groupEl) || 'Group ' + (idx + 1);
-            var fields = extractFieldsFromContainer(groupEl);
-
-            if (fields.length > 0) {
-                groups.push({
-                    id: groupId,
-                    label: groupLabel,
-                    displayOrder: idx,
-                    fields: fields,
-                    collapsed: isGroupCollapsed(groupEl)
-                });
-            }
-        });
-
-        return groups;
-    }
-
-    /**
-     * Get group label
-     */
-    function getGroupLabel(groupEl) {
-        var legend = groupEl.querySelector('legend');
-        if (legend) return legend.textContent.trim();
-
-        var header = groupEl.querySelector('.uir-field-group-header, .group-header, h3, h4');
-        if (header) return header.textContent.trim();
-
-        return groupEl.getAttribute('data-label') || groupEl.getAttribute('title');
-    }
-
-    /**
-     * Check if group is collapsed
-     */
-    function isGroupCollapsed(groupEl) {
-        return groupEl.classList.contains('collapsed') ||
-               groupEl.classList.contains('uir-collapsed') ||
-               groupEl.style.display === 'none';
-    }
-
-    /**
-     * Extract visible fields from container
-     */
-    function extractFieldsFromContainer(container) {
+    function extractVisibleFields() {
         var fields = [];
         var seen = {};
 
@@ -304,22 +166,25 @@ function(currentRecord, url, https, runtime, log) {
         var skipFields = ['ntype', 'recordtype', 'nsapiCT', 'customform', 'entryformquerystring',
                          '_csrf', 'wfinstances', 'id', 'sys_id', 'selectedtab', 'type',
                          'baserecordtype', 'nsapiFC', 'nsapiPS', 'nsapiVF', 'nsapiPI',
-                         'nsapiSR', 'nsapiLI', 'nsapiVD', 'nsapiRC', 'nsapiPD'];
+                         'nsapiSR', 'nsapiLI', 'nsapiVD', 'nsapiRC', 'nsapiPD', 'nlrole',
+                         'submitted', 'nextbill', 'nexttransaction'];
 
-        // Find field elements
-        var fieldElements = container.querySelectorAll(
-            'input[id], select[id], textarea[id], ' +
-            '[data-field-name], .uir-field'
-        );
+        // Find all input elements
+        var inputs = document.querySelectorAll('input[id], select[id], textarea[id]');
 
-        fieldElements.forEach(function(el) {
-            var fieldId = getFieldId(el);
+        inputs.forEach(function(el) {
+            var fieldId = getFieldIdFromElement(el);
             if (!fieldId || seen[fieldId]) return;
             if (skipFields.indexOf(fieldId) !== -1) return;
             if (fieldId.indexOf('nsapi') === 0) return;
+            if (fieldId.indexOf('sys_') === 0) return;
 
-            // Check visibility
-            if (!isFieldVisible(el)) return;
+            // Check if field row is visible
+            var row = el.closest('tr');
+            if (row) {
+                var style = window.getComputedStyle(row);
+                if (style.display === 'none') return;
+            }
 
             seen[fieldId] = true;
             fields.push(fieldId);
@@ -331,67 +196,39 @@ function(currentRecord, url, https, runtime, log) {
     /**
      * Get field ID from element
      */
-    function getFieldId(el) {
-        var fieldName = el.getAttribute('data-field-name');
-        if (fieldName) return fieldName;
+    function getFieldIdFromElement(el) {
+        var id = el.id || '';
+        if (!id) return null;
 
-        var id = el.id;
-        if (id) {
-            // Clean NetSuite prefixes
-            return id.replace(/^inpt_/, '')
-                     .replace(/^txt_/, '')
-                     .replace(/_display$/, '')
-                     .replace(/_fs$/, '')
-                     .replace(/_val$/, '');
-        }
-
-        return el.name;
+        // Clean NetSuite prefixes/suffixes
+        return id.replace(/^inpt_/, '')
+                 .replace(/^txt_/, '')
+                 .replace(/_display$/, '')
+                 .replace(/_fs$/, '')
+                 .replace(/_val$/, '')
+                 .replace(/_formattedValue$/, '');
     }
 
     /**
-     * Check if field is visible
-     */
-    function isFieldVisible(el) {
-        var style = window.getComputedStyle(el);
-        if (style.display === 'none' || style.visibility === 'hidden') {
-            return false;
-        }
-
-        // Check parent row
-        var parent = el.closest('tr, .uir-field-wrapper, .field-wrapper');
-        if (parent) {
-            var parentStyle = window.getComputedStyle(parent);
-            if (parentStyle.display === 'none') {
-                return false;
-            }
-        }
-
-        return true;
-    }
-
-    /**
-     * Extract sublists
+     * Extract sublists from the form
      */
     function extractSublists() {
         var sublists = [];
 
-        var sublistElements = document.querySelectorAll(
-            '[data-sublist-id], ' +
-            '.uir-machine-table, ' +
-            '.machine, ' +
-            'table.uir-sublist'
-        );
+        // Look for sublist tables
+        var tables = document.querySelectorAll('table.machine, table.uir-machine-table, [id*="_splits"]');
 
-        sublistElements.forEach(function(el, idx) {
-            var sublistId = el.getAttribute('data-sublist-id') || inferSublistId(el) || 'sublist_' + idx;
-            var columns = extractSublistColumns(el);
+        tables.forEach(function(table) {
+            var sublistId = inferSublistId(table);
+            if (!sublistId) return;
+
+            var columns = extractSublistColumns(table);
 
             sublists.push({
                 id: sublistId,
-                label: getSublistLabel(el) || sublistId,
-                visibleColumns: columns.visible,
-                columnOrder: columns.order,
-                allColumns: columns.all
+                label: sublistId.charAt(0).toUpperCase() + sublistId.slice(1),
+                visibleColumns: columns,
+                columnOrder: columns
             });
         });
 
@@ -399,73 +236,52 @@ function(currentRecord, url, https, runtime, log) {
     }
 
     /**
-     * Infer sublist ID from element
+     * Infer sublist ID from table element
      */
-    function inferSublistId(el) {
-        var id = el.id || '';
-        var className = el.className || '';
+    function inferSublistId(table) {
+        var id = (table.id || '').toLowerCase();
+        var className = (table.className || '').toLowerCase();
 
         if (id.includes('expense') || className.includes('expense')) return 'expense';
         if (id.includes('item') || className.includes('item')) return 'item';
         if (id.includes('line') || className.includes('line')) return 'line';
+        if (id.includes('apply') || className.includes('apply')) return 'apply';
 
         return null;
     }
 
     /**
-     * Get sublist label
+     * Extract visible columns from sublist
      */
-    function getSublistLabel(el) {
-        var header = el.previousElementSibling;
-        if (header && header.tagName === 'H3') {
-            return header.textContent.trim();
-        }
+    function extractSublistColumns(table) {
+        var columns = [];
 
-        var caption = el.querySelector('caption');
-        if (caption) return caption.textContent.trim();
+        var headerRow = table.querySelector('tr.uir-machine-headerrow, thead tr, tr:first-child');
+        if (!headerRow) return columns;
 
-        return null;
-    }
-
-    /**
-     * Extract sublist column configuration
-     */
-    function extractSublistColumns(el) {
-        var visible = [];
-        var order = [];
-        var all = [];
-
-        var headerRow = el.querySelector('thead tr, .uir-machine-headerrow tr, .machine_headerrow tr');
-        if (!headerRow) {
-            headerRow = el.querySelector('tr:first-child');
-        }
-        if (!headerRow) return { visible: [], order: [], all: [] };
-
-        var cells = headerRow.querySelectorAll('th, td');
+        var cells = headerRow.querySelectorAll('td, th');
         cells.forEach(function(cell) {
-            var colId = cell.getAttribute('data-column') ||
-                       cell.getAttribute('data-field') ||
+            var colId = cell.getAttribute('data-ns-column') ||
+                       cell.getAttribute('data-column') ||
                        inferColumnId(cell);
 
-            if (!colId) return;
-
-            all.push(colId);
-            order.push(colId);
-
-            var style = window.getComputedStyle(cell);
-            if (style.display !== 'none' && style.visibility !== 'hidden') {
-                visible.push(colId);
+            if (colId && colId !== 'delete' && colId !== 'insert') {
+                var style = window.getComputedStyle(cell);
+                if (style.display !== 'none') {
+                    columns.push(colId);
+                }
             }
         });
 
-        return { visible: visible, order: order, all: all };
+        return columns;
     }
 
     /**
-     * Infer column ID from header text
+     * Infer column ID from header cell
      */
     function inferColumnId(cell) {
         var text = (cell.textContent || '').trim().toLowerCase();
+        if (!text || text.length > 30) return null;
 
         var mappings = {
             'account': 'account',
@@ -475,42 +291,18 @@ function(currentRecord, url, https, runtime, log) {
             'quantity': 'quantity',
             'qty': 'quantity',
             'rate': 'rate',
-            'price': 'rate',
             'item': 'item',
             'department': 'department',
-            'dept': 'department',
             'class': 'class',
             'location': 'location',
-            'loc': 'location',
             'customer': 'customer',
             'tax code': 'taxcode',
-            'tax': 'taxcode'
+            'category': 'category',
+            'gross amt': 'grossamt',
+            'tax amt': 'tax1amt'
         };
 
         return mappings[text] || null;
-    }
-
-    /**
-     * Get all sublist IDs
-     */
-    function getAllSublistIds() {
-        var sublists = extractSublists();
-        return sublists.map(function(sl) { return sl.id; });
-    }
-
-    /**
-     * Get sublists within a tab
-     */
-    function getSublistsInTab(tabEl) {
-        var ids = [];
-        var sublists = tabEl.querySelectorAll(
-            '[data-sublist-id], .uir-machine-table, .machine'
-        );
-        sublists.forEach(function(sl) {
-            var id = sl.getAttribute('data-sublist-id') || inferSublistId(sl);
-            if (id) ids.push(id);
-        });
-        return ids;
     }
 
     return {

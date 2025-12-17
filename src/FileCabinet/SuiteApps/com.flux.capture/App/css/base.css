@@ -92,6 +92,7 @@ html {
     font-size: 14px;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
+    overflow-x: hidden;
 }
 
 body {
@@ -100,6 +101,7 @@ body {
     line-height: 1.5;
     color: var(--text-primary);
     background: var(--surface-body);
+    overflow-x: hidden;
 }
 
 /* ==========================================
@@ -318,6 +320,8 @@ body {
     flex: 1;
     padding: var(--space-lg) var(--space-xl);
     will-change: transform, opacity;
+    overflow-x: hidden;
+    max-width: 100%;
 }
 
 /* ==========================================
