@@ -35,6 +35,15 @@
             <showinlist>T</showinlist>
         </customrecordcustomfield>
 
+        <customrecordcustomfield scriptid="custrecord_dm_original_filename">
+            <fieldtype>TEXT</fieldtype>
+            <label>Original Filename</label>
+            <description>Original name of the uploaded file</description>
+            <ismandatory>F</ismandatory>
+            <displaytype>NORMAL</displaytype>
+            <showinlist>T</showinlist>
+        </customrecordcustomfield>
+
         <customrecordcustomfield scriptid="custrecord_dm_document_type">
             <fieldtype>INTEGER</fieldtype>
             <label>Document Type</label>
