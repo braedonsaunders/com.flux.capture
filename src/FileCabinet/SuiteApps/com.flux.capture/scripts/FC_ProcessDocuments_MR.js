@@ -75,14 +75,11 @@ define([
                 }
             });
 
-            // Load the file
-            const fileObj = file.load({ id: fileId });
-
-            // Process with FC_Engine
+            // Process with FC_Engine (pass fileId, not file object - engine loads it internally)
             const engine = new FC_Engine.FluxCaptureEngine();
             const startTime = Date.now();
 
-            const result = engine.processDocument(fileObj, {
+            const result = engine.processDocument(fileId, {
                 documentType: documentType,
                 enableVendorMatching: true,
                 enableAnomalyDetection: true,

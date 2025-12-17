@@ -483,10 +483,11 @@ define([
                 'custrecord_dm_confidence_score as confidence, BUILTIN.DF(custrecord_dm_vendor) as vendorName, ' +
                 'custrecord_dm_invoice_number as invoiceNumber, custrecord_dm_total_amount as totalAmount, ' +
                 'custrecord_dm_created_date as createdDate, custrecord_dm_batch_id as batchId, ' +
-                'custrecord_dm_anomalies as anomalies FROM customrecord_dm_captured_document ' +
+                'custrecord_dm_anomalies as anomalies, custrecord_dm_error_message as errorMessage FROM customrecord_dm_captured_document ' +
                 'WHERE custrecord_dm_status IN (' + DocStatus.PENDING + ', ' + DocStatus.PROCESSING + ', ' +
-                DocStatus.EXTRACTED + ', ' + DocStatus.NEEDS_REVIEW + ') ' +
-                'ORDER BY CASE custrecord_dm_status WHEN ' + DocStatus.NEEDS_REVIEW + ' THEN 1 ' +
+                DocStatus.EXTRACTED + ', ' + DocStatus.NEEDS_REVIEW + ', ' + DocStatus.ERROR + ') ' +
+                'ORDER BY CASE custrecord_dm_status WHEN ' + DocStatus.ERROR + ' THEN 0 ' +
+                'WHEN ' + DocStatus.NEEDS_REVIEW + ' THEN 1 ' +
                 'WHEN ' + DocStatus.EXTRACTED + ' THEN 2 WHEN ' + DocStatus.PROCESSING + ' THEN 3 ' +
                 'WHEN ' + DocStatus.PENDING + ' THEN 4 END, custrecord_dm_created_date ASC ' +
                 'OFFSET ' + ((page - 1) * pageSize) + ' ROWS FETCH NEXT ' + pageSize + ' ROWS ONLY';
@@ -509,13 +510,14 @@ define([
                     totalAmount: v[7],
                     createdDate: v[8],
                     batchId: v[9],
-                    hasAnomalies: docAnomalies.length > 0
+                    hasAnomalies: docAnomalies.length > 0,
+                    errorMessage: v[11] || ''
                 };
             });
 
             var countSql = 'SELECT custrecord_dm_status as status, COUNT(*) as count FROM customrecord_dm_captured_document ' +
                 'WHERE custrecord_dm_status IN (' + DocStatus.PENDING + ', ' + DocStatus.PROCESSING + ', ' +
-                DocStatus.EXTRACTED + ', ' + DocStatus.NEEDS_REVIEW + ') GROUP BY custrecord_dm_status';
+                DocStatus.EXTRACTED + ', ' + DocStatus.NEEDS_REVIEW + ', ' + DocStatus.ERROR + ') GROUP BY custrecord_dm_status';
 
             var countResults = query.runSuiteQL({ query: countSql });
             var statusCounts = {};
