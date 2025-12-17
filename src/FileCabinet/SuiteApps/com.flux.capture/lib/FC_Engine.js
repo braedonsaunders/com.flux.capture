@@ -784,7 +784,7 @@ define([
         }
 
         /**
-         * Match vendor from extracted name using fuzzy search
+         * Match vendor from extracted name using intelligent fuzzy search
          * @param {string} vendorName - The extracted vendor name
          * @returns {Object} Vendor match result with suggestions
          */
@@ -795,74 +795,58 @@ define([
 
             const searchName = String(vendorName).toLowerCase().trim();
 
-            // Remove common suffixes for better matching
-            const cleanedName = searchName
-                .replace(/\s*(inc\.?|llc\.?|ltd\.?|corp\.?|co\.?|company|incorporated|limited)$/i, '')
-                .trim();
+            // Normalize vendor name - remove common suffixes/prefixes and punctuation
+            const normalizedSearch = this._normalizeVendorName(searchName);
+            const searchTokens = this._tokenizeVendorName(normalizedSearch);
+
+            // Generate search variations for fuzzy matching
+            const searchVariations = this._generateSearchVariations(normalizedSearch, searchTokens);
+
+            // Build SQL with all variations
+            const likeConditions = searchVariations.map(() => 'LOWER(companyname) LIKE ?').join(' OR ');
 
             const sql = `
                 SELECT id, companyname, entityid, email
                 FROM vendor
                 WHERE isinactive = 'F'
-                AND (
-                    LOWER(companyname) LIKE ? OR
-                    LOWER(entityid) LIKE ? OR
-                    LOWER(companyname) = ? OR
-                    LOWER(companyname) = ?
-                )
-                ORDER BY
-                    CASE
-                        WHEN LOWER(companyname) = ? THEN 0
-                        WHEN LOWER(companyname) = ? THEN 1
-                        WHEN LOWER(companyname) LIKE ? THEN 2
-                        ELSE 3
-                    END,
-                    companyname
-                FETCH FIRST 5 ROWS ONLY
+                AND (${likeConditions})
+                ORDER BY companyname
+                FETCH FIRST 20 ROWS ONLY
             `;
 
             try {
                 const results = query.runSuiteQL({
                     query: sql,
-                    params: [
-                        `%${searchName}%`,
-                        `%${searchName}%`,
-                        searchName,
-                        cleanedName,
-                        searchName,
-                        cleanedName,
-                        `${searchName}%`
-                    ]
+                    params: searchVariations.map(v => `%${v}%`)
                 });
 
                 if (!results.results || results.results.length === 0) {
-                    return { vendorId: null, vendorName: vendorName, confidence: 0, suggestions: [] };
+                    // Try broader search with just the first significant word
+                    return this._broadVendorSearch(vendorName, searchTokens);
                 }
 
-                const suggestions = results.results.map(r => ({
+                const candidates = results.results.map(r => ({
                     id: r.values[0],
                     companyName: r.values[1],
                     entityId: r.values[2],
                     email: r.values[3]
                 }));
 
-                const bestMatch = suggestions[0];
-                const bestMatchName = bestMatch.companyName.toLowerCase();
+                // Score all candidates using fuzzy matching
+                const scoredCandidates = candidates.map(c => {
+                    const score = this._calculateVendorMatchScore(searchName, normalizedSearch, searchTokens, c.companyName);
+                    return { ...c, score };
+                }).sort((a, b) => b.score - a.score);
 
-                // Calculate confidence based on match quality
-                let confidence = 0.5;
-                if (bestMatchName === searchName || bestMatchName === cleanedName) {
-                    confidence = 0.98;
-                } else if (bestMatchName.startsWith(searchName) || searchName.startsWith(bestMatchName)) {
-                    confidence = 0.85;
-                } else if (bestMatchName.includes(searchName) || searchName.includes(bestMatchName)) {
-                    confidence = 0.70;
-                }
+                const bestMatch = scoredCandidates[0];
+
+                // Top 5 suggestions for review
+                const suggestions = scoredCandidates.slice(0, 5);
 
                 return {
-                    vendorId: bestMatch.id,
+                    vendorId: bestMatch.score >= 0.6 ? bestMatch.id : null,
                     vendorName: bestMatch.companyName,
-                    confidence: confidence,
+                    confidence: bestMatch.score,
                     suggestions: suggestions
                 };
 
@@ -870,6 +854,233 @@ define([
                 log.error('FluxCapture._matchVendor', e.message);
                 return { vendorId: null, vendorName: vendorName, confidence: 0, suggestions: [] };
             }
+        }
+
+        /**
+         * Normalize vendor name by removing common suffixes and punctuation
+         */
+        _normalizeVendorName(name) {
+            return name
+                .toLowerCase()
+                .replace(/[.,'"!?]/g, '')
+                .replace(/\s*(inc\.?|llc\.?|ltd\.?|corp\.?|co\.?|company|incorporated|limited|corporation|enterprises?|services?|solutions?|group|holdings?|international|intl\.?)$/gi, '')
+                .replace(/\s+/g, ' ')
+                .trim();
+        }
+
+        /**
+         * Tokenize vendor name into significant words
+         */
+        _tokenizeVendorName(name) {
+            const stopWords = ['the', 'a', 'an', 'and', 'or', 'of', 'for', 'to', 'in', 'at', 'by'];
+            return name.split(/\s+/)
+                .filter(w => w.length > 1 && !stopWords.includes(w));
+        }
+
+        /**
+         * Generate search variations for fuzzy matching
+         */
+        _generateSearchVariations(normalizedName, tokens) {
+            const variations = [normalizedName];
+
+            // Add individual significant tokens (for partial matches)
+            tokens.forEach(token => {
+                if (token.length >= 4) {
+                    variations.push(token);
+                    // Handle common plural/singular variations
+                    if (token.endsWith('s')) {
+                        variations.push(token.slice(0, -1)); // Remove trailing s
+                    } else {
+                        variations.push(token + 's'); // Add s
+                    }
+                    // Handle -tion/-tions variations
+                    if (token.endsWith('tions')) {
+                        variations.push(token.slice(0, -1)); // insulations -> insulation
+                    } else if (token.endsWith('tion')) {
+                        variations.push(token + 's'); // insulation -> insulations
+                    }
+                }
+            });
+
+            // First 2-3 tokens combined (company name core)
+            if (tokens.length >= 2) {
+                variations.push(tokens.slice(0, 2).join(' '));
+                if (tokens.length >= 3) {
+                    variations.push(tokens.slice(0, 3).join(' '));
+                }
+            }
+
+            return [...new Set(variations)]; // Remove duplicates
+        }
+
+        /**
+         * Broader vendor search when exact variations fail
+         */
+        _broadVendorSearch(originalName, tokens) {
+            if (tokens.length === 0) {
+                return { vendorId: null, vendorName: originalName, confidence: 0, suggestions: [] };
+            }
+
+            // Search for the most significant token (usually the first long word)
+            const significantToken = tokens.find(t => t.length >= 4) || tokens[0];
+
+            const sql = `
+                SELECT id, companyname, entityid, email
+                FROM vendor
+                WHERE isinactive = 'F'
+                AND LOWER(companyname) LIKE ?
+                ORDER BY companyname
+                FETCH FIRST 10 ROWS ONLY
+            `;
+
+            try {
+                const results = query.runSuiteQL({
+                    query: sql,
+                    params: [`%${significantToken}%`]
+                });
+
+                if (!results.results || results.results.length === 0) {
+                    return { vendorId: null, vendorName: originalName, confidence: 0, suggestions: [] };
+                }
+
+                const normalizedSearch = this._normalizeVendorName(originalName.toLowerCase());
+                const searchTokens = this._tokenizeVendorName(normalizedSearch);
+
+                const candidates = results.results.map(r => {
+                    const companyName = r.values[1];
+                    const score = this._calculateVendorMatchScore(originalName.toLowerCase(), normalizedSearch, searchTokens, companyName);
+                    return {
+                        id: r.values[0],
+                        companyName,
+                        entityId: r.values[2],
+                        email: r.values[3],
+                        score
+                    };
+                }).sort((a, b) => b.score - a.score);
+
+                const bestMatch = candidates[0];
+
+                return {
+                    vendorId: bestMatch.score >= 0.55 ? bestMatch.id : null,
+                    vendorName: bestMatch.companyName,
+                    confidence: bestMatch.score,
+                    suggestions: candidates.slice(0, 5)
+                };
+
+            } catch (e) {
+                log.error('FluxCapture._broadVendorSearch', e.message);
+                return { vendorId: null, vendorName: originalName, confidence: 0, suggestions: [] };
+            }
+        }
+
+        /**
+         * Calculate fuzzy match score between search and candidate vendor names
+         */
+        _calculateVendorMatchScore(searchName, normalizedSearch, searchTokens, candidateName) {
+            const normalizedCandidate = this._normalizeVendorName(candidateName.toLowerCase());
+            const candidateTokens = this._tokenizeVendorName(normalizedCandidate);
+
+            // Exact match after normalization
+            if (normalizedSearch === normalizedCandidate) {
+                return 0.98;
+            }
+
+            // Calculate multiple similarity metrics
+            const scores = [];
+
+            // 1. Token overlap score (Jaccard-like)
+            const tokenOverlap = this._calculateTokenOverlap(searchTokens, candidateTokens);
+            scores.push(tokenOverlap * 0.4);
+
+            // 2. Levenshtein-based similarity on normalized names
+            const levenshteinSim = this._calculateLevenshteinSimilarity(normalizedSearch, normalizedCandidate);
+            scores.push(levenshteinSim * 0.35);
+
+            // 3. Prefix match bonus
+            if (normalizedCandidate.startsWith(normalizedSearch) || normalizedSearch.startsWith(normalizedCandidate)) {
+                scores.push(0.15);
+            }
+
+            // 4. Contains bonus
+            if (normalizedCandidate.includes(normalizedSearch) || normalizedSearch.includes(normalizedCandidate)) {
+                scores.push(0.1);
+            }
+
+            return Math.min(scores.reduce((a, b) => a + b, 0), 0.98);
+        }
+
+        /**
+         * Calculate token overlap score
+         */
+        _calculateTokenOverlap(tokens1, tokens2) {
+            if (tokens1.length === 0 || tokens2.length === 0) return 0;
+
+            let matches = 0;
+            const used = new Set();
+
+            for (const t1 of tokens1) {
+                for (let i = 0; i < tokens2.length; i++) {
+                    if (used.has(i)) continue;
+                    const t2 = tokens2[i];
+
+                    // Exact token match
+                    if (t1 === t2) {
+                        matches += 1;
+                        used.add(i);
+                        break;
+                    }
+
+                    // Fuzzy token match (handles insulations vs insulation)
+                    const tokenSim = this._calculateLevenshteinSimilarity(t1, t2);
+                    if (tokenSim >= 0.85) {
+                        matches += tokenSim;
+                        used.add(i);
+                        break;
+                    }
+                }
+            }
+
+            return matches / Math.max(tokens1.length, tokens2.length);
+        }
+
+        /**
+         * Calculate Levenshtein similarity (0-1 scale)
+         */
+        _calculateLevenshteinSimilarity(str1, str2) {
+            if (str1 === str2) return 1;
+            if (str1.length === 0 || str2.length === 0) return 0;
+
+            const len1 = str1.length;
+            const len2 = str2.length;
+
+            // Quick check: if lengths differ too much, low similarity
+            if (Math.abs(len1 - len2) > Math.max(len1, len2) * 0.5) {
+                return 0;
+            }
+
+            // Levenshtein distance calculation
+            const matrix = [];
+            for (let i = 0; i <= len1; i++) {
+                matrix[i] = [i];
+            }
+            for (let j = 0; j <= len2; j++) {
+                matrix[0][j] = j;
+            }
+
+            for (let i = 1; i <= len1; i++) {
+                for (let j = 1; j <= len2; j++) {
+                    const cost = str1[i - 1] === str2[j - 1] ? 0 : 1;
+                    matrix[i][j] = Math.min(
+                        matrix[i - 1][j] + 1,      // deletion
+                        matrix[i][j - 1] + 1,      // insertion
+                        matrix[i - 1][j - 1] + cost // substitution
+                    );
+                }
+            }
+
+            const distance = matrix[len1][len2];
+            const maxLen = Math.max(len1, len2);
+            return 1 - (distance / maxLen);
         }
 
         /**

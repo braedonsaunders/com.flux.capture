@@ -167,10 +167,10 @@
 
                 <li class="nav-section-title">Documents</li>
                 <li class="nav-item">
-                    <a href="#" class="nav-link" data-route="queue">
-                        <i class="fas fa-stream"></i>
-                        <span>Queue</span>
-                        <span class="nav-badge" id="queue-badge" style="display:none;">0</span>
+                    <a href="#" class="nav-link" data-route="flow">
+                        <i class="fas fa-bolt"></i>
+                        <span>Flow</span>
+                        <span class="nav-badge" id="flow-badge" style="display:none;">0</span>
                     </a>
                 </li>
                 <li class="nav-item">
@@ -196,6 +196,17 @@
             </ul>
 
             <div class="sidebar-footer">
+                <div class="sidebar-controls">
+                    <button class="sidebar-control" id="btn-dark-mode" title="Toggle Dark Mode">
+                        <i class="fas fa-moon"></i>
+                    </button>
+                    <button class="sidebar-control" id="btn-fullscreen" title="Toggle Fullscreen">
+                        <i class="fas fa-expand"></i>
+                    </button>
+                    <button class="sidebar-control" id="btn-collapse-sidebar" title="Collapse Sidebar">
+                        <i class="fas fa-angles-left"></i>
+                    </button>
+                </div>
                 <div class="sidebar-user">
                     <div class="user-avatar" id="user-avatar">U</div>
                     <div class="user-info">
@@ -205,6 +216,11 @@
                 </div>
             </div>
         </nav>
+
+        <!-- Collapsed sidebar expand button -->
+        <button class="sidebar-expand-btn" id="btn-expand-sidebar" title="Expand Sidebar">
+            <i class="fas fa-angles-right"></i>
+        </button>
 
         <!-- MAIN CONTENT AREA -->
         <main class="app-main">
