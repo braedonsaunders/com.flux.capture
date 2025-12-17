@@ -4,9 +4,9 @@
  * @NModuleScope SameAccount
  *
  * Flux Capture - Main Suitelet
- * Two-mode pattern: wrapper (NetSuite nav) + content (SPA)
+ * Redirects to content mode (fc_mode=content) to serve the SPA directly
  */
-define(['N/file', 'N/runtime', 'N/url', 'N/ui/serverWidget', 'N/search'], function(file, runtime, url, serverWidget, search) {
+define(['N/file', 'N/runtime', 'N/url', 'N/search'], function(file, runtime, url, search) {
 
     'use strict';
 
@@ -51,27 +51,20 @@ define(['N/file', 'N/runtime', 'N/url', 'N/ui/serverWidget', 'N/search'], functi
     }
 
     /**
-     * Mode 1: Serve NetSuite wrapper with iframe
+     * Mode 1: Redirect to content mode
+     * NetSuite's X-Frame-Options headers prevent iframe embedding,
+     * so we redirect directly to the content URL instead
      */
     function serveWrapper(context) {
-        var form = serverWidget.createForm({ title: 'Flux Capture' });
         var currentScript = runtime.getCurrentScript();
 
-        // Get URL to this same Suitelet with fc_mode=content
-        var contentUrl = url.resolveScript({
-            scriptId: currentScript.id,
-            deploymentId: currentScript.deploymentId,
-            params: { fc_mode: 'content' }
+        // Redirect to content URL to avoid X-Frame-Options issues
+        context.response.sendRedirect({
+            type: 'SUITELET',
+            identifier: currentScript.id,
+            id: currentScript.deploymentId,
+            parameters: { fc_mode: 'content' }
         });
-
-        var htmlField = form.addField({
-            id: 'custpage_fc_frame',
-            type: serverWidget.FieldType.INLINEHTML,
-            label: ' '
-        });
-
-        htmlField.defaultValue = getWrapperHTML(contentUrl);
-        context.response.writePage(form);
     }
 
     /**
@@ -170,71 +163,6 @@ define(['N/file', 'N/runtime', 'N/url', 'N/ui/serverWidget', 'N/search'], functi
         });
 
         return fileUrls;
-    }
-
-    /**
-     * Get wrapper HTML with iframe
-     */
-    function getWrapperHTML(contentUrl) {
-        return '\
-            <style>\
-                #main_form > table:first-child,\
-                .uir-page-title-secondline,\
-                .uir-page-title,\
-                .uir-page-title-firstline,\
-                #main_form > tbody > tr:first-child,\
-                #main_form > table > tbody > tr:first-child {\
-                    visibility: hidden !important;\
-                    height: 0 !important;\
-                    min-height: 0 !important;\
-                    overflow: hidden !important;\
-                    padding: 0 !important;\
-                    margin: 0 !important;\
-                    border: none !important;\
-                }\
-                .fc-frame-wrapper {\
-                    position: fixed;\
-                    left: 0;\
-                    right: 0;\
-                    bottom: 0;\
-                    top: 103px;\
-                    width: 100vw;\
-                    z-index: 100;\
-                }\
-                .fc-iframe {\
-                    width: 100%;\
-                    height: 100%;\
-                    border: none;\
-                    display: block;\
-                }\
-            </style>\
-            <div class="fc-frame-wrapper">\
-                <iframe src="' + contentUrl + '" class="fc-iframe" title="Flux Capture"></iframe>\
-            </div>\
-            <script>\
-                (function() {\
-                    function adjustIframePosition() {\
-                        var wrapper = document.querySelector(".fc-frame-wrapper");\
-                        if (!wrapper) return;\
-                        var headerSelectors = ["#div__header", "#ns-header", "#ns_navigation", ".uir-page-header"];\
-                        var headerBottom = 0;\
-                        for (var i = 0; i < headerSelectors.length; i++) {\
-                            var header = document.querySelector(headerSelectors[i]);\
-                            if (header) {\
-                                var rect = header.getBoundingClientRect();\
-                                if (rect.bottom > headerBottom) headerBottom = rect.bottom;\
-                            }\
-                        }\
-                        if (headerBottom > 0) {\
-                            headerBottom = Math.max(80, Math.min(120, headerBottom));\
-                            wrapper.style.top = headerBottom + "px";\
-                        }\
-                    }\
-                    adjustIframePosition();\
-                    [100, 200, 400, 800].forEach(function(d) { setTimeout(adjustIframePosition, d); });\
-                    window.addEventListener("resize", adjustIframePosition);\
-                })();\
-            </script>';
     }
 
     /**
