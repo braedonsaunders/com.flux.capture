@@ -6,7 +6,7 @@
  * Flux Capture - Main Suitelet
  * Two-mode pattern: wrapper (NetSuite nav) + content (SPA)
  */
-define(['N/file', 'N/runtime', 'N/url', 'N/ui/serverWidget'], function(file, runtime, url, serverWidget) {
+define(['N/file', 'N/runtime', 'N/url', 'N/ui/serverWidget', 'N/search'], function(file, runtime, url, serverWidget, search) {
 
     'use strict';
 
@@ -130,6 +130,7 @@ define(['N/file', 'N/runtime', 'N/url', 'N/ui/serverWidget'], function(file, run
 
     /**
      * Resolve all file URLs from FILE_MANIFEST
+     * Uses search fallback if direct path fails
      */
     function resolveFileUrls() {
         var fileUrls = {};
@@ -141,10 +142,30 @@ define(['N/file', 'N/runtime', 'N/url', 'N/ui/serverWidget'], function(file, run
             try {
                 var fileObj = file.load({ id: fullPath });
                 fileUrls[key] = fileObj.url;
-                log.debug('File Loaded', key + ' -> ' + fullPath);
+                log.debug('File Loaded', key + ' -> ' + fileObj.url);
             } catch (e) {
                 log.error('File Load Failed', key + ' -> ' + fullPath + ' : ' + e.message);
-                fileUrls[key] = null;
+
+                // Try searching by file name as fallback
+                try {
+                    var fileName = relativePath.split('/').pop();
+                    var fileSearch = search.create({
+                        type: 'file',
+                        filters: [['name', 'is', fileName]],
+                        columns: ['url', 'folder']
+                    });
+                    var results = fileSearch.run().getRange({ start: 0, end: 1 });
+                    if (results && results.length > 0) {
+                        fileUrls[key] = results[0].getValue('url');
+                        log.debug('File Found via Search', key + ' -> ' + fileUrls[key]);
+                    } else {
+                        log.error('File Search Failed', 'No results for: ' + fileName);
+                        fileUrls[key] = null;
+                    }
+                } catch (searchError) {
+                    log.error('File Search Error', searchError.message);
+                    fileUrls[key] = null;
+                }
             }
         });
 
