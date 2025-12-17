@@ -828,10 +828,11 @@ define([
     }
 
     /**
-     * Get form fields for a transaction type
+     * Get form fields for a transaction type with multiple sublists and field grouping
+     * Matches NetSuite's preferred form configuration for the account
      * @param {string} transactionType - Type: 'vendorbill', 'expensereport', etc.
      * @param {number} formId - Optional specific form ID
-     * @returns {Object} Form field configuration
+     * @returns {Object} Form field configuration with groups and sublists
      */
     function getTransactionFormFields(transactionType, formId) {
         if (!transactionType) {
@@ -840,34 +841,113 @@ define([
 
         try {
             var recordType;
-            var sublistId;
+            var sublists = [];
             var defaultBodyFields = [];
-            var defaultLineFields = [];
+            var fieldGroups = [];
 
-            // Map transaction types
+            // Map transaction types with multiple sublists
             switch (transactionType.toLowerCase()) {
                 case 'vendorbill':
                 case 'vendor_bill':
                 case 'bill':
                     recordType = record.Type.VENDOR_BILL;
-                    sublistId = 'item';
-                    defaultBodyFields = ['entity', 'trandate', 'duedate', 'tranid', 'memo', 'currency', 'terms', 'approvalstatus'];
-                    defaultLineFields = ['item', 'quantity', 'rate', 'amount', 'description', 'taxcode', 'department', 'class', 'location'];
+                    // Vendor bills have TWO sublists: expense (account-based) and item (item-based)
+                    sublists = [
+                        {
+                            id: 'expense',
+                            label: 'Expenses',
+                            type: 'expense',
+                            defaultFields: ['account', 'amount', 'memo', 'department', 'class', 'location', 'customer', 'taxcode', 'amortizationsched', 'amortizstartdate', 'amortizationenddate']
+                        },
+                        {
+                            id: 'item',
+                            label: 'Items',
+                            type: 'item',
+                            defaultFields: ['item', 'description', 'quantity', 'units', 'rate', 'amount', 'taxcode', 'department', 'class', 'location', 'customer']
+                        }
+                    ];
+                    defaultBodyFields = ['entity', 'trandate', 'duedate', 'tranid', 'memo', 'currency', 'terms', 'approvalstatus', 'subsidiary', 'department', 'class', 'location', 'account'];
+                    // Standard field groups for vendor bills
+                    fieldGroups = [
+                        { id: 'primary', label: 'Primary Information', fields: ['entity', 'trandate', 'duedate', 'postingperiod'] },
+                        { id: 'classification', label: 'Classification', fields: ['subsidiary', 'department', 'class', 'location'] },
+                        { id: 'reference', label: 'Reference', fields: ['tranid', 'memo', 'externalid'] },
+                        { id: 'accounting', label: 'Accounting', fields: ['terms', 'account', 'currency', 'exchangerate'] },
+                        { id: 'custom', label: 'Custom Fields', fields: [] } // Will be populated with custbody fields
+                    ];
                     break;
                 case 'expensereport':
                 case 'expense_report':
                 case 'expense':
                     recordType = record.Type.EXPENSE_REPORT;
-                    sublistId = 'expense';
-                    defaultBodyFields = ['entity', 'trandate', 'memo', 'approvalstatus', 'advance'];
-                    defaultLineFields = ['category', 'amount', 'memo', 'expensedate', 'currency', 'department', 'class', 'location'];
+                    sublists = [
+                        {
+                            id: 'expense',
+                            label: 'Expenses',
+                            type: 'expense',
+                            defaultFields: ['category', 'expensedate', 'amount', 'memo', 'currency', 'exchangerate', 'taxcode', 'department', 'class', 'location', 'customer', 'receipt']
+                        }
+                    ];
+                    defaultBodyFields = ['entity', 'trandate', 'memo', 'approvalstatus', 'advance', 'subsidiary', 'department', 'class', 'location', 'account'];
+                    fieldGroups = [
+                        { id: 'primary', label: 'Primary Information', fields: ['entity', 'trandate', 'postingperiod'] },
+                        { id: 'classification', label: 'Classification', fields: ['subsidiary', 'department', 'class', 'location'] },
+                        { id: 'accounting', label: 'Accounting', fields: ['account', 'advance'] },
+                        { id: 'custom', label: 'Custom Fields', fields: [] }
+                    ];
                     break;
                 case 'vendorcredit':
                 case 'vendor_credit':
                     recordType = record.Type.VENDOR_CREDIT;
-                    sublistId = 'item';
-                    defaultBodyFields = ['entity', 'trandate', 'tranid', 'memo', 'currency'];
-                    defaultLineFields = ['item', 'quantity', 'rate', 'amount', 'description'];
+                    sublists = [
+                        {
+                            id: 'expense',
+                            label: 'Expenses',
+                            type: 'expense',
+                            defaultFields: ['account', 'amount', 'memo', 'department', 'class', 'location']
+                        },
+                        {
+                            id: 'item',
+                            label: 'Items',
+                            type: 'item',
+                            defaultFields: ['item', 'description', 'quantity', 'rate', 'amount', 'taxcode', 'department', 'class', 'location']
+                        }
+                    ];
+                    defaultBodyFields = ['entity', 'trandate', 'tranid', 'memo', 'currency', 'subsidiary', 'department', 'class', 'location', 'account'];
+                    fieldGroups = [
+                        { id: 'primary', label: 'Primary Information', fields: ['entity', 'trandate', 'postingperiod'] },
+                        { id: 'classification', label: 'Classification', fields: ['subsidiary', 'department', 'class', 'location'] },
+                        { id: 'reference', label: 'Reference', fields: ['tranid', 'memo'] },
+                        { id: 'accounting', label: 'Accounting', fields: ['account', 'currency', 'exchangerate'] },
+                        { id: 'custom', label: 'Custom Fields', fields: [] }
+                    ];
+                    break;
+                case 'purchaseorder':
+                case 'purchase_order':
+                case 'po':
+                    recordType = record.Type.PURCHASE_ORDER;
+                    sublists = [
+                        {
+                            id: 'expense',
+                            label: 'Expenses',
+                            type: 'expense',
+                            defaultFields: ['account', 'amount', 'memo', 'department', 'class', 'location']
+                        },
+                        {
+                            id: 'item',
+                            label: 'Items',
+                            type: 'item',
+                            defaultFields: ['item', 'description', 'quantity', 'units', 'rate', 'amount', 'taxcode', 'department', 'class', 'location', 'expectedreceiptdate']
+                        }
+                    ];
+                    defaultBodyFields = ['entity', 'trandate', 'duedate', 'tranid', 'memo', 'currency', 'terms', 'subsidiary', 'department', 'class', 'location'];
+                    fieldGroups = [
+                        { id: 'primary', label: 'Primary Information', fields: ['entity', 'trandate', 'duedate'] },
+                        { id: 'classification', label: 'Classification', fields: ['subsidiary', 'department', 'class', 'location'] },
+                        { id: 'reference', label: 'Reference', fields: ['tranid', 'memo'] },
+                        { id: 'accounting', label: 'Accounting', fields: ['terms', 'currency', 'exchangerate'] },
+                        { id: 'custom', label: 'Custom Fields', fields: [] }
+                    ];
                     break;
                 default:
                     return Response.error('INVALID_TYPE', 'Unsupported transaction type: ' + transactionType);
@@ -886,107 +966,227 @@ define([
                 // Return default fields if we can't create record
                 return Response.success({
                     transactionType: transactionType,
-                    recordType: recordType,
+                    recordType: String(recordType),
                     formId: formId || 'default',
                     bodyFields: defaultBodyFields.map(function(f) {
                         return { id: f, label: f, type: 'text', mandatory: false };
                     }),
-                    lineFields: defaultLineFields.map(function(f) {
-                        return { id: f, label: f, type: 'text' };
+                    sublists: sublists.map(function(sl) {
+                        return {
+                            id: sl.id,
+                            label: sl.label,
+                            type: sl.type,
+                            fields: sl.defaultFields.map(function(f) {
+                                return { id: f, label: f, type: 'text' };
+                            })
+                        };
                     }),
-                    sublistId: sublistId
+                    fieldGroups: fieldGroups
                 });
             }
 
-            // Get actual form ID being used
+            // Get actual form ID being used (this is the preferred form)
             var actualFormId;
             try {
                 actualFormId = tempRecord.getValue('customform');
             } catch (e) { /* ignore */ }
 
-            // Get all body fields
+            // Get all body fields from the form
             var bodyFieldIds = tempRecord.getFields();
             var bodyFields = [];
+            var customBodyFields = [];
 
-            // Filter to relevant fields
+            // Fields we want to include (comprehensive list)
             var relevantBodyFields = ['entity', 'trandate', 'duedate', 'tranid', 'memo', 'currency',
                                       'terms', 'approvalstatus', 'subsidiary', 'department', 'class',
-                                      'location', 'account', 'postingperiod', 'exchangerate'];
+                                      'location', 'account', 'postingperiod', 'exchangerate', 'nexus',
+                                      'total', 'usertotal', 'taxtotal', 'discountitem', 'discountrate',
+                                      'custform', 'customform', 'createdfrom', 'billaddress', 'billaddresslist'];
 
             bodyFieldIds.forEach(function(fieldId) {
-                if (relevantBodyFields.indexOf(fieldId) === -1 && fieldId.indexOf('custbody') === -1) {
+                var isCustom = fieldId.indexOf('custbody') === 0;
+                if (!isCustom && relevantBodyFields.indexOf(fieldId) === -1) {
                     return; // Skip non-relevant standard fields
                 }
 
                 try {
                     var field = tempRecord.getField({ fieldId: fieldId });
                     if (field) {
+                        // Check if field is visible/display type
+                        var isHidden = field.isDisplay === false;
+
                         var fieldInfo = {
                             id: fieldId,
                             label: field.label || fieldId,
                             type: field.type || 'text',
                             mandatory: field.isMandatory || false,
-                            isCustom: fieldId.indexOf('custbody') === 0
+                            isCustom: isCustom,
+                            isHidden: isHidden,
+                            help: field.help || ''
                         };
 
                         // Get select options if it's a select field
                         if (field.type === 'select' || field.type === 'multiselect') {
                             try {
-                                var options = field.getSelectOptions();
-                                if (options && options.length < 100) { // Don't return huge lists
+                                var options = field.getSelectOptions({ filter: null });
+                                if (options && options.length < 200) { // Don't return huge lists
                                     fieldInfo.options = options.map(function(opt) {
                                         return { value: opt.value, text: opt.text };
                                     });
+                                } else if (options) {
+                                    fieldInfo.hasOptions = true;
+                                    fieldInfo.optionCount = options.length;
                                 }
                             } catch (e) { /* ignore */ }
                         }
 
-                        bodyFields.push(fieldInfo);
+                        if (isCustom) {
+                            customBodyFields.push(fieldInfo);
+                        } else {
+                            bodyFields.push(fieldInfo);
+                        }
                     }
                 } catch (e) {
                     // Field not accessible, skip
                 }
             });
 
-            // Get sublist fields
-            var lineFields = [];
-            try {
-                var sublistFieldIds = tempRecord.getSublistFields({ sublistId: sublistId });
-
-                sublistFieldIds.forEach(function(fieldId) {
-                    try {
-                        var field = tempRecord.getSublistField({ sublistId: sublistId, fieldId: fieldId, line: 0 });
-                        if (field) {
-                            lineFields.push({
-                                id: fieldId,
-                                label: field.label || fieldId,
-                                type: field.type || 'text',
-                                mandatory: field.isMandatory || false,
-                                isCustom: fieldId.indexOf('custcol') === 0
-                            });
-                        }
-                    } catch (e) { /* ignore */ }
-                });
-            } catch (e) {
-                log.debug('getTransactionFormFields', 'Could not get sublist fields: ' + e.message);
-                // Use defaults
-                lineFields = defaultLineFields.map(function(f) {
-                    return { id: f, label: f, type: 'text' };
-                });
+            // Add custom fields to the custom group
+            var customGroup = fieldGroups.find(function(g) { return g.id === 'custom'; });
+            if (customGroup) {
+                customGroup.fields = customBodyFields.map(function(f) { return f.id; });
             }
+
+            // Combine body fields
+            var allBodyFields = bodyFields.concat(customBodyFields);
+
+            // Get fields for each sublist
+            var enhancedSublists = [];
+            sublists.forEach(function(sublistConfig) {
+                var sublistId = sublistConfig.id;
+                var sublistFields = [];
+
+                try {
+                    // Get actual sublist fields from form
+                    var sublistFieldIds = tempRecord.getSublistFields({ sublistId: sublistId });
+
+                    // Important sublist fields we want to include
+                    var importantLineFields = ['item', 'account', 'category', 'description', 'memo',
+                                              'quantity', 'units', 'rate', 'amount', 'taxcode', 'tax1amt',
+                                              'department', 'class', 'location', 'customer', 'isbillable',
+                                              'amortizationsched', 'amortizstartdate', 'amortizationenddate',
+                                              'expensedate', 'receipt', 'exchangerate', 'grossamt'];
+
+                    sublistFieldIds.forEach(function(fieldId) {
+                        var isCustom = fieldId.indexOf('custcol') === 0;
+                        if (!isCustom && importantLineFields.indexOf(fieldId) === -1) {
+                            return; // Skip non-important standard fields
+                        }
+
+                        try {
+                            // Add a line to get field metadata
+                            tempRecord.selectNewLine({ sublistId: sublistId });
+                            var field = tempRecord.getSublistField({ sublistId: sublistId, fieldId: fieldId, line: 0 });
+
+                            if (field) {
+                                var fieldInfo = {
+                                    id: fieldId,
+                                    label: field.label || fieldId,
+                                    type: field.type || 'text',
+                                    mandatory: field.isMandatory || false,
+                                    isCustom: isCustom
+                                };
+
+                                // Get select options for selects
+                                if (field.type === 'select') {
+                                    try {
+                                        var options = field.getSelectOptions({ filter: null });
+                                        if (options && options.length < 200) {
+                                            fieldInfo.options = options.map(function(opt) {
+                                                return { value: opt.value, text: opt.text };
+                                            });
+                                        } else if (options) {
+                                            fieldInfo.hasOptions = true;
+                                            fieldInfo.optionCount = options.length;
+                                        }
+                                    } catch (e) { /* ignore */ }
+                                }
+
+                                sublistFields.push(fieldInfo);
+                            }
+                        } catch (e) {
+                            // Field not accessible at line level, try without line
+                            try {
+                                var fieldAlt = tempRecord.getSublistField({ sublistId: sublistId, fieldId: fieldId, line: -1 });
+                                if (fieldAlt) {
+                                    sublistFields.push({
+                                        id: fieldId,
+                                        label: fieldAlt.label || fieldId,
+                                        type: fieldAlt.type || 'text',
+                                        mandatory: fieldAlt.isMandatory || false,
+                                        isCustom: isCustom
+                                    });
+                                }
+                            } catch (e2) { /* ignore */ }
+                        }
+                    });
+
+                    // Cancel the new line selection
+                    try {
+                        tempRecord.cancelLine({ sublistId: sublistId });
+                    } catch (e) { /* ignore */ }
+
+                } catch (e) {
+                    log.debug('getTransactionFormFields', 'Could not get sublist fields for ' + sublistId + ': ' + e.message);
+                    // Use defaults
+                    sublistFields = sublistConfig.defaultFields.map(function(f) {
+                        return { id: f, label: f, type: 'text' };
+                    });
+                }
+
+                enhancedSublists.push({
+                    id: sublistConfig.id,
+                    label: sublistConfig.label,
+                    type: sublistConfig.type,
+                    fields: sublistFields.length > 0 ? sublistFields : sublistConfig.defaultFields.map(function(f) {
+                        return { id: f, label: f, type: 'text' };
+                    })
+                });
+            });
 
             return Response.success({
                 transactionType: transactionType,
                 recordType: String(recordType),
                 formId: actualFormId || formId || 'default',
-                bodyFields: bodyFields,
-                lineFields: lineFields,
-                sublistId: sublistId
+                formName: getFormName(actualFormId),
+                bodyFields: allBodyFields,
+                sublists: enhancedSublists,
+                fieldGroups: fieldGroups,
+                // For backwards compatibility
+                lineFields: enhancedSublists.length > 0 ? enhancedSublists[0].fields : [],
+                sublistId: enhancedSublists.length > 0 ? enhancedSublists[0].id : 'expense'
             });
 
         } catch (e) {
             log.error('getTransactionFormFields', e);
             return Response.error('FORM_FIELDS_ERROR', e.message);
+        }
+    }
+
+    /**
+     * Get form name by ID
+     */
+    function getFormName(formId) {
+        if (!formId) return null;
+        try {
+            var formLookup = search.lookupFields({
+                type: 'customrecord_suitescript_form', // This won't work - forms aren't searchable
+                id: formId,
+                columns: ['name']
+            });
+            return formLookup.name;
+        } catch (e) {
+            return 'Form #' + formId;
         }
     }
 

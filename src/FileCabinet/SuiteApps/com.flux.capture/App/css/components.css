@@ -1393,6 +1393,131 @@
     font-size: var(--font-size-base);
 }
 
+/* ==========================================
+   SUBLIST TABS (Expense/Item tabs for Bills)
+   ========================================== */
+.line-section {
+    margin-top: var(--space-md);
+}
+
+.sublist-tabs {
+    display: flex;
+    gap: var(--space-xs);
+    margin-bottom: var(--space-md);
+    border-bottom: 2px solid var(--border-color);
+    padding-bottom: 0;
+}
+
+.sublist-tab {
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
+    padding: var(--space-sm) var(--space-md);
+    background: transparent;
+    border: none;
+    border-bottom: 2px solid transparent;
+    margin-bottom: -2px;
+    color: var(--text-tertiary);
+    font-size: var(--font-size-sm);
+    font-weight: 500;
+    cursor: pointer;
+    transition: all var(--transition);
+}
+
+.sublist-tab:hover {
+    color: var(--text-primary);
+    background: var(--gray-50);
+}
+
+.sublist-tab.active {
+    color: var(--color-primary);
+    border-bottom-color: var(--color-primary);
+    background: transparent;
+}
+
+.sublist-tab i {
+    font-size: 14px;
+}
+
+.tab-count {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 20px;
+    height: 20px;
+    padding: 0 6px;
+    background: var(--gray-100);
+    color: var(--text-tertiary);
+    font-size: 11px;
+    font-weight: 600;
+    border-radius: 10px;
+}
+
+.sublist-tab.active .tab-count {
+    background: var(--color-primary);
+    color: var(--text-inverse);
+}
+
+.sublist-container {
+    display: none;
+}
+
+.sublist-container.active {
+    display: block;
+}
+
+.sublist-toolbar {
+    display: flex;
+    justify-content: flex-end;
+    margin-bottom: var(--space-sm);
+}
+
+.sublist-table {
+    width: 100%;
+    font-size: var(--font-size-sm);
+}
+
+.sublist-table th {
+    padding: var(--space-xs) var(--space-sm);
+    text-align: left;
+    font-weight: 500;
+    color: var(--text-tertiary);
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    border-bottom: 1px solid var(--border-color);
+    background: var(--gray-50);
+}
+
+.sublist-table td {
+    padding: var(--space-xs);
+    vertical-align: middle;
+}
+
+.sublist-table .line-input {
+    width: 100%;
+    padding: 6px 8px;
+    font-size: var(--font-size-sm);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-sm);
+    background: var(--surface-card);
+    transition: border-color var(--transition);
+}
+
+.sublist-table .line-input:focus {
+    outline: none;
+    border-color: var(--color-primary);
+    box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.1);
+}
+
+.sublist-table select.line-input {
+    appearance: none;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%236b7280' d='M3 4.5L6 7.5L9 4.5'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 8px center;
+    padding-right: 24px;
+}
+
 /* Input with Currency Prefix */
 .input-with-prefix {
     position: relative;
