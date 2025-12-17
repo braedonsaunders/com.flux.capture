@@ -217,9 +217,11 @@ define([
         const { request } = context;
         const action = request.parameters.action || 'dashboard';
         const docId = request.parameters.docId || '';
+        const statusFilter = request.parameters.status || '';
+        const page = parseInt(request.parameters.page) || 1;
 
         // Load initial data for SPA
-        const initialData = getInitialData(action, docId);
+        const initialData = getInitialData(action, docId, statusFilter, page);
         const cssUrl = getCssFileUrl();
         const restletUrl = getRestletUrl();
         const user = runtime.getCurrentUser();
@@ -270,7 +272,7 @@ define([
                     <a href="#" class="nav-item ${action === 'queue' ? 'active' : ''}" data-view="queue" onclick="FluxApp.navigate('queue'); return false;">
                         <i class="fas fa-inbox"></i>
                         <span>Queue</span>
-                        <span class="badge" id="pendingBadge" style="display: ${initialData.stats?.pending > 0 ? 'inline' : 'none'}">${initialData.stats?.pending || 0}</span>
+                        <span class="badge" id="pendingBadge" style="display: ${(initialData.stats && initialData.stats.pending > 0) ? 'inline' : 'none'}">${(initialData.stats && initialData.stats.pending) || 0}</span>
                     </a>
                 </div>
                 <div class="nav-section">
@@ -328,7 +330,6 @@ define([
             function init() {
                 syncNetSuiteTheme();
                 setupEventListeners();
-                window.addEventListener('popstate', handlePopState);
                 initViewHandlers(currentView);
             }
 
@@ -375,113 +376,44 @@ define([
                 return 'rgb(' + r + ', ' + g + ', ' + b + ')';
             }
 
-            // Navigation (SPA - no page reload)
-            async function navigate(view, params = {}) {
+            // Navigation - uses URL-based navigation for smooth iframe reloading
+            function navigate(view, params) {
+                params = params || {};
                 if (view === currentView && !params.force) return;
 
                 showLoading();
 
-                // Update sidebar active state
-                document.querySelectorAll('.nav-item').forEach(item => {
-                    item.classList.toggle('active', item.dataset.view === view);
-                });
+                // Build new URL with updated action parameter
+                var urlParams = new URLSearchParams(window.location.search);
+                urlParams.set('action', view);
 
-                try {
-                    const content = await fetchView(view, params);
-                    const container = document.getElementById('viewContainer');
-
-                    // Fade out
-                    container.style.opacity = '0';
-                    container.style.transform = 'translateY(8px)';
-
-                    await sleep(150);
-
-                    // Update content
-                    container.innerHTML = content;
-                    currentView = view;
-
-                    // Update URL without reload
-                    const newUrl = updateUrlParam('action', view);
-                    window.history.pushState({ view: view }, '', newUrl);
-
-                    // Fade in
-                    await sleep(50);
-                    container.style.opacity = '1';
-                    container.style.transform = 'translateY(0)';
-
-                    // Re-initialize view-specific handlers
-                    initViewHandlers(view);
-                } catch (error) {
-                    console.error('Navigation error:', error);
-                } finally {
-                    hideLoading();
+                // Remove docId if navigating away from review
+                if (view !== 'review') {
+                    urlParams.delete('docId');
                 }
+
+                // Add any additional params
+                if (params.status) {
+                    urlParams.set('status', params.status);
+                }
+                if (params.page) {
+                    urlParams.set('page', params.page);
+                }
+                if (params.docId) {
+                    urlParams.set('docId', params.docId);
+                }
+
+                // Navigate by changing location (iframe reload is smooth)
+                window.location.href = window.location.pathname + '?' + urlParams.toString();
             }
 
-            // Fetch view content via API
-            async function fetchView(view, params = {}) {
-                const apiUrl = buildApiUrl({
-                    action: 'getView',
-                    view: view,
-                    ...params
-                });
-
-                const response = await fetch(apiUrl);
-                const text = await response.text();
-
-                try {
-                    const result = JSON.parse(text);
-                    if (result.success) {
-                        return result.data.html;
-                    }
-                    throw new Error(result.error?.message || 'Failed to load view');
-                } catch (e) {
-                    console.error('API Response:', text);
-                    throw new Error('API Error: ' + (text.substring(0, 100) || 'Unknown error'));
-                }
+            // Review document - navigates to review view with docId
+            function reviewDoc(docId) {
+                navigate('review', { docId: docId, force: true });
             }
 
-            // Review document
-            async function reviewDoc(docId) {
-                showLoading();
-
-                document.querySelectorAll('.nav-item').forEach(item => {
-                    item.classList.remove('active');
-                });
-
-                try {
-                    const apiUrl = buildApiUrl({ action: 'getView', view: 'review', docId: docId });
-                    const response = await fetch(apiUrl);
-                    const text = await response.text();
-                    const result = JSON.parse(text);
-
-                    if (result.success) {
-                        const container = document.getElementById('viewContainer');
-                        container.style.opacity = '0';
-                        await sleep(150);
-                        container.innerHTML = result.data.html;
-                        currentView = 'review';
-
-                        const newUrl = updateUrlParam('action', 'review') + '&docId=' + docId;
-                        window.history.pushState({ view: 'review', docId: docId }, '', newUrl);
-
-                        await sleep(50);
-                        container.style.opacity = '1';
-                        container.style.transform = 'translateY(0)';
-
-                        initViewHandlers('review');
-                    }
-                } catch (error) {
-                    console.error('Review error:', error);
-                } finally {
-                    hideLoading();
-                }
-            }
-
-            // Filter queue
+            // Filter queue - navigates with status filter
             function filterQueue(status) {
-                const tabs = document.querySelectorAll('.filter-tab');
-                tabs.forEach(tab => tab.classList.toggle('active', tab.dataset.status === status));
                 navigate('queue', { status: status, force: true });
             }
 
@@ -745,24 +677,12 @@ define([
                 if (overlay) overlay.style.display = 'none';
             }
 
-            function sleep(ms) {
-                return new Promise(resolve => setTimeout(resolve, ms));
-            }
-
-            function updateUrlParam(key, value) {
-                const params = new URLSearchParams(window.location.search);
-                params.set(key, value);
-                return window.location.pathname + '?' + params.toString();
-            }
-
-            function handlePopState(event) {
-                if (event.state && event.state.view) {
-                    navigate(event.state.view, { force: true });
-                }
-            }
-
             function setupEventListeners() {
-                document.getElementById('viewContainer').style.transition = 'opacity 0.15s ease, transform 0.15s ease';
+                // View container transitions (for any future animations)
+                var container = document.getElementById('viewContainer');
+                if (container) {
+                    container.style.transition = 'opacity 0.15s ease, transform 0.15s ease';
+                }
             }
 
             // Public API
@@ -1449,7 +1369,7 @@ define([
 
     // ==================== Data Functions ====================
 
-    function getInitialData(action, docId) {
+    function getInitialData(action, docId, statusFilter, page) {
         const data = {};
 
         try {
@@ -1458,9 +1378,9 @@ define([
             data.anomalies = getRecentAnomalies(5);
 
             if (action === 'queue') {
-                data.queue = getProcessingQueue(1, 25, '');
-                data.page = 1;
-                data.statusFilter = '';
+                data.queue = getProcessingQueue(page || 1, 25, statusFilter || '');
+                data.page = page || 1;
+                data.statusFilter = statusFilter || '';
             }
 
             if (action === 'review' && docId) {
@@ -1491,7 +1411,8 @@ define([
             `;
 
             const result = query.runSuiteQL({ query: sql });
-            const vals = result.results[0]?.values || [0, 0, 0, 0, 0];
+            const row = result.results && result.results[0] ? result.results[0] : null;
+            const vals = row && row.values ? row.values : [0, 0, 0, 0, 0];
 
             return {
                 total: vals[0] || 0,
@@ -1591,9 +1512,10 @@ define([
 
             const result = query.runSuiteQL({ query: sql });
 
-            const countSql = `SELECT COUNT(*) FROM customrecord_dm_captured_document WHERE 1=1`;
+            const countSql = 'SELECT COUNT(*) FROM customrecord_dm_captured_document WHERE 1=1';
             const countResult = query.runSuiteQL({ query: countSql });
-            const total = countResult.results[0]?.values[0] || 0;
+            const countRow = countResult.results && countResult.results[0] ? countResult.results[0] : null;
+            const total = countRow && countRow.values ? countRow.values[0] : 0;
 
             return {
                 documents: result.results.map(r => ({
