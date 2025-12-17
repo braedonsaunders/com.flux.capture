@@ -414,30 +414,14 @@ function(currentRecord, url) {
 
         console.log('[FC_FormLayoutCapture] Looking for sublists...');
 
-        // NetSuite uses various patterns for sublist containers
-        // Look for the div containers that wrap sublist tables
-        var sublistContainers = container.querySelectorAll(
-            'div[id$="_splits"], ' +                    // expense_splits, item_splits
-            'div[id$="machine"], ' +                    // Various machine divs
-            'div.uir-machine, ' +                       // Machine class
-            'table.uir-machine-table, ' +              // Machine tables
-            'div[id*="expense"], ' +                   // Expense-related
-            'div[id*="item"], ' +                      // Item-related
-            'div[id*="line"]'                          // Line-related
-        );
+        // NetSuite sublists have data-nsps-type="sublist" attribute on the table
+        var sublistTables = container.querySelectorAll('table[data-nsps-type="sublist"]');
+        console.log('[FC_FormLayoutCapture] Found', sublistTables.length, 'tables with data-nsps-type="sublist"');
 
-        console.log('[FC_FormLayoutCapture] Found', sublistContainers.length, 'potential sublist containers');
-
-        sublistContainers.forEach(function(elem) {
-            var sublistId = inferSublistId(elem);
+        sublistTables.forEach(function(table) {
+            // Get sublist ID from data attribute
+            var sublistId = table.getAttribute('data-nsps-id');
             if (!sublistId || seen[sublistId]) return;
-
-            // Find the actual table within this container
-            var table = elem.tagName === 'TABLE' ? elem : elem.querySelector('table');
-            if (!table) {
-                console.log('[FC_FormLayoutCapture] No table found in container:', elem.id);
-                return;
-            }
 
             seen[sublistId] = true;
 
@@ -452,17 +436,13 @@ function(currentRecord, url) {
             });
         });
 
-        // Also try to find sublists by looking for specific NetSuite sublist patterns
+        // Fallback: look for tables with _splits suffix (e.g., expense_splits, item_splits)
         if (sublists.length === 0) {
-            console.log('[FC_FormLayoutCapture] No sublists found with primary selectors, trying fallback...');
+            console.log('[FC_FormLayoutCapture] No sublists found via data attribute, trying ID patterns...');
 
-            // Look for any table with machine header row
-            var machineTables = container.querySelectorAll('table');
-            machineTables.forEach(function(table) {
-                var headerRow = table.querySelector('tr.uir-machine-headerrow, tr.machineheaderrow');
-                if (!headerRow) return;
-
-                var sublistId = inferSublistId(table) || inferSublistFromTable(table);
+            var splitsTables = container.querySelectorAll('table[id$="_splits"]');
+            splitsTables.forEach(function(table) {
+                var sublistId = inferSublistId(table);
                 if (!sublistId || seen[sublistId]) return;
 
                 seen[sublistId] = true;
@@ -487,35 +467,16 @@ function(currentRecord, url) {
      */
     function inferSublistId(elem) {
         var id = (elem.id || '').toLowerCase();
-        var className = (elem.className || '').toLowerCase();
+
+        // Extract from _splits pattern (e.g., expense_splits -> expense)
+        var splitsMatch = id.match(/^([a-z]+)_splits$/);
+        if (splitsMatch) return splitsMatch[1];
 
         // Direct ID patterns
-        if (id.includes('expense_splits') || id.includes('expenseline') || id.includes('expense_machine')) return 'expense';
-        if (id.includes('item_splits') || id.includes('itemline') || id.includes('item_machine')) return 'item';
-        if (id.includes('apply_machine') || id.includes('apply_splits')) return 'apply';
-        if (id.includes('line_machine') || id.includes('line_splits')) return 'line';
         if (id.includes('expense')) return 'expense';
         if (id.includes('item')) return 'item';
         if (id.includes('apply')) return 'apply';
         if (id.includes('line')) return 'line';
-
-        return null;
-    }
-
-    /**
-     * Infer sublist ID from table content (fallback)
-     */
-    function inferSublistFromTable(table) {
-        // Look at header cells to determine sublist type
-        var headers = table.querySelectorAll('th, td.listheadertextb');
-        var headerText = '';
-        headers.forEach(function(h) {
-            headerText += ' ' + (h.textContent || '').toLowerCase();
-        });
-
-        if (headerText.includes('expense') || headerText.includes('receipt')) return 'expense';
-        if (headerText.includes('item') || headerText.includes('quantity')) return 'item';
-        if (headerText.includes('amount') && headerText.includes('account')) return 'expense';
 
         return null;
     }
@@ -527,7 +488,7 @@ function(currentRecord, url) {
         var columns = [];
         var seen = {};
 
-        // Find header row
+        // Find header row - NetSuite uses uir-machine-headerrow class
         var headerRow = table.querySelector('tr.uir-machine-headerrow, thead tr');
         if (!headerRow) {
             // Try first row with multiple cells
@@ -535,20 +496,38 @@ function(currentRecord, url) {
         }
         if (!headerRow) return columns;
 
+        console.log('[FC_FormLayoutCapture] Extracting columns from header row');
+
         var cells = headerRow.querySelectorAll('td, th');
         cells.forEach(function(cell, idx) {
             // Skip if not visible
             if (!isElementVisible(cell)) return;
 
-            // Get column ID from data attribute or infer from text
-            var colId = cell.getAttribute('data-ns-tooltip') ||
+            // NetSuite puts column info in data-label or data-nsps-label attributes
+            var colLabel = cell.getAttribute('data-label') ||
+                          cell.getAttribute('data-nsps-label');
+
+            var colId = null;
+
+            if (colLabel) {
+                // Convert label to column ID (e.g., "Account" -> "account")
+                colId = colLabel.toLowerCase().replace(/\s+/g, '').replace(/[^a-z0-9]/gi, '');
+                console.log('[FC_FormLayoutCapture] Column from data-label:', colLabel, '->', colId);
+            }
+
+            // Fallback to other data attributes
+            if (!colId) {
+                colId = cell.getAttribute('data-ns-tooltip') ||
                        cell.getAttribute('data-field') ||
                        cell.getAttribute('data-column');
+            }
 
+            // Last resort: infer from text content
             if (!colId) {
                 colId = inferColumnIdFromHeader(cell);
             }
 
+            // Skip empty or already seen columns
             if (colId && !seen[colId]) {
                 seen[colId] = true;
                 columns.push(colId);
