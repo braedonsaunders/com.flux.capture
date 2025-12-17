@@ -511,112 +511,136 @@ define([
     }
 
     function getDashboardStats() {
-        const statsSql = `
-            SELECT
-                COUNT(*) as total,
-                SUM(CASE WHEN custrecord_dm_status = ${DocStatus.COMPLETED} THEN 1 ELSE 0 END) as completed,
-                SUM(CASE WHEN custrecord_dm_status = ${DocStatus.COMPLETED} AND custrecord_dm_confidence_score >= 85 THEN 1 ELSE 0 END) as autoProcessed,
-                SUM(CASE WHEN custrecord_dm_status IN (${DocStatus.PENDING}, ${DocStatus.PROCESSING}, ${DocStatus.EXTRACTED}, ${DocStatus.NEEDS_REVIEW}) THEN 1 ELSE 0 END) as pending,
-                SUM(CASE WHEN custrecord_dm_status = ${DocStatus.REJECTED} THEN 1 ELSE 0 END) as rejected,
-                SUM(CASE WHEN custrecord_dm_status = ${DocStatus.ERROR} THEN 1 ELSE 0 END) as errors,
-                AVG(custrecord_dm_confidence_score) as avgConfidence,
-                SUM(custrecord_dm_total_amount) as totalValue
-            FROM customrecord_dm_captured_document
-            WHERE custrecord_dm_created_date >= ADD_MONTHS(SYSDATE, -1)
-        `;
+        try {
+            const statsSql = `
+                SELECT
+                    COUNT(*) as total,
+                    SUM(CASE WHEN custrecord_dm_status = ${DocStatus.COMPLETED} THEN 1 ELSE 0 END) as completed,
+                    SUM(CASE WHEN custrecord_dm_status = ${DocStatus.COMPLETED} AND custrecord_dm_confidence_score >= 85 THEN 1 ELSE 0 END) as autoProcessed,
+                    SUM(CASE WHEN custrecord_dm_status IN (${DocStatus.PENDING}, ${DocStatus.PROCESSING}, ${DocStatus.EXTRACTED}, ${DocStatus.NEEDS_REVIEW}) THEN 1 ELSE 0 END) as pending,
+                    SUM(CASE WHEN custrecord_dm_status = ${DocStatus.REJECTED} THEN 1 ELSE 0 END) as rejected,
+                    SUM(CASE WHEN custrecord_dm_status = ${DocStatus.ERROR} THEN 1 ELSE 0 END) as errors,
+                    AVG(custrecord_dm_confidence_score) as avgConfidence,
+                    SUM(custrecord_dm_total_amount) as totalValue
+                FROM customrecord_dm_captured_document
+                WHERE custrecord_dm_created_date >= ADD_MONTHS(SYSDATE, -1)
+            `;
 
-        const statsResult = query.runSuiteQL({ query: statsSql });
-        const stats = statsResult.results[0].values;
+            const statsResult = query.runSuiteQL({ query: statsSql });
+            const stats = (statsResult.results && statsResult.results[0]) ? statsResult.results[0].values : [0,0,0,0,0,0,0,0];
 
-        // Get document type breakdown
-        const typeSql = `
-            SELECT custrecord_dm_document_type as docType, COUNT(*) as count
-            FROM customrecord_dm_captured_document
-            WHERE custrecord_dm_created_date >= ADD_MONTHS(SYSDATE, -1)
-            GROUP BY custrecord_dm_document_type
-        `;
+            // Get document type breakdown
+            const typeSql = `
+                SELECT custrecord_dm_document_type as docType, COUNT(*) as count
+                FROM customrecord_dm_captured_document
+                WHERE custrecord_dm_created_date >= ADD_MONTHS(SYSDATE, -1)
+                GROUP BY custrecord_dm_document_type
+            `;
 
-        const typeResults = query.runSuiteQL({ query: typeSql });
-        const typeBreakdown = {};
-        typeResults.results.forEach(row => {
-            typeBreakdown[row.values[0] || 'Unknown'] = row.values[1];
-        });
+            const typeResults = query.runSuiteQL({ query: typeSql });
+            const typeBreakdown = {};
+            if (typeResults.results) {
+                typeResults.results.forEach(row => {
+                    typeBreakdown[row.values[0] || 'Unknown'] = row.values[1];
+                });
+            }
 
-        // Get daily trend (last 7 days)
-        const trendSql = `
-            SELECT TO_CHAR(custrecord_dm_created_date, 'YYYY-MM-DD') as day, COUNT(*) as count
-            FROM customrecord_dm_captured_document
-            WHERE custrecord_dm_created_date >= SYSDATE - 7
-            GROUP BY TO_CHAR(custrecord_dm_created_date, 'YYYY-MM-DD')
-            ORDER BY day
-        `;
+            // Get daily trend (last 7 days)
+            const trendSql = `
+                SELECT TO_CHAR(custrecord_dm_created_date, 'YYYY-MM-DD') as day, COUNT(*) as count
+                FROM customrecord_dm_captured_document
+                WHERE custrecord_dm_created_date >= SYSDATE - 7
+                GROUP BY TO_CHAR(custrecord_dm_created_date, 'YYYY-MM-DD')
+                ORDER BY day
+            `;
 
-        const trendResults = query.runSuiteQL({ query: trendSql });
-        const trend = trendResults.results.map(row => ({
-            date: row.values[0],
-            count: row.values[1]
-        }));
+            const trendResults = query.runSuiteQL({ query: trendSql });
+            const trend = trendResults.results ? trendResults.results.map(row => ({
+                date: row.values[0],
+                count: row.values[1]
+            })) : [];
 
-        return Response.success({
-            summary: {
-                totalProcessed: stats[0] || 0,
-                completed: stats[1] || 0,
-                autoProcessed: stats[2] || 0,
-                pendingReview: stats[3] || 0,
-                rejected: stats[4] || 0,
-                errors: stats[5] || 0,
-                avgConfidence: Math.round(stats[6] || 0),
-                totalValue: stats[7] || 0
-            },
-            typeBreakdown: typeBreakdown,
-            trend: trend,
-            autoProcessRate: stats[0] > 0 ? Math.round((stats[2] / stats[0]) * 100) : 0
-        });
+            return Response.success({
+                summary: {
+                    totalProcessed: stats[0] || 0,
+                    completed: stats[1] || 0,
+                    autoProcessed: stats[2] || 0,
+                    pendingReview: stats[3] || 0,
+                    rejected: stats[4] || 0,
+                    errors: stats[5] || 0,
+                    avgConfidence: Math.round(stats[6] || 0),
+                    totalValue: stats[7] || 0
+                },
+                typeBreakdown: typeBreakdown,
+                trend: trend,
+                autoProcessRate: stats[0] > 0 ? Math.round((stats[2] / stats[0]) * 100) : 0
+            });
+        } catch (e) {
+            log.error('getDashboardStats Error', { message: e.message, stack: e.stack });
+            // Return empty stats on error
+            return Response.success({
+                summary: { totalProcessed: 0, completed: 0, autoProcessed: 0, pendingReview: 0, rejected: 0, errors: 0, avgConfidence: 0, totalValue: 0 },
+                typeBreakdown: {},
+                trend: [],
+                autoProcessRate: 0
+            });
+        }
     }
 
     function getRecentAnomalies(context) {
-        const limit = Math.min(parseInt(context.limit) || 10, 50);
+        try {
+            const limit = Math.min(parseInt(context.limit) || 10, 50);
 
-        const sql = `
-            SELECT
-                id,
-                name,
-                BUILTIN.DF(custrecord_dm_vendor) as vendorName,
-                custrecord_dm_anomalies as anomalies,
-                custrecord_dm_created_date as createdDate,
-                custrecord_dm_confidence_score as confidence
-            FROM customrecord_dm_captured_document
-            WHERE custrecord_dm_anomalies IS NOT NULL
-            AND custrecord_dm_anomalies != '[]'
-            AND custrecord_dm_status NOT IN (${DocStatus.REJECTED}, ${DocStatus.COMPLETED})
-            ORDER BY custrecord_dm_created_date DESC
-            FETCH FIRST ${limit} ROWS ONLY
-        `;
+            const sql = `
+                SELECT
+                    id,
+                    name,
+                    BUILTIN.DF(custrecord_dm_vendor) as vendorName,
+                    custrecord_dm_anomalies as anomalies,
+                    custrecord_dm_created_date as createdDate,
+                    custrecord_dm_confidence_score as confidence
+                FROM customrecord_dm_captured_document
+                WHERE custrecord_dm_anomalies IS NOT NULL
+                AND custrecord_dm_anomalies != '[]'
+                AND custrecord_dm_status NOT IN (${DocStatus.REJECTED}, ${DocStatus.COMPLETED})
+                ORDER BY custrecord_dm_created_date DESC
+                FETCH FIRST ${limit} ROWS ONLY
+            `;
 
-        const results = query.runSuiteQL({ query: sql });
+            const results = query.runSuiteQL({ query: sql });
 
-        const anomalies = [];
-        results.results.forEach(row => {
-            const docAnomalies = JSON.parse(row.values[3] || '[]');
-            docAnomalies.forEach(anomaly => {
-                anomalies.push({
-                    documentId: row.values[0],
-                    documentName: row.values[1],
-                    vendorName: row.values[2],
-                    type: anomaly.type,
-                    severity: anomaly.severity,
-                    message: anomaly.message,
-                    createdDate: row.values[4],
-                    confidence: row.values[5]
+            const anomalies = [];
+            if (results.results) {
+                results.results.forEach(row => {
+                    try {
+                        const docAnomalies = JSON.parse(row.values[3] || '[]');
+                        docAnomalies.forEach(anomaly => {
+                            anomalies.push({
+                                documentId: row.values[0],
+                                documentName: row.values[1],
+                                vendorName: row.values[2],
+                                type: anomaly.type,
+                                severity: anomaly.severity,
+                                message: anomaly.message,
+                                createdDate: row.values[4],
+                                confidence: row.values[5]
+                            });
+                        });
+                    } catch (parseErr) {
+                        log.debug('Anomaly parse error', parseErr.message);
+                    }
                 });
-            });
-        });
+            }
 
-        // Sort by severity
-        const severityOrder = { high: 0, medium: 1, low: 2 };
-        anomalies.sort((a, b) => severityOrder[a.severity] - severityOrder[b.severity]);
+            // Sort by severity
+            const severityOrder = { high: 0, medium: 1, low: 2 };
+            anomalies.sort((a, b) => (severityOrder[a.severity] || 2) - (severityOrder[b.severity] || 2));
 
-        return Response.success(anomalies.slice(0, limit));
+            return Response.success(anomalies.slice(0, limit));
+        } catch (e) {
+            log.error('getRecentAnomalies Error', { message: e.message, stack: e.stack });
+            return Response.success([]);
+        }
     }
 
     function searchVendors(queryText) {
