@@ -517,6 +517,13 @@ function(currentRecord, url) {
             var columns = extractSublistColumns(table);
             console.log('[FC_FormLayoutCapture] Sublist', sublistId, 'columns:', columns.length);
 
+            // Skip sublists with no valid columns (e.g., still loading)
+            // Server-side schema will provide column definitions for these
+            if (columns.length === 0) {
+                console.log('[FC_FormLayoutCapture] Skipping sublist', sublistId, '- no valid columns (may be loading)');
+                return;
+            }
+
             sublists.push({
                 id: sublistId,
                 label: sublistId.charAt(0).toUpperCase() + sublistId.slice(1),
@@ -687,8 +694,13 @@ function(currentRecord, url) {
                 colId = inferColumnIdFromHeader(cell);
             }
 
-            // Skip empty or already seen columns
+            // Skip empty, already seen, or placeholder columns
             if (colId && !seen[colId]) {
+                // Skip NetSuite loading placeholders
+                if (colId === 'loading' || colId === 'loadingpleasewait') {
+                    console.log('[FC_FormLayoutCapture] Skipping placeholder column:', colId);
+                    return;
+                }
                 seen[colId] = true;
                 columns.push(colId);
             }
@@ -704,8 +716,9 @@ function(currentRecord, url) {
         var text = (cell.textContent || '').trim().toLowerCase();
         if (!text || text.length > 40) return null;
 
-        // Skip system columns
+        // Skip system columns and loading placeholders
         if (text === '' || text === 'add' || text === 'insert' || text === 'delete') return null;
+        if (text === 'loading' || text === 'loading...' || text.indexOf('please wait') !== -1) return null;
 
         var mappings = {
             'account': 'account',
