@@ -206,6 +206,9 @@ define([
                 case 'formschema':
                     result = getFormSchema(context.transactionType, context);
                     break;
+                case 'formlayout':
+                    result = getFormLayout(context.transactionType, context.formId);
+                    break;
                 case 'accounts':
                     result = getAccounts(context);
                     break;
@@ -290,10 +293,13 @@ define([
                     result = updateSettings(context);
                     break;
                 case 'formconfig':
-                    result = updateFormSchemaConfig(context.transactionType, context.config);
+                    result = updateFormSchemaConfig(context.transactionType, context.formId, context.config);
                     break;
                 case 'invalidatecache':
-                    result = invalidateFormSchemaCache(context.transactionType);
+                    result = invalidateFormSchemaCache(context.transactionType, context.formId);
+                    break;
+                case 'saveformlayout':
+                    result = saveFormLayout(context.transactionType, context.formId, context.layout);
                     break;
                 default:
                     result = Response.error('INVALID_ACTION', 'Unknown action: ' + action);
@@ -1390,16 +1396,17 @@ define([
     /**
      * Update form schema configuration
      * @param {string} transactionType - The transaction type
+     * @param {string} formId - The form ID
      * @param {Object} config - Configuration updates
      * @returns {Object} Updated configuration
      */
-    function updateFormSchemaConfig(transactionType, config) {
+    function updateFormSchemaConfig(transactionType, formId, config) {
         if (!transactionType) {
             return Response.error('MISSING_PARAM', 'Transaction type is required');
         }
 
         try {
-            var result = FormSchemaExtractor.updateConfig(transactionType, config);
+            var result = FormSchemaExtractor.updateConfig(transactionType, formId, config);
             if (!result.success) {
                 return Response.error('CONFIG_UPDATE_ERROR', result.error);
             }
@@ -1413,15 +1420,16 @@ define([
     /**
      * Invalidate form schema cache
      * @param {string} transactionType - The transaction type to invalidate
+     * @param {string} formId - Optional form ID
      * @returns {Object} Success/failure status
      */
-    function invalidateFormSchemaCache(transactionType) {
+    function invalidateFormSchemaCache(transactionType, formId) {
         if (!transactionType) {
             return Response.error('MISSING_PARAM', 'Transaction type is required');
         }
 
         try {
-            var result = FormSchemaExtractor.invalidateCache(transactionType);
+            var result = FormSchemaExtractor.invalidateCache(transactionType, formId);
             if (!result.success) {
                 return Response.error('CACHE_INVALIDATE_ERROR', result.error);
             }
@@ -1429,6 +1437,56 @@ define([
         } catch (e) {
             log.error('invalidateFormSchemaCache', e);
             return Response.error('CACHE_INVALIDATE_ERROR', e.message);
+        }
+    }
+
+    /**
+     * Get cached form layout (client-extracted tabs/groups/visibility)
+     * @param {string} transactionType - The transaction type
+     * @param {string} formId - The form ID
+     * @returns {Object} Layout if exists
+     */
+    function getFormLayout(transactionType, formId) {
+        if (!transactionType) {
+            return Response.error('MISSING_PARAM', 'Transaction type is required');
+        }
+
+        try {
+            var layout = FormSchemaExtractor.getCachedLayout(transactionType, formId);
+            if (layout) {
+                return Response.success({ layout: layout, _cached: true });
+            }
+            return Response.success({ layout: null, message: 'No layout cached. Extract from NetSuite form.' });
+        } catch (e) {
+            log.error('getFormLayout', e);
+            return Response.error('LAYOUT_ERROR', e.message);
+        }
+    }
+
+    /**
+     * Save form layout extracted from client-side DOM
+     * @param {string} transactionType - The transaction type
+     * @param {string} formId - The form ID
+     * @param {Object} layout - The layout data (tabs, groups, fields, visibility)
+     * @returns {Object} Success/failure status
+     */
+    function saveFormLayout(transactionType, formId, layout) {
+        if (!transactionType) {
+            return Response.error('MISSING_PARAM', 'Transaction type is required');
+        }
+        if (!layout) {
+            return Response.error('MISSING_PARAM', 'Layout data is required');
+        }
+
+        try {
+            var result = FormSchemaExtractor.saveFormLayout(transactionType, formId, layout);
+            if (!result.success) {
+                return Response.error('LAYOUT_SAVE_ERROR', result.error || result.message);
+            }
+            return Response.success({ message: 'Layout saved successfully' });
+        } catch (e) {
+            log.error('saveFormLayout', e);
+            return Response.error('LAYOUT_SAVE_ERROR', e.message);
         }
     }
 
