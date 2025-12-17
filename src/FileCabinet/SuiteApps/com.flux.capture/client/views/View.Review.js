@@ -41,6 +41,8 @@
         isLoading: false,
         isSaving: false,
         fieldConfidences: {},
+        formFields: null, // Dynamic form fields from NetSuite
+        transactionType: 'vendorbill', // Default transaction type
 
         // ==========================================
         // INITIALIZATION
@@ -53,6 +55,7 @@
             this.rotation = 0;
             this.currentPage = 1;
             this.lineItems = [];
+            this.formFields = null;
             this.isLoading = true;
 
             // Render base template
@@ -80,12 +83,20 @@
             this.isLoading = true;
             this.showLoadingState();
 
-            API.get('document', { id: this.docId })
-                .then(function(data) {
+            // Load document and form fields in parallel
+            Promise.all([
+                API.get('document', { id: this.docId }),
+                API.get('formfields', { transactionType: this.transactionType })
+            ])
+                .then(function(results) {
+                    var data = results[0];
+                    var formFieldsData = results[1];
+
                     self.data = data;
                     self.lineItems = data.lineItems || [];
                     self.fieldConfidences = data.fieldConfidences || {};
                     self.totalPages = data.pageCount || 1;
+                    self.formFields = formFieldsData;
                     self.isLoading = false;
                     self.render();
                 })
@@ -233,10 +244,12 @@
                     document.body.style.userSelect = '';
 
                     // Save preference to localStorage
+                    // Extract percentage from flex: "0 0 XX%" - match number before %
                     try {
-                        var width = previewPanel.style.flex.match(/[\d.]+/);
-                        if (width) {
-                            localStorage.setItem('fc_preview_width', width[0]);
+                        var flexVal = previewPanel.style.flex;
+                        var percentMatch = flexVal.match(/([\d.]+)%/);
+                        if (percentMatch && percentMatch[1]) {
+                            localStorage.setItem('fc_preview_width', percentMatch[1]);
                         }
                     } catch (e) { /* ignore */ }
                 }
@@ -409,6 +422,8 @@
             var doc = this.data;
             var confClass = getConfidenceClass(doc.confidence || 0);
             var anomalies = doc.anomalies || [];
+            var formFields = this.formFields || {};
+            var bodyFields = formFields.bodyFields || [];
 
             var html = '';
 
@@ -446,11 +461,11 @@
                 '</div>';
             }
 
-            // ========== VENDOR SECTION ==========
+            // ========== VENDOR SECTION (entity field with search) ==========
             html += '<div class="form-section">' +
                 '<h4><i class="fas fa-building"></i> Vendor</h4>' +
                 '<div class="form-field vendor-field">' +
-                    '<label>Vendor Name ' + this.renderConfidenceBadge('vendorName') + '</label>' +
+                    '<label>Vendor Name ' + this.renderConfidenceBadge('vendorName') + (this.isFieldMandatory('entity', bodyFields) ? ' <span class="required">*</span>' : '') + '</label>' +
                     '<div class="vendor-search-wrapper">' +
                         '<input type="text" id="field-vendor" class="vendor-input" value="' + escapeHtml(doc.vendorName || '') + '" placeholder="Search or enter vendor name..." autocomplete="off">' +
                         '<div class="vendor-dropdown" id="vendor-dropdown" style="display:none;"></div>' +
@@ -460,30 +475,41 @@
                 '</div>' +
             '</div>';
 
-            // ========== INVOICE DETAILS ==========
-            html += '<div class="form-section">' +
-                '<h4><i class="fas fa-file-invoice"></i> Invoice Details</h4>' +
-                '<div class="form-row">' +
-                    '<div class="form-field">' +
-                        '<label>Invoice Number ' + this.renderConfidenceBadge('invoiceNumber') + '</label>' +
-                        '<input type="text" id="field-invoiceNumber" value="' + escapeHtml(doc.invoiceNumber || '') + '" placeholder="INV-0001">' +
-                    '</div>' +
-                    '<div class="form-field">' +
-                        '<label>Invoice Date ' + this.renderConfidenceBadge('invoiceDate') + '</label>' +
-                        '<input type="date" id="field-invoiceDate" value="' + formatDateInput(doc.invoiceDate) + '">' +
-                    '</div>' +
-                '</div>' +
-                '<div class="form-row">' +
-                    '<div class="form-field">' +
-                        '<label>Due Date ' + this.renderConfidenceBadge('dueDate') + '</label>' +
-                        '<input type="date" id="field-dueDate" value="' + formatDateInput(doc.dueDate) + '">' +
-                    '</div>' +
-                    '<div class="form-field">' +
-                        '<label>PO Number ' + this.renderConfidenceBadge('poNumber') + '</label>' +
-                        '<input type="text" id="field-poNumber" value="' + escapeHtml(doc.poNumber || '') + '" placeholder="PO-0001">' +
-                    '</div>' +
-                '</div>' +
-            '</div>';
+            // ========== TRANSACTION DETAILS (Dynamic from NetSuite) ==========
+            html += this.renderDynamicFieldSection('Transaction Details', 'fa-file-invoice', bodyFields, [
+                { ns: 'tranid', doc: 'invoiceNumber', label: 'Reference/Invoice #', type: 'text' },
+                { ns: 'trandate', doc: 'invoiceDate', label: 'Transaction Date', type: 'date' },
+                { ns: 'duedate', doc: 'dueDate', label: 'Due Date', type: 'date' },
+                { ns: 'memo', doc: 'memo', label: 'Memo', type: 'text' }
+            ]);
+
+            // ========== CLASSIFICATION FIELDS ==========
+            html += this.renderDynamicFieldSection('Classification', 'fa-tags', bodyFields, [
+                { ns: 'subsidiary', doc: 'subsidiary', label: 'Subsidiary', type: 'select' },
+                { ns: 'department', doc: 'department', label: 'Department', type: 'select' },
+                { ns: 'class', doc: 'class', label: 'Class', type: 'select' },
+                { ns: 'location', doc: 'location', label: 'Location', type: 'select' }
+            ]);
+
+            // ========== PAYMENT & TERMS ==========
+            html += this.renderDynamicFieldSection('Payment & Terms', 'fa-credit-card', bodyFields, [
+                { ns: 'terms', doc: 'paymentTerms', label: 'Payment Terms', type: 'select' },
+                { ns: 'currency', doc: 'currency', label: 'Currency', type: 'select' },
+                { ns: 'exchangerate', doc: 'exchangeRate', label: 'Exchange Rate', type: 'number' },
+                { ns: 'account', doc: 'apAccount', label: 'A/P Account', type: 'select' }
+            ]);
+
+            // ========== CUSTOM FIELDS ==========
+            var customFields = bodyFields.filter(function(f) { return f.isCustom; });
+            if (customFields.length > 0) {
+                html += '<div class="form-section">' +
+                    '<h4><i class="fas fa-cog"></i> Custom Fields</h4>' +
+                    '<div class="form-grid">';
+                customFields.forEach(function(field) {
+                    html += self.renderDynamicField(field, doc[field.id] || '');
+                });
+                html += '</div></div>';
+            }
 
             // ========== LINE ITEMS TABLE ==========
             html += '<div class="form-section">' +
@@ -532,6 +558,135 @@
 
             // ========== BIND FORM EVENTS ==========
             this.bindFormEvents();
+        },
+
+        // Render a section of dynamic fields based on NetSuite field metadata
+        renderDynamicFieldSection: function(title, icon, bodyFields, fieldMappings) {
+            var self = this;
+            var doc = this.data;
+            var html = '';
+            var renderedFields = [];
+
+            // Build list of fields to render in this section
+            fieldMappings.forEach(function(mapping) {
+                var nsField = bodyFields.find(function(f) { return f.id === mapping.ns; });
+                if (nsField) {
+                    renderedFields.push({
+                        nsField: nsField,
+                        docKey: mapping.doc,
+                        label: mapping.label || nsField.label,
+                        type: mapping.type || nsField.type
+                    });
+                }
+            });
+
+            // Only render section if we have fields
+            if (renderedFields.length === 0) return '';
+
+            html += '<div class="form-section">' +
+                '<h4><i class="fas ' + icon + '"></i> ' + escapeHtml(title) + '</h4>' +
+                '<div class="form-grid">';
+
+            // Render fields in rows of 2
+            for (var i = 0; i < renderedFields.length; i += 2) {
+                html += '<div class="form-row">';
+                html += this.renderMappedField(renderedFields[i], doc);
+                if (renderedFields[i + 1]) {
+                    html += this.renderMappedField(renderedFields[i + 1], doc);
+                }
+                html += '</div>';
+            }
+
+            html += '</div></div>';
+            return html;
+        },
+
+        // Render a mapped field (with doc value mapping)
+        renderMappedField: function(fieldInfo, doc) {
+            var nsField = fieldInfo.nsField;
+            var value = doc[fieldInfo.docKey] || '';
+            var label = fieldInfo.label;
+            var fieldId = 'field-' + fieldInfo.docKey;
+            var isRequired = nsField.mandatory;
+
+            var html = '<div class="form-field">' +
+                '<label>' + escapeHtml(label) + ' ' + this.renderConfidenceBadge(fieldInfo.docKey) +
+                (isRequired ? ' <span class="required">*</span>' : '') + '</label>';
+
+            if (nsField.type === 'select' && nsField.options && nsField.options.length > 0) {
+                // Select field with options from NetSuite
+                html += '<select id="' + fieldId + '">';
+                html += '<option value="">-- Select --</option>';
+                nsField.options.forEach(function(opt) {
+                    var selected = (String(value) === String(opt.value)) ? ' selected' : '';
+                    html += '<option value="' + escapeHtml(opt.value) + '"' + selected + '>' + escapeHtml(opt.text) + '</option>';
+                });
+                html += '</select>';
+            } else if (fieldInfo.type === 'date' || nsField.type === 'date') {
+                html += '<input type="date" id="' + fieldId + '" value="' + formatDateInput(value) + '">';
+            } else if (fieldInfo.type === 'number' || nsField.type === 'currency' || nsField.type === 'float' || nsField.type === 'integer') {
+                if (nsField.type === 'currency') {
+                    html += '<div class="input-with-prefix">' +
+                        '<span class="input-prefix">$</span>' +
+                        '<input type="number" step="0.01" id="' + fieldId + '" value="' + (parseFloat(value) || 0).toFixed(2) + '">' +
+                        '</div>';
+                } else {
+                    html += '<input type="number" step="any" id="' + fieldId + '" value="' + escapeHtml(value) + '">';
+                }
+            } else if (nsField.type === 'textarea') {
+                html += '<textarea id="' + fieldId + '" rows="2">' + escapeHtml(value) + '</textarea>';
+            } else {
+                // Default text input
+                html += '<input type="text" id="' + fieldId + '" value="' + escapeHtml(value) + '">';
+            }
+
+            html += '</div>';
+            return html;
+        },
+
+        // Render a dynamic field from NetSuite metadata
+        renderDynamicField: function(nsField, value) {
+            var fieldId = 'field-' + nsField.id;
+            var label = nsField.label || nsField.id;
+            var isRequired = nsField.mandatory;
+
+            var html = '<div class="form-field">' +
+                '<label>' + escapeHtml(label) +
+                (isRequired ? ' <span class="required">*</span>' : '') + '</label>';
+
+            if (nsField.type === 'select' && nsField.options && nsField.options.length > 0) {
+                html += '<select id="' + fieldId + '">';
+                html += '<option value="">-- Select --</option>';
+                nsField.options.forEach(function(opt) {
+                    var selected = (String(value) === String(opt.value)) ? ' selected' : '';
+                    html += '<option value="' + escapeHtml(opt.value) + '"' + selected + '>' + escapeHtml(opt.text) + '</option>';
+                });
+                html += '</select>';
+            } else if (nsField.type === 'date') {
+                html += '<input type="date" id="' + fieldId + '" value="' + formatDateInput(value) + '">';
+            } else if (nsField.type === 'currency' || nsField.type === 'float') {
+                html += '<div class="input-with-prefix">' +
+                    '<span class="input-prefix">$</span>' +
+                    '<input type="number" step="0.01" id="' + fieldId + '" value="' + (parseFloat(value) || 0).toFixed(2) + '">' +
+                    '</div>';
+            } else if (nsField.type === 'integer') {
+                html += '<input type="number" step="1" id="' + fieldId + '" value="' + escapeHtml(value) + '">';
+            } else if (nsField.type === 'checkbox') {
+                html += '<input type="checkbox" id="' + fieldId + '"' + (value ? ' checked' : '') + '>';
+            } else if (nsField.type === 'textarea') {
+                html += '<textarea id="' + fieldId + '" rows="2">' + escapeHtml(value) + '</textarea>';
+            } else {
+                html += '<input type="text" id="' + fieldId + '" value="' + escapeHtml(value) + '">';
+            }
+
+            html += '</div>';
+            return html;
+        },
+
+        // Check if a NetSuite field is mandatory
+        isFieldMandatory: function(fieldId, bodyFields) {
+            var field = bodyFields.find(function(f) { return f.id === fieldId; });
+            return field && field.mandatory;
         },
 
         renderConfidenceBadge: function(field) {

@@ -489,6 +489,60 @@
                 // Already past minimum time, hide immediately
                 performHide();
             }
+        },
+
+        /**
+         * Show confirmation modal
+         * @param {Object} options - Modal options
+         * @param {string} options.title - Modal title
+         * @param {string} options.message - Modal message
+         * @param {string} options.confirmText - Confirm button text (default: 'Confirm')
+         * @param {string} options.cancelText - Cancel button text (default: 'Cancel')
+         * @param {string} options.type - Modal type: 'danger', 'warning', 'info' (default: 'info')
+         * @returns {Promise} - Resolves true if confirmed, false if cancelled
+         */
+        confirm: function(options) {
+            options = options || {};
+            var title = options.title || 'Confirm';
+            var message = options.message || 'Are you sure?';
+            var confirmText = options.confirmText || 'Confirm';
+            var cancelText = options.cancelText || 'Cancel';
+            var type = options.type || 'info';
+
+            return new Promise(function(resolve) {
+                var modal = document.createElement('div');
+                modal.className = 'modal-overlay';
+                modal.innerHTML =
+                    '<div class="modal modal-' + type + '">' +
+                        '<div class="modal-header">' +
+                            '<h3>' + escapeHtml(title) + '</h3>' +
+                            '<button class="btn btn-ghost btn-icon modal-close"><i class="fas fa-times"></i></button>' +
+                        '</div>' +
+                        '<div class="modal-body">' +
+                            '<p>' + escapeHtml(message) + '</p>' +
+                        '</div>' +
+                        '<div class="modal-footer">' +
+                            '<button class="btn btn-secondary modal-cancel">' + escapeHtml(cancelText) + '</button>' +
+                            '<button class="btn btn-' + (type === 'danger' ? 'danger' : 'primary') + ' modal-confirm">' + escapeHtml(confirmText) + '</button>' +
+                        '</div>' +
+                    '</div>';
+
+                function close(result) {
+                    modal.classList.remove('visible');
+                    setTimeout(function() { modal.remove(); }, 200);
+                    resolve(result);
+                }
+
+                modal.querySelector('.modal-close').addEventListener('click', function() { close(false); });
+                modal.querySelector('.modal-cancel').addEventListener('click', function() { close(false); });
+                modal.querySelector('.modal-confirm').addEventListener('click', function() { close(true); });
+                modal.addEventListener('click', function(e) {
+                    if (e.target === modal) close(false);
+                });
+
+                document.body.appendChild(modal);
+                requestAnimationFrame(function() { modal.classList.add('visible'); });
+            });
         }
     };
 
