@@ -74,6 +74,54 @@
         .nav-link.active { background: var(--color-primary); color: white; }
         .nav-link i { width: 20px; text-align: center; }
         .sidebar-footer { padding: var(--space-md); border-top: 1px solid rgba(255,255,255,0.08); }
+        .sidebar-controls {
+            display: flex;
+            justify-content: center;
+            gap: 4px;
+            padding: 8px 0;
+            border-bottom: 1px solid rgba(255,255,255,0.1);
+            margin-bottom: 8px;
+        }
+        .sidebar-control {
+            width: 32px;
+            height: 32px;
+            border: none;
+            background: rgba(255,255,255,0.1);
+            border-radius: 6px;
+            color: rgba(255,255,255,0.7);
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .sidebar-control:hover {
+            background: rgba(255,255,255,0.2);
+            color: white;
+        }
+        .sidebar-control.active {
+            background: var(--color-primary);
+            color: white;
+        }
+        .sidebar-expand-btn {
+            position: fixed;
+            left: 0;
+            top: 50%;
+            transform: translateY(-50%);
+            width: 24px;
+            height: 48px;
+            border: none;
+            background: var(--gray-800);
+            border-radius: 0 6px 6px 0;
+            color: white;
+            cursor: pointer;
+            display: none;
+            align-items: center;
+            justify-content: center;
+            z-index: 100;
+        }
+        body.sidebar-collapsed .app-sidebar { width: 0; padding: 0; overflow: hidden; }
+        body.sidebar-collapsed .sidebar-expand-btn { display: flex; }
+        body.sidebar-collapsed .app-main { margin-left: 0; }
         .sidebar-user { display: flex; align-items: center; gap: var(--space-md); }
         .user-avatar {
             width: 36px; height: 36px; border-radius: 8px;
@@ -171,6 +219,12 @@
                         <i class="fas fa-bolt"></i>
                         <span>Flow</span>
                         <span class="nav-badge" id="flow-badge" style="display:none;">0</span>
+                    </a>
+                </li>
+                <li class="nav-item">
+                    <a href="#" class="nav-link" data-route="documents">
+                        <i class="fas fa-folder-open"></i>
+                        <span>All Documents</span>
                     </a>
                 </li>
                 <li class="nav-item">
@@ -501,21 +555,26 @@
         <div class="view-batch">
             <header class="view-header">
                 <div class="header-content">
-                    <h1>Batch Processing</h1>
-                    <p class="header-subtitle">Manage document batches</p>
+                    <h1>Batches</h1>
+                    <p class="header-subtitle">Upload batches and their document progress</p>
+                </div>
+                <div class="header-actions">
+                    <button class="btn btn-primary" id="btn-new-batch">
+                        <i class="fas fa-plus"></i> New Upload
+                    </button>
                 </div>
             </header>
 
             <div class="card">
                 <div class="card-header">
-                    <div class="card-title"><i class="fas fa-boxes-stacked"></i> Recent Batches</div>
+                    <div class="card-title"><i class="fas fa-boxes-stacked"></i> All Batches</div>
                 </div>
                 <div class="card-body">
                     <div class="data-table">
                         <table>
                             <thead>
                                 <tr>
-                                    <th>Batch Name</th>
+                                    <th>Batch</th>
                                     <th>Documents</th>
                                     <th>Progress</th>
                                     <th>Status</th>
@@ -718,6 +777,77 @@
         </div>
     </script>
 
+    <!-- DOCUMENTS LIST TEMPLATE -->
+    <script type="text/template" id="tpl-documents">
+        <div class="view-documents">
+            <header class="view-header">
+                <div class="header-content">
+                    <h1>All Documents</h1>
+                    <p class="header-subtitle">Manage and review all captured documents</p>
+                </div>
+                <div class="header-actions">
+                    <button class="btn btn-danger" id="btn-delete-selected" disabled>
+                        <i class="fas fa-trash"></i> Delete Selected
+                    </button>
+                    <button class="btn btn-secondary" id="btn-refresh">
+                        <i class="fas fa-sync-alt"></i>
+                    </button>
+                    <button class="btn btn-primary" id="btn-upload-new">
+                        <i class="fas fa-plus"></i> Upload
+                    </button>
+                </div>
+            </header>
+
+            <div class="filter-bar">
+                <div class="filter-tabs" id="status-filter">
+                    <button class="filter-tab active" data-status="">All</button>
+                    <button class="filter-tab" data-status="1">Pending</button>
+                    <button class="filter-tab" data-status="2">Processing</button>
+                    <button class="filter-tab" data-status="4">Needs Review</button>
+                    <button class="filter-tab" data-status="6">Completed</button>
+                    <button class="filter-tab" data-status="5">Rejected</button>
+                    <button class="filter-tab" data-status="7">Errors</button>
+                </div>
+                <div class="filter-search">
+                    <i class="fas fa-search"></i>
+                    <input type="text" id="doc-search" placeholder="Search documents...">
+                </div>
+            </div>
+
+            <div class="card">
+                <div class="card-body">
+                    <div class="data-table">
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th class="col-check"><input type="checkbox" id="select-all"></th>
+                                    <th>Document</th>
+                                    <th>Vendor</th>
+                                    <th>Invoice #</th>
+                                    <th class="col-amount">Amount</th>
+                                    <th class="col-confidence">Confidence</th>
+                                    <th class="col-status">Status</th>
+                                    <th>Created</th>
+                                    <th class="col-actions">Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody id="documents-table-body">
+                                <!-- Documents render here -->
+                            </tbody>
+                        </table>
+                    </div>
+                    <div class="empty-state" id="empty-state" style="display:none;">
+                        <i class="fas fa-folder-open"></i>
+                        <h4>No documents found</h4>
+                        <p>Upload documents to get started</p>
+                    </div>
+                </div>
+            </div>
+
+            <div class="pagination" id="pagination"></div>
+        </div>
+    </script>
+
     <!-- ============================================
          JAVASCRIPT - Order matters!
          ============================================ -->
@@ -733,5 +863,6 @@
     <script src="{{JS_VIEW_RAIL_URL}}"></script>
     <script src="{{JS_VIEW_BATCH_URL}}"></script>
     <script src="{{JS_VIEW_SETTINGS_URL}}"></script>
+    <script src="{{JS_VIEW_DOCUMENTS_URL}}"></script>
 </body>
 </html>
