@@ -890,17 +890,16 @@ define([
     // View Data Functions
     function getDashboardStatsData() {
         try {
-            const sql = `
-                SELECT COUNT(*) as total,
-                    SUM(CASE WHEN custrecord_dm_status IN (1,2,3,4) THEN 1 ELSE 0 END) as pending,
-                    SUM(CASE WHEN custrecord_dm_status = 6 THEN 1 ELSE 0 END) as completed,
-                    SUM(CASE WHEN custrecord_dm_status = 6 AND custrecord_dm_confidence_score >= 85 THEN 1 ELSE 0 END) as autoProcessed,
-                    SUM(custrecord_dm_total_amount) as totalValue
-                FROM customrecord_dm_captured_document
-                WHERE custrecord_dm_created_date >= ADD_MONTHS(SYSDATE, -1)
-            `;
+            const sql = 'SELECT COUNT(*) as total, ' +
+                'SUM(CASE WHEN custrecord_dm_status IN (1,2,3,4) THEN 1 ELSE 0 END) as pending, ' +
+                'SUM(CASE WHEN custrecord_dm_status = 6 THEN 1 ELSE 0 END) as completed, ' +
+                'SUM(CASE WHEN custrecord_dm_status = 6 AND custrecord_dm_confidence_score >= 85 THEN 1 ELSE 0 END) as autoProcessed, ' +
+                'SUM(custrecord_dm_total_amount) as totalValue ' +
+                'FROM customrecord_dm_captured_document ' +
+                'WHERE custrecord_dm_created_date >= ADD_MONTHS(SYSDATE, -1)';
             const result = query.runSuiteQL({ query: sql });
-            const vals = result.results[0]?.values || [0, 0, 0, 0, 0];
+            const row = result.results && result.results[0] ? result.results[0] : null;
+            const vals = row && row.values ? row.values : [0, 0, 0, 0, 0];
             return {
                 total: vals[0] || 0,
                 pending: vals[1] || 0,
@@ -909,73 +908,82 @@ define([
                 totalValue: vals[4] || 0,
                 autoRate: vals[0] > 0 ? Math.round((vals[3] / vals[0]) * 100) : 0
             };
-        } catch (e) { return { total: 0, pending: 0, completed: 0, autoProcessed: 0, totalValue: 0, autoRate: 0 }; }
+        } catch (e) { log.error('getDashboardStatsData', e); return { total: 0, pending: 0, completed: 0, autoProcessed: 0, totalValue: 0, autoRate: 0 }; }
     }
 
     function getRecentDocumentsData(limit) {
         try {
-            const sql = `
-                SELECT id, name, custrecord_dm_status, BUILTIN.DF(custrecord_dm_status) as statusText,
-                    BUILTIN.DF(custrecord_dm_vendor) as vendorName, custrecord_dm_invoice_number,
-                    custrecord_dm_total_amount, TO_CHAR(custrecord_dm_created_date, 'Mon DD') as createdDate
-                FROM customrecord_dm_captured_document
-                ORDER BY custrecord_dm_created_date DESC
-                FETCH FIRST ${limit} ROWS ONLY
-            `;
+            const sql = 'SELECT id, name, custrecord_dm_status, BUILTIN.DF(custrecord_dm_status) as statusText, ' +
+                'BUILTIN.DF(custrecord_dm_vendor) as vendorName, custrecord_dm_invoice_number, ' +
+                'custrecord_dm_total_amount, TO_CHAR(custrecord_dm_created_date, \'Mon DD\') as createdDate ' +
+                'FROM customrecord_dm_captured_document ' +
+                'ORDER BY custrecord_dm_created_date DESC ' +
+                'FETCH FIRST ' + limit + ' ROWS ONLY';
             const result = query.runSuiteQL({ query: sql });
-            return result.results.map(r => ({
-                id: r.values[0], name: r.values[1], status: r.values[2], statusText: r.values[3],
-                vendorName: r.values[4], invoiceNumber: r.values[5], amount: r.values[6] || 0, date: r.values[7]
-            }));
-        } catch (e) { return []; }
+            return result.results.map(function(r) {
+                return {
+                    id: r.values[0], name: r.values[1], status: r.values[2], statusText: r.values[3],
+                    vendorName: r.values[4], invoiceNumber: r.values[5], amount: r.values[6] || 0, date: r.values[7]
+                };
+            });
+        } catch (e) { log.error('getRecentDocumentsData', e); return []; }
     }
 
     function getAnomaliesData(limit) {
         try {
-            const sql = `
-                SELECT id, custrecord_dm_anomalies, BUILTIN.DF(custrecord_dm_vendor) as vendorName
-                FROM customrecord_dm_captured_document
-                WHERE custrecord_dm_anomalies IS NOT NULL AND custrecord_dm_anomalies != '[]'
-                AND custrecord_dm_status NOT IN (5, 6)
-                ORDER BY custrecord_dm_created_date DESC
-                FETCH FIRST ${limit * 2} ROWS ONLY
-            `;
+            const sql = 'SELECT id, custrecord_dm_anomalies, BUILTIN.DF(custrecord_dm_vendor) as vendorName ' +
+                'FROM customrecord_dm_captured_document ' +
+                'WHERE custrecord_dm_anomalies IS NOT NULL AND custrecord_dm_anomalies != \'[]\' ' +
+                'AND custrecord_dm_status NOT IN (5, 6) ' +
+                'ORDER BY custrecord_dm_created_date DESC ' +
+                'FETCH FIRST ' + (limit * 2) + ' ROWS ONLY';
             const result = query.runSuiteQL({ query: sql });
             const anomalies = [];
-            result.results.forEach(r => {
-                const docAnomalies = JSON.parse(r.values[1] || '[]');
-                docAnomalies.forEach(a => anomalies.push({ documentId: r.values[0], vendorName: r.values[2], ...a }));
+            result.results.forEach(function(r) {
+                try {
+                    const docAnomalies = JSON.parse(r.values[1] || '[]');
+                    docAnomalies.forEach(function(a) {
+                        anomalies.push({
+                            documentId: r.values[0],
+                            vendorName: r.values[2],
+                            type: a.type || '',
+                            message: a.message || '',
+                            severity: a.severity || ''
+                        });
+                    });
+                } catch (parseErr) { /* skip invalid JSON */ }
             });
             return anomalies.slice(0, limit);
-        } catch (e) { return []; }
+        } catch (e) { log.error('getAnomaliesData', e); return []; }
     }
 
     function getQueueData(page, pageSize, statusFilter) {
         try {
-            let sql = `
-                SELECT id, name, custrecord_dm_status, BUILTIN.DF(custrecord_dm_status) as statusText,
-                    BUILTIN.DF(custrecord_dm_vendor) as vendorName, custrecord_dm_invoice_number,
-                    custrecord_dm_total_amount, custrecord_dm_confidence_score, custrecord_dm_anomalies,
-                    TO_CHAR(custrecord_dm_created_date, 'Mon DD HH24:MI') as createdDate
-                FROM customrecord_dm_captured_document WHERE 1=1
-            `;
-            const statusMap = { 'pending': '1', 'processing': '2', 'review': '4', 'completed': '6' };
-            if (statusFilter && statusMap[statusFilter]) sql += ` AND custrecord_dm_status = ${statusMap[statusFilter]}`;
-            sql += ` ORDER BY custrecord_dm_created_date DESC OFFSET ${(page - 1) * pageSize} ROWS FETCH NEXT ${pageSize} ROWS ONLY`;
+            var sql = 'SELECT id, name, custrecord_dm_status, BUILTIN.DF(custrecord_dm_status) as statusText, ' +
+                'BUILTIN.DF(custrecord_dm_vendor) as vendorName, custrecord_dm_invoice_number, ' +
+                'custrecord_dm_total_amount, custrecord_dm_confidence_score, custrecord_dm_anomalies, ' +
+                'TO_CHAR(custrecord_dm_created_date, \'Mon DD HH24:MI\') as createdDate ' +
+                'FROM customrecord_dm_captured_document WHERE 1=1';
+            var statusMap = { 'pending': '1', 'processing': '2', 'review': '4', 'completed': '6' };
+            if (statusFilter && statusMap[statusFilter]) sql += ' AND custrecord_dm_status = ' + statusMap[statusFilter];
+            sql += ' ORDER BY custrecord_dm_created_date DESC OFFSET ' + ((page - 1) * pageSize) + ' ROWS FETCH NEXT ' + pageSize + ' ROWS ONLY';
 
             const result = query.runSuiteQL({ query: sql });
-            const countResult = query.runSuiteQL({ query: `SELECT COUNT(*) FROM customrecord_dm_captured_document WHERE 1=1` });
-            const total = countResult.results[0]?.values[0] || 0;
+            const countResult = query.runSuiteQL({ query: 'SELECT COUNT(*) FROM customrecord_dm_captured_document WHERE 1=1' });
+            const countRow = countResult.results && countResult.results[0] ? countResult.results[0] : null;
+            const total = countRow && countRow.values ? (countRow.values[0] || 0) : 0;
 
             return {
-                documents: result.results.map(r => ({
-                    id: r.values[0], name: r.values[1], status: r.values[2], statusText: r.values[3],
-                    vendorName: r.values[4], invoiceNumber: r.values[5], amount: r.values[6] || 0,
-                    confidence: r.values[7] || 0, hasAnomalies: r.values[8] && r.values[8] !== '[]', date: r.values[9]
-                })),
+                documents: result.results.map(function(r) {
+                    return {
+                        id: r.values[0], name: r.values[1], status: r.values[2], statusText: r.values[3],
+                        vendorName: r.values[4], invoiceNumber: r.values[5], amount: r.values[6] || 0,
+                        confidence: r.values[7] || 0, hasAnomalies: r.values[8] && r.values[8] !== '[]', date: r.values[9]
+                    };
+                }),
                 total: total, totalPages: Math.ceil(total / pageSize)
             };
-        } catch (e) { return { documents: [], total: 0, totalPages: 0 }; }
+        } catch (e) { log.error('getQueueData', e); return { documents: [], total: 0, totalPages: 0 }; }
     }
 
     function getDocumentData(docId) {
@@ -1017,20 +1025,20 @@ define([
 
     function getBatchesData(limit) {
         try {
-            const sql = `
-                SELECT id, name, custrecord_dm_batch_status, BUILTIN.DF(custrecord_dm_batch_status) as statusText,
-                    custrecord_dm_batch_document_count, custrecord_dm_batch_processed_count,
-                    TO_CHAR(custrecord_dm_batch_created_date, 'Mon DD') as createdDate
-                FROM customrecord_dm_batch ORDER BY custrecord_dm_batch_created_date DESC
-                FETCH FIRST ${limit} ROWS ONLY
-            `;
-            const result = query.runSuiteQL({ query: sql });
-            return result.results.map(r => ({
-                id: r.values[0], name: r.values[1], status: r.values[2], statusText: r.values[3],
-                total: r.values[4] || 0, processed: r.values[5] || 0,
-                progress: r.values[4] > 0 ? Math.round((r.values[5] / r.values[4]) * 100) : 0, date: r.values[6]
-            }));
-        } catch (e) { return []; }
+            var sql = 'SELECT id, name, custrecord_dm_batch_status, BUILTIN.DF(custrecord_dm_batch_status) as statusText, ' +
+                'custrecord_dm_batch_document_count, custrecord_dm_batch_processed_count, ' +
+                'TO_CHAR(custrecord_dm_batch_created_date, \'Mon DD\') as createdDate ' +
+                'FROM customrecord_dm_batch ORDER BY custrecord_dm_batch_created_date DESC ' +
+                'FETCH FIRST ' + limit + ' ROWS ONLY';
+            var result = query.runSuiteQL({ query: sql });
+            return result.results.map(function(r) {
+                return {
+                    id: r.values[0], name: r.values[1], status: r.values[2], statusText: r.values[3],
+                    total: r.values[4] || 0, processed: r.values[5] || 0,
+                    progress: r.values[4] > 0 ? Math.round((r.values[5] / r.values[4]) * 100) : 0, date: r.values[6]
+                };
+            });
+        } catch (e) { log.error('getBatchesData', e); return []; }
     }
 
     // Helper functions for view rendering
