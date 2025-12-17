@@ -1286,6 +1286,34 @@
                         </div>
                     </div>
                 </div>
+
+                <div class="settings-card">
+                    <div class="settings-card-header">
+                        <i class="fas fa-database"></i>
+                        <div>
+                            <h3>Cache Management</h3>
+                            <p>Clear cached form layouts and schemas</p>
+                        </div>
+                    </div>
+                    <div class="settings-card-body">
+                        <div class="setting-row">
+                            <div class="setting-label">
+                                <span>Form Layout Cache</span>
+                                <small>Clear cached NetSuite form layouts. Use this after customizing forms.</small>
+                            </div>
+                            <div class="setting-control">
+                                <button class="btn btn-secondary" id="btn-clear-cache">
+                                    <i class="fas fa-trash-alt"></i> Clear Cache
+                                </button>
+                            </div>
+                        </div>
+                        <div class="setting-row" id="cache-status" style="display:none;">
+                            <div class="setting-label">
+                                <span id="cache-status-text">Cache cleared</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
             </div>
 
             <div class="settings-footer">

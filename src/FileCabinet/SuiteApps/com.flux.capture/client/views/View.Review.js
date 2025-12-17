@@ -239,6 +239,20 @@
             this.initPanelResizer();
         },
 
+        // Preserve resizer width after layout changes (tab switches, etc.)
+        preserveResizerWidth: function() {
+            var previewPanel = el('#preview-panel');
+            if (!previewPanel) return;
+
+            try {
+                var savedWidth = localStorage.getItem('fc_preview_width');
+                if (savedWidth) {
+                    var widthToUse = Math.max(25, Math.min(70, parseFloat(savedWidth)));
+                    previewPanel.style.flex = '0 0 ' + widthToUse + '%';
+                }
+            } catch (e) { /* ignore */ }
+        },
+
         initPanelResizer: function() {
             var resizer = el('#panel-resizer');
             var previewPanel = el('#preview-panel');
@@ -868,6 +882,9 @@
                     document.querySelectorAll('.form-tab-content').forEach(function(content) {
                         content.classList.toggle('active', content.getAttribute('data-tab-content') === tabId);
                     });
+
+                    // Preserve resizer width after tab switch
+                    self.preserveResizerWidth();
                 });
             }
 
@@ -1236,6 +1253,9 @@
                     });
                     var container = el('#sublist-' + sublistId);
                     if (container) container.classList.add('active');
+
+                    // Preserve resizer width after sublist tab switch
+                    self.preserveResizerWidth();
                 });
             });
 
