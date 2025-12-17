@@ -320,8 +320,9 @@ body {
     flex: 1;
     padding: var(--space-lg) var(--space-xl);
     will-change: transform, opacity;
-    overflow-x: hidden;
+    overflow: hidden; /* Prevent any overflow from causing layout issues */
     max-width: 100%;
+    min-width: 0; /* Allow flex container to shrink properly */
 }
 
 /* ==========================================
