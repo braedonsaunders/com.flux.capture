@@ -7,7 +7,8 @@
  * Usage:
  *   node scripts/sync.js              # Sync changed files since last sync (local dev)
  *   node scripts/sync.js --ci         # Sync only files changed in latest commit (for CI/CD)
- *   node scripts/sync.js --all        # Force sync all files
+ *   node scripts/sync.js --all        # Force sync all files + deploy Objects (custom records, scripts)
+ *   node scripts/sync.js --deploy     # Full project deploy (Objects + Files) via SDF
  *   node scripts/sync.js --watch      # Watch for changes and auto-sync
  *   node scripts/sync.js --no-delete  # Skip deletion of removed files
  *
@@ -23,6 +24,7 @@ const path = require('path');
 
 const SYNC_STATE_FILE = '.sync-state.json';
 const FILE_CABINET_PATH = 'src/FileCabinet/SuiteApps/com.flux.capture';
+const OBJECTS_PATH = 'src/Objects';
 
 // File extensions to sync
 const SYNCABLE_EXTENSIONS = ['.js', '.css', '.html', '.json', '.xml'];
@@ -203,27 +205,56 @@ function deleteFiles(files) {
     return { success, failed };
 }
 
-// Track if we've already tried project:deploy this session
-let triedProjectDeploy = false;
-
+/**
+ * Run full SDF project deployment
+ * This deploys Objects (custom records, scripts) and Files according to deploy.xml
+ */
 function runProjectDeploy() {
-    if (triedProjectDeploy) {
-        return false;
-    }
-    triedProjectDeploy = true;
-
     try {
-        log(`Running project:deploy to create folder structure...`, 'info');
+        log(`Running SDF project:deploy...`, 'info');
+        log(`  This will deploy Objects (custom records, scripts) and Files`, 'info');
+
         execSync('suitecloud project:deploy', {
             encoding: 'utf8',
-            stdio: 'inherit'
+            stdio: 'inherit',
+            cwd: path.join(process.cwd(), 'src')
         });
+
         log(`Project deployed successfully`, 'success');
         return true;
     } catch (e) {
         log(`Project deploy failed: ${e.message}`, 'error');
         return false;
     }
+}
+
+/**
+ * Get list of Object files that have changed
+ */
+function getChangedObjectFiles() {
+    try {
+        const baseRef = getBaseRef();
+        const output = execSync(`git diff --name-only ${baseRef} HEAD 2>/dev/null`, {
+            encoding: 'utf8'
+        }).trim();
+
+        if (!output) return [];
+
+        return output.split('\n')
+            .filter(f => f.startsWith(OBJECTS_PATH))
+            .filter(f => f.endsWith('.xml'));
+    } catch (e) {
+        return [];
+    }
+}
+
+/**
+ * Check if any Object files exist (for first-time setup detection)
+ */
+function hasObjectFiles() {
+    if (!fs.existsSync(OBJECTS_PATH)) return false;
+    const files = fs.readdirSync(OBJECTS_PATH);
+    return files.some(f => f.endsWith('.xml'));
 }
 
 function uploadFile(filePath) {
@@ -351,6 +382,7 @@ function watchMode() {
 function main() {
     const args = process.argv.slice(2);
     const forceAll = args.includes('--all');
+    const deployMode = args.includes('--deploy');
     const ciMode = args.includes('--ci');
     const watchModeEnabled = args.includes('--watch');
     const noDelete = args.includes('--no-delete');
@@ -360,22 +392,46 @@ function main() {
         return;
     }
 
+    // Full deploy mode - uses SDF project:deploy for Objects and Files
+    if (deployMode) {
+        log('Deploy mode: running full SDF project deployment...');
+        if (!hasObjectFiles()) {
+            log('No Object files found in src/Objects/', 'warn');
+        }
+        const success = runProjectDeploy();
+        if (!success) {
+            process.exit(1);
+        }
+        return;
+    }
+
     const state = loadSyncState();
     let filesToSync;
     let filesToDelete = [];
+    let needsObjectDeploy = false;
 
     if (forceAll) {
         log('Force syncing all files...');
         filesToSync = getAllFiles(FILE_CABINET_PATH);
+        // Also deploy Objects when using --all
+        needsObjectDeploy = hasObjectFiles();
     } else if (ciMode) {
         log('CI mode: detecting files changed in latest commit...');
         filesToSync = getGitCommitChangedFiles();
+
+        // Check if any Objects changed - if so, need full deploy
+        const changedObjects = getChangedObjectFiles();
+        if (changedObjects.length > 0) {
+            log(`Detected ${changedObjects.length} changed Object file(s):`, 'info');
+            changedObjects.forEach(f => log(`  - ${f}`));
+            needsObjectDeploy = true;
+        }
 
         if (!noDelete) {
             filesToDelete = getGitCommitDeletedFiles();
         }
 
-        if (filesToSync.length === 0 && filesToDelete.length === 0) {
+        if (filesToSync.length === 0 && filesToDelete.length === 0 && !needsObjectDeploy) {
             log('No SuiteApp files changed in this commit', 'success');
             return;
         }
@@ -385,6 +441,18 @@ function main() {
 
         filesToSync = [...new Set([...gitChanges, ...changedFiles])];
         state.fileHashes = { ...state.fileHashes, ...newHashes };
+    }
+
+    // If Objects need deployment, use full SDF deploy
+    if (needsObjectDeploy) {
+        log('Objects need deployment - running full SDF project:deploy...', 'info');
+        const deploySuccess = runProjectDeploy();
+        if (!deploySuccess) {
+            log('Full project deploy failed', 'error');
+            process.exit(1);
+        }
+        log('Full project deployment completed', 'success');
+        return;
     }
 
     // Upload new/changed files

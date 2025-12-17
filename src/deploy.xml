@@ -1,8 +1,12 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <deploy>
+    <configuration>
+        <path>~/Objects/customrecord_dm_batch.xml</path>
+        <path>~/Objects/customrecord_dm_captured_document.xml</path>
+        <path>~/Objects/customscript_fc_router.xml</path>
+        <path>~/Objects/customscript_fc_suitelet.xml</path>
+    </configuration>
     <files>
-        <path>~/FileCabinet/SuiteApps/com.flux.capture/FC_Engine.js</path>
-        <path>~/FileCabinet/SuiteApps/com.flux.capture/FC_Router.js</path>
-        <path>~/FileCabinet/SuiteApps/com.flux.capture/FC_Suitelet.js</path>
+        <path>~/FileCabinet/SuiteApps/com.flux.capture/*</path>
     </files>
 </deploy>
