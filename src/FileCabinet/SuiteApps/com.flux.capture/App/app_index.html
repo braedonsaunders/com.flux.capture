@@ -144,63 +144,17 @@
             'use strict';
 
             /**
-             * Convert RGB color string to HSL components
-             */
-            function rgbToHsl(r, g, b) {
-                r /= 255; g /= 255; b /= 255;
-                var max = Math.max(r, g, b), min = Math.min(r, g, b);
-                var h, s, l = (max + min) / 2;
-
-                if (max === min) {
-                    h = s = 0;
-                } else {
-                    var d = max - min;
-                    s = l > 0.5 ? d / (2 - max - min) : d / (max + min);
-                    switch (max) {
-                        case r: h = ((g - b) / d + (g < b ? 6 : 0)) / 6; break;
-                        case g: h = ((b - r) / d + 2) / 6; break;
-                        case b: h = ((r - g) / d + 4) / 6; break;
-                    }
-                }
-                return { h: h * 360, s: s * 100, l: l * 100 };
-            }
-
-            /**
-             * Parse RGB/RGBA color string to components
-             */
-            function parseRgb(colorStr) {
-                var match = colorStr.match(/rgba?\((\d+),\s*(\d+),\s*(\d+)/);
-                if (match) {
-                    return { r: parseInt(match[1]), g: parseInt(match[2]), b: parseInt(match[3]) };
-                }
-                return null;
-            }
-
-            /**
-             * Apply navbar color to sidebar with gradient
+             * Apply navbar color to sidebar - uses the color directly
              */
             function applySidebarColor(color) {
-                var rgb = parseRgb(color);
-                if (!rgb) return;
-
-                var hsl = rgbToHsl(rgb.r, rgb.g, rgb.b);
                 var sidebar = document.querySelector('.app-sidebar');
                 if (!sidebar) return;
 
-                // Create gradient from base color - darker at top, slightly lighter at bottom
-                var topL = Math.max(hsl.l - 5, 5);
-                var bottomL = Math.min(hsl.l + 8, 35);
+                // Apply the navbar color directly as a solid background
+                sidebar.style.background = color;
+                document.documentElement.style.setProperty('--surface-sidebar', color);
 
-                var gradient = 'linear-gradient(180deg, ' +
-                    'hsl(' + hsl.h + ', ' + hsl.s + '%, ' + topL + '%) 0%, ' +
-                    'hsl(' + hsl.h + ', ' + hsl.s + '%, ' + bottomL + '%) 100%)';
-
-                sidebar.style.background = gradient;
-
-                // Also update the CSS variable for consistency
-                document.documentElement.style.setProperty('--surface-sidebar', gradient);
-
-                console.log('[FC] Sidebar color synced with NetSuite navbar');
+                console.log('[FC] Sidebar color synced with NetSuite navbar:', color);
             }
 
             // Listen for color message from parent frame
