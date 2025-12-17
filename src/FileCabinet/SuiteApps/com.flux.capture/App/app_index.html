@@ -266,7 +266,8 @@
             }
 
             /**
-             * Check if color is light or grey (skip container backgrounds)
+             * Check if color is light or grey (skip light backgrounds, we want the dark nav bar)
+             * More aggressive filtering to skip the lighter top section and match the darker nav
              */
             function isLightOrGrey(color) {
                 var rgb = parseRgb(color);
@@ -277,8 +278,12 @@
                 var min = Math.min(rgb.r, rgb.g, rgb.b);
                 var saturation = max === 0 ? 0 : (max - min) / max;
 
-                if (luminance > 0.85) return true;
-                if (saturation < 0.15 && luminance > 0.5) return true;
+                // Skip if luminance > 0.5 (we want dark colors only, like the nav bar)
+                if (luminance > 0.5) return true;
+
+                // Skip if very unsaturated (grey)
+                if (saturation < 0.1 && luminance > 0.3) return true;
+
                 return false;
             }
 
