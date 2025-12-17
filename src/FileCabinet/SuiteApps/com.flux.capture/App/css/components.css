@@ -2113,6 +2113,68 @@
     color: var(--color-warning);
 }
 
+/* Modal dialog variant (shows immediately) */
+.modal-dialog {
+    background: var(--surface-card);
+    border-radius: var(--radius-lg);
+    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+    min-width: 400px;
+    max-width: 600px;
+    max-height: 90vh;
+    overflow: auto;
+}
+
+.modal-dialog.modal-lg {
+    max-width: 700px;
+}
+
+.modal-dialog .modal-header {
+    position: sticky;
+    top: 0;
+    background: var(--surface-card);
+    z-index: 1;
+}
+
+.modal-dialog .modal-body ol {
+    margin: var(--space-md) 0;
+    padding-left: var(--space-lg);
+}
+
+.modal-dialog .modal-body ol li {
+    margin-bottom: var(--space-sm);
+    color: var(--text-secondary);
+}
+
+.modal-actions {
+    margin-top: var(--space-lg);
+    display: flex;
+    gap: var(--space-md);
+    justify-content: center;
+}
+
+/* Code block for extraction */
+.code-block {
+    background: var(--surface-hover);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-md);
+    padding: var(--space-md);
+    font-family: monospace;
+    font-size: var(--font-size-sm);
+    overflow-x: auto;
+    white-space: pre-wrap;
+    word-break: break-all;
+    max-height: 150px;
+    margin: var(--space-md) 0;
+}
+
+.extraction-status {
+    margin-top: var(--space-lg);
+    padding: var(--space-md);
+    background: var(--surface-hover);
+    border-radius: var(--radius-md);
+    text-align: center;
+}
+
 /* ==========================================
    DOCUMENT RAIL INTERFACE
    ========================================== */

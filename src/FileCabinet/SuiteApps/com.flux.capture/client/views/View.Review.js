@@ -494,6 +494,9 @@
                     '<button class="btn btn-ghost btn-sm" id="btn-shortcuts" title="Keyboard Shortcuts">' +
                         '<i class="fas fa-keyboard"></i>' +
                     '</button>' +
+                    (!hasLayout ? '<button class="btn btn-ghost btn-sm" id="btn-extract-layout" title="Extract Form Layout from NetSuite">' +
+                        '<i class="fas fa-download"></i>' +
+                    '</button>' : '') +
                 '</div>' +
             '</div>';
 
@@ -719,6 +722,170 @@
             // ========== BIND FORM EVENTS ==========
             this.bindFormEvents();
             this.bindTabEvents();
+            this.bindExtractionButton();
+        },
+
+        // Bind extraction button click handler
+        bindExtractionButton: function() {
+            var self = this;
+            var btn = el('#btn-extract-layout');
+            if (!btn) return;
+
+            btn.addEventListener('click', function() {
+                self.showExtractLayoutModal();
+            });
+        },
+
+        // Show modal to extract form layout from NetSuite
+        showExtractLayoutModal: function() {
+            var self = this;
+            var recordType = this.transactionType || 'vendorbill';
+            var formId = this.formFields && this.formFields.formInfo ? this.formFields.formInfo.id : '';
+
+            // Build NetSuite form URL
+            var nsBaseUrl = this.getNsBaseUrl();
+            var formUrl = nsBaseUrl + '/app/accounting/transactions/' + recordType + '.nl?e=T';
+            if (formId) {
+                formUrl += '&cf=' + formId;
+            }
+
+            var modalHtml = '<div class="modal-overlay" id="extract-modal">' +
+                '<div class="modal-dialog modal-lg">' +
+                    '<div class="modal-header">' +
+                        '<h3><i class="fas fa-download"></i> Extract Form Layout</h3>' +
+                        '<button class="btn btn-ghost btn-icon modal-close">&times;</button>' +
+                    '</div>' +
+                    '<div class="modal-body">' +
+                        '<p>To extract the form layout from your NetSuite preferred form:</p>' +
+                        '<ol>' +
+                            '<li>Click the button below to open the NetSuite form in a new window</li>' +
+                            '<li>Wait for the form to fully load</li>' +
+                            '<li>Copy and run this code in the browser console (F12 > Console):</li>' +
+                        '</ol>' +
+                        '<pre class="code-block" id="extraction-code">' +
+                            this.getExtractionBookmarklet(recordType, formId) +
+                        '</pre>' +
+                        '<button class="btn btn-ghost btn-sm" id="btn-copy-code">' +
+                            '<i class="fas fa-copy"></i> Copy Code' +
+                        '</button>' +
+                        '<div class="modal-actions">' +
+                            '<a href="' + escapeHtml(formUrl) + '" target="_blank" class="btn btn-primary">' +
+                                '<i class="fas fa-external-link-alt"></i> Open NetSuite Form' +
+                            '</a>' +
+                        '</div>' +
+                        '<div class="extraction-status" id="extraction-status" style="display:none;"></div>' +
+                    '</div>' +
+                '</div>' +
+            '</div>';
+
+            document.body.insertAdjacentHTML('beforeend', modalHtml);
+
+            // Bind modal events
+            var modal = el('#extract-modal');
+            modal.querySelector('.modal-close').addEventListener('click', function() {
+                modal.remove();
+            });
+            modal.addEventListener('click', function(e) {
+                if (e.target === modal) modal.remove();
+            });
+
+            // Copy code button
+            el('#btn-copy-code').addEventListener('click', function() {
+                var code = el('#extraction-code').textContent;
+                navigator.clipboard.writeText(code).then(function() {
+                    el('#btn-copy-code').innerHTML = '<i class="fas fa-check"></i> Copied!';
+                    setTimeout(function() {
+                        el('#btn-copy-code').innerHTML = '<i class="fas fa-copy"></i> Copy Code';
+                    }, 2000);
+                });
+            });
+
+            // Listen for message from extraction script
+            window.addEventListener('message', function handler(event) {
+                if (event.data && event.data.type === 'FC_FORM_LAYOUT') {
+                    window.removeEventListener('message', handler);
+                    self.handleExtractedLayout(event.data.layout);
+                    modal.remove();
+                }
+            });
+        },
+
+        // Get NetSuite base URL
+        getNsBaseUrl: function() {
+            // Try to get from current context or use default
+            if (typeof window.nsBaseUrl !== 'undefined') {
+                return window.nsBaseUrl;
+            }
+            // Try to extract from any NetSuite links on page
+            var nsLink = document.querySelector('a[href*=".netsuite.com"]');
+            if (nsLink) {
+                var match = nsLink.href.match(/(https:\/\/[^\/]+)/);
+                if (match) return match[1];
+            }
+            return 'https://system.netsuite.com';
+        },
+
+        // Generate extraction bookmarklet code
+        getExtractionBookmarklet: function(recordType, formId) {
+            var apiUrl = this.apiUrl || '/app/site/hosting/restlet.nl';
+            return '(function(){' +
+                'var layout={tabs:[],sublists:[],extractedAt:new Date().toISOString(),formId:"' + (formId || '') + '",recordType:"' + recordType + '"};' +
+                'var mainTab={id:"main",label:"Main",displayOrder:0,fieldGroups:[],sublists:[]};' +
+                'var fields=[];' +
+                'document.querySelectorAll("input[id],select[id],textarea[id]").forEach(function(el){' +
+                    'var id=el.id.replace(/^inpt_/,"").replace(/_fs$/,"");' +
+                    'if(id&&!["ntype","customform","recordtype"].includes(id)){' +
+                        'var row=el.closest("tr");' +
+                        'var visible=row?getComputedStyle(row).display!=="none":true;' +
+                        'if(visible)fields.push(id);' +
+                    '}' +
+                '});' +
+                'mainTab.fieldGroups.push({id:"extracted",label:"Fields",displayOrder:0,fields:fields});' +
+                'document.querySelectorAll(".machine,.uir-machine-table").forEach(function(sl,i){' +
+                    'var id=sl.id.includes("expense")?"expense":sl.id.includes("item")?"item":"sublist_"+i;' +
+                    'mainTab.sublists.push(id);' +
+                    'var cols=[];' +
+                    'sl.querySelectorAll("thead th,tr:first-child td").forEach(function(th){' +
+                        'var colId=th.getAttribute("data-field")||th.textContent.trim().toLowerCase().replace(/\\s+/g,"");' +
+                        'if(colId)cols.push(colId);' +
+                    '});' +
+                    'layout.sublists.push({id:id,visibleColumns:cols,columnOrder:cols});' +
+                '});' +
+                'layout.tabs.push(mainTab);' +
+                'console.log("Extracted layout:",layout);' +
+                'if(window.opener){window.opener.postMessage({type:"FC_FORM_LAYOUT",layout:layout},"*");}' +
+                'alert("Layout extracted! Check console for details. If opened from Flux Capture, the layout has been sent back.");' +
+            '})();';
+        },
+
+        // Handle layout received from extraction
+        handleExtractedLayout: function(layout) {
+            var self = this;
+            var statusEl = el('#extraction-status');
+
+            if (statusEl) {
+                statusEl.style.display = 'block';
+                statusEl.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Saving layout...';
+            }
+
+            // Save to server
+            API.put('saveformlayout', {
+                transactionType: layout.recordType || this.transactionType,
+                formId: layout.formId,
+                layout: layout
+            }).then(function(response) {
+                if (statusEl) {
+                    statusEl.innerHTML = '<i class="fas fa-check-circle" style="color:var(--color-success);"></i> Layout saved! Refreshing...';
+                }
+                // Refresh the form to use new layout
+                setTimeout(function() {
+                    self.loadData();
+                }, 1000);
+            }).catch(function(error) {
+                if (statusEl) {
+                    statusEl.innerHTML = '<i class="fas fa-exclamation-circle" style="color:var(--color-danger);"></i> Error: ' + error.message;
+                }
+            });
         },
 
         // Get icon for a field group
