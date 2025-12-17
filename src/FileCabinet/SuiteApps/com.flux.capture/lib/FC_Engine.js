@@ -665,29 +665,107 @@ define([
 
         /**
          * Simulate extraction for testing/demo when N/documentCapture is unavailable
+         * Attempts to extract data from filename patterns
          */
         _simulateExtraction(fileObj) {
-            log.audit('FluxCapture.simulate', `Simulating extraction for: ${fileObj.name}`);
+            const fileName = fileObj.name || '';
+            log.audit('FluxCapture.simulate', `Simulating extraction for: ${fileName}`);
+
+            // Try to extract data from filename patterns
+            // Common patterns: "DATE-VendorName - INVXXXXXX.pdf", "Invoice_XXXXX_Vendor.pdf", etc.
+            let vendorName = null;
+            let invoiceNumber = null;
+            let invoiceDate = null;
+
+            // Extract invoice number patterns: INV, INVOICE, #, etc.
+            const invPatterns = [
+                /INV[#\-_]?(\d+)/i,              // INV12345, INV-12345
+                /INVOICE[#\-_\s]?(\d+)/i,       // INVOICE 12345
+                /(?:^|[\s\-_])(\d{6,})/,        // 6+ digit numbers
+                /#(\d+)/                         // #12345
+            ];
+
+            for (const pattern of invPatterns) {
+                const match = fileName.match(pattern);
+                if (match) {
+                    invoiceNumber = match[0].replace(/^[\s\-_#]+/, '');
+                    break;
+                }
+            }
+
+            // Extract date patterns: MM-DD-YYYY, YYYY-MM-DD, etc.
+            const datePatterns = [
+                /(\d{1,2}[-\/]\d{1,2}[-\/]\d{2,4})/,  // MM-DD-YYYY or MM/DD/YYYY
+                /(\d{4}[-\/]\d{1,2}[-\/]\d{1,2})/     // YYYY-MM-DD
+            ];
+
+            for (const pattern of datePatterns) {
+                const match = fileName.match(pattern);
+                if (match) {
+                    try {
+                        const parsed = new Date(match[1].replace(/-/g, '/'));
+                        if (!isNaN(parsed.getTime())) {
+                            invoiceDate = parsed;
+                        }
+                    } catch (e) { /* ignore parsing errors */ }
+                    break;
+                }
+            }
+
+            // Extract vendor name from filename
+            // Remove common patterns and extensions
+            let cleanName = fileName
+                .replace(/\.(pdf|png|jpg|jpeg|tiff?)$/i, '')  // Remove extension
+                .replace(/INV[#\-_]?\d+/gi, '')               // Remove invoice numbers
+                .replace(/\d{1,2}[-\/]\d{1,2}[-\/]\d{2,4}/g, '') // Remove dates
+                .replace(/^[A-Z][-\s]/i, '')                  // Remove leading letter codes like "O-"
+                .replace(/[-_]+/g, ' ')                       // Convert separators to spaces
+                .trim();
+
+            // Split by common separators and find likely vendor name
+            const parts = cleanName.split(/\s*[-–—]\s*/);
+            if (parts.length > 1) {
+                // Vendor is often the second or last meaningful part
+                vendorName = parts.find(p => p.length > 2 && !/^\d+$/.test(p));
+            } else if (cleanName.length > 2) {
+                vendorName = cleanName;
+            }
+
+            // Clean up vendor name
+            if (vendorName) {
+                vendorName = vendorName.replace(/\s+/g, ' ').trim();
+            }
+
+            log.debug('FluxCapture.simulate', {
+                fileName: fileName,
+                extractedVendor: vendorName,
+                extractedInvoice: invoiceNumber,
+                extractedDate: invoiceDate
+            });
 
             return {
                 documentType: DocumentType.INVOICE,
                 fields: {
-                    vendorName: null,
+                    vendorName: vendorName,
                     vendorAddress: null,
-                    invoiceNumber: null,
-                    invoiceDate: null,
-                    dueDate: null,
+                    invoiceNumber: invoiceNumber,
+                    invoiceDate: invoiceDate,
+                    dueDate: invoiceDate ? new Date(invoiceDate.getTime() + 30 * 24 * 60 * 60 * 1000) : null, // +30 days
                     poNumber: null,
                     subtotal: 0,
                     taxAmount: 0,
                     totalAmount: 0,
                     currency: 'USD'
                 },
-                fieldConfidences: {},
+                fieldConfidences: {
+                    vendorName: vendorName ? 0.6 : 0,
+                    invoiceNumber: invoiceNumber ? 0.7 : 0,
+                    invoiceDate: invoiceDate ? 0.6 : 0
+                },
                 lineItems: [],
-                rawText: '[Document capture not available - manual entry required]',
+                rawText: '[Document capture not available - data extracted from filename]',
                 pageCount: 1,
-                mimeType: null
+                mimeType: fileObj.fileType || null
             };
         }
 
