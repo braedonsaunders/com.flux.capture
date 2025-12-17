@@ -6,6 +6,12 @@
     'use strict';
 
     // ==========================================
+    // LOADING & TIMING
+    // ==========================================
+    var LOADING_START_TIME = Date.now();
+    var MINIMUM_LOADING_TIME = 1800; // ms - minimum time to show loading animation
+
+    // ==========================================
     // UTILITY FUNCTIONS
     // ==========================================
 
@@ -245,10 +251,14 @@
     // ROUTER
     // ==========================================
 
+    var VIEW_TRANSITION_DURATION = 250; // ms for view transitions
+    var isFirstNavigation = true;
+
     var Router = {
         routes: {},
         currentRoute: null,
         currentParams: {},
+        isTransitioning: false,
 
         /**
          * Register a route handler
@@ -264,13 +274,31 @@
         },
 
         /**
-         * Navigate to a route
+         * Navigate to a route with smooth transitions
          * @param {string} route - Route name
          * @param {object} params - Route parameters
          */
         navigate: function(route, params) {
+            var self = this;
             console.log('[Router] navigate called:', route, params);
             params = params || {};
+
+            // Prevent navigation during transition
+            if (this.isTransitioning) {
+                console.log('[Router] Navigation blocked - transition in progress');
+                return;
+            }
+
+            var container = el('#view-container');
+            if (!container) {
+                console.error('[Router] view-container not found');
+                return;
+            }
+
+            // Update active nav link immediately
+            els('.nav-link').forEach(function(link) {
+                link.classList.toggle('active', link.dataset.route === route);
+            });
 
             // Call cleanup for previous route
             if (this.currentRoute && this.routes[this.currentRoute] && this.routes[this.currentRoute].cleanup) {
@@ -281,17 +309,38 @@
                 }
             }
 
-            // Update active nav link
-            els('.nav-link').forEach(function(link) {
-                link.classList.toggle('active', link.dataset.route === route);
-            });
-
-            // Clear view container
-            var container = el('#view-container');
-            console.log('[Router] view-container element:', container);
-            if (container) {
-                container.innerHTML = '';
+            // First navigation - no exit animation needed
+            if (isFirstNavigation || !container.innerHTML.trim()) {
+                isFirstNavigation = false;
+                this._renderView(container, route, params);
+                return;
             }
+
+            // Subsequent navigations - animate out then in
+            this.isTransitioning = true;
+
+            // Animate out current view
+            container.classList.add('view-exiting');
+
+            setTimeout(function() {
+                // Clear container
+                container.innerHTML = '';
+                container.classList.remove('view-exiting');
+
+                // Render new view with enter animation
+                self._renderView(container, route, params);
+
+                self.isTransitioning = false;
+            }, VIEW_TRANSITION_DURATION);
+        },
+
+        /**
+         * Render view into container with enter animation
+         * @private
+         */
+        _renderView: function(container, route, params) {
+            // Start with entering state
+            container.classList.add('view-entering');
 
             // Execute handler for new route
             var routeConfig = this.routes[route];
@@ -300,16 +349,25 @@
                     routeConfig.init(params);
                 } catch (e) {
                     console.error('[Router] Init error:', e);
-                    if (container) {
-                        container.innerHTML = '<div class="empty-state"><div class="empty-icon error"><i class="fas fa-exclamation-triangle"></i></div><h4>Error Loading View</h4><p>' + escapeHtml(e.message) + '</p></div>';
-                    }
+                    container.innerHTML = '<div class="empty-state"><div class="empty-icon error"><i class="fas fa-exclamation-triangle"></i></div><h4>Error Loading View</h4><p>' + escapeHtml(e.message) + '</p></div>';
                 }
             } else {
                 console.warn('[Router] No handler for route:', route);
-                if (container) {
-                    container.innerHTML = '<div class="empty-state"><div class="empty-icon"><i class="fas fa-question"></i></div><h4>View Not Found</h4><p>The requested view does not exist.</p></div>';
-                }
+                container.innerHTML = '<div class="empty-state"><div class="empty-icon"><i class="fas fa-question"></i></div><h4>View Not Found</h4><p>The requested view does not exist.</p></div>';
             }
+
+            // Trigger enter animation on next frame
+            requestAnimationFrame(function() {
+                requestAnimationFrame(function() {
+                    container.classList.remove('view-entering');
+                    container.classList.add('view-entered');
+
+                    // Clean up class after animation
+                    setTimeout(function() {
+                        container.classList.remove('view-entered');
+                    }, VIEW_TRANSITION_DURATION);
+                });
+            });
 
             this.currentRoute = route;
             this.currentParams = params;
@@ -404,15 +462,39 @@
         },
 
         /**
-         * Hide loading state
+         * Hide loading state with premium fade animation
+         * Respects minimum display time for animation to complete
          */
         hideLoading: function() {
             console.log('[UI] hideLoading called');
             var loading = el('#loading-screen');
             console.log('[UI] loading-screen element:', loading);
-            if (loading) {
-                loading.style.display = 'none';
-                console.log('[UI] Loading screen hidden');
+            if (!loading) return;
+
+            var elapsedTime = Date.now() - LOADING_START_TIME;
+            var remainingTime = Math.max(0, MINIMUM_LOADING_TIME - elapsedTime);
+
+            console.log('[UI] Loading elapsed:', elapsedTime, 'remaining:', remainingTime);
+
+            function performHide() {
+                // Add hidden class to trigger CSS fade animation
+                loading.classList.add('hidden');
+
+                // Remove from DOM after animation completes
+                setTimeout(function() {
+                    if (loading.parentNode) {
+                        loading.parentNode.removeChild(loading);
+                    }
+                    console.log('[UI] Loading screen removed');
+                }, 500);
+            }
+
+            if (remainingTime > 0) {
+                // Wait for remaining time before hiding
+                setTimeout(performHide, remainingTime);
+            } else {
+                // Already past minimum time, hide immediately
+                performHide();
             }
         },
 
