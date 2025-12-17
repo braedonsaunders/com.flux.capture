@@ -17,10 +17,14 @@ define([
     'N/runtime',
     'N/log',
     'N/format',
-    'N/encode'
-], function(file, record, search, query, runtime, log, format, encode) {
+    'N/encode',
+    'N/documentCapture'
+], function(file, record, search, query, runtime, log, format, encode, documentCapture) {
 
     'use strict';
+
+    // N/documentCapture module reference (loaded via AMD)
+    const docCaptureModule = documentCapture;
 
     // ==================== Constants ====================
 
@@ -166,23 +170,17 @@ define([
         }
 
         /**
-         * Load the N/documentCapture module
+         * Get the N/documentCapture module (already loaded via AMD define)
          * @returns {Object} The documentCapture module or null if unavailable
          */
         _getDocCaptureModule() {
-            if (this.docCaptureModule !== null) {
-                return this.docCaptureModule;
+            // Module is loaded via define() at top of file
+            if (docCaptureModule) {
+                log.debug('N/documentCapture', 'Module available via AMD');
+                return docCaptureModule;
             }
-
-            try {
-                this.docCaptureModule = require('N/documentCapture');
-                log.debug('N/documentCapture', 'Module loaded successfully');
-                return this.docCaptureModule;
-            } catch (e) {
-                log.error('N/documentCapture', `Module not available: ${e.message}`);
-                this.docCaptureModule = false;
-                return null;
-            }
+            log.warn('N/documentCapture', 'Module not available');
+            return null;
         }
 
         /**
