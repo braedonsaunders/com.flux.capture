@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <restlet scriptid="customscript_fc_router">
     <name>Flux Capture Router</name>
-    <scriptfile>[/SuiteApps/com.flux.capture/FC_Router.js]</scriptfile>
+    <scriptfile>[/SuiteApps/com.flux.capture/suitelet/FC_Router.js]</scriptfile>
     <description>RESTlet API router for Flux Capture document processing</description>
     <isinactive>F</isinactive>
     <notifyadmins>F</notifyadmins>

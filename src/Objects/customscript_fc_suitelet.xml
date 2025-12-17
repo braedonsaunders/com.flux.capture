@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <suitelet scriptid="customscript_fc_suitelet">
     <name>Flux Capture</name>
-    <scriptfile>[/SuiteApps/com.flux.capture/FC_Suitelet.js]</scriptfile>
+    <scriptfile>[/SuiteApps/com.flux.capture/suitelet/FC_Suitelet.js]</scriptfile>
     <description>Main Suitelet for Flux Capture document processing</description>
     <isinactive>F</isinactive>
     <notifyadmins>F</notifyadmins>

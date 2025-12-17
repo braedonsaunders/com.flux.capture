@@ -30,7 +30,7 @@ define([
     function getEngine() {
         if (!EngineCache) {
             try {
-                EngineCache = require('./FC_Engine');
+                EngineCache = require('../lib/FC_Engine');
             } catch (e) {
                 log.error('FC_Engine load error', e.message);
                 EngineCache = { FluxCaptureEngine: null };

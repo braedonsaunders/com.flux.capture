@@ -1,0 +1,463 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Flux Capture</title>
+
+    <!-- External dependencies -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+
+    <!-- App CSS - Placeholders replaced by Suitelet -->
+    <link rel="stylesheet" href="{{CSS_BASE_URL}}">
+    <link rel="stylesheet" href="{{CSS_COMPONENTS_URL}}">
+
+    <!-- Config script injected here by Suitelet -->
+</head>
+<body>
+    <div class="app-wrapper">
+        <!-- SIDEBAR NAVIGATION -->
+        <nav class="app-sidebar">
+            <div class="sidebar-header">
+                <div class="sidebar-logo">
+                    <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                        <path d="M13 2L3 14H12L11 22L21 10H12L13 2Z" fill="currentColor"/>
+                    </svg>
+                </div>
+                <div class="sidebar-brand">
+                    <span class="brand-name">Flux</span>
+                    <span class="brand-tagline">Document Intelligence</span>
+                </div>
+            </div>
+
+            <ul class="nav-list">
+                <li class="nav-section-title">Overview</li>
+                <li class="nav-item">
+                    <a href="#" class="nav-link active" data-route="dashboard">
+                        <i class="fas fa-chart-line"></i>
+                        <span>Dashboard</span>
+                    </a>
+                </li>
+
+                <li class="nav-section-title">Documents</li>
+                <li class="nav-item">
+                    <a href="#" class="nav-link" data-route="upload">
+                        <i class="fas fa-cloud-arrow-up"></i>
+                        <span>Upload</span>
+                    </a>
+                </li>
+                <li class="nav-item">
+                    <a href="#" class="nav-link" data-route="queue">
+                        <i class="fas fa-layer-group"></i>
+                        <span>Processing</span>
+                        <span class="nav-badge" id="queue-badge" style="display:none;">0</span>
+                    </a>
+                </li>
+                <li class="nav-item">
+                    <a href="#" class="nav-link" data-route="batch">
+                        <i class="fas fa-boxes-stacked"></i>
+                        <span>Batches</span>
+                    </a>
+                </li>
+
+                <li class="nav-section-title">System</li>
+                <li class="nav-item">
+                    <a href="#" class="nav-link" data-route="settings">
+                        <i class="fas fa-sliders"></i>
+                        <span>Settings</span>
+                    </a>
+                </li>
+            </ul>
+
+            <div class="sidebar-footer">
+                <div class="sidebar-user">
+                    <div class="user-avatar" id="user-avatar">U</div>
+                    <div class="user-info">
+                        <div class="user-name" id="user-name">User</div>
+                        <div class="user-role">Administrator</div>
+                    </div>
+                </div>
+            </div>
+        </nav>
+
+        <!-- MAIN CONTENT AREA -->
+        <main class="app-main">
+            <!-- Loading screen -->
+            <div class="loading-screen" id="loading-screen">
+                <div class="loading-content">
+                    <div class="spinner"></div>
+                    <p>Loading Flux Capture...</p>
+                </div>
+            </div>
+
+            <!-- View container - views render here -->
+            <div id="view-container"></div>
+        </main>
+    </div>
+
+    <!-- Toast container -->
+    <div id="toast-container" class="toast-container"></div>
+
+    <!-- ============================================
+         VIEW TEMPLATES
+         ============================================ -->
+
+    <!-- DASHBOARD TEMPLATE -->
+    <script type="text/template" id="tpl-dashboard">
+        <div class="view-dashboard">
+            <header class="view-header">
+                <div class="header-content">
+                    <h1>Dashboard</h1>
+                    <p class="header-subtitle">Real-time document processing intelligence</p>
+                </div>
+                <div class="header-actions">
+                    <button class="btn btn-primary btn-lg" id="btn-new-upload">
+                        <i class="fas fa-plus"></i> New Upload
+                    </button>
+                </div>
+            </header>
+
+            <div class="kpi-row" id="kpi-container">
+                <!-- KPIs render here -->
+            </div>
+
+            <div class="dashboard-grid">
+                <div class="card card-lg">
+                    <div class="card-header">
+                        <div class="card-title"><i class="fas fa-clock-rotate-left"></i> Recent Activity</div>
+                        <a href="#" class="card-action" data-route="queue">View All</a>
+                    </div>
+                    <div class="card-body" id="activity-container">
+                        <!-- Activity list renders here -->
+                    </div>
+                </div>
+
+                <div class="card">
+                    <div class="card-header">
+                        <div class="card-title"><i class="fas fa-triangle-exclamation"></i> Alerts</div>
+                        <span class="alert-count" id="alert-count">0</span>
+                    </div>
+                    <div class="card-body" id="alerts-container">
+                        <!-- Alerts render here -->
+                    </div>
+                </div>
+            </div>
+        </div>
+    </script>
+
+    <!-- UPLOAD TEMPLATE -->
+    <script type="text/template" id="tpl-upload">
+        <div class="view-upload">
+            <header class="view-header">
+                <div class="header-content">
+                    <h1>Upload Documents</h1>
+                    <p class="header-subtitle">Drag and drop or select files to process</p>
+                </div>
+            </header>
+
+            <div class="upload-wrapper">
+                <div class="upload-type-selector" id="type-selector">
+                    <label class="type-card active">
+                        <input type="radio" name="docType" value="auto" checked>
+                        <div class="type-icon"><i class="fas fa-wand-magic-sparkles"></i></div>
+                        <span>Auto-Detect</span>
+                    </label>
+                    <label class="type-card">
+                        <input type="radio" name="docType" value="INVOICE">
+                        <div class="type-icon"><i class="fas fa-file-invoice-dollar"></i></div>
+                        <span>Invoice</span>
+                    </label>
+                    <label class="type-card">
+                        <input type="radio" name="docType" value="RECEIPT">
+                        <div class="type-icon"><i class="fas fa-receipt"></i></div>
+                        <span>Receipt</span>
+                    </label>
+                    <label class="type-card">
+                        <input type="radio" name="docType" value="EXPENSE">
+                        <div class="type-icon"><i class="fas fa-file-lines"></i></div>
+                        <span>Expense</span>
+                    </label>
+                </div>
+
+                <div class="upload-dropzone" id="upload-zone">
+                    <div class="dropzone-content">
+                        <div class="dropzone-icon"><i class="fas fa-cloud-arrow-up"></i></div>
+                        <h3>Drop files here</h3>
+                        <p>or click to browse</p>
+                        <div class="dropzone-formats">
+                            <span class="format-tag">PDF</span>
+                            <span class="format-tag">PNG</span>
+                            <span class="format-tag">JPG</span>
+                            <span class="format-tag">TIFF</span>
+                        </div>
+                    </div>
+                    <input type="file" id="file-input" multiple accept=".pdf,.png,.jpg,.jpeg,.tiff,.tif" hidden>
+                </div>
+
+                <div class="upload-queue" id="upload-queue" style="display:none;">
+                    <div class="queue-header">
+                        <h3><i class="fas fa-list-check"></i> Ready to Upload</h3>
+                        <button class="btn btn-ghost btn-sm" id="btn-clear-queue">Clear All</button>
+                    </div>
+                    <div class="queue-list" id="queue-list"></div>
+                    <div class="queue-footer">
+                        <button class="btn btn-secondary" id="btn-add-more"><i class="fas fa-plus"></i> Add More</button>
+                        <button class="btn btn-primary btn-lg" id="btn-process">
+                            <i class="fas fa-bolt"></i> Process <span id="file-count">0</span> Files
+                        </button>
+                    </div>
+                </div>
+
+                <div class="upload-progress" id="upload-progress" style="display:none;">
+                    <div class="progress-visual">
+                        <div class="progress-spinner"></div>
+                        <h3 id="progress-title">Processing...</h3>
+                        <p id="progress-text">Preparing files...</p>
+                        <div class="progress-track">
+                            <div class="progress-bar" id="progress-bar"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </script>
+
+    <!-- QUEUE TEMPLATE -->
+    <script type="text/template" id="tpl-queue">
+        <div class="view-queue">
+            <header class="view-header">
+                <div class="header-content">
+                    <h1>Processing Queue</h1>
+                    <p class="header-subtitle"><span id="queue-total">0</span> documents in queue</p>
+                </div>
+                <div class="header-actions">
+                    <button class="btn btn-primary" id="btn-upload-new">
+                        <i class="fas fa-plus"></i> Upload
+                    </button>
+                </div>
+            </header>
+
+            <div class="filter-bar">
+                <div class="filter-tabs" id="filter-tabs">
+                    <button class="filter-tab active" data-status="">All</button>
+                    <button class="filter-tab" data-status="1">Pending</button>
+                    <button class="filter-tab" data-status="4">Needs Review</button>
+                    <button class="filter-tab" data-status="6">Completed</button>
+                </div>
+            </div>
+
+            <div class="data-table">
+                <table>
+                    <thead>
+                        <tr>
+                            <th class="col-check"><input type="checkbox" id="select-all"></th>
+                            <th class="col-doc">Document</th>
+                            <th>Vendor</th>
+                            <th>Invoice #</th>
+                            <th class="col-amount">Amount</th>
+                            <th class="col-confidence">Confidence</th>
+                            <th class="col-status">Status</th>
+                            <th class="col-actions">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody id="queue-table-body">
+                        <!-- Table rows render here -->
+                    </tbody>
+                </table>
+            </div>
+
+            <div class="pagination" id="pagination"></div>
+        </div>
+    </script>
+
+    <!-- REVIEW TEMPLATE -->
+    <script type="text/template" id="tpl-review">
+        <div class="view-review">
+            <div class="review-toolbar">
+                <button class="btn btn-ghost" id="btn-back">
+                    <i class="fas fa-arrow-left"></i> Back
+                </button>
+                <div class="toolbar-title">
+                    <span class="doc-type-badge" id="doc-type-badge">Invoice</span>
+                    <span id="doc-title">Document Review</span>
+                </div>
+                <div class="toolbar-actions">
+                    <button class="btn btn-danger" id="btn-reject">
+                        <i class="fas fa-xmark"></i> Reject
+                    </button>
+                    <button class="btn btn-success" id="btn-approve">
+                        <i class="fas fa-check"></i> Approve & Create
+                    </button>
+                </div>
+            </div>
+
+            <div class="review-content">
+                <div class="preview-panel">
+                    <div class="preview-tools">
+                        <button class="btn btn-icon btn-ghost" id="btn-zoom-out" title="Zoom Out">
+                            <i class="fas fa-minus"></i>
+                        </button>
+                        <button class="btn btn-icon btn-ghost" id="btn-zoom-in" title="Zoom In">
+                            <i class="fas fa-plus"></i>
+                        </button>
+                        <button class="btn btn-icon btn-ghost" id="btn-download" title="Download">
+                            <i class="fas fa-download"></i>
+                        </button>
+                    </div>
+                    <div class="preview-viewport" id="preview-viewport">
+                        <!-- Document preview renders here -->
+                    </div>
+                </div>
+
+                <div class="extraction-panel" id="extraction-panel">
+                    <!-- Extraction form renders here -->
+                </div>
+            </div>
+        </div>
+    </script>
+
+    <!-- BATCH TEMPLATE -->
+    <script type="text/template" id="tpl-batch">
+        <div class="view-batch">
+            <header class="view-header">
+                <div class="header-content">
+                    <h1>Batch Processing</h1>
+                    <p class="header-subtitle">Manage document batches</p>
+                </div>
+            </header>
+
+            <div class="card">
+                <div class="card-header">
+                    <div class="card-title"><i class="fas fa-boxes-stacked"></i> Recent Batches</div>
+                </div>
+                <div class="card-body">
+                    <div class="data-table">
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th>Batch Name</th>
+                                    <th>Documents</th>
+                                    <th>Progress</th>
+                                    <th>Status</th>
+                                    <th>Created</th>
+                                    <th class="col-actions">Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody id="batch-table-body">
+                                <!-- Batch rows render here -->
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </script>
+
+    <!-- SETTINGS TEMPLATE -->
+    <script type="text/template" id="tpl-settings">
+        <div class="view-settings">
+            <header class="view-header">
+                <div class="header-content">
+                    <h1>Settings</h1>
+                    <p class="header-subtitle">Configure Flux Capture</p>
+                </div>
+            </header>
+
+            <div class="settings-layout">
+                <div class="settings-card">
+                    <div class="settings-card-header">
+                        <i class="fas fa-microchip"></i>
+                        <div>
+                            <h3>Processing</h3>
+                            <p>Configure AI extraction settings</p>
+                        </div>
+                    </div>
+                    <div class="settings-card-body">
+                        <div class="setting-row">
+                            <div class="setting-label">
+                                <span>Auto-approve Threshold</span>
+                                <small>Documents above this confidence are auto-approved</small>
+                            </div>
+                            <div class="setting-control">
+                                <input type="range" min="70" max="100" value="85" id="auto-threshold">
+                                <span id="threshold-value" class="range-value">85%</span>
+                            </div>
+                        </div>
+                        <div class="setting-row">
+                            <div class="setting-label">
+                                <span>Default Document Type</span>
+                                <small>Used when auto-detect is disabled</small>
+                            </div>
+                            <div class="setting-control">
+                                <select id="default-type">
+                                    <option value="auto">Auto-Detect</option>
+                                    <option value="INVOICE">Invoice</option>
+                                    <option value="RECEIPT">Receipt</option>
+                                </select>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="settings-card">
+                    <div class="settings-card-header">
+                        <i class="fas fa-shield-halved"></i>
+                        <div>
+                            <h3>Fraud Detection</h3>
+                            <p>Configure anomaly detection rules</p>
+                        </div>
+                    </div>
+                    <div class="settings-card-body">
+                        <div class="setting-row">
+                            <div class="setting-label">
+                                <span>Duplicate Detection</span>
+                                <small>Flag potential duplicate invoices</small>
+                            </div>
+                            <div class="setting-control">
+                                <label class="toggle">
+                                    <input type="checkbox" id="duplicate-detection" checked>
+                                    <span class="toggle-track"><span class="toggle-thumb"></span></span>
+                                </label>
+                            </div>
+                        </div>
+                        <div class="setting-row">
+                            <div class="setting-label">
+                                <span>Amount Validation</span>
+                                <small>Verify line items sum to total</small>
+                            </div>
+                            <div class="setting-control">
+                                <label class="toggle">
+                                    <input type="checkbox" id="amount-validation" checked>
+                                    <span class="toggle-track"><span class="toggle-thumb"></span></span>
+                                </label>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="settings-footer">
+                <button class="btn btn-primary btn-lg" id="btn-save-settings">
+                    <i class="fas fa-check"></i> Save Changes
+                </button>
+            </div>
+        </div>
+    </script>
+
+    <!-- ============================================
+         JAVASCRIPT - Order matters!
+         ============================================ -->
+    <!-- 1. Core framework first -->
+    <script src="{{JS_CORE_URL}}"></script>
+    <!-- 2. Main app setup -->
+    <script src="{{JS_MAIN_URL}}"></script>
+    <!-- 3. View controllers -->
+    <script src="{{JS_VIEW_DASHBOARD_URL}}"></script>
+    <script src="{{JS_VIEW_UPLOAD_URL}}"></script>
+    <script src="{{JS_VIEW_QUEUE_URL}}"></script>
+    <script src="{{JS_VIEW_REVIEW_URL}}"></script>
+    <script src="{{JS_VIEW_BATCH_URL}}"></script>
+    <script src="{{JS_VIEW_SETTINGS_URL}}"></script>
+</body>
+</html>
