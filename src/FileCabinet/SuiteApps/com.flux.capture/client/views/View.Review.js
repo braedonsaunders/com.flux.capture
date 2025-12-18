@@ -819,23 +819,15 @@
 
                             if (groupFields.length === 0) return;
 
-                            // Determine if this group should be collapsed by default
-                            // "Other Fields" / "default" groups are collapsed by default
-                            var isOtherFields = group.id === 'default' ||
-                                                group.label === 'Other Fields' ||
-                                                group.id.indexOf('_default') !== -1;
-                            var collapsedClass = isOtherFields ? ' collapsed' : '';
-                            var chevronClass = isOtherFields ? 'fa-chevron-down' : 'fa-chevron-up';
-
                             var icon = self.getGroupIcon(group.id);
-                            html += '<div class="form-section field-group' + collapsedClass + '" data-group="' + group.id + '">' +
+                            html += '<div class="form-section field-group" data-group="' + group.id + '">' +
                                 '<h4 class="group-header">' +
                                     '<i class="fas ' + icon + '"></i> ' + escapeHtml(group.label) +
                                     '<button class="btn btn-ghost btn-icon btn-xs group-toggle" title="Toggle section">' +
-                                        '<i class="fas ' + chevronClass + '"></i>' +
+                                        '<i class="fas fa-chevron-up"></i>' +
                                     '</button>' +
                                 '</h4>' +
-                                '<div class="group-content"' + (isOtherFields ? ' style="display:none;"' : '') + '><div class="form-grid">';
+                                '<div class="group-content"><div class="form-grid">';
 
                             for (var i = 0; i < groupFields.length; i += 2) {
                                 html += '<div class="form-row">';
@@ -1139,9 +1131,13 @@
                 (isRequired ? ' <span class="required">*</span>' : '') + '</label>';
 
             // Check if field should be disabled (readonly or inline mode)
-            var isDisabled = nsField.isDisabled || nsField.isReadonly || nsField.mode === 'inline';
+            var isDisabled = nsField.isDisabled || nsField.isReadonly || nsField.mode === 'inline' ||
+                             nsField.displayType === 'DISABLED' || nsField.displayType === 'INLINETEXT';
 
-            if (nsField.type === 'select' && nsField.options && nsField.options.length > 0) {
+            // Determine if this is a select field (by type or by known field ID)
+            var isSelectType = nsField.type === 'select' || this.isSelectField(nsField.id);
+
+            if (isSelectType && nsField.options && nsField.options.length > 0) {
                 // Select with pre-loaded options - render dropdown
                 html += '<select id="' + fieldId + '" class="ns-field-select" data-field="' + nsField.id + '"' + (isDisabled ? ' disabled' : '') + (isRequired ? ' required' : '') + '>';
                 html += '<option value="">-- Select --</option>';
@@ -1150,7 +1146,7 @@
                     html += '<option value="' + escapeHtml(opt.value) + '"' + selected + '>' + escapeHtml(opt.text) + '</option>';
                 });
                 html += '</select>';
-            } else if (nsField.type === 'select') {
+            } else if (isSelectType) {
                 // Select without pre-loaded options - use typeahead for server-side search
                 var lookupType = this.getLookupType(nsField.id);
                 var displayValue = doc[docKey + '_display'] || doc[docKey + '_text'] || '';
@@ -1201,11 +1197,12 @@
             var sublistId = sublist.id;
             var fields = sublist.fields || [];
 
-            // Get line items for this sublist type
+            // Get line items for this sublist type (case-insensitive comparison)
+            var slType = (sublistId || '').toLowerCase();
             var items = [];
-            if (sublistId === 'expense') {
+            if (slType === 'expense') {
                 items = doc.expenseLines || doc.lineItems || [];
-            } else if (sublistId === 'item') {
+            } else if (slType === 'item') {
                 items = doc.itemLines || [];
             }
 
@@ -1258,26 +1255,39 @@
         // Get visible fields for a sublist using schema configuration
         getVisibleSublistFields: function(sublist) {
             var self = this;
-            var fields = sublist.fields || [];
+            // Support both 'columns' (from XML) and 'fields' (from server extraction)
+            var fields = sublist.columns || sublist.fields || [];
             var visible = [];
 
             // Use visibleColumns from schema if available (preferred form configuration)
             var visibleColumns = sublist.visibleColumns || [];
             var columnOrder = sublist.columnOrder || visibleColumns;
 
+            // Filter out columns marked as not visible
+            var visibleFieldsFromSchema = fields.filter(function(f) {
+                return f.visible !== false;
+            });
+
             if (columnOrder.length > 0) {
                 // Use the form's configured column order
                 columnOrder.forEach(function(fieldId) {
-                    var field = fields.find(function(f) { return f.id === fieldId; });
-                    if (field && field.isDisplay !== false) {
+                    var normalizedId = (fieldId || '').toLowerCase();
+                    var field = visibleFieldsFromSchema.find(function(f) {
+                        return (f.id || '').toLowerCase() === normalizedId;
+                    });
+                    if (field) {
                         visible.push(field);
                     }
                 });
+            } else if (visibleFieldsFromSchema.length > 0) {
+                // Use fields marked as visible from schema/XML
+                visible = visibleFieldsFromSchema.slice(0, this.sublistColumnLimit || 10);
             } else {
                 // Fallback to priority-based ordering based on sublist type or ID
                 var priorityOrder = [];
-                var isExpense = sublist.type === 'expense' || sublist.id === 'expense';
-                var isItem = sublist.type === 'item' || sublist.id === 'item';
+                var slId = (sublist.id || '').toLowerCase();
+                var isExpense = sublist.type === 'expense' || slId === 'expense';
+                var isItem = sublist.type === 'item' || slId === 'item';
 
                 if (isExpense) {
                     priorityOrder = ['account', 'amount', 'memo', 'department', 'class', 'location', 'customer', 'taxcode', 'grossamt', 'tax1amt'];
@@ -1289,8 +1299,10 @@
                 }
 
                 priorityOrder.forEach(function(fieldId) {
-                    var field = fields.find(function(f) { return f.id === fieldId; });
-                    if (field && field.isDisplay !== false) {
+                    var field = fields.find(function(f) {
+                        return (f.id || '').toLowerCase() === fieldId.toLowerCase();
+                    });
+                    if (field && field.visible !== false && field.isDisplay !== false) {
                         visible.push(field);
                     }
                 });
@@ -1300,7 +1312,8 @@
 
             // Add any custom columns not already included
             fields.forEach(function(f) {
-                if (f.isCustom && f.isDisplay !== false && !visible.find(function(v) { return v.id === f.id; })) {
+                var isCustom = f.isCustom || (f.id && f.id.indexOf('[') !== -1);
+                if (isCustom && f.visible !== false && f.isDisplay !== false && !visible.find(function(v) { return v.id === f.id; })) {
                     visible.push(f);
                 }
             });
@@ -1312,14 +1325,20 @@
 
         // Render a single cell in the sublist table
         renderSublistCell: function(field, item, idx, sublistId) {
-            var value = item[field.id] || '';
-            var displayValue = item[field.id + '_display'] || ''; // For lookups, store display text
-            var inputId = 'line-' + sublistId + '-' + idx + '-' + field.id;
+            // Handle both uppercase (from XML) and lowercase field IDs
+            var fieldId = field.id;
+            var normalizedFieldId = (fieldId || '').toLowerCase();
+            var value = item[fieldId] || item[normalizedFieldId] || '';
+            var displayValue = item[fieldId + '_display'] || item[normalizedFieldId + '_display'] || '';
+            var inputId = 'line-' + sublistId + '-' + idx + '-' + fieldId;
+
+            // Detect if this is a select field (by type or by known field ID)
+            var isSelectField = field.type === 'select' || this.isSelectField(normalizedFieldId);
 
             // Select field with inline options - render simple select dropdown
-            if (field.type === 'select' && field.options && field.options.length > 0) {
+            if (isSelectField && field.options && field.options.length > 0) {
                 var html = '<td class="select-cell">' +
-                    '<select class="line-input" id="' + inputId + '" data-field="' + field.id + '">' +
+                    '<select class="line-input" id="' + inputId + '" data-field="' + fieldId + '">' +
                     '<option value="">--</option>';
                 field.options.forEach(function(opt) {
                     var selected = (String(value) === String(opt.value)) ? ' selected' : '';
@@ -1329,7 +1348,7 @@
                 return html;
             }
             // Select field requiring API lookup (large list like account, customer, item)
-            else if (field.type === 'select' && (field.lookupRequired || field.hasOptions)) {
+            else if (isSelectField) {
                 var lookupType = this.getLookupType(field.id, sublistId);
                 var html = '<td class="select-cell">' +
                     '<div class="typeahead-select" data-field="' + field.id + '" data-lookup="' + lookupType + '">' +
@@ -1357,21 +1376,39 @@
 
         // Determine API lookup type for a field
         getLookupType: function(fieldId, sublistId) {
-            if (fieldId === 'account') return 'accounts';
-            if (fieldId === 'item') return 'items';
-            if (fieldId === 'customer') return 'customers';
-            if (fieldId === 'department') return 'departments';
-            if (fieldId === 'class') return 'classes';
-            if (fieldId === 'location') return 'locations';
-            if (fieldId === 'entity') return 'vendors';
-            if (fieldId === 'job' || fieldId === 'project') return 'projects';
-            if (fieldId === 'subsidiary') return 'subsidiaries';
-            if (fieldId === 'currency') return 'currencies';
-            if (fieldId === 'terms') return 'terms';
-            if (fieldId === 'taxcode') return 'taxcodes';
-            if (fieldId === 'category' || fieldId === 'expensecategory') return 'expensecategories';
-            if (fieldId === 'employee') return 'employees';
+            var normalizedId = (fieldId || '').toLowerCase();
+            if (normalizedId === 'account') return 'accounts';
+            if (normalizedId === 'item') return 'items';
+            if (normalizedId === 'customer') return 'customers';
+            if (normalizedId === 'department') return 'departments';
+            if (normalizedId === 'class') return 'classes';
+            if (normalizedId === 'location') return 'locations';
+            if (normalizedId === 'entity') return 'vendors';
+            if (normalizedId === 'job' || normalizedId === 'project') return 'projects';
+            if (normalizedId === 'subsidiary') return 'subsidiaries';
+            if (normalizedId === 'currency') return 'currencies';
+            if (normalizedId === 'terms') return 'terms';
+            if (normalizedId === 'taxcode') return 'taxcodes';
+            if (normalizedId === 'category' || normalizedId === 'expensecategory') return 'expensecategories';
+            if (normalizedId === 'employee') return 'employees';
+            if (normalizedId === 'postingperiod') return 'accountingperiods';
+            if (normalizedId === 'approvalstatus') return 'approvalstatuses';
+            if (normalizedId === 'nextapprover') return 'employees';
+            if (normalizedId === 'projecttask') return 'projecttasks';
             return 'generic';
+        },
+
+        // Detect if a field should be a select/typeahead based on its ID
+        isSelectField: function(fieldId) {
+            var normalizedId = (fieldId || '').toLowerCase();
+            var selectFields = [
+                'account', 'department', 'class', 'location', 'subsidiary',
+                'entity', 'customer', 'vendor', 'employee', 'item',
+                'currency', 'terms', 'taxcode', 'postingperiod',
+                'approvalstatus', 'nextapprover', 'category', 'expensecategory',
+                'job', 'project', 'projecttask', 'customform'
+            ];
+            return selectFields.indexOf(normalizedId) !== -1;
         },
 
         // Initialize sublist data structure
@@ -1684,12 +1721,13 @@
             if (!this.sublistData) this.sublistData = {};
             if (!this.sublistData[sublistId]) this.sublistData[sublistId] = [];
 
-            // Create empty line based on sublist type
+            // Create empty line based on sublist type (normalize to lowercase for comparison)
+            var slType = (sublistId || '').toLowerCase();
             var newLine = { amount: 0 };
-            if (sublistId === 'expense') {
+            if (slType === 'expense') {
                 newLine.account = '';
                 newLine.memo = '';
-            } else if (sublistId === 'item') {
+            } else if (slType === 'item') {
                 newLine.item = '';
                 newLine.description = '';
                 newLine.quantity = 1;
@@ -1697,7 +1735,7 @@
             }
 
             this.sublistData[sublistId].push(newLine);
-            this.changes[sublistId + 'Lines'] = this.sublistData[sublistId];
+            this.changes[slType + 'Lines'] = this.sublistData[sublistId];
             this.markUnsaved();
             this.refreshSublist(sublistId);
             this.updateTabCounts();
@@ -1706,8 +1744,9 @@
         removeSublistLine: function(sublistId, idx) {
             if (!this.sublistData || !this.sublistData[sublistId]) return;
 
+            var slType = (sublistId || '').toLowerCase();
             this.sublistData[sublistId].splice(idx, 1);
-            this.changes[sublistId + 'Lines'] = this.sublistData[sublistId];
+            this.changes[slType + 'Lines'] = this.sublistData[sublistId];
             this.markUnsaved();
             this.refreshSublist(sublistId);
             this.updateTabCounts();
@@ -1747,17 +1786,20 @@
             var sublistContainer = el('#sublist-' + sublistId);
             if (!container || !sublistContainer) return;
 
-            // Get the sublist config from form fields
+            // Get the sublist config from form fields (case-insensitive find)
             var formFields = this.formFields || {};
             var sublists = formFields.sublists || [];
-            var sublist = sublists.find(function(sl) { return sl.id === sublistId; });
+            var normalizedId = (sublistId || '').toLowerCase();
+            var sublist = sublists.find(function(sl) {
+                return (sl.id || '').toLowerCase() === normalizedId;
+            });
 
             if (!sublist) return;
 
             // Re-render the sublist table
             var items = this.sublistData[sublistId] || [];
             var doc = { expenseLines: [], itemLines: [] };
-            doc[sublistId === 'expense' ? 'expenseLines' : 'itemLines'] = items;
+            doc[normalizedId === 'expense' ? 'expenseLines' : 'itemLines'] = items;
 
             container.innerHTML = this.renderSublistTable(sublist, doc);
         },
