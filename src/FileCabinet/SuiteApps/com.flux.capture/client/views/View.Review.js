@@ -323,10 +323,11 @@
                         field.options = expenseAccountsData;
                     }
 
-                    // Inject COGS accounts into 'account' field on item sublist
-                    if (field.id === 'account' && sublist.id === 'item' && cogsAccountsData.length > 0) {
+                    // Inject COGS + Expense accounts into 'account' field on item sublist
+                    if (field.id === 'account' && sublist.id === 'item') {
                         field.type = 'select';
-                        field.options = cogsAccountsData;
+                        // Combine COGS and Expense accounts for item sublist
+                        field.options = [].concat(cogsAccountsData || [], expenseAccountsData || []);
                     }
 
                     // Inject items into 'item' field on item sublist
