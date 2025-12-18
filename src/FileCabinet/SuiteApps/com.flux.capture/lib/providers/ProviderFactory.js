@@ -177,7 +177,18 @@ define([
          */
         testProviderConnection(providerType, config) {
             try {
-                const provider = this.getProviderByType(providerType, config);
+                // If _useSavedApiKey flag is set, load the encrypted key from saved config
+                let testConfig = { ...config };
+                if (config && config._useSavedApiKey) {
+                    const savedConfig = this._loadConfig();
+                    if (savedConfig && savedConfig.azure && savedConfig.azure.apiKey) {
+                        // Decrypt the saved API key for testing
+                        testConfig.apiKey = this._decryptValue(savedConfig.azure.apiKey);
+                    }
+                    delete testConfig._useSavedApiKey;
+                }
+
+                const provider = this.getProviderByType(providerType, testConfig);
 
                 // Validate config first
                 const validation = provider.validateConfig();
@@ -223,11 +234,24 @@ define([
          */
         saveProviderConfig(config) {
             try {
+                // Load existing config to preserve encrypted API key if needed
+                const existingConfig = this._loadConfig();
+
                 // Encrypt sensitive fields
                 const configToSave = { ...config };
-                if (configToSave.azure && configToSave.azure.apiKey) {
-                    configToSave.azure.apiKey = this._encryptValue(configToSave.azure.apiKey);
-                    configToSave.azure._apiKeyEncrypted = true;
+                if (configToSave.azure) {
+                    if (configToSave.azure.apiKey) {
+                        // New API key provided - encrypt it
+                        configToSave.azure.apiKey = this._encryptValue(configToSave.azure.apiKey);
+                        configToSave.azure._apiKeyEncrypted = true;
+                    } else if (configToSave.azure._preserveExistingApiKey && existingConfig && existingConfig.azure && existingConfig.azure.apiKey) {
+                        // Preserve existing encrypted API key
+                        configToSave.azure.apiKey = existingConfig.azure.apiKey;
+                        configToSave.azure._apiKeyEncrypted = existingConfig.azure._apiKeyEncrypted;
+                    }
+                    // Clean up internal flags
+                    delete configToSave.azure._preserveExistingApiKey;
+                    delete configToSave.azure._hasApiKey;
                 }
 
                 // Find existing config record
