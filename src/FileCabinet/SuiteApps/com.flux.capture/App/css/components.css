@@ -4178,10 +4178,33 @@ body.fullscreen-mode .sidebar-expand-btn {
 .zero-stat .zero-value { display: block; font-size: 1.5rem; font-weight: 700; color: var(--text-primary); }
 .zero-stat .zero-label { font-size: var(--font-size-sm); color: var(--text-secondary); }
 
-/* Keyboard HUD */
+/* Keyboard HUD - Base styles */
 .keyboard-hud { position: fixed; bottom: var(--space-lg); left: 50%; transform: translateX(-50%); display: flex; gap: var(--space-md); padding: var(--space-sm) var(--space-md); background: var(--gray-900); border-radius: var(--radius-lg); box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3); z-index: 100; }
 .hud-item { display: flex; align-items: center; gap: var(--space-xs); color: var(--gray-400); font-size: var(--font-size-sm); }
 .hud-item kbd { padding: 2px 6px; background: var(--gray-800); border: 1px solid var(--gray-700); border-radius: var(--radius-sm); font-family: monospace; color: var(--gray-300); }
+
+/* Documents Keyboard HUD - Hidden until hover near bottom */
+.docs-keyboard-hover {
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    height: 60px;
+    z-index: 99;
+}
+.docs-keyboard-hud {
+    transform: translateX(-50%) translateY(100%);
+    bottom: 0;
+    border-radius: var(--radius-lg) var(--radius-lg) 0 0;
+    box-shadow: 0 -4px 20px rgba(0, 0, 0, 0.3);
+    opacity: 0;
+    transition: transform 0.2s ease, opacity 0.2s ease;
+}
+.docs-keyboard-hover:hover + .docs-keyboard-hud,
+.docs-keyboard-hud:hover {
+    transform: translateX(-50%) translateY(0);
+    opacity: 1;
+}
 
 /* Command Palette */
 .command-palette { position: fixed; inset: 0; display: flex; align-items: flex-start; justify-content: center; padding-top: 15vh; z-index: 1000; }

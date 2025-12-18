@@ -50,7 +50,7 @@
         // ==========================================
         init: function(params) {
             var self = this;
-            this.docId = params.docId;
+            this.docId = params && params.docId ? params.docId : null;
             this.changes = {};
             this.zoom = 1;
             this.rotation = 0;
@@ -62,17 +62,60 @@
             // Render base template
             renderTemplate('tpl-review', 'view-container');
 
-            // Load queue context for prev/next navigation
-            this.loadQueueContext();
-
             // Bind events and keyboard shortcuts
             this.bindEvents();
             this.bindKeyboardShortcuts();
 
             if (this.docId) {
+                // Load queue context for prev/next navigation, then load document
+                this.loadQueueContext();
                 this.loadData();
             } else {
-                this.showError('No document ID provided');
+                // No docId provided - load first document from review queue
+                this.loadFirstDocument();
+            }
+        },
+
+        loadFirstDocument: function() {
+            var self = this;
+            this.showLoadingState();
+
+            // Load documents needing review and start with the first one
+            API.get('list', { status: '4', pageSize: 100 }) // NEEDS_REVIEW
+                .then(function(data) {
+                    if (data && data.length > 0) {
+                        self.queueIds = data.map(function(d) { return d.id; });
+                        self.docId = self.queueIds[0];
+                        self.queueIndex = 0;
+                        self.updateNavigationButtons();
+                        self.loadData();
+                    } else {
+                        // No documents to review - show empty state
+                        self.showNoDocumentsState();
+                    }
+                })
+                .catch(function(err) {
+                    console.error('[Review] Load error:', err);
+                    self.showError('Failed to load documents: ' + err.message);
+                });
+        },
+
+        showNoDocumentsState: function() {
+            var container = el('#view-container');
+            if (container) {
+                container.innerHTML = '<div class="empty-state" style="padding-top:100px;">' +
+                    '<div class="empty-icon success"><i class="fas fa-check-circle"></i></div>' +
+                    '<h4>All Caught Up!</h4>' +
+                    '<p>No documents need review right now.</p>' +
+                    '<button class="btn btn-primary" id="btn-go-documents">Go to Documents</button>' +
+                '</div>';
+
+                var btn = el('#btn-go-documents');
+                if (btn) {
+                    btn.addEventListener('click', function() {
+                        Router.navigate('documents');
+                    });
+                }
             }
         },
 
