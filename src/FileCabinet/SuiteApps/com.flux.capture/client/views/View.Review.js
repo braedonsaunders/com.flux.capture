@@ -788,7 +788,10 @@
                             (group.fields || []).forEach(function(fieldRef) {
                                 // Handle both field ID strings and field objects from DOM extraction
                                 var fieldId = typeof fieldRef === 'object' ? fieldRef.id : fieldRef;
-                                if (fieldId === 'entity') return;
+                                var normalizedFieldId = (fieldId || '').toLowerCase();
+
+                                // Skip vendor/entity field - it's rendered specially at the top
+                                if (normalizedFieldId === 'entity' || normalizedFieldId === 'vendor') return;
 
                                 // First check if DOM extraction gave us field metadata
                                 var domField = typeof fieldRef === 'object' ? fieldRef : null;
