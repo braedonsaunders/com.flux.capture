@@ -171,6 +171,9 @@ function(record, search, log, query, runtime) {
             var existingId = findConfigRecord(configType, recordType, formId);
             var configRec;
 
+            // Generate a descriptive name for the record
+            var recordName = configType + '_' + recordType + (formId ? '_' + formId : '');
+
             if (existingId) {
                 configRec = record.load({
                     type: CONFIG_RECORD_TYPE,
@@ -180,6 +183,8 @@ function(record, search, log, query, runtime) {
                 configRec = record.create({
                     type: CONFIG_RECORD_TYPE
                 });
+                // Set the required Name field
+                configRec.setValue('name', recordName);
                 configRec.setValue('custrecord_flux_cfg_type', configType);
                 configRec.setValue('custrecord_flux_cfg_key', recordType);
                 if (formId) {

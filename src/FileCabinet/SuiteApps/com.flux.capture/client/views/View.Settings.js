@@ -402,6 +402,11 @@
             var self = this;
             var fields = [];
 
+            // NetSuite form XML uses two formats:
+            // 1. <field id="entity">...</field> (SDF format)
+            // 2. <ENTITY><visible>T</visible></ENTITY> (field ID as element name)
+
+            // Try SDF format first
             container.querySelectorAll('field').forEach(function(f) {
                 var scriptIdEl = f.querySelector('[scriptid]');
                 var id = scriptIdEl ? scriptIdEl.getAttribute('scriptid') : f.getAttribute('id');
@@ -416,6 +421,38 @@
                     displayType: self.getXmlText(f, 'displayType') || 'NORMAL'
                 });
             });
+
+            // If no fields found, try alternate format (field ID as element name)
+            if (fields.length === 0) {
+                // Skip known non-field elements
+                var skipElements = ['id', 'label', 'visible', 'collapsed', 'help', 'displaytype',
+                    'ismandatory', 'defaultchecked', 'displayOrder', 'scriptid'];
+
+                Array.prototype.forEach.call(container.children, function(child) {
+                    var tagName = child.tagName.toLowerCase();
+
+                    // Skip if it's a known metadata element
+                    if (skipElements.indexOf(tagName) !== -1) return;
+
+                    // This is likely a field element
+                    var id = tagName;
+
+                    // Check for scriptid attribute (for custom fields)
+                    if (child.hasAttribute('scriptid')) {
+                        id = child.getAttribute('scriptid');
+                    }
+
+                    fields.push({
+                        id: id,
+                        label: self.getXmlText(child, 'label') || id,
+                        visible: self.getXmlText(child, 'visible') !== 'F',
+                        mandatory: self.getXmlText(child, 'mandatory') === 'T' ||
+                            self.getXmlText(child, 'ismandatory') === 'T',
+                        displayType: self.getXmlText(child, 'displayType') ||
+                            self.getXmlText(child, 'displaytype') || 'NORMAL'
+                    });
+                });
+            }
 
             return fields;
         },
@@ -503,7 +540,8 @@
 
             API.put('formconfig', {
                 transactionType: this.currentFormType,
-                config: this.parsedXml
+                config: this.parsedXml,
+                source: 'xml_upload'
             }).then(function() {
                 if (btn) {
                     btn.disabled = false;
