@@ -207,6 +207,9 @@ define([
                 case 'suggestedAccount':
                     result = getSuggestedAccount(context.vendorId, context.description);
                     break;
+                case 'scriptstatus':
+                    result = getScriptDeploymentStatus(context.deploymentId);
+                    break;
                 default:
                     result = Response.error('INVALID_ACTION', 'Unknown action: ' + action);
             }
@@ -286,7 +289,7 @@ define([
                     result = saveFormLayout(context.transactionType, context.formId, context.layout);
                     break;
                 case 'scriptstatus':
-                    result = updateScriptDeploymentStatus(context.scriptId, context.enabled);
+                    result = updateScriptDeploymentStatus(context.deploymentId, context.enabled);
                     break;
                 default:
                     result = Response.error('INVALID_ACTION', 'Unknown action: ' + action);
@@ -1597,20 +1600,20 @@ define([
 
     /**
      * Get script deployment status (enabled/disabled)
-     * @param {string} scriptId - The script ID (e.g., 'customscript_fc_form_capture')
+     * @param {string} deploymentId - The deployment script ID (e.g., 'customdeploy_fc_formlayout_vendorbill')
      * @returns {Object} { enabled: boolean, deploymentId: string }
      */
-    function getScriptDeploymentStatus(scriptId) {
-        if (!scriptId) {
-            return Response.error('MISSING_PARAM', 'Script ID is required');
+    function getScriptDeploymentStatus(deploymentId) {
+        if (!deploymentId) {
+            return Response.error('MISSING_PARAM', 'Deployment ID is required');
         }
 
         try {
-            // Search for script deployment
+            // Search for script deployment by deployment scriptid
             var deploymentSearch = search.create({
                 type: search.Type.SCRIPT_DEPLOYMENT,
                 filters: [
-                    ['script.scriptid', 'is', scriptId]
+                    ['scriptid', 'is', deploymentId]
                 ],
                 columns: [
                     search.createColumn({ name: 'internalid' }),
@@ -1626,7 +1629,7 @@ define([
                 return Response.success({
                     enabled: false,
                     found: false,
-                    message: 'Script deployment not found'
+                    message: 'Script deployment not found: ' + deploymentId
                 });
             }
 
@@ -1635,13 +1638,13 @@ define([
             var isDeployed = deployment.getValue('isdeployed');
 
             // Status 'RELEASED' means enabled, 'NOTSCHEDULED' or 'TESTING' means disabled
-            var enabled = status === 'RELEASED' && isDeployed === true;
+            var enabled = status === 'RELEASED';
 
             return Response.success({
                 enabled: enabled,
                 found: true,
-                deploymentId: deployment.getValue('internalid'),
-                scriptDeploymentId: deployment.getValue('scriptid'),
+                internalId: deployment.getValue('internalid'),
+                deploymentId: deployment.getValue('scriptid'),
                 status: status
             });
         } catch (e) {
@@ -1652,21 +1655,21 @@ define([
 
     /**
      * Update script deployment status (enable/disable)
-     * @param {string} scriptId - The script ID (e.g., 'customscript_fc_form_capture')
+     * @param {string} deploymentId - The deployment script ID (e.g., 'customdeploy_fc_formlayout_vendorbill')
      * @param {boolean} enabled - Whether to enable or disable
      * @returns {Object} Success/failure status
      */
-    function updateScriptDeploymentStatus(scriptId, enabled) {
-        if (!scriptId) {
-            return Response.error('MISSING_PARAM', 'Script ID is required');
+    function updateScriptDeploymentStatus(deploymentId, enabled) {
+        if (!deploymentId) {
+            return Response.error('MISSING_PARAM', 'Deployment ID is required');
         }
 
         try {
-            // First find the deployment
+            // Find the deployment by scriptid
             var deploymentSearch = search.create({
                 type: search.Type.SCRIPT_DEPLOYMENT,
                 filters: [
-                    ['script.scriptid', 'is', scriptId]
+                    ['scriptid', 'is', deploymentId]
                 ],
                 columns: [
                     search.createColumn({ name: 'internalid' })
@@ -1676,15 +1679,15 @@ define([
             var deploymentResult = deploymentSearch.run().getRange({ start: 0, end: 1 });
 
             if (!deploymentResult || deploymentResult.length === 0) {
-                return Response.error('DEPLOYMENT_NOT_FOUND', 'Script deployment not found for: ' + scriptId);
+                return Response.error('DEPLOYMENT_NOT_FOUND', 'Script deployment not found: ' + deploymentId);
             }
 
-            var deploymentId = deploymentResult[0].getValue('internalid');
+            var internalId = deploymentResult[0].getValue('internalid');
 
             // Update the deployment status
             var deploymentRec = record.load({
                 type: record.Type.SCRIPT_DEPLOYMENT,
-                id: deploymentId
+                id: internalId
             });
 
             // Set status: 'RELEASED' = enabled, 'NOTSCHEDULED' = disabled
@@ -1695,7 +1698,7 @@ define([
 
             deploymentRec.save();
 
-            log.audit('updateScriptDeploymentStatus', 'Script ' + scriptId + ' ' + (enabled ? 'enabled' : 'disabled'));
+            log.audit('updateScriptDeploymentStatus', 'Deployment ' + deploymentId + ' ' + (enabled ? 'enabled' : 'disabled'));
 
             return Response.success({
                 enabled: enabled,

@@ -5766,3 +5766,42 @@ body.fullscreen-mode .sidebar-expand-btn {
 .form-editor-help li {
     margin-bottom: var(--space-xs);
 }
+
+/* Hidden field/column state */
+.editor-node.is-hidden > .node-header {
+    opacity: 0.5;
+    background: var(--gray-100);
+    border-style: dashed;
+}
+
+.editor-node.is-hidden > .node-header .node-label {
+    text-decoration: line-through;
+    color: var(--text-tertiary);
+}
+
+.hidden-badge {
+    background: var(--color-danger) !important;
+    color: white !important;
+    font-weight: 600;
+    animation: pulse-badge 2s infinite;
+}
+
+@keyframes pulse-badge {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.7; }
+}
+
+/* Action button states */
+.btn-icon-active {
+    color: var(--color-success) !important;
+}
+
+.btn-icon-danger:hover {
+    color: var(--color-danger) !important;
+    background: var(--color-danger-bg) !important;
+}
+
+/* Always show actions for hidden items */
+.editor-node.is-hidden .node-actions {
+    opacity: 1;
+}
