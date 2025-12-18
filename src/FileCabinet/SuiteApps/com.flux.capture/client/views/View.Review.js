@@ -2777,11 +2777,18 @@
 
             if (!reviewContent || !topSection) return;
 
-            // Move sublist section back to extraction panel before removing bottom section
-            if (bottomSection) {
+            // Move sublist section back to extraction panel before the action buttons
+            if (bottomSection && extractionPanel) {
                 var sublistSection = bottomSection.querySelector('.line-section');
-                if (sublistSection && extractionPanel) {
-                    extractionPanel.appendChild(sublistSection);
+                var actionSection = extractionPanel.querySelector('.action-section');
+                if (sublistSection) {
+                    if (actionSection) {
+                        // Insert before the save button section
+                        extractionPanel.insertBefore(sublistSection, actionSection);
+                    } else {
+                        // Fallback: append to end
+                        extractionPanel.appendChild(sublistSection);
+                    }
                 }
             }
 
