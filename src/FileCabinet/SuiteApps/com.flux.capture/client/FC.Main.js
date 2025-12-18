@@ -68,34 +68,55 @@
             });
         }
 
-        // Fullscreen toggle
+        // Fullscreen toggle - with iframe support
         var fullscreenBtn = el('#btn-fullscreen');
         if (fullscreenBtn) {
             fullscreenBtn.addEventListener('click', function() {
-                if (!document.fullscreenElement) {
-                    document.documentElement.requestFullscreen().catch(function() {});
-                    document.body.classList.add('fullscreen-mode');
-                    this.classList.add('active');
-                    var icon = this.querySelector('i');
-                    if (icon) icon.className = 'fas fa-compress';
+                var btn = this;
+                var isFullscreen = document.fullscreenElement || document.webkitFullscreenElement;
+
+                if (!isFullscreen) {
+                    // Try to enter fullscreen
+                    var elem = document.documentElement;
+                    var requestFS = elem.requestFullscreen || elem.webkitRequestFullscreen || elem.mozRequestFullScreen || elem.msRequestFullscreen;
+
+                    if (requestFS) {
+                        requestFS.call(elem).then(function() {
+                            document.body.classList.add('fullscreen-mode');
+                            btn.classList.add('active');
+                            var icon = btn.querySelector('i');
+                            if (icon) icon.className = 'fas fa-compress';
+                        }).catch(function(err) {
+                            // Fullscreen might be blocked in iframe - try opening in new window
+                            FCDebug.log('[Fullscreen] Failed:', err.message);
+                            UI.toast('Fullscreen not available in this context', 'warning');
+                        });
+                    }
                 } else {
-                    document.exitFullscreen().catch(function() {});
+                    // Exit fullscreen
+                    var exitFS = document.exitFullscreen || document.webkitExitFullscreen || document.mozCancelFullScreen || document.msExitFullscreen;
+                    if (exitFS) {
+                        exitFS.call(document).catch(function() {});
+                    }
                     document.body.classList.remove('fullscreen-mode');
-                    this.classList.remove('active');
-                    var icon = this.querySelector('i');
+                    btn.classList.remove('active');
+                    var icon = btn.querySelector('i');
                     if (icon) icon.className = 'fas fa-expand';
                 }
             });
 
             // Listen for fullscreen change (user pressed Esc)
-            document.addEventListener('fullscreenchange', function() {
-                if (!document.fullscreenElement) {
+            var fsChangeHandler = function() {
+                var isFullscreen = document.fullscreenElement || document.webkitFullscreenElement;
+                if (!isFullscreen) {
                     document.body.classList.remove('fullscreen-mode');
                     fullscreenBtn.classList.remove('active');
                     var icon = fullscreenBtn.querySelector('i');
                     if (icon) icon.className = 'fas fa-expand';
                 }
-            });
+            };
+            document.addEventListener('fullscreenchange', fsChangeHandler);
+            document.addEventListener('webkitfullscreenchange', fsChangeHandler);
         }
 
         // Collapse sidebar
