@@ -446,20 +446,6 @@
                 self.showShortcutsHelp();
             });
 
-            // Toggle alert details
-            this.on('#alert-status-toggle', 'click', function() {
-                var details = el('#alert-details');
-                var chevron = this.querySelector('.alert-chevron');
-                if (details) {
-                    var isHidden = details.style.display === 'none';
-                    details.style.display = isHidden ? 'block' : 'none';
-                    if (chevron) {
-                        chevron.classList.toggle('fa-chevron-down', !isHidden);
-                        chevron.classList.toggle('fa-chevron-up', isHidden);
-                    }
-                }
-            });
-
             // Panel resizer
             this.initPanelResizer();
         },
@@ -924,6 +910,10 @@
             // Get matched field IDs to distinguish matched vs unmatched
             var matchedFieldIds = this.getMatchedFieldIds();
 
+            // Standard page dimensions in inches (letter size)
+            var PAGE_WIDTH_INCHES = 8.5;
+            var PAGE_HEIGHT_INCHES = 11;
+
             Object.keys(allFields).forEach(function(key) {
                 var field = allFields[key];
                 if (!field.position) return;
@@ -938,19 +928,48 @@
                 box.dataset.fieldValue = field.value || '';
                 box.dataset.fieldLabel = field.label || key;
 
-                // Convert normalized coordinates (0-1) to pixel coordinates
-                var x = (pos.x || 0) * pdfViewport.width;
-                var y = (pos.y || 0) * pdfViewport.height;
-                var w = (pos.w || 0.1) * pdfViewport.width;
-                var h = (pos.h || 0.02) * pdfViewport.height;
+                // Get raw position values (handle both width/height and w/h property names)
+                var rawX = pos.x || 0;
+                var rawY = pos.y || 0;
+                var rawW = pos.width || pos.w || 0.5;
+                var rawH = pos.height || pos.h || 0.1;
+
+                // Detect coordinate system and convert to pixel coordinates
+                // If values > 1, they're likely in inches (Azure) or points (PDF)
+                // If values <= 1, they're normalized (0-1)
+                var x, y, w, h;
+
+                if (rawX > 1 || rawY > 1 || rawW > 1 || rawH > 1) {
+                    // Coordinates are in inches - convert to viewport pixels
+                    // Scale: viewport pixels / page inches
+                    var scaleX = pdfViewport.width / PAGE_WIDTH_INCHES;
+                    var scaleY = pdfViewport.height / PAGE_HEIGHT_INCHES;
+
+                    x = rawX * scaleX;
+                    y = rawY * scaleY;
+                    w = rawW * scaleX;
+                    h = rawH * scaleY;
+                } else {
+                    // Coordinates are normalized (0-1)
+                    x = rawX * pdfViewport.width;
+                    y = rawY * pdfViewport.height;
+                    w = rawW * pdfViewport.width;
+                    h = rawH * pdfViewport.height;
+                }
+
+                // Clamp to viewport bounds
+                x = Math.max(0, Math.min(x, pdfViewport.width - 20));
+                y = Math.max(0, Math.min(y, pdfViewport.height - 16));
+                w = Math.max(20, Math.min(w, pdfViewport.width - x));
+                h = Math.max(16, Math.min(h, pdfViewport.height - y));
 
                 box.style.left = x + 'px';
                 box.style.top = y + 'px';
-                box.style.width = Math.max(w, 20) + 'px';
-                box.style.height = Math.max(h, 16) + 'px';
+                box.style.width = w + 'px';
+                box.style.height = h + 'px';
 
                 // Add tooltip
-                box.title = field.label + ': ' + field.value + (isMatched ? ' (Matched)' : ' (Unmatched - Click to assign)');
+                box.title = (field.label || key) + ': ' + (field.value || '') + (isMatched ? ' (Matched)' : ' (Unmatched - Click to assign)');
 
                 // Click handler for unmatched annotations
                 if (!isMatched) {
@@ -2088,6 +2107,23 @@
 
         bindFormEvents: function() {
             var self = this;
+
+            // Toggle alert details
+            var alertToggle = el('#alert-status-toggle');
+            if (alertToggle) {
+                alertToggle.onclick = function() {
+                    var details = el('#alert-details');
+                    var chevron = alertToggle.querySelector('.alert-chevron');
+                    if (details) {
+                        var isHidden = details.style.display === 'none';
+                        details.style.display = isHidden ? 'block' : 'none';
+                        if (chevron) {
+                            chevron.classList.toggle('fa-chevron-down', !isHidden);
+                            chevron.classList.toggle('fa-chevron-up', isHidden);
+                        }
+                    }
+                };
+            }
 
             // Track all field changes
             var panel = el('#extraction-panel');
@@ -3812,6 +3848,50 @@
                 };
             });
 
+            // Auto-scroll during drag
+            var scrollInterval = null;
+            var extractionPanel = el('#extraction-panel');
+
+            function startAutoScroll(panel, direction, speed) {
+                stopAutoScroll();
+                scrollInterval = setInterval(function() {
+                    panel.scrollTop += direction * speed;
+                }, 16);
+            }
+
+            function stopAutoScroll() {
+                if (scrollInterval) {
+                    clearInterval(scrollInterval);
+                    scrollInterval = null;
+                }
+            }
+
+            // Global dragover for auto-scroll
+            if (extractionPanel) {
+                extractionPanel.ondragover = function(e) {
+                    if (!self.extractionPool.dragActive) return;
+                    e.preventDefault();
+
+                    var rect = extractionPanel.getBoundingClientRect();
+                    var y = e.clientY;
+                    var scrollZone = 60; // pixels from edge to trigger scroll
+
+                    if (y < rect.top + scrollZone) {
+                        // Near top - scroll up
+                        startAutoScroll(extractionPanel, -1, 10);
+                    } else if (y > rect.bottom - scrollZone) {
+                        // Near bottom - scroll down
+                        startAutoScroll(extractionPanel, 1, 10);
+                    } else {
+                        stopAutoScroll();
+                    }
+                };
+
+                extractionPanel.ondragleave = function() {
+                    stopAutoScroll();
+                };
+            }
+
             // Card drag events
             document.querySelectorAll('.pool-card').forEach(function(card) {
                 card.ondragstart = function(e) {
@@ -3830,6 +3910,7 @@
                     self.extractionPool.dragActive = false;
                     card.classList.remove('dragging');
                     document.body.classList.remove('extraction-dragging');
+                    stopAutoScroll();
                     document.querySelectorAll('.form-field.drop-target').forEach(function(f) {
                         f.classList.remove('drop-target', 'drop-hover');
                     });
