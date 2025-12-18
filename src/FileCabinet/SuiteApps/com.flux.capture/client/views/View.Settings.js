@@ -362,10 +362,17 @@
             var label = el('#capture-toggle-label');
             var deploymentId = this.getDeploymentId();
 
+            // Show loading state
+            if (label) label.textContent = 'Loading status...';
+            if (toggle) toggle.disabled = true;
+
             API.get('scriptstatus', { deploymentId: deploymentId })
                 .then(function(result) {
                     self.captureScriptEnabled = result.data && result.data.enabled;
-                    if (toggle) toggle.checked = self.captureScriptEnabled;
+                    if (toggle) {
+                        toggle.checked = self.captureScriptEnabled;
+                        toggle.disabled = false;
+                    }
                     if (label) {
                         label.textContent = self.captureScriptEnabled ?
                             'Capture Enabled for ' + self.currentFormType : 'Capture Disabled';
@@ -373,7 +380,10 @@
                 })
                 .catch(function() {
                     self.captureScriptEnabled = false;
-                    if (toggle) toggle.checked = false;
+                    if (toggle) {
+                        toggle.checked = false;
+                        toggle.disabled = false;
+                    }
                     if (label) label.textContent = 'Script Status Unknown';
                 });
         },
@@ -747,18 +757,18 @@
 
             // If over limit, warn but allow proceeding
             if (jsonSize > 3800) {
-                UI.confirm(
-                    'The configuration size (' + sizeKb + ' KB) is large and may exceed storage limits. ' +
-                    'You can still save it, but consider deselecting some items if you encounter issues.',
-                    'Large Configuration Warning',
-                    {
-                        confirmText: 'Import Anyway',
-                        cancelText: 'Cancel',
-                        onConfirm: function() {
-                            self.doImportXmlConfig(selectedConfig);
-                        }
+                UI.confirm({
+                    title: 'Large Configuration Warning',
+                    message: 'The configuration size (' + sizeKb + ' KB) is large and may exceed storage limits. ' +
+                        'You can still save it, but consider deselecting some items if you encounter issues.',
+                    confirmText: 'Import Anyway',
+                    cancelText: 'Cancel',
+                    type: 'warning'
+                }).then(function(confirmed) {
+                    if (confirmed) {
+                        self.doImportXmlConfig(selectedConfig);
                     }
-                );
+                });
                 return;
             }
 
@@ -990,7 +1000,8 @@
         },
 
         renderEditorSublist: function(sublist, idx) {
-            var columns = sublist.columns || [];
+            // Handle both 'columns' (from XML) and 'fields' (from server extraction)
+            var columns = sublist.columns || sublist.fields || [];
 
             var html = '<div class="editor-node editor-sublist" data-sublist-idx="' + idx + '">';
             html += '<div class="node-header" data-toggle="sublist-' + idx + '">' +
@@ -1115,19 +1126,18 @@
             var self = this;
             var dataset = btn.dataset;
 
-            UI.confirm(
-                'Are you sure you want to delete this ' + type + '? This cannot be undone.',
-                'Delete ' + type.charAt(0).toUpperCase() + type.slice(1),
-                {
-                    confirmText: 'Delete',
-                    danger: true,
-                    onConfirm: function() {
-                        self.removeConfigItem(dataset, type);
-                        self.renderFormEditor();
-                        UI.toast(type.charAt(0).toUpperCase() + type.slice(1) + ' deleted', 'success');
-                    }
+            UI.confirm({
+                title: 'Delete ' + type.charAt(0).toUpperCase() + type.slice(1),
+                message: 'Are you sure you want to delete this ' + type + '? This cannot be undone.',
+                confirmText: 'Delete',
+                type: 'danger'
+            }).then(function(confirmed) {
+                if (confirmed) {
+                    self.removeConfigItem(dataset, type);
+                    self.renderFormEditor();
+                    UI.toast(type.charAt(0).toUpperCase() + type.slice(1) + ' deleted', 'success');
                 }
-            );
+            });
         },
 
         deleteAllItems: function() {
@@ -1138,37 +1148,36 @@
                 return;
             }
 
-            UI.confirm(
-                'This will delete ALL tabs, field groups, fields, and sublists from the current configuration. This cannot be undone!',
-                'Delete All Items',
-                {
-                    confirmText: 'Delete All',
-                    danger: true,
-                    onConfirm: function() {
-                        var layout = self.editedConfig.layout || self.editedConfig;
+            UI.confirm({
+                title: 'Delete All Items',
+                message: 'This will delete ALL tabs, field groups, fields, and sublists from the current configuration. This cannot be undone!',
+                confirmText: 'Delete All',
+                type: 'danger'
+            }).then(function(confirmed) {
+                if (confirmed) {
+                    var layout = self.editedConfig.layout || self.editedConfig;
 
-                        // Clear all tabs
-                        if (layout.tabs) {
-                            layout.tabs = [];
-                        }
-
-                        // Clear sublists
-                        if (self.editedConfig.sublists) {
-                            self.editedConfig.sublists = [];
-                        } else if (layout.sublists) {
-                            layout.sublists = [];
-                        }
-
-                        // Clear body fields
-                        if (self.editedConfig.bodyFields) {
-                            self.editedConfig.bodyFields = [];
-                        }
-
-                        self.renderFormEditor();
-                        UI.toast('All items deleted', 'success');
+                    // Clear all tabs
+                    if (layout.tabs) {
+                        layout.tabs = [];
                     }
+
+                    // Clear sublists
+                    if (self.editedConfig.sublists) {
+                        self.editedConfig.sublists = [];
+                    } else if (layout.sublists) {
+                        layout.sublists = [];
+                    }
+
+                    // Clear body fields
+                    if (self.editedConfig.bodyFields) {
+                        self.editedConfig.bodyFields = [];
+                    }
+
+                    self.renderFormEditor();
+                    UI.toast('All items deleted', 'success');
                 }
-            );
+            });
         },
 
         removeConfigItem: function(dataset, type) {
@@ -1198,8 +1207,10 @@
                 var sublistIdx = parseInt(dataset.sublistIdx);
                 var colIdx = parseInt(dataset.idx);
                 var sublist = sublists[sublistIdx];
-                if (sublist && sublist.columns) {
-                    sublist.columns.splice(colIdx, 1);
+                // Handle both 'columns' (from XML) and 'fields' (from server extraction)
+                var cols = sublist && (sublist.columns || sublist.fields);
+                if (cols) {
+                    cols.splice(colIdx, 1);
                 }
             } else if (type === 'group') {
                 var tabIdx = parseInt(dataset.tabIdx);
@@ -1260,7 +1271,9 @@
                 return sublists[parseInt(dataset.idx)];
             } else if (type === 'column') {
                 var sublist = sublists[parseInt(dataset.sublistIdx)];
-                return sublist && sublist.columns ? sublist.columns[parseInt(dataset.idx)] : null;
+                // Handle both 'columns' (from XML) and 'fields' (from server extraction)
+                var cols = sublist && (sublist.columns || sublist.fields);
+                return cols ? cols[parseInt(dataset.idx)] : null;
             }
             return null;
         },
@@ -1296,17 +1309,17 @@
 
         resetFormConfig: function() {
             var self = this;
-            UI.confirm(
-                'This will reset all changes and reload the original configuration. Continue?',
-                'Reset Configuration',
-                {
-                    confirmText: 'Reset',
-                    onConfirm: function() {
-                        self.loadFormConfig(self.currentFormType);
-                        UI.toast('Configuration reset', 'info');
-                    }
+            UI.confirm({
+                title: 'Reset Configuration',
+                message: 'This will reset all changes and reload the original configuration. Continue?',
+                confirmText: 'Reset',
+                type: 'warning'
+            }).then(function(confirmed) {
+                if (confirmed) {
+                    self.loadFormConfig(self.currentFormType);
+                    UI.toast('Configuration reset', 'info');
                 }
-            );
+            });
         },
 
         saveFormConfig: function() {
@@ -1493,11 +1506,12 @@
                     '</div>';
             }).join('');
 
-            UI.confirm(
-                '<div style="font-size:var(--font-size-sm);">' + html + '</div>',
-                'Keyboard Shortcuts',
-                { confirmText: 'Got it', showCancel: false }
-            );
+            UI.confirm({
+                title: 'Keyboard Shortcuts',
+                message: '<div style="font-size:var(--font-size-sm);">' + html + '</div>',
+                confirmText: 'Got it',
+                showCancel: false
+            });
         },
 
         cleanup: function() {
