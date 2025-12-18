@@ -6,29 +6,6 @@
     'use strict';
 
     /**
-     * Initialize user info in sidebar
-     */
-    function initUserInfo() {
-        if (!window.FC_CONFIG || !window.FC_CONFIG.user) return;
-
-        var user = window.FC_CONFIG.user;
-        var nameEl = el('#user-name');
-        var avatarEl = el('#user-avatar');
-
-        if (nameEl && user.name) {
-            nameEl.textContent = user.name;
-        }
-
-        if (avatarEl && user.name) {
-            var parts = user.name.split(' ');
-            var initials = parts.length >= 2
-                ? (parts[0][0] + parts[1][0]).toUpperCase()
-                : user.name.substring(0, 2).toUpperCase();
-            avatarEl.textContent = initials;
-        }
-    }
-
-    /**
      * Initialize navigation click handlers
      */
     function initNavigation() {
@@ -145,9 +122,6 @@
      */
     function startApp() {
         FCDebug.log('[FC.Main] Starting application...');
-
-        // Initialize user info
-        initUserInfo();
 
         // Set up navigation
         initNavigation();

@@ -995,6 +995,7 @@
             var hiddenClass = isHidden ? ' is-hidden' : '';
             var mandatoryBadge = field.mandatory ? '<span class="field-badge mandatory">Required</span>' : '';
             var visibilityBadge = isHidden ? '<span class="field-badge hidden-badge">HIDDEN</span>' : '';
+            var defaultBadge = field.defaultValue ? '<span class="field-badge default-badge">Default</span>' : '';
 
             var html = '<div class="editor-node editor-field' + hiddenClass + '" data-parent="' + parentKey + '" data-field-idx="' + fieldIdx + '">';
             html += '<div class="node-header field-header">' +
@@ -1002,11 +1003,12 @@
                 '<span class="node-label">' + escapeHtml(field.label || field.id) + '</span>' +
                 '<span class="field-id">(' + escapeHtml(field.id) + ')</span>' +
                 mandatoryBadge +
+                defaultBadge +
                 visibilityBadge +
                 '<span class="node-meta">' + (field.type || 'text') + '</span>' +
                 '<div class="node-actions">' +
-                '<button class="btn-icon" data-action="edit-label" data-type="field" data-parent="' + parentKey + '" data-idx="' + fieldIdx + '" title="Edit label">' +
-                '<i class="fas fa-pencil"></i>' +
+                '<button class="btn-icon" data-action="edit-settings" data-type="field" data-parent="' + parentKey + '" data-idx="' + fieldIdx + '" title="Edit field settings">' +
+                '<i class="fas fa-cog"></i>' +
                 '</button>' +
                 '<button class="btn-icon' + (isHidden ? '' : ' btn-icon-active') + '" data-action="toggle-visible" data-type="field" data-parent="' + parentKey + '" data-idx="' + fieldIdx + '" title="' + (isHidden ? 'Show field' : 'Hide field') + '">' +
                 '<i class="fas ' + visibleClass + '"></i>' +
@@ -1128,6 +1130,8 @@
                         self.toggleItemVisibility(this, type);
                     } else if (action === 'edit-label') {
                         self.editItemLabel(this, type);
+                    } else if (action === 'edit-settings') {
+                        self.editFieldSettings(this, type);
                     } else if (action === 'delete') {
                         self.deleteItem(this, type);
                     }
@@ -1288,6 +1292,225 @@
                     self.renderFormEditor(); // Re-render to show changes
                 }
             });
+        },
+
+        editFieldSettings: function(btn, type) {
+            var self = this;
+            var item = this.getConfigItem(btn.dataset, type);
+            if (!item || type !== 'field') return;
+
+            var fieldId = item.id || '';
+            var currentLabel = item.label || fieldId;
+            var currentDefault = item.defaultValue || '';
+            var currentDefaultText = item.defaultValueText || ''; // Display text for select fields
+            var fieldType = item.type || 'text';
+
+            // Check if this is a select/typeahead field
+            var isSelectField = this.isSelectField(fieldId) || fieldType === 'select' || fieldType === 'multiselect';
+
+            // Build modal HTML
+            var modalHtml = '<div class="modal-overlay" id="field-settings-modal">' +
+                '<div class="modal modal-sm">' +
+                    '<div class="modal-header">' +
+                        '<h3><i class="fas fa-cog"></i> Field Settings</h3>' +
+                        '<button class="modal-close" id="close-field-settings">&times;</button>' +
+                    '</div>' +
+                    '<div class="modal-body">' +
+                        '<div class="form-field">' +
+                            '<label>Field ID</label>' +
+                            '<input type="text" value="' + escapeHtml(fieldId) + '" disabled class="input-disabled">' +
+                        '</div>' +
+                        '<div class="form-field">' +
+                            '<label>Label</label>' +
+                            '<input type="text" id="field-label-input" value="' + escapeHtml(currentLabel) + '">' +
+                        '</div>' +
+                        '<div class="form-field">' +
+                            '<label>Default Value</label>';
+
+            if (isSelectField) {
+                var lookupType = this.getLookupTypeForField(fieldId);
+                modalHtml += '<div class="typeahead-select default-value-typeahead" data-field="' + fieldId + '" data-lookup="' + lookupType + '">' +
+                    '<input type="hidden" id="field-default-value" value="' + escapeHtml(currentDefault) + '">' +
+                    '<input type="text" class="typeahead-input" id="field-default-display" ' +
+                        'value="' + escapeHtml(currentDefaultText || currentDefault) + '" placeholder="Search to select default..." autocomplete="off">' +
+                    '<div class="typeahead-dropdown"></div>' +
+                '</div>';
+            } else if (fieldType === 'date') {
+                modalHtml += '<input type="date" id="field-default-value" value="' + escapeHtml(currentDefault) + '">';
+            } else if (fieldType === 'checkbox') {
+                var isChecked = currentDefault === 'T' || currentDefault === true || currentDefault === 'true';
+                modalHtml += '<label class="checkbox-label">' +
+                    '<input type="checkbox" id="field-default-value"' + (isChecked ? ' checked' : '') + '>' +
+                    ' Default to checked' +
+                '</label>';
+            } else {
+                modalHtml += '<input type="text" id="field-default-value" value="' + escapeHtml(currentDefault) + '" placeholder="Enter default value...">';
+            }
+
+            modalHtml += '<p class="field-hint">This value will be pre-filled when creating new transactions.</p>' +
+                        '</div>' +
+                    '</div>' +
+                    '<div class="modal-footer">' +
+                        '<button class="btn btn-ghost" id="cancel-field-settings">Cancel</button>' +
+                        '<button class="btn btn-primary" id="save-field-settings">Save Changes</button>' +
+                    '</div>' +
+                '</div>' +
+            '</div>';
+
+            // Add modal to DOM
+            document.body.insertAdjacentHTML('beforeend', modalHtml);
+
+            var modal = el('#field-settings-modal');
+            var closeBtn = el('#close-field-settings');
+            var cancelBtn = el('#cancel-field-settings');
+            var saveBtn = el('#save-field-settings');
+
+            // Trigger visibility animation after DOM insert
+            requestAnimationFrame(function() {
+                modal.classList.add('visible');
+            });
+
+            // Close modal handlers
+            var closeModal = function() {
+                modal.classList.remove('visible');
+                setTimeout(function() {
+                    if (modal) modal.remove();
+                }, 200);
+            };
+
+            closeBtn.addEventListener('click', closeModal);
+            cancelBtn.addEventListener('click', closeModal);
+            modal.addEventListener('click', function(e) {
+                if (e.target === modal) closeModal();
+            });
+
+            // Save handler
+            saveBtn.addEventListener('click', function() {
+                var newLabel = el('#field-label-input').value.trim();
+                var defaultValueInput = el('#field-default-value');
+                var defaultDisplayInput = el('#field-default-display');
+                var newDefault;
+                var newDefaultText;
+
+                if (fieldType === 'checkbox') {
+                    newDefault = defaultValueInput.checked ? 'T' : 'F';
+                } else {
+                    newDefault = defaultValueInput ? defaultValueInput.value : '';
+                    newDefaultText = defaultDisplayInput ? defaultDisplayInput.value : '';
+                }
+
+                // Update item
+                if (newLabel) item.label = newLabel;
+                if (newDefault) {
+                    item.defaultValue = newDefault;
+                    if (newDefaultText && isSelectField) {
+                        item.defaultValueText = newDefaultText;
+                    }
+                } else {
+                    delete item.defaultValue;
+                    delete item.defaultValueText;
+                }
+
+                self.renderFormEditor();
+                closeModal();
+            });
+
+            // Setup typeahead for select fields
+            if (isSelectField) {
+                self.setupDefaultValueTypeahead(modal, fieldId);
+            }
+        },
+
+        setupDefaultValueTypeahead: function(modal, fieldId) {
+            var self = this;
+            var wrapper = modal.querySelector('.default-value-typeahead');
+            if (!wrapper) return;
+
+            var input = wrapper.querySelector('.typeahead-input');
+            var hiddenInput = wrapper.querySelector('input[type="hidden"]');
+            var dropdown = wrapper.querySelector('.typeahead-dropdown');
+            var lookupType = wrapper.dataset.lookup;
+            var debounceTimer = null;
+
+            input.addEventListener('input', function() {
+                var query = this.value.trim();
+                if (query.length < 2) {
+                    dropdown.style.display = 'none';
+                    return;
+                }
+
+                clearTimeout(debounceTimer);
+                debounceTimer = setTimeout(function() {
+                    self.fetchTypeaheadOptions(lookupType, query, function(options) {
+                        if (options.length === 0) {
+                            dropdown.style.display = 'none';
+                            return;
+                        }
+
+                        dropdown.innerHTML = options.map(function(opt) {
+                            return '<div class="typeahead-option" data-value="' + escapeHtml(opt.value) + '" data-text="' + escapeHtml(opt.text) + '">' +
+                                escapeHtml(opt.text) + '</div>';
+                        }).join('');
+                        dropdown.style.display = 'block';
+                    });
+                }, 300);
+            });
+
+            // Handle option selection
+            dropdown.addEventListener('click', function(e) {
+                var option = e.target.closest('.typeahead-option');
+                if (option) {
+                    hiddenInput.value = option.dataset.value;
+                    input.value = option.dataset.text;
+                    dropdown.style.display = 'none';
+                }
+            });
+
+            // Close on blur
+            input.addEventListener('blur', function() {
+                setTimeout(function() {
+                    dropdown.style.display = 'none';
+                }, 200);
+            });
+        },
+
+        fetchTypeaheadOptions: function(lookupType, query, callback) {
+            var url = API.buildUrl('typeahead', { type: lookupType, query: query });
+            API.get(url).then(function(response) {
+                var data = response.data || response;
+                var options = Array.isArray(data) ? data : (data.options || []);
+                callback(options.slice(0, 10));
+            }).catch(function() {
+                callback([]);
+            });
+        },
+
+        getLookupTypeForField: function(fieldId) {
+            var id = (fieldId || '').toLowerCase();
+            if (id === 'entity' || id === 'vendor') return 'vendors';
+            if (id === 'subsidiary') return 'subsidiaries';
+            if (id === 'department') return 'departments';
+            if (id === 'class') return 'classes';
+            if (id === 'location') return 'locations';
+            if (id === 'account') return 'accounts';
+            if (id === 'terms') return 'terms';
+            if (id === 'currency') return 'currencies';
+            if (id === 'postingperiod') return 'accountingperiods';
+            if (id === 'employee') return 'employees';
+            if (id === 'approvalstatus') return 'approvalstatuses';
+            if (id === 'item') return 'items';
+            if (id === 'customer') return 'customers';
+            return 'generic';
+        },
+
+        isSelectField: function(fieldId) {
+            var id = (fieldId || '').toLowerCase();
+            var selectFields = [
+                'entity', 'vendor', 'subsidiary', 'department', 'class', 'location',
+                'account', 'terms', 'currency', 'postingperiod', 'employee', 'approvalstatus',
+                'item', 'customer', 'nexus', 'taxcode', 'expenseaccount', 'salesrep'
+            ];
+            return selectFields.indexOf(id) !== -1 || id.indexOf('custbody') === 0;
         },
 
         getConfigItem: function(dataset, type) {

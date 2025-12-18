@@ -15,6 +15,7 @@
         'KeyA': { action: 'approve', description: 'Approve & next' },
         'KeyR': { action: 'reject', description: 'Reject document' },
         'KeyS': { action: 'skip', description: 'Skip to next' },
+        'KeyV': { action: 'splitView', description: 'Toggle split view' },
         'Escape': { action: 'back', description: 'Back to documents' },
         'ArrowRight': { action: 'nextDoc', description: 'Next document' },
         'ArrowLeft': { action: 'prevDoc', description: 'Previous document' },
@@ -378,6 +379,11 @@
                 self.rotate();
             });
 
+            // View mode toggle (split view)
+            this.on('#btn-view-mode', 'click', function() {
+                self.toggleSplitView();
+            });
+
             // Page navigation
             this.on('#btn-page-prev', 'click', function() {
                 self.goToPage(self.currentPage - 1);
@@ -583,6 +589,7 @@
                     case 'approve': self.approveDocument(); break;
                     case 'reject': self.rejectDocument(); break;
                     case 'skip': self.skipDocument(); break;
+                    case 'splitView': self.toggleSplitView(); break;
                     case 'back': self.navigateBack(); break;
                     case 'nextDoc': self.goToNextDocument(); break;
                     case 'prevDoc': self.goToPrevDocument(); break;
@@ -724,7 +731,10 @@
             if (!panel) return;
 
             var doc = this.data;
-            var confClass = getConfidenceClass(doc.confidence || 0);
+            // Normalize confidence: may be stored as decimal (0-1) or percentage (0-100)
+            var rawConf = parseFloat(doc.confidence) || 0;
+            var normalizedConfidence = rawConf <= 1 ? Math.round(rawConf * 100) : Math.round(rawConf);
+            var confClass = getConfidenceClass(normalizedConfidence);
             var anomalies = doc.anomalies || [];
             var formFields = this.formFields || {};
             var bodyFields = formFields.bodyFields || [];
@@ -762,9 +772,9 @@
                     '<div class="confidence-gauge">' +
                         '<svg viewBox="0 0 36 36" class="gauge-svg">' +
                             '<circle cx="18" cy="18" r="15.5" fill="none" stroke="var(--gray-200)" stroke-width="3"/>' +
-                            '<circle cx="18" cy="18" r="15.5" fill="none" stroke="var(--color-' + (confClass === 'high' ? 'success' : confClass === 'medium' ? 'warning' : 'danger') + ')" stroke-width="3" stroke-dasharray="' + (doc.confidence || 0) + ' 100" transform="rotate(-90 18 18)"/>' +
+                            '<circle cx="18" cy="18" r="15.5" fill="none" stroke="var(--color-' + (confClass === 'high' ? 'success' : confClass === 'medium' ? 'warning' : 'danger') + ')" stroke-width="3" stroke-dasharray="' + normalizedConfidence + ' 100" transform="rotate(-90 18 18)"/>' +
                         '</svg>' +
-                        '<div class="gauge-value">' + (doc.confidence || 0) + '</div>' +
+                        '<div class="gauge-value">' + normalizedConfidence + '%</div>' +
                     '</div>' +
                     '<div class="confidence-info">' +
                         '<div class="confidence-level ' + confClass + '">' + (confClass === 'high' ? 'High' : confClass === 'medium' ? 'Medium' : 'Low') + ' Confidence</div>' +
@@ -879,16 +889,21 @@
                                 // Look up in schema bodyFields for full field definition
                                 var nsField = bodyFields.find(function(f) { return f.id === fieldId; });
 
-                                if (nsField && nsField.isDisplay !== false) {
+                                // Check both isDisplay (schema) and visible (user config) flags
+                                var fieldVisible = nsField && nsField.isDisplay !== false && nsField.visible !== false;
+                                // Also check DOM field if it has visibility set
+                                var domFieldVisible = domField && domField.visible !== false && domField.mode !== 'hidden';
+
+                                if (fieldVisible) {
                                     // Merge DOM extraction data into schema field
                                     if (domField) {
                                         nsField.label = domField.label || nsField.label;
                                         nsField.type = domField.type || nsField.type;
                                         nsField.mandatory = domField.required || nsField.mandatory;
-                                        nsField.isDisplay = domField.mode !== 'hidden';
+                                        nsField.isDisplay = domField.mode !== 'hidden' && domField.visible !== false;
                                     }
                                     groupFields.push(nsField);
-                                } else if (domField && domField.mode !== 'hidden') {
+                                } else if (domFieldVisible) {
                                     // Field not in schema but visible in DOM - use DOM data
                                     groupFields.push({
                                         id: fieldId,
@@ -912,13 +927,10 @@
                                 '</h4>' +
                                 '<div class="group-content"><div class="form-grid">';
 
-                            for (var i = 0; i < groupFields.length; i += 2) {
-                                html += '<div class="form-row">';
+                            // Render fields directly in form-grid (CSS grid handles 2-column layout)
+                            // Full-width fields will span both columns via grid-column: span 2
+                            for (var i = 0; i < groupFields.length; i++) {
                                 html += self.renderNsField(groupFields[i], doc);
-                                if (groupFields[i + 1]) {
-                                    html += self.renderNsField(groupFields[i + 1], doc);
-                                }
-                                html += '</div>';
                             }
                             html += '</div></div></div>';
                         });
@@ -1212,6 +1224,7 @@
             var fieldId = 'field-' + nsField.id;
             var label = nsField.label || nsField.id;
             var isRequired = nsField.mandatory;
+            var isFullWidth = this.isFullWidthField(nsField.id, nsField.type);
 
             // Map NS field IDs to document data keys
             var fieldMapping = {
@@ -1235,7 +1248,7 @@
                 suggestion = this.getFieldSuggestion(nsField.id, label, extractedData);
             }
 
-            var html = '<div class="form-field' + (suggestion ? ' has-suggestion' : '') + '">' +
+            var html = '<div class="form-field' + (suggestion ? ' has-suggestion' : '') + (isFullWidth ? ' full-width' : '') + '">' +
                 '<label>' + escapeHtml(label) + ' ' + this.renderConfidenceBadge(docKey) +
                 (isRequired ? ' <span class="required">*</span>' : '') + '</label>';
 
@@ -1554,15 +1567,28 @@
         // Detect checkbox fields
         isCheckboxField: function(fieldId, fieldType) {
             var ft = (fieldType || '').toLowerCase();
-            if (ft === 'checkbox' || ft === '_checkbox') return true;
+            // NetSuite returns 'checkbox', '_checkbox', or sometimes just contains 'checkbox'
+            if (ft === 'checkbox' || ft === '_checkbox' || ft.indexOf('checkbox') !== -1) return true;
             var normalizedId = (fieldId || '').toLowerCase();
             // Common checkbox field patterns
             var checkboxFields = [
                 'isadvanced', 'isperson', 'isbudgetapproved', 'istaxable', 'isbillable',
-                'isresidential', 'isactive', 'isinactive', 'isdefault', 'isprimary'
+                'isresidential', 'isactive', 'isinactive', 'isdefault', 'isprimary',
+                'taxable', 'billable', 'closed', 'complete', 'approved'
             ];
             if (checkboxFields.indexOf(normalizedId) !== -1) return true;
+            // Fields starting with 'is' or 'has' are typically booleans
             return normalizedId.indexOf('is') === 0 || normalizedId.indexOf('has') === 0;
+        },
+
+        // Check if field should render full width (not in 2-column layout)
+        isFullWidthField: function(fieldId, fieldType) {
+            var ft = (fieldType || '').toLowerCase();
+            // Textareas and long text fields should be full width
+            if (ft === 'textarea' || ft === 'richtext' || ft === 'longtext' || ft === 'clobtext') return true;
+            var normalizedId = (fieldId || '').toLowerCase();
+            var fullWidthFields = ['memo', 'message', 'description', 'notes', 'comments', 'address'];
+            return fullWidthFields.some(function(f) { return normalizedId.indexOf(f) !== -1; });
         },
 
         // Detect currency/amount fields
@@ -1637,7 +1663,9 @@
             var conf = this.fieldConfidences[field];
             if (!conf && conf !== 0) return '';
 
-            var percent = Math.round(conf * 100);
+            // Confidence may be stored as decimal (0-1) or percentage (0-100)
+            var rawConf = parseFloat(conf) || 0;
+            var percent = rawConf <= 1 ? Math.round(rawConf * 100) : Math.round(rawConf);
             var confClass = percent >= 85 ? 'high' : percent >= 60 ? 'medium' : 'low';
 
             return '<span class="field-confidence ' + confClass + '" title="AI Confidence: ' + percent + '%">' + percent + '%</span>';
@@ -2624,6 +2652,160 @@
             if (iframe) {
                 iframe.style.transform = 'scale(' + this.zoom + ') rotate(' + this.rotation + 'deg)';
             }
+        },
+
+        toggleSplitView: function() {
+            var viewReview = el('.view-review');
+            var btn = el('#btn-view-mode');
+            if (!viewReview) return;
+
+            var isSplitView = viewReview.classList.toggle('split-view');
+
+            // Toggle button active state
+            if (btn) {
+                btn.classList.toggle('active', isSplitView);
+            }
+
+            // If entering split view, restructure the DOM
+            if (isSplitView) {
+                this.setupSplitViewDom();
+            } else {
+                this.restoreNormalViewDom();
+            }
+
+            // Store preference
+            localStorage.setItem('fluxReviewSplitView', isSplitView ? 'true' : 'false');
+        },
+
+        setupSplitViewDom: function() {
+            var self = this;
+            var reviewContent = el('#review-content');
+            var previewPanel = el('#preview-panel');
+            var extractionPanel = el('#extraction-panel');
+            var resizer = el('#panel-resizer');
+
+            if (!reviewContent || !previewPanel || !extractionPanel) return;
+
+            // Create top section wrapper (2/3 height)
+            var topSection = document.createElement('div');
+            topSection.className = 'review-top-section';
+            topSection.id = 'review-top-section';
+
+            // Move preview and extraction panel to top section
+            topSection.appendChild(previewPanel);
+            if (resizer) topSection.appendChild(resizer);
+            topSection.appendChild(extractionPanel);
+
+            // Create bottom section for sublists (1/3 height)
+            var bottomSection = document.createElement('div');
+            bottomSection.className = 'review-bottom-section';
+            bottomSection.id = 'review-bottom-section';
+
+            // Move sublists to bottom section (not clone)
+            var sublistSection = extractionPanel.querySelector('.line-section');
+            if (sublistSection) {
+                bottomSection.appendChild(sublistSection);
+            }
+
+            // Add sections to review content
+            reviewContent.appendChild(topSection);
+            reviewContent.appendChild(bottomSection);
+
+            // Switch main form area to first tab
+            var firstTab = extractionPanel.querySelector('.extraction-tabs .tab-btn');
+            if (firstTab && !firstTab.classList.contains('active')) {
+                firstTab.click();
+            }
+
+            // Rebind sublist events for moved elements
+            this.bindSublistEvents(bottomSection);
+        },
+
+        bindSublistEvents: function(container) {
+            var self = this;
+            if (!container) return;
+
+            // Sublist tab switching
+            container.querySelectorAll('.sublist-tabs').forEach(function(tabsContainer) {
+                tabsContainer.addEventListener('click', function(e) {
+                    var tab = e.target.closest('.sublist-tab');
+                    if (!tab) return;
+
+                    var sublistId = tab.dataset.sublist;
+                    var parentTabs = tab.closest('.sublist-tabs');
+
+                    // Update active tab within this tabs container only
+                    if (parentTabs) {
+                        parentTabs.querySelectorAll('.sublist-tab').forEach(function(t) {
+                            t.classList.remove('active');
+                        });
+                    }
+                    tab.classList.add('active');
+
+                    // Show the correct sublist container
+                    container.querySelectorAll('.sublist-container').forEach(function(c) {
+                        c.classList.remove('active');
+                    });
+                    var sublistContainer = container.querySelector('#sublist-' + sublistId);
+                    if (sublistContainer) sublistContainer.classList.add('active');
+                });
+            });
+
+            // Line item add button
+            container.querySelectorAll('.btn-add-line').forEach(function(btn) {
+                btn.addEventListener('click', function() {
+                    var sublistId = this.closest('.sublist-container').id.replace('sublist-', '');
+                    self.addLineItem(sublistId);
+                });
+            });
+
+            // Line item delete buttons (delegated)
+            container.querySelectorAll('.sublist-table tbody').forEach(function(tbody) {
+                tbody.addEventListener('click', function(e) {
+                    var deleteBtn = e.target.closest('.btn-delete-line');
+                    if (deleteBtn) {
+                        var row = deleteBtn.closest('tr');
+                        var sublistId = tbody.closest('.sublist-container').id.replace('sublist-', '');
+                        var lineIdx = Array.from(tbody.querySelectorAll('tr')).indexOf(row);
+                        self.deleteLineItem(sublistId, lineIdx);
+                    }
+                });
+            });
+
+            // Line input changes
+            container.querySelectorAll('.line-input, .line-desc, .line-qty, .line-price, .line-amount').forEach(function(input) {
+                input.addEventListener('change', function() {
+                    self.handleLineItemChange(this);
+                });
+            });
+        },
+
+        restoreNormalViewDom: function() {
+            var reviewContent = el('#review-content');
+            var topSection = el('#review-top-section');
+            var bottomSection = el('#review-bottom-section');
+            var previewPanel = el('#preview-panel');
+            var extractionPanel = el('#extraction-panel');
+            var resizer = el('#panel-resizer');
+
+            if (!reviewContent || !topSection) return;
+
+            // Move sublist section back to extraction panel before removing bottom section
+            if (bottomSection) {
+                var sublistSection = bottomSection.querySelector('.line-section');
+                if (sublistSection && extractionPanel) {
+                    extractionPanel.appendChild(sublistSection);
+                }
+            }
+
+            // Move panels back to review content
+            reviewContent.appendChild(previewPanel);
+            if (resizer) reviewContent.appendChild(resizer);
+            reviewContent.appendChild(extractionPanel);
+
+            // Remove the split view sections
+            if (topSection) topSection.remove();
+            if (bottomSection) bottomSection.remove();
         },
 
         goToPage: function(page) {

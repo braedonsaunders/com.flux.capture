@@ -520,7 +520,7 @@ define(['N/log', 'N/query', 'N/search', '../FC_Debug'], function(log, query, sea
         }
 
         /**
-         * Calculate name match score
+         * Calculate name match score with intelligent pattern recognition
          */
         calculateNameScore(searchName, candidateName) {
             const normalizedSearch = this.normalizeVendorName(searchName);
@@ -536,22 +536,69 @@ define(['N/log', 'N/query', 'N/search', '../FC_Debug'], function(log, query, sea
             const searchTokens = this.tokenizeName(normalizedSearch);
             const candidateTokens = this.tokenizeName(normalizedCandidate);
 
-            const tokenScore = this.calculateTokenScore(searchTokens, candidateTokens);
-            const levenshteinScore = this.calculateLevenshteinScore(normalizedSearch, normalizedCandidate);
-            const prefixScore = this.calculatePrefixScore(normalizedSearch, normalizedCandidate);
+            let finalScore = 0;
+            let matchReason = '';
 
-            // Weighted combination
-            const finalScore = (tokenScore * 0.45) + (levenshteinScore * 0.35) + (prefixScore * 0.20);
+            // CHECK 1: "division of X" / "subsidiary of X" pattern
+            // If the search contains "a division of X" or "subsidiary of X", extract X and check match
+            const divisionMatch = searchName.match(/(?:a\s+)?(?:division|subsidiary|branch|unit)\s+of\s+(.+?)(?:\.|,|$)/i);
+            if (divisionMatch) {
+                const parentName = this.normalizeVendorName(divisionMatch[1]);
+                if (parentName === normalizedCandidate || normalizedCandidate.includes(parentName) || parentName.includes(normalizedCandidate)) {
+                    finalScore = 0.95;
+                    matchReason = 'DIVISION_OF_PATTERN';
+                }
+            }
 
-            // DEBUG: Log detailed scoring (only for top candidates to reduce log volume)
+            // CHECK 2: Candidate name is a substring of search (or vice versa)
+            // "Xplore Inc" in "Xplore Business, a division of Xplore Inc" should match highly
+            if (finalScore === 0 && normalizedCandidate.length >= 4) {
+                if (normalizedSearch.includes(normalizedCandidate)) {
+                    // Candidate is contained in search - strong signal
+                    const coverageRatio = normalizedCandidate.length / normalizedSearch.length;
+                    finalScore = Math.max(0.85, coverageRatio);
+                    matchReason = 'CANDIDATE_SUBSTRING_OF_SEARCH';
+                } else if (normalizedCandidate.includes(normalizedSearch)) {
+                    // Search is contained in candidate
+                    const coverageRatio = normalizedSearch.length / normalizedCandidate.length;
+                    finalScore = Math.max(0.80, coverageRatio);
+                    matchReason = 'SEARCH_SUBSTRING_OF_CANDIDATE';
+                }
+            }
+
+            // CHECK 3: All candidate tokens found in search
+            // If candidate is "Xplore" and search contains "xplore", that's a strong match
+            if (finalScore === 0 && candidateTokens.length > 0) {
+                const candidateTokensInSearch = candidateTokens.filter(ct =>
+                    searchTokens.some(st => st === ct || st.includes(ct) || ct.includes(st))
+                ).length;
+
+                if (candidateTokensInSearch === candidateTokens.length) {
+                    // ALL candidate tokens found in search
+                    // Score based on how specific the candidate is
+                    const specificity = candidateTokens.length / Math.max(searchTokens.length, 1);
+                    finalScore = 0.75 + (specificity * 0.20); // 0.75-0.95 range
+                    matchReason = 'ALL_CANDIDATE_TOKENS_FOUND';
+                }
+            }
+
+            // CHECK 4: Traditional scoring (fallback)
+            if (finalScore === 0) {
+                const tokenScore = this.calculateTokenScore(searchTokens, candidateTokens);
+                const levenshteinScore = this.calculateLevenshteinScore(normalizedSearch, normalizedCandidate);
+                const prefixScore = this.calculatePrefixScore(normalizedSearch, normalizedCandidate);
+
+                finalScore = (tokenScore * 0.45) + (levenshteinScore * 0.35) + (prefixScore * 0.20);
+                matchReason = 'TRADITIONAL_SCORING';
+            }
+
+            // DEBUG: Log detailed scoring
             log.audit('DEBUG.VendorMatcher.NameScore.Detail', JSON.stringify({
                 search: normalizedSearch,
                 candidate: normalizedCandidate,
                 searchTokens: searchTokens,
                 candidateTokens: candidateTokens,
-                tokenScore: tokenScore.toFixed(4),
-                levenshteinScore: levenshteinScore.toFixed(4),
-                prefixScore: prefixScore.toFixed(4),
+                matchReason: matchReason,
                 finalScore: finalScore.toFixed(4)
             }));
 
