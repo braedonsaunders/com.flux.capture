@@ -53,6 +53,27 @@
         formFields: null, // Dynamic form fields from NetSuite
         transactionType: 'vendorbill', // Default transaction type
         typeaheadTimeout: null, // Debounce timeout for typeahead search
+        accountsData: [], // Cached accounts for sublist dropdowns
+        itemsData: [], // Cached items for sublist dropdowns
+
+        // Document type ID to transaction type mapping
+        // 1: Invoice, 2: Receipt, 3: Credit Memo, 4: Expense Report, 5: Purchase Order
+        DOC_TYPE_TO_TRANSACTION: {
+            '1': 'vendorbill',
+            '2': 'vendorbill',      // Receipt - uses vendor bill form
+            '3': 'vendorcredit',    // Credit Memo
+            '4': 'expensereport',
+            '5': 'purchaseorder'
+        },
+
+        /**
+         * Get the transaction type for a document type ID
+         * @param {string|number} docType - Document type ID (1-5)
+         * @returns {string} Transaction type (vendorbill, expensereport, etc.)
+         */
+        getTransactionType: function(docType) {
+            return this.DOC_TYPE_TO_TRANSACTION[String(docType)] || 'vendorbill';
+        },
 
         // ==========================================
         // INITIALIZATION
@@ -66,6 +87,9 @@
             this.currentPage = 1;
             this.lineItems = [];
             this.formFields = null;
+            this.transactionType = 'vendorbill'; // Reset to default, will be set from document
+            this.accountsData = [];
+            this.itemsData = [];
             this.isLoading = true;
 
             // Restore shared queue state if available (prevents flicker on navigation)
@@ -189,25 +213,32 @@
             this.isLoading = true;
             this.showLoadingState();
 
-            // Load document, form schema, accounts, and items in parallel
-            // Using formschema for complete tab/group/field structure
-            Promise.all([
-                API.get('document', { id: this.docId }),
-                API.get('formschema', { transactionType: this.transactionType }),
-                API.get('accounts', { accountType: 'Expense' }),
-                API.get('items', {})
-            ])
-                .then(function(results) {
-                    var data = results[0];
-                    var formSchemaData = results[1];
-                    var accountsData = results[2] || [];
-                    var itemsData = results[3] || [];
-
+            // First load the document to get its type, then load form schema for that type
+            API.get('document', { id: this.docId })
+                .then(function(data) {
                     self.data = data;
                     self.lineItems = data.lineItems || [];
                     self.fieldConfidences = data.fieldConfidences || {};
                     self.totalPages = data.pageCount || 1;
+
+                    // Derive transaction type from document's documentType
+                    self.transactionType = self.getTransactionType(data.documentType);
+
+                    // Now load form schema for the correct transaction type, plus accounts and items
+                    return Promise.all([
+                        API.get('formschema', { transactionType: self.transactionType }),
+                        API.get('accounts', { accountType: 'Expense' }),
+                        API.get('items', {})
+                    ]);
+                })
+                .then(function(results) {
+                    var formSchemaData = results[0];
+                    var accountsData = results[1] || [];
+                    var itemsData = results[2] || [];
+
                     self.formFields = formSchemaData; // Now contains layout, config, etc.
+                    self.accountsData = accountsData; // Cache for document type changes
+                    self.itemsData = itemsData; // Cache for document type changes
 
                     // Inject accounts into expense sublist 'account' field
                     // Inject items into item sublist 'item' field
@@ -2545,22 +2576,58 @@
             this.data.documentType = newType;
             this.data.documentTypeText = newTypeText;
 
-            // Update UI immediately
+            // Update UI immediately - badge text
             var badgeText = el('#doc-type-badge .badge-text');
             if (badgeText) badgeText.textContent = newTypeText;
+
+            // Update dropdown selected state
+            var options = document.querySelectorAll('.doc-type-option');
+            options.forEach(function(opt) {
+                opt.classList.toggle('selected', opt.dataset.type === String(newType));
+            });
 
             // Mark as changed
             this.changes['documentType'] = newType;
             this.markUnsaved();
 
-            // Show loading while we reload form config
-            UI.toast('Loading ' + newTypeText + ' form...', 'info');
+            // Derive the new transaction type
+            var newTransactionType = this.getTransactionType(newType);
 
-            // Re-render the extraction form with new document type form
-            // Note: renderExtractionForm() already calls bindFormEvents() which handles sublist events
-            this.renderExtractionForm();
-            this.updateApplyAllButton();
-            this.bindBodyFieldTypeahead();
+            // If transaction type is changing, we need to reload the form schema
+            if (newTransactionType !== this.transactionType) {
+                this.transactionType = newTransactionType;
+
+                // Show loading state
+                this.showLoadingState();
+                UI.toast('Loading ' + newTypeText + ' form...', 'info');
+
+                // Fetch the new form schema
+                API.get('formschema', { transactionType: newTransactionType })
+                    .then(function(formSchemaData) {
+                        self.formFields = formSchemaData;
+
+                        // Re-inject accounts and items into the new form schema
+                        self.injectSublistOptions(self.accountsData, self.itemsData);
+
+                        // Re-render the extraction form with new document type form
+                        self.renderExtractionForm();
+                        self.updateApplyAllButton();
+                        self.bindBodyFieldTypeahead();
+
+                        UI.toast(newTypeText + ' form loaded', 'success');
+                    })
+                    .catch(function(err) {
+                        console.error('[Review] Failed to load form schema:', err);
+                        UI.toast('Failed to load ' + newTypeText + ' form', 'error');
+                        // Still render with existing form fields
+                        self.renderExtractionForm();
+                    });
+            } else {
+                // Same transaction type, just re-render (e.g., Invoice and Receipt both use vendorbill)
+                this.renderExtractionForm();
+                this.updateApplyAllButton();
+                this.bindBodyFieldTypeahead();
+            }
         },
 
         goToNextDocument: function() {
