@@ -35,6 +35,8 @@ define(['N/log', 'N/record', 'N/query', 'N/runtime', '../FC_Debug'], function(lo
 
         /**
          * Learn from a user correction
+         * v2.0: Enhanced logging and type tracking for transparency
+         *
          * @param {Object} correction - Correction data
          * @param {string} correction.field - Field that was corrected
          * @param {*} correction.original - Original extracted value
@@ -42,45 +44,70 @@ define(['N/log', 'N/record', 'N/query', 'N/runtime', '../FC_Debug'], function(lo
          * @param {number} correction.documentId - Document record ID
          * @param {number} correction.vendorId - Vendor ID (if known)
          * @param {Object} context - Additional context
-         * @returns {Object} Learning result
+         * @returns {Object} Learning result with type indicator
          */
         learn(correction, context = {}) {
             if (!correction || !correction.field) {
-                return { success: false, reason: 'Invalid correction data' };
+                log.error('CorrectionLearner.learn', 'Invalid correction data - missing field');
+                return { success: false, reason: 'Invalid correction data', type: null };
             }
 
-            fcDebug.debug('CorrectionLearner.learn', {
+            log.audit('CorrectionLearner.learn', {
                 field: correction.field,
-                original: correction.original,
-                corrected: correction.corrected,
-                vendorId: correction.vendorId
+                original: typeof correction.original === 'object' ? JSON.stringify(correction.original) : correction.original,
+                corrected: typeof correction.corrected === 'object' ? JSON.stringify(correction.corrected) : correction.corrected,
+                vendorId: correction.vendorId,
+                documentId: correction.documentId
             });
 
             try {
+                let result;
+                let learningType;
+
                 switch (correction.field) {
                     case 'vendor':
                     case 'vendorName':
-                        return this.learnVendorAlias(correction, context);
+                        learningType = LearningType.VENDOR_ALIAS;
+                        result = this.learnVendorAlias(correction, context);
+                        break;
 
                     case 'invoiceDate':
                     case 'dueDate':
-                        return this.learnDateFormat(correction, context);
+                        learningType = LearningType.DATE_FORMAT;
+                        result = this.learnDateFormat(correction, context);
+                        break;
 
                     case 'totalAmount':
                     case 'subtotal':
                     case 'taxAmount':
-                        return this.learnAmountFormat(correction, context);
+                        learningType = LearningType.AMOUNT_FORMAT;
+                        result = this.learnAmountFormat(correction, context);
+                        break;
 
                     case 'lineItem.account':
                     case 'account':
-                        return this.learnAccountMapping(correction, context);
+                        learningType = LearningType.ACCOUNT_MAPPING;
+                        result = this.learnAccountMapping(correction, context);
+                        break;
 
                     default:
-                        return this.learnFieldPattern(correction, context);
+                        learningType = LearningType.FIELD_PATTERN;
+                        result = this.learnFieldPattern(correction, context);
                 }
+
+                // Add type to result for tracking
+                result.type = learningType;
+
+                if (result.success) {
+                    log.audit('CorrectionLearner.learn', `Successfully learned ${learningType} pattern`);
+                } else {
+                    log.debug('CorrectionLearner.learn', `Learning ${learningType} failed: ${result.reason}`);
+                }
+
+                return result;
             } catch (e) {
-                log.error('CorrectionLearner.learn', e.message);
-                return { success: false, reason: e.message };
+                log.error('CorrectionLearner.learn', { message: e.message, stack: e.stack });
+                return { success: false, reason: e.message, type: null };
             }
         }
 
@@ -119,31 +146,43 @@ define(['N/log', 'N/record', 'N/query', 'N/runtime', '../FC_Debug'], function(lo
 
         /**
          * Learn date format preference for vendor
+         * v2.0: More robust - handles string dates, optional vendorId
          */
         learnDateFormat(correction, context) {
             const vendorId = correction.vendorId;
-            if (!vendorId) {
-                return { success: false, reason: 'Vendor ID required for date format learning' };
-            }
 
             // Analyze the correction to determine format
             const originalStr = String(correction.original || '');
-            const correctedDate = correction.corrected;
+            let correctedDate = correction.corrected;
 
-            if (!correctedDate || !(correctedDate instanceof Date)) {
+            // Convert string to Date if needed
+            if (typeof correctedDate === 'string') {
+                try {
+                    correctedDate = new Date(correctedDate);
+                } catch (e) {
+                    fcDebug.debug('CorrectionLearner.learnDateFormat', `Failed to parse date string: ${correctedDate}`);
+                }
+            }
+
+            if (!correctedDate || !(correctedDate instanceof Date) || isNaN(correctedDate.getTime())) {
+                fcDebug.debug('CorrectionLearner.learnDateFormat', 'Invalid corrected date');
                 return { success: false, reason: 'Invalid corrected date' };
             }
 
             // Determine which format was intended
             const format = this.inferDateFormat(originalStr, correctedDate);
             if (!format) {
+                fcDebug.debug('CorrectionLearner.learnDateFormat', `Could not infer format from: original="${originalStr}", corrected="${correctedDate}"`);
                 return { success: false, reason: 'Could not infer date format' };
             }
 
+            // Use 'global' if no vendorId (can still learn patterns)
+            const configKey = vendorId ? `vendor_${vendorId}` : 'global_date_format';
+
             // Get existing or create new config
-            const existing = this.getConfig(LearningType.DATE_FORMAT, `vendor_${vendorId}`);
+            const existing = this.getConfig(LearningType.DATE_FORMAT, configKey);
             const data = existing?.data || {
-                vendorId: vendorId,
+                vendorId: vendorId || null,
                 format: null,
                 confidence: 0,
                 sampleCount: 0,
@@ -162,9 +201,16 @@ define(['N/log', 'N/record', 'N/query', 'N/runtime', '../FC_Debug'], function(lo
             });
             data.lastUpdated = new Date().toISOString();
 
+            log.audit('CorrectionLearner.learnDateFormat', {
+                format: format,
+                vendorId: vendorId,
+                configKey: configKey,
+                sampleCount: data.sampleCount
+            });
+
             return this.storeConfig({
                 type: LearningType.DATE_FORMAT,
-                key: `vendor_${vendorId}`,
+                key: configKey,
                 data: data,
                 existingId: existing?.id
             });
@@ -194,30 +240,33 @@ define(['N/log', 'N/record', 'N/query', 'N/runtime', '../FC_Debug'], function(lo
 
         /**
          * Learn amount format preference for vendor
+         * v2.0: More robust - optional vendorId, better logging
          */
         learnAmountFormat(correction, context) {
             const vendorId = correction.vendorId;
-            if (!vendorId) {
-                return { success: false, reason: 'Vendor ID required for amount format learning' };
-            }
 
             const originalStr = String(correction.original || '');
             const correctedAmount = parseFloat(correction.corrected);
 
             if (isNaN(correctedAmount)) {
+                fcDebug.debug('CorrectionLearner.learnAmountFormat', 'Invalid corrected amount');
                 return { success: false, reason: 'Invalid corrected amount' };
             }
 
             // Determine format: PERIOD decimal or COMMA decimal
             const format = this.inferAmountFormat(originalStr, correctedAmount);
             if (!format) {
+                fcDebug.debug('CorrectionLearner.learnAmountFormat', `Could not infer format from: original="${originalStr}", corrected=${correctedAmount}`);
                 return { success: false, reason: 'Could not infer amount format' };
             }
 
+            // Use 'global' if no vendorId
+            const configKey = vendorId ? `vendor_${vendorId}` : 'global_amount_format';
+
             // Get existing or create new config
-            const existing = this.getConfig(LearningType.AMOUNT_FORMAT, `vendor_${vendorId}`);
+            const existing = this.getConfig(LearningType.AMOUNT_FORMAT, configKey);
             const data = existing?.data || {
-                vendorId: vendorId,
+                vendorId: vendorId || null,
                 format: null,
                 confidence: 0,
                 sampleCount: 0
@@ -228,9 +277,16 @@ define(['N/log', 'N/record', 'N/query', 'N/runtime', '../FC_Debug'], function(lo
             data.sampleCount = (data.sampleCount || 0) + 1;
             data.lastUpdated = new Date().toISOString();
 
+            log.audit('CorrectionLearner.learnAmountFormat', {
+                format: format,
+                vendorId: vendorId,
+                configKey: configKey,
+                sampleCount: data.sampleCount
+            });
+
             return this.storeConfig({
                 type: LearningType.AMOUNT_FORMAT,
-                key: `vendor_${vendorId}`,
+                key: configKey,
                 data: data,
                 existingId: existing?.id
             });

@@ -216,7 +216,11 @@ define([
                                 tableCount: (layout.tables || []).length
                             },
                             signals: vendorMatch.signals || []
-                        }
+                        },
+                        // v2.0: Include extraction warnings for transparency
+                        extractionWarnings: extractionResult.extractionWarnings || [],
+                        skippedLineItems: extractionResult.skippedLineItems || [],
+                        lineItemWarnings: extractionResult.lineItemWarnings || []
                     }
                 };
 
@@ -476,6 +480,7 @@ define([
 
         /**
          * Perform intelligent extraction using semantic matching
+         * v2.0: Collects warnings from all extraction modules
          */
         _performIntelligentExtraction(rawResult, layout, options) {
             const fields = {
@@ -495,11 +500,13 @@ define([
 
             const fieldConfidences = {};
             const fieldCandidates = {};
+            const extractionWarnings = []; // Collect all warnings
 
             // Build context for extraction
             const extractionContext = {
                 vendorCountry: options.vendorCountry || null,
-                vendorLocale: options.vendorLocale || null
+                vendorLocale: options.vendorLocale || null,
+                learnedFormat: null // Will be set if vendor has learned format
             };
 
             // Get learned formats if we have a vendor
@@ -507,10 +514,12 @@ define([
                 const dateFormat = this.correctionLearner.getVendorDateFormat(options.vendorId);
                 const amountFormat = this.correctionLearner.getVendorAmountFormat(options.vendorId);
 
-                if (dateFormat) {
+                if (dateFormat && dateFormat.format) {
                     extractionContext.dateFormat = dateFormat.format;
+                    extractionContext.learnedFormat = dateFormat.format;
+                    fcDebug.debug('FC_Engine.extraction', `Using learned date format for vendor ${options.vendorId}: ${dateFormat.format}`);
                 }
-                if (amountFormat) {
+                if (amountFormat && amountFormat.format) {
                     extractionContext.amountFormat = amountFormat.format;
                 }
             }
@@ -552,11 +561,22 @@ define([
             }
 
             // Resolve best candidate for each field
-            for (const [fieldName, candidates] of Object.entries(fieldCandidates)) {
+            // IMPORTANT: Parse invoiceDate FIRST so it's available for dueDate validation
+            const fieldOrder = ['invoiceDate', 'dueDate', ...Object.keys(fieldCandidates).filter(f => f !== 'invoiceDate' && f !== 'dueDate')];
+
+            for (const fieldName of fieldOrder) {
+                const candidates = fieldCandidates[fieldName];
+                if (!candidates) continue;
+
                 const best = this.fieldMatcher.resolveMultipleCandidates(fieldName, candidates);
                 if (best) {
+                    // Update context with parsed invoiceDate for dueDate parsing
+                    if (fieldName === 'dueDate' && fields.invoiceDate) {
+                        extractionContext.invoiceDate = fields.invoiceDate;
+                    }
+
                     // Parse the value based on field type
-                    const parsedValue = this._parseFieldValue(fieldName, best.value, extractionContext);
+                    const parsedValue = this._parseFieldValue(fieldName, best.value, extractionContext, extractionWarnings);
 
                     if (parsedValue !== null && parsedValue !== undefined) {
                         fields[fieldName] = parsedValue;
@@ -567,6 +587,9 @@ define([
 
             // Extract line items from tables
             let lineItems = [];
+            let lineItemWarnings = [];
+            let skippedLineItems = [];
+
             if (rawResult.rawTables && rawResult.rawTables.length > 0) {
                 // Find the line items table (usually the largest)
                 const lineItemsTable = layout.lineItemsTable?.raw ||
@@ -578,6 +601,17 @@ define([
                 if (lineItemsTable) {
                     const tableResult = this.tableAnalyzer.analyze(lineItemsTable, extractionContext);
                     lineItems = tableResult.lineItems;
+
+                    // Collect TableAnalyzer warnings
+                    if (tableResult.warnings && tableResult.warnings.length > 0) {
+                        lineItemWarnings = tableResult.warnings;
+                        extractionWarnings.push(...tableResult.warnings);
+                    }
+
+                    // Track skipped items for visibility
+                    if (tableResult.skippedItems && tableResult.skippedItems.length > 0) {
+                        skippedLineItems = tableResult.skippedItems;
+                    }
                 }
             }
 
@@ -620,7 +654,11 @@ define([
                 pageCount: rawResult.pageCount,
                 // Include all raw extractions for flexible field suggestions
                 allExtractedFields: allExtractedFields,
-                fieldCandidates: fieldCandidates
+                fieldCandidates: fieldCandidates,
+                // v2.0: Include extraction warnings and skipped items
+                extractionWarnings: extractionWarnings,
+                skippedLineItems: skippedLineItems,
+                lineItemWarnings: lineItemWarnings
             };
         }
 
@@ -653,8 +691,9 @@ define([
 
         /**
          * Parse field value based on type with intelligent parsing
+         * v2.0: Collects warnings and returns structured result
          */
-        _parseFieldValue(fieldName, rawValue, context) {
+        _parseFieldValue(fieldName, rawValue, context, warningsArray) {
             if (!rawValue) return null;
 
             const value = String(rawValue).trim();
@@ -664,13 +703,28 @@ define([
                 const dateContext = {
                     vendorCountry: context.vendorCountry,
                     fieldType: fieldName,
-                    invoiceDate: fieldName === 'dueDate' ? context.invoiceDate : null
+                    invoiceDate: fieldName === 'dueDate' ? context.invoiceDate : null,
+                    learnedFormat: context.learnedFormat || context.dateFormat
                 };
 
                 // Check if this is relative date term (Net 30)
-                if (fieldName === 'dueDate' && /net\s*\d+/i.test(value) && context.invoiceDate) {
-                    const relative = this.dateParser.parseRelativeDate(value, context.invoiceDate);
-                    if (relative) return relative.date;
+                if (fieldName === 'dueDate' && /net\s*\d+/i.test(value)) {
+                    if (context.invoiceDate) {
+                        const relative = this.dateParser.parseRelativeDate(value, context.invoiceDate);
+                        if (relative) {
+                            return relative.date;
+                        }
+                    } else {
+                        // Add warning if we can't parse relative date without invoice date
+                        if (warningsArray) {
+                            warningsArray.push({
+                                type: 'relative_date_no_base',
+                                message: `Cannot calculate "${value}" without invoice date`,
+                                field: fieldName,
+                                rawValue: value
+                            });
+                        }
+                    }
                 }
 
                 // Use learned format if available
@@ -679,6 +733,24 @@ define([
                 }
 
                 const result = this.dateParser.parse(value, dateContext);
+
+                // Collect any date parsing warnings
+                if (warningsArray && result.warnings && result.warnings.length > 0) {
+                    result.warnings.forEach(w => {
+                        warningsArray.push({
+                            ...w,
+                            field: fieldName
+                        });
+                    });
+                }
+
+                // If date was corrected, log it
+                if (result.corrected) {
+                    fcDebug.debug('FC_Engine.parseFieldValue',
+                        `Date ${fieldName} corrected from ${result.originalInterpretation} to ${result.date}`
+                    );
+                }
+
                 return result.date;
             }
 
