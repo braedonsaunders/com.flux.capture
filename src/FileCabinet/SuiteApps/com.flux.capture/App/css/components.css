@@ -1160,6 +1160,70 @@
 /* ==========================================
    SETTINGS
    ========================================== */
+
+/* Settings Tabs Navigation */
+.settings-tabs-nav {
+    display: flex;
+    gap: var(--space-xs);
+    padding: 0 var(--space-xl);
+    margin-bottom: var(--space-lg);
+    border-bottom: 1px solid var(--border-color);
+    background: var(--surface-card);
+}
+
+.settings-nav-tab {
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
+    padding: var(--space-md) var(--space-lg);
+    background: none;
+    border: none;
+    border-bottom: 2px solid transparent;
+    color: var(--text-secondary);
+    font-size: var(--font-size-base);
+    font-weight: 500;
+    cursor: pointer;
+    transition: all var(--transition);
+    margin-bottom: -1px;
+}
+
+.settings-nav-tab:hover {
+    color: var(--text-primary);
+    background: var(--gray-50);
+}
+
+.settings-nav-tab.active {
+    color: var(--color-primary);
+    border-bottom-color: var(--color-primary);
+    background: none;
+}
+
+.settings-nav-tab i {
+    font-size: 16px;
+}
+
+/* Settings Tab Panels */
+.settings-tab-panel {
+    display: none;
+    padding: 0 var(--space-xl) var(--space-xl);
+    animation: settingsTabFadeIn 0.2s ease;
+}
+
+.settings-tab-panel.active {
+    display: block;
+}
+
+@keyframes settingsTabFadeIn {
+    from {
+        opacity: 0;
+        transform: translateY(8px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
 .settings-layout {
     display: grid;
     gap: var(--space-lg);
