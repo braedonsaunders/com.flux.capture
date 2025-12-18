@@ -1309,8 +1309,8 @@
             var isSelectField = this.isSelectField(fieldId) || fieldType === 'select' || fieldType === 'multiselect';
 
             // Build modal HTML
-            var modalHtml = '<div class="modal-backdrop" id="field-settings-modal">' +
-                '<div class="modal-content modal-sm">' +
+            var modalHtml = '<div class="modal-overlay" id="field-settings-modal">' +
+                '<div class="modal modal-sm">' +
                     '<div class="modal-header">' +
                         '<h3><i class="fas fa-cog"></i> Field Settings</h3>' +
                         '<button class="modal-close" id="close-field-settings">&times;</button>' +
@@ -1365,9 +1365,17 @@
             var cancelBtn = el('#cancel-field-settings');
             var saveBtn = el('#save-field-settings');
 
+            // Trigger visibility animation after DOM insert
+            requestAnimationFrame(function() {
+                modal.classList.add('visible');
+            });
+
             // Close modal handlers
             var closeModal = function() {
-                if (modal) modal.remove();
+                modal.classList.remove('visible');
+                setTimeout(function() {
+                    if (modal) modal.remove();
+                }, 200);
             };
 
             closeBtn.addEventListener('click', closeModal);

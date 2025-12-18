@@ -401,7 +401,7 @@ define([
             uploadedByName: docRecord.getText('custrecord_flux_uploaded_by'),
             createdDate: docRecord.getValue('custrecord_flux_created_date'),
             modifiedDate: docRecord.getValue('custrecord_flux_modified_date'),
-            confidence: Math.round((docRecord.getValue('custrecord_flux_confidence_score') || 0) * 100),
+            confidence: docRecord.getValue('custrecord_flux_confidence_score') || 0,
             vendor: docRecord.getValue('custrecord_flux_vendor'),
             vendorName: docRecord.getText('custrecord_flux_vendor'),
             vendorMatchConfidence: docRecord.getValue('custrecord_flux_vendor_match_confidence'),
