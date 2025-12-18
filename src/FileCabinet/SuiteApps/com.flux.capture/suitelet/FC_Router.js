@@ -398,7 +398,25 @@ define([
         var lineItems = JSON.parse(docRecord.getValue('custrecord_flux_line_items') || '[]');
         var anomalies = JSON.parse(docRecord.getValue('custrecord_flux_anomalies') || '[]');
         var extractedData = JSON.parse(docRecord.getValue('custrecord_flux_extracted_data') || '{}');
-        var formData = JSON.parse(docRecord.getValue('custrecord_flux_form_data') || 'null');
+
+        // Parse formData with error handling for legacy data (field may contain old raw text)
+        var formData = null;
+        var formDataRaw = docRecord.getValue('custrecord_flux_form_data');
+        if (formDataRaw) {
+            try {
+                formData = JSON.parse(formDataRaw);
+                // Validate it's actually our formData structure (has bodyFields or sublists)
+                if (formData && typeof formData === 'object' && (formData.bodyFields || formData.sublists)) {
+                    // Valid formData
+                } else {
+                    formData = null; // Not valid formData structure, treat as empty
+                }
+            } catch (e) {
+                // Field contains non-JSON data (legacy raw text), ignore it
+                formData = null;
+            }
+        }
+
         var status = docRecord.getValue('custrecord_flux_status');
 
         var document = {
