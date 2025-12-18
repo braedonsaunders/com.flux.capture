@@ -19,7 +19,7 @@
     var COMMANDS = [
         { id: 'approve', label: 'Approve current document', icon: 'fa-check', shortcut: 'A' },
         { id: 'approve-all-high', label: 'Approve all high confidence', icon: 'fa-check-double', shortcut: '⌘⇧A' },
-        { id: 'reject', label: 'Reject current document', icon: 'fa-times', shortcut: 'R' },
+        { id: 'delete', label: 'Delete current document', icon: 'fa-trash-can', shortcut: 'D' },
         { id: 'open', label: 'Open full review', icon: 'fa-expand', shortcut: '⏎' },
         { id: 'search', label: 'Search documents', icon: 'fa-search', shortcut: '/' },
         { id: 'upload', label: 'Upload new documents', icon: 'fa-cloud-arrow-up', shortcut: 'U' },
@@ -322,11 +322,14 @@
                             self.approveAllHighConfidence();
                         }
                         break;
-                    case 'r':
+                    case 'd':
                         if (!e.metaKey && !e.ctrlKey) {
                             e.preventDefault();
-                            self.rejectCurrentDocument();
-                        } else if (e.metaKey || e.ctrlKey) {
+                            self.deleteCurrentDocument();
+                        }
+                        break;
+                    case 'r':
+                        if (e.metaKey || e.ctrlKey) {
                             e.preventDefault();
                             self.loadData();
                         }
@@ -506,7 +509,7 @@
                     '<div class="row-actions">' +
                         '<button class="row-action btn-approve" data-action="approve" title="Approve (A)"><i class="fas fa-check"></i></button>' +
                         '<button class="row-action btn-open" data-action="open" title="Open (⏎)"><i class="fas fa-expand"></i></button>' +
-                        '<button class="row-action btn-reject" data-action="reject" title="Reject (R)"><i class="fas fa-times"></i></button>' +
+                        '<button class="row-action btn-delete" data-action="delete" title="Delete (D)"><i class="fas fa-trash-can"></i></button>' +
                     '</div>' +
                 '</div>';
 
@@ -643,8 +646,8 @@
                 case 'open':
                     Router.navigate('review', { docId: docId });
                     break;
-                case 'reject':
-                    this.rejectDocument(docId);
+                case 'delete':
+                    this.deleteDocument(docId);
                     break;
             }
         },
@@ -663,10 +666,10 @@
             }
         },
 
-        rejectCurrentDocument: function() {
+        deleteCurrentDocument: function() {
             var doc = this.filteredDocuments[this.focusedIndex];
             if (doc) {
-                this.rejectDocument(doc.id);
+                this.deleteDocument(doc.id);
             }
         },
 
@@ -702,19 +705,25 @@
                 });
         },
 
-        rejectDocument: function(docId) {
+        deleteDocument: function(docId) {
             var self = this;
 
-            UI.prompt('Rejection reason:').then(function(reason) {
-                if (!reason) return;
+            UI.confirm({
+                title: 'Delete Document',
+                message: 'Are you sure you want to delete this document? This action cannot be undone.',
+                confirmText: 'Delete',
+                cancelText: 'Cancel',
+                type: 'danger'
+            }).then(function(confirmed) {
+                if (!confirmed) return;
 
-                API.put('reject', { documentId: docId, reason: reason })
+                API.delete('document', { id: docId })
                     .then(function() {
                         self.streak = 0;
                         self.processedToday++;
                         localStorage.setItem('fc_processed_today', String(self.processedToday));
 
-                        UI.toast('Document rejected', 'success');
+                        UI.toast('Document deleted', 'success');
                         self.loadData();
                     })
                     .catch(function(err) {
@@ -849,8 +858,8 @@
                 case 'approve-all-high':
                     this.approveAllHighConfidence();
                     break;
-                case 'reject':
-                    this.rejectCurrentDocument();
+                case 'delete':
+                    this.deleteCurrentDocument();
                     break;
                 case 'open':
                     this.openCurrentDocument();
