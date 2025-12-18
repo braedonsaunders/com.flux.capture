@@ -101,6 +101,12 @@ define(['N/log'], function(log) {
                 ],
 
                 vendorName: [
+                    // OCI Document Understanding labels (highest priority)
+                    { pattern: /^vendor\s*name$/i, score: 1.0, zone: 'HEADER' },
+                    { pattern: /^vendor\s*name\s*logo$/i, score: 0.98, zone: 'HEADER' },
+                    { pattern: /^vendor\s*address\s*recipient$/i, score: 0.95, zone: 'HEADER' },
+                    { pattern: /^supplier\s*name$/i, score: 0.97, zone: 'HEADER' },
+                    // Traditional label patterns
                     { pattern: /^(from|bill\s*from|sold\s*by|vendor|supplier)$/i, score: 0.90, zone: 'HEADER' },
                     { pattern: /^company\s*name$/i, score: 0.85, zone: 'HEADER' },
                     { pattern: /^merchant$/i, score: 0.80, zone: 'HEADER' },
