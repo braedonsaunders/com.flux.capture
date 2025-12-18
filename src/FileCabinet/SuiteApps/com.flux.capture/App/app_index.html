@@ -714,35 +714,24 @@
                 <li class="nav-section-title">Overview</li>
                 <li class="nav-item">
                     <a href="#" class="nav-link active" data-route="dashboard">
-                        <i class="fas fa-chart-line"></i>
-                        <span>Dashboard</span>
+                        <i class="fas fa-gauge-high"></i>
+                        <span>Mission Control</span>
                     </a>
                 </li>
 
-                <li class="nav-section-title">Documents</li>
-                <li class="nav-item">
-                    <a href="#" class="nav-link" data-route="upload">
-                        <i class="fas fa-cloud-arrow-up"></i>
-                        <span>Upload</span>
-                    </a>
-                </li>
+                <li class="nav-section-title">Workflow</li>
                 <li class="nav-item">
                     <a href="#" class="nav-link" data-route="flow">
-                        <i class="fas fa-bolt"></i>
+                        <i class="fas fa-sparkles"></i>
                         <span>Flow</span>
-                        <span class="nav-badge" id="flow-badge" style="display:none;">0</span>
+                        <span class="nav-badge nav-badge-pulse" id="flow-processing-badge" style="display:none;">0</span>
                     </a>
                 </li>
                 <li class="nav-item">
                     <a href="#" class="nav-link" data-route="documents">
-                        <i class="fas fa-folder-open"></i>
-                        <span>All Documents</span>
-                    </a>
-                </li>
-                <li class="nav-item">
-                    <a href="#" class="nav-link" data-route="batch">
-                        <i class="fas fa-boxes-stacked"></i>
-                        <span>Batches</span>
+                        <i class="fas fa-inbox"></i>
+                        <span>Documents</span>
+                        <span class="nav-badge" id="documents-badge" style="display:none;">0</span>
                     </a>
                 </li>
 
@@ -836,43 +825,141 @@
          VIEW TEMPLATES
          ============================================ -->
 
-    <!-- DASHBOARD TEMPLATE -->
+    <!-- MISSION CONTROL TEMPLATE -->
     <script type="text/template" id="tpl-dashboard">
-        <div class="view-dashboard">
-            <header class="view-header">
-                <div class="header-content">
-                    <h1>Dashboard</h1>
-                    <p class="header-subtitle">Real-time document processing intelligence</p>
+        <div class="view-mission-control">
+            <!-- Mission Control Header -->
+            <header class="mc-header">
+                <div class="mc-header-left">
+                    <h1 class="mc-title">Mission Control</h1>
+                    <span class="mc-greeting" id="mc-greeting">Good morning</span>
                 </div>
-                <div class="header-actions">
-                    <button class="btn btn-primary btn-lg" id="btn-new-upload">
-                        <i class="fas fa-plus"></i> New Upload
+                <div class="mc-header-right">
+                    <button class="btn btn-primary btn-glow" id="btn-go-to-flow">
+                        <i class="fas fa-sparkles"></i> Upload Documents
                     </button>
                 </div>
             </header>
 
-            <div class="kpi-row" id="kpi-container">
-                <!-- KPIs render here -->
+            <!-- KPI Metrics Row -->
+            <div class="mc-metrics" id="mc-metrics">
+                <div class="mc-metric-card">
+                    <div class="metric-value" id="metric-to-review">0</div>
+                    <div class="metric-label">To Review</div>
+                    <div class="metric-trend" id="trend-to-review"></div>
+                </div>
+                <div class="mc-metric-card">
+                    <div class="metric-value" id="metric-processing">0</div>
+                    <div class="metric-label">Processing</div>
+                    <div class="metric-sublabel" id="metric-processing-eta"></div>
+                </div>
+                <div class="mc-metric-card">
+                    <div class="metric-value" id="metric-pending-amount">$0</div>
+                    <div class="metric-label">Pending Amount</div>
+                    <div class="metric-trend" id="trend-pending"></div>
+                </div>
+                <div class="mc-metric-card">
+                    <div class="metric-value" id="metric-accuracy">0%</div>
+                    <div class="metric-label">AI Accuracy</div>
+                    <div class="metric-trend positive" id="trend-accuracy"></div>
+                </div>
             </div>
 
-            <div class="dashboard-grid">
-                <div class="card card-lg">
-                    <div class="card-header">
-                        <div class="card-title"><i class="fas fa-clock-rotate-left"></i> Recent Activity</div>
-                        <a href="#" class="card-action" data-route="queue">View All</a>
+            <!-- Main Grid -->
+            <div class="mc-grid">
+                <!-- Left Column -->
+                <div class="mc-grid-left">
+                    <!-- Processing Velocity Chart -->
+                    <div class="mc-card">
+                        <div class="mc-card-header">
+                            <span class="mc-card-title"><i class="fas fa-chart-line"></i> Processing Velocity</span>
+                            <span class="mc-card-subtitle">Last 24 hours</span>
+                        </div>
+                        <div class="mc-card-body">
+                            <div class="velocity-chart" id="velocity-chart">
+                                <div class="velocity-bars" id="velocity-bars"></div>
+                                <div class="velocity-stats">
+                                    <div class="velocity-stat">
+                                        <span class="stat-label">Peak</span>
+                                        <span class="stat-value" id="velocity-peak">0/hr</span>
+                                    </div>
+                                    <div class="velocity-stat">
+                                        <span class="stat-label">Current</span>
+                                        <span class="stat-value" id="velocity-current">0/hr</span>
+                                    </div>
+                                    <div class="velocity-stat">
+                                        <span class="stat-label">Today</span>
+                                        <span class="stat-value" id="velocity-today">0</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
                     </div>
-                    <div class="card-body" id="activity-container">
-                        <!-- Activity list renders here -->
+
+                    <!-- Queue Composition -->
+                    <div class="mc-card">
+                        <div class="mc-card-header">
+                            <span class="mc-card-title"><i class="fas fa-chart-pie"></i> Queue Composition</span>
+                        </div>
+                        <div class="mc-card-body">
+                            <div class="queue-composition" id="queue-composition">
+                                <div class="composition-bar">
+                                    <div class="composition-segment high" id="comp-high" style="width:0%"></div>
+                                    <div class="composition-segment medium" id="comp-medium" style="width:0%"></div>
+                                    <div class="composition-segment low" id="comp-low" style="width:0%"></div>
+                                </div>
+                                <div class="composition-legend">
+                                    <div class="legend-item"><span class="legend-dot high"></span> High Confidence <span id="comp-high-pct">0%</span></div>
+                                    <div class="legend-item"><span class="legend-dot medium"></span> Medium <span id="comp-medium-pct">0%</span></div>
+                                    <div class="legend-item"><span class="legend-dot low"></span> Needs Review <span id="comp-low-pct">0%</span></div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Top Vendors -->
+                    <div class="mc-card">
+                        <div class="mc-card-header">
+                            <span class="mc-card-title"><i class="fas fa-building"></i> Top Vendors</span>
+                            <span class="mc-card-subtitle">This month</span>
+                        </div>
+                        <div class="mc-card-body">
+                            <div class="top-vendors" id="top-vendors">
+                                <!-- Vendors render here -->
+                            </div>
+                        </div>
                     </div>
                 </div>
 
-                <div class="card">
-                    <div class="card-header">
-                        <div class="card-title"><i class="fas fa-triangle-exclamation"></i> Alerts</div>
-                        <span class="alert-count" id="alert-count">0</span>
+                <!-- Right Column -->
+                <div class="mc-grid-right">
+                    <!-- Anomaly Radar -->
+                    <div class="mc-card mc-card-alert">
+                        <div class="mc-card-header">
+                            <span class="mc-card-title"><i class="fas fa-radar"></i> Anomaly Radar</span>
+                            <span class="anomaly-count" id="anomaly-count">0</span>
+                        </div>
+                        <div class="mc-card-body">
+                            <div class="anomaly-list" id="anomaly-list">
+                                <!-- Anomalies render here -->
+                            </div>
+                            <button class="btn btn-ghost btn-sm btn-block" id="btn-view-anomalies" style="display:none;">
+                                View All Anomalies <i class="fas fa-arrow-right"></i>
+                            </button>
+                        </div>
                     </div>
-                    <div class="card-body" id="alerts-container">
-                        <!-- Alerts render here -->
+
+                    <!-- Activity Stream -->
+                    <div class="mc-card mc-card-activity">
+                        <div class="mc-card-header">
+                            <span class="mc-card-title"><i class="fas fa-stream"></i> Activity Stream</span>
+                            <span class="mc-card-subtitle">Real-time</span>
+                        </div>
+                        <div class="mc-card-body">
+                            <div class="activity-stream" id="activity-stream">
+                                <!-- Activity items render here -->
+                            </div>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -1088,119 +1175,157 @@
         </div>
     </script>
 
-    <!-- BATCH TEMPLATE -->
-    <script type="text/template" id="tpl-batch">
-        <div class="view-batch">
-            <header class="view-header">
-                <div class="header-content">
-                    <h1>Batches</h1>
-                    <p class="header-subtitle">Upload batches and their document progress</p>
-                </div>
-                <div class="header-actions">
-                    <button class="btn btn-primary" id="btn-new-batch">
-                        <i class="fas fa-plus"></i> New Upload
-                    </button>
-                </div>
-            </header>
 
-            <div class="card">
-                <div class="card-header">
-                    <div class="card-title"><i class="fas fa-boxes-stacked"></i> All Batches</div>
-                </div>
-                <div class="card-body">
-                    <div class="data-table">
-                        <table>
-                            <thead>
-                                <tr>
-                                    <th>Batch</th>
-                                    <th>Documents</th>
-                                    <th>Progress</th>
-                                    <th>Status</th>
-                                    <th>Created</th>
-                                    <th class="col-actions">Actions</th>
-                                </tr>
-                            </thead>
-                            <tbody id="batch-table-body">
-                                <!-- Batch rows render here -->
-                            </tbody>
-                        </table>
-                    </div>
-                </div>
-            </div>
-        </div>
-    </script>
-
-    <!-- DOCUMENT RAIL TEMPLATE -->
+    <!-- FLOW TEMPLATE - Upload + Theatrical Processing -->
     <script type="text/template" id="tpl-rail">
-        <div class="view-rail">
-            <!-- Top toolbar -->
-            <div class="rail-toolbar">
-                <div class="toolbar-left">
-                    <button class="btn btn-primary" id="btn-upload">
-                        <i class="fas fa-cloud-arrow-up"></i> Upload
-                    </button>
-                    <div class="rail-stats" id="rail-stats"></div>
-                </div>
-                <div class="toolbar-center">
-                    <div class="search-bar">
-                        <i class="fas fa-search"></i>
-                        <input type="text" id="rail-search" placeholder="Search documents by vendor, invoice #, amount...">
+        <div class="view-flow">
+            <!-- Ambient particles background -->
+            <div class="flow-particles" id="flow-particles"></div>
+
+            <!-- Flow Header Stats -->
+            <div class="flow-header">
+                <div class="flow-stats">
+                    <div class="flow-stat" id="stat-incoming">
+                        <i class="fas fa-inbox"></i>
+                        <span class="stat-value">0</span>
+                        <span class="stat-label">Incoming</span>
+                    </div>
+                    <div class="flow-stat processing" id="stat-processing">
+                        <i class="fas fa-cog fa-spin"></i>
+                        <span class="stat-value">0</span>
+                        <span class="stat-label">Processing</span>
+                    </div>
+                    <div class="flow-stat ready" id="stat-ready">
+                        <i class="fas fa-check-circle"></i>
+                        <span class="stat-value">0</span>
+                        <span class="stat-label">Ready</span>
                     </div>
                 </div>
-                <div class="toolbar-right">
-                    <button class="btn btn-ghost" id="btn-flow-mode">
-                        <i class="fas fa-bolt"></i> Start Review
+                <div class="flow-actions">
+                    <button class="btn btn-secondary" id="btn-go-to-documents">
+                        <i class="fas fa-inbox"></i> Go to Documents
                     </button>
                 </div>
             </div>
 
-            <!-- Main rail area -->
-            <div class="rail-main">
-                <!-- Document zones (horizontal rail) -->
-                <div class="rail-zones">
-                    <div class="zone" id="zone-incoming">
-                        <div class="zone-header">
-                            <span class="zone-icon"><i class="fas fa-inbox"></i></span>
-                            <span class="zone-label">Incoming</span>
-                            <span class="zone-count">0</span>
+            <!-- Main Flow Content -->
+            <div class="flow-main">
+                <!-- Upload Portal Stage -->
+                <div class="flow-stage" id="stage-upload">
+                    <div class="upload-portal" id="upload-portal">
+                        <div class="portal-glow"></div>
+                        <div class="portal-ring portal-ring-1"></div>
+                        <div class="portal-ring portal-ring-2"></div>
+                        <div class="portal-ring portal-ring-3"></div>
+                        <div class="portal-center">
+                            <div class="portal-icon">
+                                <i class="fas fa-cloud-arrow-up"></i>
+                            </div>
+                            <div class="portal-text">
+                                <h3>Drop files here</h3>
+                                <p>or click to browse</p>
+                            </div>
                         </div>
-                        <div class="zone-cards"></div>
+                        <input type="file" id="flow-file-input" multiple accept=".pdf,.png,.jpg,.jpeg,.tiff,.tif" hidden>
                     </div>
-
-                    <div class="zone" id="zone-extracting">
-                        <div class="zone-header">
-                            <span class="zone-icon"><i class="fas fa-microchip"></i></span>
-                            <span class="zone-label">Extracting</span>
-                            <span class="zone-count">0</span>
-                        </div>
-                        <div class="zone-cards"></div>
+                    <div class="upload-formats">
+                        <span class="format-pill">PDF</span>
+                        <span class="format-pill">PNG</span>
+                        <span class="format-pill">JPG</span>
+                        <span class="format-pill">TIFF</span>
                     </div>
-
-                    <div class="zone zone-primary" id="zone-review">
-                        <div class="zone-header">
-                            <span class="zone-icon"><i class="fas fa-eye"></i></span>
-                            <span class="zone-label">Review</span>
-                            <span class="zone-count">0</span>
-                        </div>
-                        <div class="zone-cards"></div>
+                    <div class="upload-type-selector" id="flow-type-selector">
+                        <label class="type-pill active">
+                            <input type="radio" name="flowDocType" value="auto" checked>
+                            <i class="fas fa-wand-magic-sparkles"></i>
+                            <span>Auto</span>
+                        </label>
+                        <label class="type-pill">
+                            <input type="radio" name="flowDocType" value="vendorbill">
+                            <i class="fas fa-file-invoice-dollar"></i>
+                            <span>Bill</span>
+                        </label>
+                        <label class="type-pill">
+                            <input type="radio" name="flowDocType" value="expensereport">
+                            <i class="fas fa-receipt"></i>
+                            <span>Expense</span>
+                        </label>
                     </div>
+                </div>
 
-                    <div class="zone zone-done" id="zone-done">
-                        <div class="zone-header">
-                            <span class="zone-icon"><i class="fas fa-check-double"></i></span>
-                            <span class="zone-label">Done</span>
-                            <span class="zone-count">0</span>
+                <!-- Processing Theater Stage -->
+                <div class="flow-stage" id="stage-processing" style="display:none;">
+                    <div class="processing-theater">
+                        <!-- Queue Column -->
+                        <div class="theater-column queue-column">
+                            <div class="column-header">
+                                <i class="fas fa-layer-group"></i> Queue
+                                <span class="column-count" id="queue-count">0</span>
+                            </div>
+                            <div class="column-items" id="queue-items"></div>
                         </div>
-                        <div class="zone-cards"></div>
+
+                        <!-- Processing Column - Center Stage -->
+                        <div class="theater-column processing-column">
+                            <div class="column-header">
+                                <i class="fas fa-microchip"></i> Extracting
+                            </div>
+                            <div class="processing-visualizer" id="processing-visualizer">
+                                <div class="visualizer-empty">
+                                    <i class="fas fa-cube"></i>
+                                    <span>Waiting for documents...</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Ready Column -->
+                        <div class="theater-column ready-column">
+                            <div class="column-header">
+                                <i class="fas fa-check-double"></i> Ready
+                                <span class="column-count" id="ready-count">0</span>
+                            </div>
+                            <div class="column-items" id="ready-items"></div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Completion Stage -->
+                <div class="flow-stage" id="stage-complete" style="display:none;">
+                    <div class="completion-display">
+                        <div class="completion-icon">
+                            <i class="fas fa-check-circle"></i>
+                        </div>
+                        <h2 class="completion-title">All Documents Processed!</h2>
+                        <div class="completion-stats">
+                            <div class="comp-stat">
+                                <span class="comp-value" id="comp-total">0</span>
+                                <span class="comp-label">Processed</span>
+                            </div>
+                            <div class="comp-stat high">
+                                <span class="comp-value" id="comp-high-conf">0</span>
+                                <span class="comp-label">High Confidence</span>
+                            </div>
+                            <div class="comp-stat">
+                                <span class="comp-value" id="comp-needs-review">0</span>
+                                <span class="comp-label">Need Review</span>
+                            </div>
+                        </div>
+                        <div class="completion-actions">
+                            <button class="btn btn-primary btn-lg btn-glow" id="btn-review-documents">
+                                <i class="fas fa-inbox"></i> Review Documents
+                            </button>
+                            <button class="btn btn-secondary" id="btn-upload-more">
+                                <i class="fas fa-plus"></i> Upload More
+                            </button>
+                        </div>
                     </div>
                 </div>
             </div>
 
-            <!-- Flow mode overlay (hidden by default) -->
-            <div class="flow-mode-overlay" id="flow-mode-overlay">
-                <div class="flow-progress">
-                    <div class="flow-progress-bar" id="flow-progress-bar"></div>
-                </div>
+            <!-- Drop More Zone (visible during processing) -->
+            <div class="drop-more-zone" id="drop-more-zone" style="display:none;">
+                <i class="fas fa-plus-circle"></i>
+                <span>Drop more files to add to queue</span>
             </div>
         </div>
     </script>
@@ -1324,74 +1449,160 @@
         </div>
     </script>
 
-    <!-- DOCUMENTS LIST TEMPLATE -->
+    <!-- DOCUMENTS TEMPLATE - Inbox Zero + Command Mode -->
     <script type="text/template" id="tpl-documents">
-        <div class="view-documents">
-            <header class="view-header">
-                <div class="header-content">
-                    <h1>All Documents</h1>
-                    <p class="header-subtitle">Manage and review all captured documents</p>
+        <div class="view-documents-inbox">
+            <!-- Progress Header -->
+            <div class="inbox-header">
+                <div class="inbox-progress">
+                    <div class="progress-left">
+                        <span class="inbox-icon"><i class="fas fa-inbox"></i></span>
+                        <span class="inbox-count" id="inbox-count">0</span>
+                        <span class="inbox-label">to review</span>
+                    </div>
+                    <div class="progress-center">
+                        <div class="progress-track">
+                            <div class="progress-fill" id="progress-fill" style="width:0%"></div>
+                        </div>
+                        <span class="progress-text" id="progress-text">0% complete today</span>
+                    </div>
+                    <div class="progress-right">
+                        <span class="streak-badge" id="streak-badge" style="display:none;">
+                            <i class="fas fa-fire"></i>
+                            <span id="streak-count">0</span>
+                        </span>
+                    </div>
                 </div>
-                <div class="header-actions">
-                    <button class="btn btn-danger" id="btn-delete-selected" disabled>
-                        <i class="fas fa-trash"></i> Delete Selected
-                    </button>
-                    <button class="btn btn-secondary" id="btn-refresh">
+                <div class="inbox-actions">
+                    <button class="btn btn-ghost" id="btn-refresh" title="Refresh">
                         <i class="fas fa-sync-alt"></i>
                     </button>
-                    <button class="btn btn-primary" id="btn-upload-new">
-                        <i class="fas fa-plus"></i> Upload
+                    <button class="btn btn-primary" id="btn-go-to-flow">
+                        <i class="fas fa-sparkles"></i> Upload
                     </button>
                 </div>
-            </header>
+            </div>
 
-            <div class="filter-bar">
-                <div class="filter-tabs" id="status-filter">
-                    <button class="filter-tab active" data-status="">All</button>
-                    <button class="filter-tab" data-status="1">Pending</button>
-                    <button class="filter-tab" data-status="2">Processing</button>
-                    <button class="filter-tab" data-status="4">Needs Review</button>
-                    <button class="filter-tab" data-status="6">Completed</button>
-                    <button class="filter-tab" data-status="5">Rejected</button>
-                    <button class="filter-tab" data-status="7">Errors</button>
-                </div>
-                <div class="filter-search">
+            <!-- Confidence Triage Tabs -->
+            <div class="triage-tabs" id="triage-tabs">
+                <button class="triage-tab active" data-filter="review">
+                    <span class="tab-label">To Review</span>
+                    <span class="tab-count" id="tab-count-review">0</span>
+                </button>
+                <button class="triage-tab" data-filter="high">
+                    <span class="tab-dot high"></span>
+                    <span class="tab-label">High</span>
+                    <span class="tab-count" id="tab-count-high">0</span>
+                </button>
+                <button class="triage-tab" data-filter="medium">
+                    <span class="tab-dot medium"></span>
+                    <span class="tab-label">Medium</span>
+                    <span class="tab-count" id="tab-count-medium">0</span>
+                </button>
+                <button class="triage-tab" data-filter="low">
+                    <span class="tab-dot low"></span>
+                    <span class="tab-label">Low</span>
+                    <span class="tab-count" id="tab-count-low">0</span>
+                </button>
+                <button class="triage-tab" data-filter="flagged">
+                    <i class="fas fa-flag"></i>
+                    <span class="tab-label">Flagged</span>
+                    <span class="tab-count" id="tab-count-flagged">0</span>
+                </button>
+                <div class="triage-divider"></div>
+                <button class="triage-tab" data-filter="completed">
+                    <span class="tab-label">Completed</span>
+                    <span class="tab-count" id="tab-count-completed">0</span>
+                </button>
+                <button class="triage-tab" data-filter="all">
+                    <span class="tab-label">All</span>
+                </button>
+                <div class="triage-search">
                     <i class="fas fa-search"></i>
-                    <input type="text" id="doc-search" placeholder="Search documents...">
+                    <input type="text" id="doc-search" placeholder="Search... (/)">
                 </div>
             </div>
 
-            <div class="card">
-                <div class="card-body">
-                    <div class="data-table">
-                        <table>
-                            <thead>
-                                <tr>
-                                    <th class="col-check"><input type="checkbox" id="select-all"></th>
-                                    <th>Document</th>
-                                    <th>Vendor</th>
-                                    <th>Invoice #</th>
-                                    <th class="col-amount">Amount</th>
-                                    <th class="col-confidence">Confidence</th>
-                                    <th class="col-status">Status</th>
-                                    <th>Created</th>
-                                    <th class="col-actions">Actions</th>
-                                </tr>
-                            </thead>
-                            <tbody id="documents-table-body">
-                                <!-- Documents render here -->
-                            </tbody>
-                        </table>
+            <!-- AI Quick Actions Panel -->
+            <div class="quick-actions-panel" id="quick-actions-panel" style="display:none;">
+                <div class="quick-action-card approve-all" id="qa-approve-high">
+                    <div class="qa-icon"><i class="fas fa-check-double"></i></div>
+                    <div class="qa-content">
+                        <div class="qa-title">Approve <span id="qa-high-count">0</span> High Confidence</div>
+                        <div class="qa-subtitle">$<span id="qa-high-total">0</span> total</div>
                     </div>
-                    <div class="empty-state" id="empty-state" style="display:none;">
-                        <i class="fas fa-folder-open"></i>
-                        <h4>No documents found</h4>
-                        <p>Upload documents to get started</p>
+                    <div class="qa-shortcut">⌘⇧A</div>
+                </div>
+                <div class="quick-action-card group-action" id="qa-vendor-group" style="display:none;">
+                    <div class="qa-icon"><i class="fas fa-layer-group"></i></div>
+                    <div class="qa-content">
+                        <div class="qa-title"><span id="qa-group-count">0</span> from <span id="qa-group-vendor">Vendor</span></div>
+                        <div class="qa-subtitle">Review as group</div>
+                    </div>
+                    <div class="qa-shortcut">G</div>
+                </div>
+            </div>
+
+            <!-- Document List -->
+            <div class="document-list" id="document-list">
+                <!-- Documents render here -->
+            </div>
+
+            <!-- Inbox Zero State -->
+            <div class="inbox-zero" id="inbox-zero" style="display:none;">
+                <div class="inbox-zero-content">
+                    <div class="inbox-zero-icon">
+                        <i class="fas fa-party-horn"></i>
+                    </div>
+                    <h2>All Caught Up!</h2>
+                    <p>You've processed all documents</p>
+                    <div class="inbox-zero-stats">
+                        <div class="zero-stat">
+                            <span class="zero-value" id="zero-processed">0</span>
+                            <span class="zero-label">Processed Today</span>
+                        </div>
+                        <div class="zero-stat">
+                            <span class="zero-value" id="zero-accuracy">0%</span>
+                            <span class="zero-label">Avg Confidence</span>
+                        </div>
+                        <div class="zero-stat">
+                            <span class="zero-value" id="zero-streak">0</span>
+                            <span class="zero-label">Best Streak</span>
+                        </div>
+                    </div>
+                    <button class="btn btn-primary btn-lg" id="btn-upload-from-zero">
+                        <i class="fas fa-sparkles"></i> Upload More Documents
+                    </button>
+                </div>
+            </div>
+
+            <!-- Keyboard HUD -->
+            <div class="keyboard-hud" id="keyboard-hud">
+                <div class="hud-item"><kbd>J</kbd><span>Next</span></div>
+                <div class="hud-item"><kbd>K</kbd><span>Prev</span></div>
+                <div class="hud-item"><kbd>⏎</kbd><span>Open</span></div>
+                <div class="hud-item"><kbd>A</kbd><span>Approve</span></div>
+                <div class="hud-item"><kbd>R</kbd><span>Reject</span></div>
+                <div class="hud-item"><kbd>Space</kbd><span>Select</span></div>
+                <div class="hud-item"><kbd>⌘K</kbd><span>Commands</span></div>
+            </div>
+
+            <!-- Command Palette (hidden by default) -->
+            <div class="command-palette" id="command-palette" style="display:none;">
+                <div class="palette-overlay"></div>
+                <div class="palette-modal">
+                    <div class="palette-input-wrapper">
+                        <i class="fas fa-search"></i>
+                        <input type="text" id="palette-input" placeholder="Type a command..." autofocus>
+                    </div>
+                    <div class="palette-results" id="palette-results">
+                        <!-- Commands render here -->
                     </div>
                 </div>
             </div>
 
-            <div class="pagination" id="pagination"></div>
+            <!-- Confetti container for celebrations -->
+            <div class="confetti-container" id="confetti-container"></div>
         </div>
     </script>
 
@@ -1408,7 +1619,6 @@
     <script src="{{JS_VIEW_QUEUE_URL}}"></script>
     <script src="{{JS_VIEW_REVIEW_URL}}"></script>
     <script src="{{JS_VIEW_RAIL_URL}}"></script>
-    <script src="{{JS_VIEW_BATCH_URL}}"></script>
     <script src="{{JS_VIEW_SETTINGS_URL}}"></script>
     <script src="{{JS_VIEW_DOCUMENTS_URL}}"></script>
 </body>

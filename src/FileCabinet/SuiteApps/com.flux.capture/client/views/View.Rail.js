@@ -1,11 +1,11 @@
 /**
- * Flux Capture - Document Rail View Controller
- * Unified document processing interface with horizontal flow
+ * Flux Capture - Flow View Controller
+ * Theatrical upload portal + processing visualization
+ * Combines upload experience with animated document processing theater
  */
 (function() {
     'use strict';
 
-    // Document status constants (must match server)
     var DocStatus = {
         PENDING: '1',
         PROCESSING: '2',
@@ -16,144 +16,71 @@
         ERROR: '7'
     };
 
-    // Zone configuration mapping statuses to zones
-    var ZONES = [
-        { id: 'incoming', label: 'Incoming', statuses: [DocStatus.PENDING], icon: 'fa-inbox' },
-        { id: 'extracting', label: 'Extracting', statuses: [DocStatus.PROCESSING], icon: 'fa-cog' },
-        { id: 'review', label: 'Review', statuses: [DocStatus.NEEDS_REVIEW, DocStatus.EXTRACTED, DocStatus.ERROR], icon: 'fa-eye' },
-        { id: 'done', label: 'Done', statuses: [DocStatus.COMPLETED, DocStatus.REJECTED], icon: 'fa-check-double' }
-    ];
-
-    var RailController = {
+    var FlowController = {
         documents: [],
-        selectedDoc: null,
-        selectedDocId: null,
-        formFields: null,
-        activeTab: 'details',
-        flowMode: false,
-        flowIndex: 0,
-        reviewQueue: [],
+        pendingUploads: [],
+        processingDocs: [],
+        readyDocs: [],
         refreshInterval: null,
-        detailPanelOpen: false,
-        REFRESH_MS: 8000,
+        REFRESH_MS: 3000,
+        currentStage: 'upload', // upload | processing | complete
+        uploadInProgress: false,
+        selectedDocType: 'auto',
+        particles: [],
+        animationFrame: null,
 
         // ==========================================
         // INITIALIZATION
         // ==========================================
         init: function() {
             this.documents = [];
-            this.selectedDoc = null;
-            this.selectedDocId = null;
-            this.activeTab = 'details';
-            this.flowMode = false;
-            this.detailPanelOpen = false;
-            this.formFieldsLoaded = false;
+            this.pendingUploads = [];
+            this.processingDocs = [];
+            this.readyDocs = [];
+            this.currentStage = 'upload';
+            this.uploadInProgress = false;
 
             renderTemplate('tpl-rail', 'view-container');
             this.bindEvents();
-            this.loadInitialData();
+            this.loadData();
             this.startRefresh();
+            this.initParticles();
         },
 
         cleanup: function() {
             this.stopRefresh();
+            this.stopParticles();
             this.documents = [];
-            this.selectedDoc = null;
         },
 
         // ==========================================
         // DATA LOADING
         // ==========================================
-        loadInitialData: function() {
+        loadData: function() {
             var self = this;
 
-            // Load queue data AND form fields on first load only
-            Promise.all([
-                API.get('queue', { pageSize: 100 }),
-                API.get('formfields', { transactionType: 'vendorbill' })
-            ]).then(function(results) {
-                var queueData = results[0] || {};
-                self.documents = queueData.queue || [];
-                self.formFields = results[1] || {};
-                self.formFieldsLoaded = true;
-
-                self.processDocuments();
+            API.get('queue', { pageSize: 100 }).then(function(data) {
+                self.documents = (data && data.queue) || [];
+                self.categorizeDocuments();
                 self.render();
-
-                // If we had a selected doc, refresh its data
-                if (self.selectedDocId) {
-                    self.loadDocumentDetails(self.selectedDocId);
-                }
+                self.checkStageTransition();
             }).catch(function(err) {
                 console.error('[Flow] Load error:', err);
-                UI.toast('Failed to load documents: ' + err.message, 'error');
             });
         },
 
-        refreshQueue: function() {
+        categorizeDocuments: function() {
             var self = this;
+            this.processingDocs = [];
+            this.readyDocs = [];
 
-            // Only refresh queue data, not form fields
-            API.get('queue', { pageSize: 100 }).then(function(queueData) {
-                self.documents = (queueData && queueData.queue) || [];
-                self.processDocuments();
-                self.render();
-            }).catch(function(err) {
-                console.error('[Flow] Refresh error:', err);
-            });
-        },
-
-        processDocuments: function() {
-            var self = this;
-            // Build review queue
-            this.reviewQueue = this.documents.filter(function(d) {
+            this.documents.forEach(function(d) {
                 var status = String(d.status);
-                return status === DocStatus.NEEDS_REVIEW ||
-                       status === DocStatus.EXTRACTED ||
-                       status === DocStatus.ERROR;
-            });
-        },
-
-        filterDocuments: function(query) {
-            var self = this;
-
-            if (!query) {
-                // Reset to show all documents
-                this.filteredDocuments = null;
-                this.renderZones();
-                return;
-            }
-
-            // Filter documents by vendor name, invoice number, amount, or any other attribute
-            this.filteredDocuments = this.documents.filter(function(doc) {
-                var vendorName = (doc.vendorName || '').toLowerCase();
-                var invoiceNumber = (doc.invoiceNumber || '').toLowerCase();
-                var amount = String(doc.totalAmount || '');
-                var memo = (doc.memo || '').toLowerCase();
-                var fileName = (doc.fileName || '').toLowerCase();
-
-                return vendorName.indexOf(query) !== -1 ||
-                       invoiceNumber.indexOf(query) !== -1 ||
-                       amount.indexOf(query) !== -1 ||
-                       memo.indexOf(query) !== -1 ||
-                       fileName.indexOf(query) !== -1;
-            });
-
-            this.renderZones();
-        },
-
-        loadData: function() {
-            // For backwards compatibility, call refreshQueue
-            this.refreshQueue();
-        },
-
-        loadDocumentDetails: function(docId) {
-            var self = this;
-            API.get('document', { id: docId }).then(function(doc) {
-                self.selectedDoc = doc;
-                self.renderDetailPanel();
-            }).catch(function(err) {
-                console.error('[Rail] Document load error:', err);
+                if (status === DocStatus.PENDING || status === DocStatus.PROCESSING) {
+                    self.processingDocs.push(d);
+                } else if (status === DocStatus.EXTRACTED || status === DocStatus.NEEDS_REVIEW) {
+                    self.readyDocs.push(d);
+                }
             });
         },
 
@@ -161,9 +88,7 @@
             var self = this;
             this.stopRefresh();
             this.refreshInterval = setInterval(function() {
-                if (!self.flowMode && !self.detailPanelOpen) {
-                    self.refreshQueue();
-                }
+                self.loadData();
             }, this.REFRESH_MS);
         },
 
@@ -175,116 +100,268 @@
         },
 
         // ==========================================
+        // PARTICLES ANIMATION
+        // ==========================================
+        initParticles: function() {
+            var container = el('#flow-particles');
+            if (!container) return;
+
+            // Create floating particles
+            for (var i = 0; i < 20; i++) {
+                var particle = document.createElement('div');
+                particle.className = 'flow-particle';
+                particle.style.left = Math.random() * 100 + '%';
+                particle.style.animationDelay = (Math.random() * 5) + 's';
+                particle.style.animationDuration = (5 + Math.random() * 10) + 's';
+                container.appendChild(particle);
+            }
+        },
+
+        stopParticles: function() {
+            if (this.animationFrame) {
+                cancelAnimationFrame(this.animationFrame);
+            }
+        },
+
+        // ==========================================
         // EVENT BINDING
         // ==========================================
         bindEvents: function() {
             var self = this;
 
-            // Upload button
-            this.on('#btn-upload', 'click', function() {
-                Router.navigate('upload');
+            // Upload portal click
+            this.on('#upload-portal', 'click', function() {
+                el('#flow-file-input').click();
             });
 
-            // Flow mode toggle
-            this.on('#btn-flow-mode', 'click', function() {
-                self.toggleFlowMode();
+            // File input change
+            this.on('#flow-file-input', 'change', function(e) {
+                self.handleFiles(e.target.files);
             });
 
-            // Search functionality - actual document search
-            var searchInput = document.querySelector('#rail-search');
-            if (searchInput) {
-                var searchTimeout;
-                searchInput.addEventListener('input', function(e) {
-                    var query = e.target.value.trim().toLowerCase();
-                    clearTimeout(searchTimeout);
-                    searchTimeout = setTimeout(function() {
-                        self.filterDocuments(query);
-                    }, 200);
+            // Drag and drop on portal
+            var portal = el('#upload-portal');
+            if (portal) {
+                portal.addEventListener('dragover', function(e) {
+                    e.preventDefault();
+                    portal.classList.add('drag-over');
                 });
 
-                searchInput.addEventListener('keydown', function(e) {
-                    if ((e.ctrlKey || e.metaKey) && e.key === 'k') {
-                        e.preventDefault();
-                        self.openCommandPalette();
-                    }
+                portal.addEventListener('dragleave', function(e) {
+                    e.preventDefault();
+                    portal.classList.remove('drag-over');
+                });
+
+                portal.addEventListener('drop', function(e) {
+                    e.preventDefault();
+                    portal.classList.remove('drag-over');
+                    self.handleFiles(e.dataTransfer.files);
                 });
             }
 
-            // Card clicks - delegated
-            document.addEventListener('click', function(e) {
-                // Card selection
-                var card = e.target.closest('.doc-card');
-                if (card && !e.target.closest('.quick-action')) {
-                    var docId = card.dataset.docId;
-                    self.selectDocument(docId);
+            // Drop more zone
+            var dropMore = el('#drop-more-zone');
+            if (dropMore) {
+                dropMore.addEventListener('dragover', function(e) {
                     e.preventDefault();
-                    return;
-                }
+                    dropMore.classList.add('drag-over');
+                });
 
-                // Quick actions
-                var quickAction = e.target.closest('.quick-action');
-                if (quickAction) {
-                    var action = quickAction.dataset.action;
-                    var cardEl = quickAction.closest('.doc-card');
-                    if (cardEl) {
-                        self.handleQuickAction(action, cardEl.dataset.docId);
-                    }
+                dropMore.addEventListener('dragleave', function() {
+                    dropMore.classList.remove('drag-over');
+                });
+
+                dropMore.addEventListener('drop', function(e) {
                     e.preventDefault();
-                    e.stopPropagation();
-                    return;
-                }
+                    dropMore.classList.remove('drag-over');
+                    self.handleFiles(e.dataTransfer.files);
+                });
+            }
 
-                // Tab clicks
-                var tab = e.target.closest('.detail-tab');
-                if (tab) {
-                    self.switchTab(tab.dataset.tab);
-                    return;
-                }
-
-                // Close panel button
-                if (e.target.closest('#btn-close-panel')) {
-                    self.closeDetailPanel();
-                    return;
+            // Document type selection
+            document.addEventListener('change', function(e) {
+                if (e.target.name === 'flowDocType') {
+                    self.selectedDocType = e.target.value;
+                    // Update active class
+                    els('.type-pill').forEach(function(pill) {
+                        pill.classList.toggle('active', pill.querySelector('input').value === self.selectedDocType);
+                    });
                 }
             });
 
-            // Keyboard shortcuts
-            document.addEventListener('keydown', function(e) {
-                // Escape to close panel
-                if (e.key === 'Escape') {
-                    if (self.detailPanelOpen) {
-                        self.closeDetailPanel();
-                    } else if (self.flowMode) {
-                        self.toggleFlowMode();
-                    }
-                    return;
-                }
+            // Navigation buttons
+            this.on('#btn-go-to-documents', 'click', function() {
+                Router.navigate('documents');
+            });
 
-                // Flow mode shortcuts
-                if (self.flowMode && !e.target.closest('input, textarea, select')) {
-                    if (e.key === 'ArrowRight' || e.key === 'Enter') {
-                        e.preventDefault();
-                        self.approveAndNext();
-                    } else if (e.key === 'ArrowLeft') {
-                        e.preventDefault();
-                        self.skipDocument();
-                    } else if (e.key === 'ArrowDown') {
-                        e.preventDefault();
-                        self.rejectCurrent();
-                    }
-                }
+            this.on('#btn-review-documents', 'click', function() {
+                Router.navigate('documents');
+            });
 
-                // Command palette
-                if ((e.ctrlKey || e.metaKey) && e.key === 'k') {
-                    e.preventDefault();
-                    self.openCommandPalette();
+            this.on('#btn-upload-more', 'click', function() {
+                self.resetToUpload();
+            });
+
+            // Card clicks
+            document.addEventListener('click', function(e) {
+                var card = e.target.closest('.theater-card');
+                if (card && card.dataset.docId) {
+                    Router.navigate('review', { docId: card.dataset.docId });
                 }
             });
         },
 
         on: function(selector, event, handler) {
-            var el = document.querySelector(selector);
-            if (el) el.addEventListener(event, handler);
+            var element = document.querySelector(selector);
+            if (element) element.addEventListener(event, handler);
+        },
+
+        // ==========================================
+        // FILE HANDLING
+        // ==========================================
+        handleFiles: function(files) {
+            if (!files || files.length === 0) return;
+
+            var self = this;
+            var validFiles = [];
+
+            for (var i = 0; i < files.length; i++) {
+                var file = files[i];
+                var ext = file.name.split('.').pop().toLowerCase();
+                if (['pdf', 'png', 'jpg', 'jpeg', 'tiff', 'tif'].indexOf(ext) !== -1) {
+                    validFiles.push(file);
+                }
+            }
+
+            if (validFiles.length === 0) {
+                UI.toast('No valid files selected. Please use PDF, PNG, JPG, or TIFF.', 'warning');
+                return;
+            }
+
+            // Switch to processing stage
+            this.currentStage = 'processing';
+            this.showStage('processing');
+            this.uploadFiles(validFiles);
+        },
+
+        uploadFiles: function(files) {
+            var self = this;
+            this.uploadInProgress = true;
+
+            // Add files to queue display
+            files.forEach(function(file) {
+                self.addToQueue({
+                    name: file.name,
+                    size: file.size,
+                    status: 'uploading'
+                });
+            });
+
+            // Upload each file
+            var uploadPromises = files.map(function(file) {
+                return self.uploadSingleFile(file);
+            });
+
+            Promise.all(uploadPromises).then(function(results) {
+                self.uploadInProgress = false;
+                UI.toast(results.length + ' file(s) uploaded successfully!', 'success');
+                self.loadData(); // Refresh to get processing status
+            }).catch(function(err) {
+                self.uploadInProgress = false;
+                UI.toast('Upload failed: ' + err.message, 'error');
+            });
+        },
+
+        uploadSingleFile: function(file) {
+            var self = this;
+
+            return new Promise(function(resolve, reject) {
+                var formData = new FormData();
+                formData.append('file', file);
+                formData.append('documentType', self.selectedDocType);
+
+                API.upload('upload', formData, function(progress) {
+                    self.updateQueueItem(file.name, {
+                        status: 'uploading',
+                        progress: progress
+                    });
+                }).then(function(result) {
+                    self.updateQueueItem(file.name, {
+                        status: 'processing',
+                        docId: result.documentId
+                    });
+                    resolve(result);
+                }).catch(function(err) {
+                    self.updateQueueItem(file.name, {
+                        status: 'error',
+                        error: err.message
+                    });
+                    reject(err);
+                });
+            });
+        },
+
+        addToQueue: function(item) {
+            this.pendingUploads.push(item);
+            this.renderQueueColumn();
+        },
+
+        updateQueueItem: function(fileName, updates) {
+            var item = this.pendingUploads.find(function(u) {
+                return u.name === fileName;
+            });
+            if (item) {
+                Object.assign(item, updates);
+                this.renderQueueColumn();
+            }
+        },
+
+        // ==========================================
+        // STAGE MANAGEMENT
+        // ==========================================
+        checkStageTransition: function() {
+            // If we have processing docs, stay in processing stage
+            if (this.processingDocs.length > 0) {
+                if (this.currentStage !== 'processing') {
+                    this.currentStage = 'processing';
+                    this.showStage('processing');
+                }
+                return;
+            }
+
+            // If we just finished processing and have ready docs, show complete
+            if (this.currentStage === 'processing' && this.readyDocs.length > 0 && !this.uploadInProgress) {
+                this.currentStage = 'complete';
+                this.showStage('complete');
+                this.renderCompletionStats();
+                return;
+            }
+        },
+
+        showStage: function(stage) {
+            var stages = ['upload', 'processing', 'complete'];
+            stages.forEach(function(s) {
+                var stageEl = el('#stage-' + s);
+                if (stageEl) {
+                    stageEl.style.display = s === stage ? 'flex' : 'none';
+                }
+            });
+
+            // Show drop more zone during processing
+            var dropMore = el('#drop-more-zone');
+            if (dropMore) {
+                dropMore.style.display = stage === 'processing' ? 'flex' : 'none';
+            }
+        },
+
+        resetToUpload: function() {
+            this.currentStage = 'upload';
+            this.pendingUploads = [];
+            this.showStage('upload');
+
+            // Reset file input
+            var fileInput = el('#flow-file-input');
+            if (fileInput) fileInput.value = '';
         },
 
         // ==========================================
@@ -292,537 +369,194 @@
         // ==========================================
         render: function() {
             this.renderStats();
-            this.renderZones();
-            if (!this.detailPanelOpen) {
-                this.renderDetailPanel();
+
+            if (this.currentStage === 'processing') {
+                this.renderQueueColumn();
+                this.renderProcessingVisualizer();
+                this.renderReadyColumn();
             }
         },
 
         renderStats: function() {
-            var statsEl = el('#rail-stats');
-            if (!statsEl) return;
+            var incoming = this.documents.filter(function(d) {
+                return String(d.status) === DocStatus.PENDING;
+            }).length;
 
-            var counts = { incoming: 0, extracting: 0, review: 0, done: 0 };
+            var processing = this.documents.filter(function(d) {
+                return String(d.status) === DocStatus.PROCESSING;
+            }).length;
 
-            this.documents.forEach(function(d) {
-                var status = String(d.status);
-                if (status === DocStatus.PENDING) counts.incoming++;
-                else if (status === DocStatus.PROCESSING) counts.extracting++;
-                else if (status === DocStatus.NEEDS_REVIEW || status === DocStatus.EXTRACTED || status === DocStatus.ERROR) counts.review++;
-                else if (status === DocStatus.COMPLETED || status === DocStatus.REJECTED) counts.done++;
-            });
+            var ready = this.readyDocs.length;
 
-            statsEl.innerHTML =
-                '<span class="stat-item"><span class="stat-num">' + counts.incoming + '</span> incoming</span>' +
-                '<span class="stat-item"><span class="stat-num">' + counts.extracting + '</span> extracting</span>' +
-                '<span class="stat-item highlight"><span class="stat-num">' + counts.review + '</span> to review</span>' +
-                '<span class="stat-item success"><span class="stat-num">' + counts.done + '</span> done</span>';
-        },
+            // Update stat displays
+            var incomingStat = el('#stat-incoming .stat-value');
+            var processingStat = el('#stat-processing .stat-value');
+            var readyStat = el('#stat-ready .stat-value');
 
-        renderZones: function() {
-            var self = this;
-            // Use filtered documents if a search is active
-            var docsToRender = this.filteredDocuments || this.documents;
+            if (incomingStat) incomingStat.textContent = incoming;
+            if (processingStat) processingStat.textContent = processing;
+            if (readyStat) readyStat.textContent = ready;
 
-            ZONES.forEach(function(zone) {
-                var container = el('#zone-' + zone.id + ' .zone-cards');
-                if (!container) return;
-
-                var docs = docsToRender.filter(function(d) {
-                    return zone.statuses.indexOf(String(d.status)) !== -1;
-                });
-
-                // Update count
-                var countEl = el('#zone-' + zone.id + ' .zone-count');
-                if (countEl) countEl.textContent = docs.length;
-
-                if (docs.length === 0) {
-                    container.innerHTML = '<div class="zone-empty"><i class="fas fa-inbox"></i><span>Empty</span></div>';
-                    return;
-                }
-
-                container.innerHTML = docs.slice(0, 20).map(function(doc) {
-                    return self.renderDocCard(doc, zone.id);
-                }).join('');
-
-                if (docs.length > 20) {
-                    container.innerHTML += '<div class="zone-more">+' + (docs.length - 20) + ' more</div>';
-                }
-            });
-        },
-
-        renderDocCard: function(doc, zoneId) {
-            var isSelected = String(this.selectedDocId) === String(doc.id);
-            var confidence = parseInt(doc.confidence) || 0;
-            var confClass = confidence >= 85 ? 'high' : confidence >= 60 ? 'medium' : 'low';
-            var status = String(doc.status);
-            var hasAnomaly = doc.anomalies && doc.anomalies.length > 0;
-            var hasError = status === DocStatus.ERROR;
-
-            var glowClass = '';
-            if (status === DocStatus.PROCESSING) glowClass = 'glow-processing';
-            else if (hasError) glowClass = 'glow-error';
-            else if (hasAnomaly) glowClass = 'glow-anomaly';
-            else if (confClass === 'high') glowClass = 'glow-high';
-            else if (confClass === 'medium') glowClass = 'glow-medium';
-            else if (confClass === 'low') glowClass = 'glow-low';
-
-            var cardClass = 'doc-card ' + glowClass;
-            if (isSelected) cardClass += ' selected';
-
-            return '<div class="' + cardClass + '" data-doc-id="' + doc.id + '">' +
-                '<div class="card-header">' +
-                    '<span class="card-vendor">' + escapeHtml(doc.vendorName || 'Unknown Vendor') + '</span>' +
-                    '<span class="card-amount">$' + formatNumber(doc.totalAmount || 0) + '</span>' +
-                '</div>' +
-                (doc.invoiceNumber ? '<div class="card-ref">#' + escapeHtml(doc.invoiceNumber) + '</div>' : '') +
-                (hasError ? '<div class="card-error"><i class="fas fa-exclamation-triangle"></i> Error</div>' : '') +
-                '<div class="card-footer">' +
-                    '<div class="confidence-bar"><div class="confidence-fill conf-' + confClass + '" style="width:' + confidence + '%"></div></div>' +
-                    (hasAnomaly ? '<span class="anomaly-indicator"><i class="fas fa-flag"></i></span>' : '') +
-                '</div>' +
-                '<div class="card-actions">' +
-                    '<button class="quick-action" data-action="approve" title="Approve"><i class="fas fa-check"></i></button>' +
-                    '<button class="quick-action" data-action="review" title="Review"><i class="fas fa-expand"></i></button>' +
-                    '<button class="quick-action" data-action="reject" title="Reject"><i class="fas fa-times"></i></button>' +
-                '</div>' +
-            '</div>';
-        },
-
-        renderDetailPanel: function() {
-            var panel = el('#detail-panel');
-            if (!panel) return;
-
-            if (!this.selectedDoc) {
-                panel.innerHTML = this.renderDashboardState();
-                panel.classList.remove('open');
-                this.detailPanelOpen = false;
-            } else {
-                panel.innerHTML = this.renderDocumentState();
-                panel.classList.add('open');
-                this.detailPanelOpen = true;
-                this.bindDetailEvents();
+            // Add animation class if processing
+            var processingContainer = el('#stat-processing');
+            if (processingContainer) {
+                processingContainer.classList.toggle('active', processing > 0);
             }
         },
 
-        renderDashboardState: function() {
-            var reviewCount = this.reviewQueue.length;
+        renderQueueColumn: function() {
+            var container = el('#queue-items');
+            var countEl = el('#queue-count');
+            if (!container) return;
 
-            return '<div class="panel-dashboard">' +
-                '<div class="dash-summary">' +
-                    '<div class="dash-stat-big">' +
-                        '<span class="stat-value">' + reviewCount + '</span>' +
-                        '<span class="stat-label">Documents to Review</span>' +
-                    '</div>' +
-                '</div>' +
-                (reviewCount > 0 ?
-                    '<button class="btn btn-primary btn-lg btn-block" id="btn-start-flow">' +
-                        '<i class="fas fa-bolt"></i> Start Flow Mode' +
-                    '</button>' :
-                    '<div class="dash-empty"><i class="fas fa-check-circle"></i><p>All caught up!</p></div>'
-                ) +
-                '<div class="dash-tips">' +
-                    '<h4>Quick Tips</h4>' +
-                    '<ul>' +
-                        '<li><kbd>Click</kbd> a card to review</li>' +
-                        '<li><kbd>→</kbd> Approve in flow mode</li>' +
-                        '<li><kbd>←</kbd> Skip document</li>' +
-                        '<li><kbd>Esc</kbd> Close panel</li>' +
-                    '</ul>' +
-                '</div>' +
-            '</div>';
-        },
+            var items = this.pendingUploads.filter(function(u) {
+                return u.status === 'uploading';
+            });
 
-        renderDocumentState: function() {
-            var doc = this.selectedDoc;
-            if (!doc) return '';
+            if (countEl) countEl.textContent = items.length;
 
-            var confidence = parseInt(doc.confidence) || 0;
-            var confClass = confidence >= 85 ? 'high' : confidence >= 60 ? 'medium' : 'low';
-            var lineItems = doc.lineItems || [];
-
-            // Use fileUrl if available (from document details API), otherwise no preview
-            var previewUrl = doc.fileUrl || '';
-            var hasPreview = !!previewUrl;
-
-            return '<div class="panel-document">' +
-                // Header with close button
-                '<div class="panel-header">' +
-                    '<div class="panel-title">' +
-                        '<span class="conf-badge conf-' + confClass + '">' + confidence + '%</span>' +
-                        '<span>' + escapeHtml(doc.vendorName || 'Document Review') + '</span>' +
-                    '</div>' +
-                    '<button class="btn btn-ghost btn-icon" id="btn-close-panel"><i class="fas fa-times"></i></button>' +
-                '</div>' +
-                // PDF Preview - use fileUrl from API
-                '<div class="panel-preview">' +
-                    (hasPreview ?
-                        '<iframe src="' + previewUrl + '" title="Document Preview"></iframe>' :
-                        '<div class="no-preview"><i class="fas fa-file-pdf"></i><span>No preview available</span></div>'
-                    ) +
-                '</div>' +
-                // Tabs
-                '<div class="panel-tabs">' +
-                    '<button class="detail-tab' + (this.activeTab === 'details' ? ' active' : '') + '" data-tab="details">Details</button>' +
-                    '<button class="detail-tab' + (this.activeTab === 'lines' ? ' active' : '') + '" data-tab="lines">Lines (' + lineItems.length + ')</button>' +
-                    '<button class="detail-tab' + (this.activeTab === 'more' ? ' active' : '') + '" data-tab="more">More</button>' +
-                '</div>' +
-                // Tab content
-                '<div class="panel-content" id="panel-content">' +
-                    this.renderTabContent() +
-                '</div>' +
-                // Actions
-                '<div class="panel-actions">' +
-                    '<button class="btn btn-success" id="btn-approve"><i class="fas fa-check"></i> Approve</button>' +
-                    '<button class="btn btn-danger" id="btn-reject"><i class="fas fa-times"></i> Reject</button>' +
-                    '<button class="btn btn-secondary" id="btn-full-review"><i class="fas fa-expand"></i> Full Review</button>' +
-                '</div>' +
-            '</div>';
-        },
-
-        renderTabContent: function() {
-            var doc = this.selectedDoc;
-            if (!doc) return '';
-
-            switch (this.activeTab) {
-                case 'details':
-                    return this.renderDetailsTab(doc);
-                case 'lines':
-                    return this.renderLinesTab(doc);
-                case 'more':
-                    return this.renderMoreTab(doc);
-                default:
-                    return '';
-            }
-        },
-
-        renderDetailsTab: function(doc) {
-            return '<div class="detail-form">' +
-                '<div class="form-row">' +
-                    '<label>Vendor</label>' +
-                    '<input type="text" id="field-vendor" value="' + escapeHtml(doc.vendorName || '') + '">' +
-                '</div>' +
-                '<div class="form-row-2col">' +
-                    '<div class="form-row">' +
-                        '<label>Invoice #</label>' +
-                        '<input type="text" id="field-invoiceNumber" value="' + escapeHtml(doc.invoiceNumber || '') + '">' +
-                    '</div>' +
-                    '<div class="form-row">' +
-                        '<label>Date</label>' +
-                        '<input type="date" id="field-invoiceDate" value="' + formatDateInput(doc.invoiceDate) + '">' +
-                    '</div>' +
-                '</div>' +
-                '<div class="form-row-2col">' +
-                    '<div class="form-row">' +
-                        '<label>Due Date</label>' +
-                        '<input type="date" id="field-dueDate" value="' + formatDateInput(doc.dueDate) + '">' +
-                    '</div>' +
-                    '<div class="form-row">' +
-                        '<label>PO #</label>' +
-                        '<input type="text" id="field-poNumber" value="' + escapeHtml(doc.poNumber || '') + '">' +
-                    '</div>' +
-                '</div>' +
-                '<div class="form-divider"></div>' +
-                '<div class="form-row-2col">' +
-                    '<div class="form-row">' +
-                        '<label>Subtotal</label>' +
-                        '<div class="input-money"><span>$</span><input type="number" step="0.01" id="field-subtotal" value="' + (doc.subtotal || 0).toFixed(2) + '"></div>' +
-                    '</div>' +
-                    '<div class="form-row">' +
-                        '<label>Tax</label>' +
-                        '<div class="input-money"><span>$</span><input type="number" step="0.01" id="field-taxAmount" value="' + (doc.taxAmount || 0).toFixed(2) + '"></div>' +
-                    '</div>' +
-                '</div>' +
-                '<div class="form-row total-row">' +
-                    '<label>Total</label>' +
-                    '<div class="input-money total"><span>$</span><input type="number" step="0.01" id="field-totalAmount" value="' + (doc.totalAmount || 0).toFixed(2) + '"></div>' +
-                '</div>' +
-            '</div>';
-        },
-
-        renderLinesTab: function(doc) {
-            var lines = doc.lineItems || [];
-
-            if (lines.length === 0) {
-                return '<div class="empty-state"><i class="fas fa-receipt"></i><p>No line items extracted</p></div>';
+            if (items.length === 0) {
+                container.innerHTML = '<div class="column-empty"><i class="fas fa-check"></i><span>Queue empty</span></div>';
+                return;
             }
 
-            var html = '<div class="lines-list">';
-            var total = 0;
-
-            lines.forEach(function(line, idx) {
-                var amount = parseFloat(line.amount) || 0;
-                total += amount;
-                html += '<div class="line-row">' +
-                    '<div class="line-desc">' + escapeHtml(line.description || 'Line ' + (idx + 1)) + '</div>' +
-                    '<div class="line-amount">$' + amount.toFixed(2) + '</div>' +
-                '</div>';
-            });
-
-            html += '</div>' +
-                '<div class="lines-total">' +
-                    '<span>Line Total:</span>' +
-                    '<span>$' + total.toFixed(2) + '</span>' +
-                '</div>';
-
-            return html;
-        },
-
-        renderMoreTab: function(doc) {
-            var formFields = this.formFields || {};
-            var bodyFields = formFields.bodyFields || [];
-
-            // Show classification fields
-            var classFields = ['subsidiary', 'department', 'class', 'location', 'terms', 'account'];
-            var html = '<div class="detail-form">';
-
-            classFields.forEach(function(fieldId) {
-                var field = bodyFields.find(function(f) { return f.id === fieldId; });
-                if (!field) return;
-
-                html += '<div class="form-row">' +
-                    '<label>' + escapeHtml(field.label || fieldId) + '</label>';
-
-                if (field.options && field.options.length > 0) {
-                    html += '<select id="field-' + fieldId + '">' +
-                        '<option value="">-- Select --</option>';
-                    field.options.forEach(function(opt) {
-                        html += '<option value="' + escapeHtml(opt.value) + '">' + escapeHtml(opt.text) + '</option>';
-                    });
-                    html += '</select>';
-                } else {
-                    html += '<input type="text" id="field-' + fieldId + '" value="">';
-                }
-
-                html += '</div>';
-            });
-
-            html += '</div>';
-            return html;
-        },
-
-        getPreviewUrl: function(fileId) {
-            // NetSuite file cabinet URL format
-            if (!fileId) return '';
-            return '/core/media/media.nl?id=' + fileId + '&c=' + (window.FC_CONFIG ? window.FC_CONFIG.accountId : '') + '&h=1';
-        },
-
-        bindDetailEvents: function() {
-            var self = this;
-
-            this.on('#btn-approve', 'click', function() {
-                self.approveDocument(self.selectedDocId);
-            });
-
-            this.on('#btn-reject', 'click', function() {
-                self.rejectDocument(self.selectedDocId);
-            });
-
-            this.on('#btn-full-review', 'click', function() {
-                Router.navigate('review', { docId: self.selectedDocId });
-            });
-
-            this.on('#btn-start-flow', 'click', function() {
-                self.toggleFlowMode();
-            });
-        },
-
-        // ==========================================
-        // DOCUMENT ACTIONS
-        // ==========================================
-        selectDocument: function(docId) {
-            this.selectedDocId = docId;
-            this.loadDocumentDetails(docId);
-            this.renderZones(); // Re-render to show selection
-        },
-
-        closeDetailPanel: function() {
-            this.selectedDocId = null;
-            this.selectedDoc = null;
-            this.detailPanelOpen = false;
-            this.renderDetailPanel();
-            this.renderZones();
-        },
-
-        handleQuickAction: function(action, docId) {
-            switch (action) {
-                case 'approve':
-                    this.approveDocument(docId);
-                    break;
-                case 'reject':
-                    this.rejectDocument(docId);
-                    break;
-                case 'review':
-                    Router.navigate('review', { docId: docId });
-                    break;
-            }
-        },
-
-        approveDocument: function(docId) {
-            var self = this;
-            API.put('approve', { documentId: docId, createTransaction: true })
-                .then(function(result) {
-                    UI.toast('Document approved!', 'success');
-                    self.closeDetailPanel();
-                    self.loadData();
-                })
-                .catch(function(err) {
-                    UI.toast('Error: ' + err.message, 'error');
-                });
-        },
-
-        rejectDocument: function(docId) {
-            var self = this;
-            UI.prompt('Enter rejection reason:').then(function(reason) {
-                if (reason) {
-                    API.put('reject', { documentId: docId, reason: reason })
-                        .then(function() {
-                            UI.toast('Document rejected', 'success');
-                            self.closeDetailPanel();
-                            self.loadData();
-                        })
-                        .catch(function(err) {
-                            UI.toast('Error: ' + err.message, 'error');
-                        });
-                }
-            });
-        },
-
-        switchTab: function(tabId) {
-            this.activeTab = tabId;
-
-            // Update tab buttons
-            els('.detail-tab').forEach(function(tab) {
-                tab.classList.toggle('active', tab.dataset.tab === tabId);
-            });
-
-            // Re-render content
-            var contentEl = el('#panel-content');
-            if (contentEl) {
-                contentEl.innerHTML = this.renderTabContent();
-            }
-        },
-
-        // ==========================================
-        // FLOW MODE
-        // ==========================================
-        toggleFlowMode: function() {
-            // Flow mode navigates to full page review for first document in queue
-            if (this.reviewQueue.length > 0) {
-                var firstDoc = this.reviewQueue[0];
-                Router.navigate('review', { docId: firstDoc.id });
-                UI.toast('Flow Mode: Review documents with keyboard shortcuts', 'info');
-            } else {
-                UI.toast('No documents to review', 'warning');
-            }
-        },
-
-        approveAndNext: function() {
-            var self = this;
-            if (!this.selectedDocId) return;
-
-            API.put('approve', { documentId: this.selectedDocId, createTransaction: true })
-                .then(function() {
-                    self.flowIndex++;
-                    self.loadData().then(function() {
-                        if (self.flowIndex < self.reviewQueue.length) {
-                            self.selectDocument(self.reviewQueue[self.flowIndex].id);
-                        } else {
-                            UI.toast('All documents reviewed!', 'success');
-                            self.toggleFlowMode();
-                        }
-                    });
-                });
-        },
-
-        skipDocument: function() {
-            this.flowIndex++;
-            if (this.flowIndex < this.reviewQueue.length) {
-                this.selectDocument(this.reviewQueue[this.flowIndex].id);
-            } else {
-                this.flowIndex = 0;
-                if (this.reviewQueue.length > 0) {
-                    this.selectDocument(this.reviewQueue[0].id);
-                }
-            }
-        },
-
-        rejectCurrent: function() {
-            if (this.selectedDocId) {
-                this.rejectDocument(this.selectedDocId);
-            }
-        },
-
-        // ==========================================
-        // COMMAND PALETTE
-        // ==========================================
-        openCommandPalette: function() {
-            var self = this;
-            var overlay = document.createElement('div');
-            overlay.className = 'command-overlay';
-            overlay.innerHTML =
-                '<div class="command-modal">' +
-                    '<input type="text" class="command-input" placeholder="Type a command..." autofocus>' +
-                    '<div class="command-list">' +
-                        '<div class="command-item" data-cmd="flow"><i class="fas fa-bolt"></i> Start Flow Mode</div>' +
-                        '<div class="command-item" data-cmd="upload"><i class="fas fa-upload"></i> Upload Documents</div>' +
-                        '<div class="command-item" data-cmd="refresh"><i class="fas fa-sync"></i> Refresh</div>' +
-                        '<div class="command-item" data-cmd="settings"><i class="fas fa-cog"></i> Settings</div>' +
+            container.innerHTML = items.map(function(item) {
+                var progress = item.progress || 0;
+                return '<div class="theater-card uploading">' +
+                    '<div class="card-icon"><i class="fas fa-file-pdf"></i></div>' +
+                    '<div class="card-info">' +
+                        '<div class="card-name">' + escapeHtml(item.name) + '</div>' +
+                        '<div class="card-progress">' +
+                            '<div class="progress-bar" style="width:' + progress + '%"></div>' +
+                        '</div>' +
                     '</div>' +
                 '</div>';
-
-            overlay.addEventListener('click', function(e) {
-                if (e.target === overlay) overlay.remove();
-
-                var item = e.target.closest('.command-item');
-                if (item) {
-                    var cmd = item.dataset.cmd;
-                    overlay.remove();
-                    self.executeCommand(cmd);
-                }
-            });
-
-            overlay.querySelector('.command-input').addEventListener('keydown', function(e) {
-                if (e.key === 'Escape') overlay.remove();
-            });
-
-            document.body.appendChild(overlay);
-            overlay.querySelector('.command-input').focus();
+            }).join('');
         },
 
-        executeCommand: function(cmd) {
-            switch (cmd) {
-                case 'flow':
-                    this.toggleFlowMode();
-                    break;
-                case 'upload':
-                    Router.navigate('upload');
-                    break;
-                case 'refresh':
-                    this.loadData();
-                    UI.toast('Refreshed', 'success');
-                    break;
-                case 'settings':
-                    Router.navigate('settings');
-                    break;
+        renderProcessingVisualizer: function() {
+            var container = el('#processing-visualizer');
+            if (!container) return;
+
+            // Find actively processing document
+            var processingDoc = this.documents.find(function(d) {
+                return String(d.status) === DocStatus.PROCESSING;
+            });
+
+            if (!processingDoc) {
+                container.innerHTML = '<div class="visualizer-empty">' +
+                    '<i class="fas fa-cube"></i>' +
+                    '<span>Waiting for documents...</span>' +
+                '</div>';
+                return;
             }
+
+            // Render active extraction visualization
+            container.innerHTML = this.renderExtractionVisual(processingDoc);
+        },
+
+        renderExtractionVisual: function(doc) {
+            return '<div class="extraction-visual">' +
+                '<div class="extraction-doc">' +
+                    '<div class="doc-preview">' +
+                        '<div class="scan-line"></div>' +
+                        '<i class="fas fa-file-invoice"></i>' +
+                    '</div>' +
+                    '<div class="doc-name">' + escapeHtml(doc.fileName || 'Document') + '</div>' +
+                '</div>' +
+                '<div class="extraction-fields">' +
+                    '<div class="field-extract">' +
+                        '<i class="fas fa-building"></i>' +
+                        '<span class="field-label">Vendor</span>' +
+                        '<span class="field-value extracting"><span class="typing-dots"></span></span>' +
+                    '</div>' +
+                    '<div class="field-extract">' +
+                        '<i class="fas fa-hashtag"></i>' +
+                        '<span class="field-label">Invoice #</span>' +
+                        '<span class="field-value pending">...</span>' +
+                    '</div>' +
+                    '<div class="field-extract">' +
+                        '<i class="fas fa-dollar-sign"></i>' +
+                        '<span class="field-label">Amount</span>' +
+                        '<span class="field-value pending">...</span>' +
+                    '</div>' +
+                    '<div class="field-extract">' +
+                        '<i class="fas fa-list"></i>' +
+                        '<span class="field-label">Line Items</span>' +
+                        '<span class="field-value pending">...</span>' +
+                    '</div>' +
+                '</div>' +
+                '<div class="extraction-progress">' +
+                    '<div class="progress-track">' +
+                        '<div class="progress-fill animate"></div>' +
+                    '</div>' +
+                    '<span class="progress-text">Extracting data...</span>' +
+                '</div>' +
+            '</div>';
+        },
+
+        renderReadyColumn: function() {
+            var container = el('#ready-items');
+            var countEl = el('#ready-count');
+            if (!container) return;
+
+            if (countEl) countEl.textContent = this.readyDocs.length;
+
+            if (this.readyDocs.length === 0) {
+                container.innerHTML = '<div class="column-empty"><i class="fas fa-inbox"></i><span>No documents ready</span></div>';
+                return;
+            }
+
+            container.innerHTML = this.readyDocs.slice(0, 10).map(function(doc) {
+                var conf = parseInt(doc.confidence) || 0;
+                var confClass = conf >= 85 ? 'high' : conf >= 60 ? 'medium' : 'low';
+
+                return '<div class="theater-card ready" data-doc-id="' + doc.id + '">' +
+                    '<div class="card-confidence conf-' + confClass + '">' + conf + '%</div>' +
+                    '<div class="card-info">' +
+                        '<div class="card-vendor">' + escapeHtml(doc.vendorName || 'Unknown') + '</div>' +
+                        '<div class="card-amount">$' + formatNumber(doc.totalAmount || 0) + '</div>' +
+                    '</div>' +
+                    '<div class="card-arrow"><i class="fas fa-chevron-right"></i></div>' +
+                '</div>';
+            }).join('');
+
+            if (this.readyDocs.length > 10) {
+                container.innerHTML += '<div class="column-more">+' + (this.readyDocs.length - 10) + ' more</div>';
+            }
+        },
+
+        renderCompletionStats: function() {
+            var total = this.readyDocs.length;
+            var highConf = this.readyDocs.filter(function(d) {
+                return parseInt(d.confidence) >= 85;
+            }).length;
+            var needsReview = total - highConf;
+
+            var totalEl = el('#comp-total');
+            var highEl = el('#comp-high-conf');
+            var reviewEl = el('#comp-needs-review');
+
+            if (totalEl) totalEl.textContent = total;
+            if (highEl) highEl.textContent = highConf;
+            if (reviewEl) reviewEl.textContent = needsReview;
         }
     };
 
-    // Register the controller as 'flow' (primary route)
+    // Register routes
     Router.register('flow',
-        function(params) { RailController.init(params); },
-        function() { RailController.cleanup(); }
+        function(params) { FlowController.init(params); },
+        function() { FlowController.cleanup(); }
     );
 
-    // Keep backward compatibility with 'queue' and 'rail' routes
+    // Backward compatibility
     Router.register('queue',
-        function(params) { RailController.init(params); },
-        function() { RailController.cleanup(); }
+        function(params) { FlowController.init(params); },
+        function() { FlowController.cleanup(); }
     );
     Router.register('rail',
-        function(params) { RailController.init(params); },
-        function() { RailController.cleanup(); }
+        function(params) { FlowController.init(params); },
+        function() { FlowController.cleanup(); }
     );
 
     console.log('[View.Flow] Loaded');
