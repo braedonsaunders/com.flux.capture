@@ -147,6 +147,7 @@ define([
                     'custrecord_flux_tax_amount': extraction.fields && extraction.fields.taxAmount ? extraction.fields.taxAmount : 0,
                     'custrecord_flux_total_amount': extraction.fields && extraction.fields.totalAmount ? extraction.fields.totalAmount : 0,
                     'custrecord_flux_po_number': extraction.fields && extraction.fields.poNumber ? extraction.fields.poNumber : '',
+                    'custrecord_flux_payment_terms': extraction.fields && extraction.fields.paymentTerms ? extraction.fields.paymentTerms : '',
                     'custrecord_flux_line_items': JSON.stringify(extraction.lineItems || []),
                     'custrecord_flux_anomalies': JSON.stringify(extraction.anomalies || []),
                     'custrecord_flux_confidence_score': extraction.confidence.overall,
@@ -154,6 +155,39 @@ define([
                     'custrecord_flux_processing_time': processingTime,
                     'custrecord_flux_modified_date': new Date()
                 };
+
+                // Build and store ALL extracted data as JSON for flexible field mapping
+                // This enables the extraction pool UI for mapping any extracted field to form fields
+                const extractedDataObj = {};
+
+                // Include all fields from extraction
+                if (extraction.fields) {
+                    Object.keys(extraction.fields).forEach(function(key) {
+                        extractedDataObj[key] = extraction.fields[key];
+                    });
+                }
+
+                // Include vendor info
+                extractedDataObj.vendorName = extraction.vendorMatch ? extraction.vendorMatch.vendorName : '';
+                extractedDataObj.vendor = extraction.vendorMatch ? extraction.vendorMatch.vendorId : '';
+
+                // Include all raw extracted label/value pairs for flexible suggestions
+                if (extraction.allExtractedFields) {
+                    extractedDataObj._allExtractedFields = extraction.allExtractedFields;
+                }
+
+                // Include field confidences
+                if (extraction.fieldConfidences) {
+                    extractedDataObj._fieldConfidences = extraction.fieldConfidences;
+                }
+
+                // Metadata
+                extractedDataObj._confidence = extraction.confidence;
+                extractedDataObj._vendorMatch = extraction.vendorMatch;
+                extractedDataObj._extractedAt = new Date().toISOString();
+
+                updateValues['custrecord_flux_extracted_data'] = JSON.stringify(extractedDataObj);
+                updateValues['custrecord_flux_extracted_text'] = extraction.rawText ? extraction.rawText.substring(0, 100000) : '';
 
                 // Only set currency if it's a numeric ID
                 if (extraction.fields && extraction.fields.currency) {
