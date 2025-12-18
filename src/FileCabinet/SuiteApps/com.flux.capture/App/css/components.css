@@ -4516,16 +4516,20 @@ tr.doc-row:last-child td { border-bottom: none; }
 .status-pill.status-completed { background: rgba(16, 185, 129, 0.1); color: var(--color-success); }
 .status-pill.status-error { background: rgba(239, 68, 68, 0.15); color: var(--color-danger); }
 
-/* Row Actions */
-.row-actions { display: flex; gap: var(--space-xs); opacity: 0; transition: opacity var(--transition); }
-tr.doc-row:hover .row-actions { opacity: 1; }
-.row-action { width: 28px; height: 28px; display: flex; align-items: center; justify-content: center; border: none; border-radius: var(--radius-sm); cursor: pointer; transition: all var(--transition); font-size: var(--font-size-sm); }
-.row-action.btn-approve { background: rgba(16, 185, 129, 0.1); color: var(--color-success); }
-.row-action.btn-approve:hover { background: var(--color-success); color: white; }
-.row-action.btn-open { background: var(--gray-100); color: var(--text-secondary); }
-.row-action.btn-open:hover { background: var(--color-primary); color: white; }
-.row-action.btn-delete { background: rgba(239, 68, 68, 0.1); color: var(--color-danger); }
-.row-action.btn-delete:hover { background: var(--color-danger); color: white; }
+/* Row Actions - Always visible */
+.row-actions { display: flex; gap: var(--space-xs); }
+.row-action { width: 28px; height: 28px; display: flex; align-items: center; justify-content: center; border: none; border-radius: var(--radius-sm); cursor: pointer; transition: all var(--transition); font-size: var(--font-size-sm); background: transparent; color: var(--gray-400); }
+.row-action:hover { background: var(--gray-100); }
+.row-action.btn-approve:hover { background: rgba(16, 185, 129, 0.15); color: var(--color-success); }
+.row-action.btn-open:hover { background: rgba(37, 99, 235, 0.1); color: var(--color-primary); }
+.row-action.btn-delete:hover { background: rgba(239, 68, 68, 0.15); color: var(--color-danger); }
+tr.doc-row:hover .row-action { color: var(--gray-500); }
+tr.doc-row:hover .row-action.btn-approve { background: rgba(16, 185, 129, 0.1); color: var(--color-success); }
+tr.doc-row:hover .row-action.btn-approve:hover { background: var(--color-success); color: white; }
+tr.doc-row:hover .row-action.btn-open { background: var(--gray-100); color: var(--text-secondary); }
+tr.doc-row:hover .row-action.btn-open:hover { background: var(--color-primary); color: white; }
+tr.doc-row:hover .row-action.btn-delete { background: rgba(239, 68, 68, 0.1); color: var(--color-danger); }
+tr.doc-row:hover .row-action.btn-delete:hover { background: var(--color-danger); color: white; }
 
 /* Bulk Actions Bar */
 .bulk-actions-bar { display: flex; align-items: center; justify-content: space-between; padding: var(--space-sm) var(--space-md); background: var(--color-primary); color: white; border-radius: 0 0 var(--radius-lg) var(--radius-lg); margin-top: -1px; }

@@ -42,6 +42,8 @@
         previewExpanded: -1,
         refreshInterval: null,
         REFRESH_MS: 10000,
+        _clickHandler: null,
+        _keydownHandler: null,
 
         // ==========================================
         // INITIALIZATION
@@ -81,6 +83,15 @@
             this.stopRefresh();
             this.documents = [];
             this.closeCommandPalette();
+            // Remove event listeners
+            if (this._clickHandler) {
+                document.removeEventListener('click', this._clickHandler);
+                this._clickHandler = null;
+            }
+            if (this._keydownHandler) {
+                document.removeEventListener('keydown', this._keydownHandler);
+                this._keydownHandler = null;
+            }
         },
 
         // ==========================================
@@ -192,8 +203,16 @@
         bindEvents: function() {
             var self = this;
 
-            // Triage tabs
-            document.addEventListener('click', function(e) {
+            // Remove any existing handlers first (safety)
+            if (this._clickHandler) {
+                document.removeEventListener('click', this._clickHandler);
+            }
+            if (this._keydownHandler) {
+                document.removeEventListener('keydown', this._keydownHandler);
+            }
+
+            // Create click handler
+            this._clickHandler = function(e) {
                 var tab = e.target.closest('.triage-tab');
                 if (tab) {
                     self.setFilter(tab.dataset.filter);
@@ -216,11 +235,13 @@
 
                 // Bulk action buttons
                 if (e.target.closest('#bulk-clear')) {
+                    e.stopPropagation();
                     self.clearSelection();
                     return;
                 }
 
                 if (e.target.closest('#bulk-delete')) {
+                    e.stopPropagation();
                     self.deleteSelected();
                     return;
                 }
@@ -238,6 +259,7 @@
                 // Quick action buttons
                 var action = e.target.closest('.row-action');
                 if (action) {
+                    e.stopPropagation();
                     var docId = action.closest('.doc-row').dataset.docId;
                     self.handleRowAction(action.dataset.action, docId);
                     return;
@@ -262,7 +284,8 @@
                     self.closeCommandPalette();
                     return;
                 }
-            });
+            };
+            document.addEventListener('click', this._clickHandler);
 
             // Search input
             var searchInput = el('#doc-search');
@@ -292,8 +315,8 @@
                 Router.navigate('ingest');
             });
 
-            // Keyboard navigation
-            document.addEventListener('keydown', function(e) {
+            // Create keydown handler
+            this._keydownHandler = function(e) {
                 // Don't handle if in input
                 if (e.target.matches('input, textarea, select')) {
                     if (e.key === 'Escape') {
@@ -370,7 +393,8 @@
                         self.render();
                         break;
                 }
-            });
+            };
+            document.addEventListener('keydown', this._keydownHandler);
         },
 
         on: function(selector, event, handler) {
