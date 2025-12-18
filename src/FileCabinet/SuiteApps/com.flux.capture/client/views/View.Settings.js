@@ -1548,7 +1548,7 @@
                     newDefaultText = defaultDisplayInput ? defaultDisplayInput.value : '';
                 }
 
-                // Update item
+                // Update the layout item
                 if (newLabel) item.label = newLabel;
                 if (newDefault) {
                     item.defaultValue = newDefault;
@@ -1558,6 +1558,22 @@
                 } else {
                     delete item.defaultValue;
                     delete item.defaultValueText;
+                }
+
+                // Also update the corresponding field in bodyFields (used by Review page)
+                var bodyFields = self.editedConfig.bodyFields || [];
+                var bodyField = bodyFields.find(function(f) { return f.id === fieldId; });
+                if (bodyField) {
+                    if (newLabel) bodyField.label = newLabel;
+                    if (newDefault) {
+                        bodyField.defaultValue = newDefault;
+                        if (newDefaultText && isSelectField) {
+                            bodyField.defaultValueText = newDefaultText;
+                        }
+                    } else {
+                        delete bodyField.defaultValue;
+                        delete bodyField.defaultValueText;
+                    }
                 }
 
                 self.renderFormEditor();
