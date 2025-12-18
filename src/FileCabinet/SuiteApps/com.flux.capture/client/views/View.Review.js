@@ -969,10 +969,35 @@
                 box.style.height = h + 'px';
 
                 // Add tooltip
-                box.title = (field.label || key) + ': ' + (field.value || '') + (isMatched ? ' (Matched)' : ' (Unmatched - Click to assign)');
+                box.title = (field.label || key) + ': ' + (field.value || '') + (isMatched ? ' (Matched)' : ' (Drag to assign)');
 
-                // Click handler for unmatched annotations
+                // Make unmatched annotations draggable
                 if (!isMatched) {
+                    box.draggable = true;
+                    box.style.cursor = 'grab';
+
+                    box.addEventListener('dragstart', function(e) {
+                        self.extractionPool.dragActive = true;
+                        e.dataTransfer.effectAllowed = 'copy';
+                        e.dataTransfer.setData('text/plain', JSON.stringify({
+                            key: key,
+                            value: field.value || '',
+                            id: 'annotation_' + key
+                        }));
+                        box.classList.add('dragging');
+                        document.body.classList.add('extraction-dragging');
+                    });
+
+                    box.addEventListener('dragend', function() {
+                        self.extractionPool.dragActive = false;
+                        box.classList.remove('dragging');
+                        document.body.classList.remove('extraction-dragging');
+                        document.querySelectorAll('.form-field.drop-target').forEach(function(f) {
+                            f.classList.remove('drop-target', 'drop-hover');
+                        });
+                    });
+
+                    // Click handler as alternative
                     box.addEventListener('click', function(e) {
                         e.stopPropagation();
                         self.showAnnotationAssignPopover(box, field, key);
@@ -1056,8 +1081,42 @@
             var formFields = this.formFields || {};
             var bodyFields = formFields.bodyFields || [];
 
+            // Add standard invoice fields first
+            var standardFields = [
+                { id: 'vendor', label: 'Vendor' },
+                { id: 'invoiceNumber', label: 'Invoice Number' },
+                { id: 'invoiceDate', label: 'Invoice Date' },
+                { id: 'dueDate', label: 'Due Date' },
+                { id: 'poNumber', label: 'PO Number' },
+                { id: 'subtotal', label: 'Subtotal' },
+                { id: 'taxAmount', label: 'Tax Amount' },
+                { id: 'totalAmount', label: 'Total Amount' }
+            ];
+
+            standardFields.forEach(function(field) {
+                var option = document.createElement('option');
+                option.value = field.id;
+                option.textContent = field.label;
+                select.appendChild(option);
+            });
+
+            // Add separator if there are body fields
+            if (bodyFields.length > 0) {
+                var separator = document.createElement('option');
+                separator.disabled = true;
+                separator.textContent = '──────────';
+                select.appendChild(separator);
+            }
+
+            // Add body fields
             bodyFields.forEach(function(field) {
                 if (field.isDisplay !== false && field.id !== 'entity') {
+                    // Skip if already in standard fields
+                    var isStandard = standardFields.some(function(sf) {
+                        return sf.id.toLowerCase() === field.id.toLowerCase();
+                    });
+                    if (isStandard) return;
+
                     var option = document.createElement('option');
                     option.value = field.id;
                     option.textContent = field.label || field.id;
@@ -1482,8 +1541,7 @@
         // Render sublists section
         renderSublists: function(sublistsToRender, doc) {
             var self = this;
-            var html = '<div class="form-section line-section">' +
-                '<h4><i class="fas fa-list"></i> Line Items</h4>';
+            var html = '<div class="form-section line-section">';
 
             // Render sublist tabs if multiple
             if (sublistsToRender.length > 1) {
@@ -3848,12 +3906,12 @@
                 };
             });
 
-            // Auto-scroll during drag
+            // Auto-scroll during drag - use document-level listener with capture
             var scrollInterval = null;
             var extractionPanel = el('#extraction-panel');
 
             function startAutoScroll(panel, direction, speed) {
-                stopAutoScroll();
+                if (scrollInterval) return; // Already scrolling
                 scrollInterval = setInterval(function() {
                     panel.scrollTop += direction * speed;
                 }, 16);
@@ -3866,30 +3924,33 @@
                 }
             }
 
-            // Global dragover for auto-scroll
+            // Use document-level dragover with capture to handle scroll regardless of target
             if (extractionPanel) {
-                extractionPanel.ondragover = function(e) {
+                document.addEventListener('dragover', function(e) {
                     if (!self.extractionPool.dragActive) return;
-                    e.preventDefault();
 
                     var rect = extractionPanel.getBoundingClientRect();
                     var y = e.clientY;
-                    var scrollZone = 60; // pixels from edge to trigger scroll
+                    var x = e.clientX;
+                    var scrollZone = 80;
 
-                    if (y < rect.top + scrollZone) {
-                        // Near top - scroll up
-                        startAutoScroll(extractionPanel, -1, 10);
-                    } else if (y > rect.bottom - scrollZone) {
-                        // Near bottom - scroll down
-                        startAutoScroll(extractionPanel, 1, 10);
+                    // Only scroll if mouse is within the extraction panel's x bounds
+                    if (x >= rect.left && x <= rect.right) {
+                        if (y < rect.top + scrollZone && y >= rect.top) {
+                            startAutoScroll(extractionPanel, -1, 8);
+                        } else if (y > rect.bottom - scrollZone && y <= rect.bottom) {
+                            startAutoScroll(extractionPanel, 1, 8);
+                        } else {
+                            stopAutoScroll();
+                        }
                     } else {
                         stopAutoScroll();
                     }
-                };
+                }, true); // Use capture phase
 
-                extractionPanel.ondragleave = function() {
+                document.addEventListener('dragend', function() {
                     stopAutoScroll();
-                };
+                }, true);
             }
 
             // Card drag events
