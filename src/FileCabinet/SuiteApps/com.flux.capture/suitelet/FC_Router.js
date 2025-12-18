@@ -926,7 +926,7 @@ define([
      */
     function getAccounts(context) {
         try {
-            var accountType = context.accountType || 'Expense';
+            var accountType = context.accountType;
             var searchQuery = context.query || '';
 
             // Use N/search for more reliable account lookup
@@ -934,8 +934,8 @@ define([
                 ['isinactive', 'is', 'F']
             ];
 
-            // Filter by account type if specified
-            if (accountType) {
+            // Filter by account type if specified (skip if 'all' or not provided for full list)
+            if (accountType && accountType !== 'all') {
                 filters.push('AND');
                 filters.push(['type', 'is', accountType]);
             }
