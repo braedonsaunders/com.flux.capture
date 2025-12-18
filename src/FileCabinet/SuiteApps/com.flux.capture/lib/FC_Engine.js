@@ -483,6 +483,8 @@ define([
                 invoiceDate: null,
                 dueDate: null,
                 poNumber: null,
+                memo: null,
+                paymentTerms: null,
                 subtotal: 0,
                 taxAmount: 0,
                 totalAmount: 0,

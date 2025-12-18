@@ -61,7 +61,16 @@ define([
         'ShippingAddress': 'shippingAddress',
         'ShippingAddressRecipient': 'shippingRecipient',
         'PaymentTerm': 'paymentTerms',
+        'PaymentTerms': 'paymentTerms',
         'CurrencyCode': 'currency',
+
+        // Memo/Notes fields (document-level)
+        'Memo': 'memo',
+        'Notes': 'memo',
+        'Comments': 'memo',
+        'Remarks': 'memo',
+        'Description': 'memo', // At document level, description is often a memo
+        'Message': 'memo',
 
         // Receipt fields
         'MerchantName': 'vendorName',
@@ -84,7 +93,13 @@ define([
         'UnitPrice': 'unitPrice',
         'Amount': 'amount',
         'Tax': 'tax',
-        'Date': 'date'
+        'Date': 'date',
+        // Memo/Notes for line items
+        'Memo': 'memo',
+        'Notes': 'memo',
+        'Comments': 'memo',
+        'Remarks': 'memo',
+        'ItemDescription': 'memo' // Sometimes separate from main description
     };
 
     /**
