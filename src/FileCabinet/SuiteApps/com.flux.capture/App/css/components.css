@@ -4832,7 +4832,7 @@ tr.doc-row:hover .row-action.btn-delete { background: rgba(239, 68, 68, 0.1); co
 tr.doc-row:hover .row-action.btn-delete:hover { background: var(--color-danger); color: white; }
 
 /* Bulk Actions Bar */
-.bulk-actions-bar { display: flex; align-items: center; justify-content: space-between; padding: var(--space-sm) var(--space-md); background: var(--color-primary); color: white; border-radius: 0 0 var(--radius-lg) var(--radius-lg); margin-top: -1px; }
+.bulk-actions-bar { display: flex; align-items: center; justify-content: space-between; padding: var(--space-sm) var(--space-md); background: var(--color-primary); color: white; border-radius: 0 0 var(--radius-lg) var(--radius-lg); margin-top: -1px; position: relative; z-index: 100; }
 .bulk-count { font-size: var(--font-size-sm); }
 .bulk-buttons { display: flex; gap: var(--space-sm); }
 .bulk-buttons .btn { font-size: var(--font-size-xs); padding: var(--space-xs) var(--space-sm); }
