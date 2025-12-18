@@ -560,13 +560,25 @@
 
                 if (!id) return;
 
-                fields.push({
+                // Detect checkbox type from checkBoxDefault element
+                var checkBoxDefault = self.getXmlText(f, 'checkBoxDefault');
+                var fieldType = checkBoxDefault ? 'checkbox' : 'text';
+
+                var fieldObj = {
                     id: id,
                     label: self.getXmlText(f, 'label') || id,
                     visible: self.getXmlText(f, 'visible') !== 'F',
                     mandatory: self.getXmlText(f, 'mandatory') === 'T',
-                    displayType: self.getXmlText(f, 'displayType') || 'NORMAL'
-                });
+                    displayType: self.getXmlText(f, 'displayType') || 'NORMAL',
+                    type: fieldType
+                };
+
+                // Store checkbox default value if present
+                if (checkBoxDefault) {
+                    fieldObj.checkBoxDefault = checkBoxDefault;
+                }
+
+                fields.push(fieldObj);
             });
 
             return fields;
@@ -648,11 +660,23 @@
             element.querySelectorAll('columns > column').forEach(function(col) {
                 var colId = self.getXmlText(col, 'id') || col.getAttribute('scriptid');
                 if (colId) {
-                    columns.push({
+                    // Detect checkbox type from checkBoxDefault element
+                    var checkBoxDefault = self.getXmlText(col, 'checkBoxDefault');
+                    var colType = checkBoxDefault ? 'checkbox' : 'text';
+
+                    var colObj = {
                         id: colId,
                         label: self.getXmlText(col, 'label') || colId,
-                        visible: self.getXmlText(col, 'visible') !== 'F'
-                    });
+                        visible: self.getXmlText(col, 'visible') !== 'F',
+                        type: colType
+                    };
+
+                    // Store checkbox default value if present
+                    if (checkBoxDefault) {
+                        colObj.checkBoxDefault = checkBoxDefault;
+                    }
+
+                    columns.push(colObj);
                 }
             });
 
