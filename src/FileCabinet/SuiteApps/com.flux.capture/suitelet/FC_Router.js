@@ -211,6 +211,12 @@ define([
                 case 'scriptstatus':
                     result = getScriptDeploymentStatus(context.deploymentId);
                     break;
+                case 'providerconfig':
+                    result = getProviderConfig();
+                    break;
+                case 'providers':
+                    result = getAvailableProviders();
+                    break;
                 default:
                     result = Response.error('INVALID_ACTION', 'Unknown action: ' + action);
             }
@@ -244,6 +250,9 @@ define([
                     break;
                 case 'learn':
                     result = submitCorrection(context);
+                    break;
+                case 'testprovider':
+                    result = testProviderConnection(context.providerType, context.config);
                     break;
                 default:
                     result = Response.error('INVALID_ACTION', 'Unknown action: ' + action);
@@ -291,6 +300,9 @@ define([
                     break;
                 case 'scriptstatus':
                     result = updateScriptDeploymentStatus(context.deploymentId, context.enabled);
+                    break;
+                case 'providerconfig':
+                    result = saveProviderConfig(context);
                     break;
                 default:
                     result = Response.error('INVALID_ACTION', 'Unknown action: ' + action);
@@ -2883,6 +2895,122 @@ define([
         }
 
         return txnRecord ? txnRecord.save() : null;
+    }
+
+    // ==================== Provider Configuration Handlers ====================
+
+    /**
+     * Get provider configuration for UI (with masked sensitive data)
+     */
+    function getProviderConfig() {
+        try {
+            var EngineModule = getEngine();
+            if (!EngineModule || !EngineModule.getProviderConfig) {
+                return Response.error('MODULE_NOT_AVAILABLE', 'Provider configuration module not available');
+            }
+
+            var config = EngineModule.getProviderConfig();
+            return Response.success(config, 'Provider configuration retrieved');
+        } catch (e) {
+            log.error('getProviderConfig', e);
+            return Response.error('GET_PROVIDER_CONFIG_FAILED', e.message);
+        }
+    }
+
+    /**
+     * Get list of available providers
+     */
+    function getAvailableProviders() {
+        try {
+            var EngineModule = getEngine();
+            if (!EngineModule || !EngineModule.getAvailableProviders) {
+                return Response.error('MODULE_NOT_AVAILABLE', 'Provider module not available');
+            }
+
+            var providers = EngineModule.getAvailableProviders();
+            return Response.success(providers, 'Available providers retrieved');
+        } catch (e) {
+            log.error('getAvailableProviders', e);
+            return Response.error('GET_PROVIDERS_FAILED', e.message);
+        }
+    }
+
+    /**
+     * Save provider configuration
+     */
+    function saveProviderConfig(context) {
+        try {
+            var EngineModule = getEngine();
+            if (!EngineModule || !EngineModule.saveProviderConfig) {
+                return Response.error('MODULE_NOT_AVAILABLE', 'Provider configuration module not available');
+            }
+
+            // Build config from context
+            var config = {
+                providerType: context.providerType || 'oci'
+            };
+
+            // Include OCI config if present
+            if (context.oci) {
+                config.oci = context.oci;
+            }
+
+            // Include Azure config if present
+            if (context.azure) {
+                config.azure = {
+                    endpoint: context.azure.endpoint || '',
+                    defaultModel: context.azure.defaultModel || 'prebuilt-invoice'
+                };
+                // Only include API key if a new one was provided
+                if (context.azure.apiKey) {
+                    config.azure.apiKey = context.azure.apiKey;
+                }
+            }
+
+            var result = EngineModule.saveProviderConfig(config);
+
+            if (result.success) {
+                return Response.success(null, result.message || 'Provider configuration saved');
+            } else {
+                return Response.error('SAVE_FAILED', result.message || 'Failed to save provider configuration');
+            }
+        } catch (e) {
+            log.error('saveProviderConfig', e);
+            return Response.error('SAVE_PROVIDER_CONFIG_FAILED', e.message);
+        }
+    }
+
+    /**
+     * Test provider connection
+     */
+    function testProviderConnection(providerType, config) {
+        try {
+            var EngineModule = getEngine();
+            if (!EngineModule || !EngineModule.testProviderConnection) {
+                return Response.error('MODULE_NOT_AVAILABLE', 'Provider module not available');
+            }
+
+            // Build test config
+            var testConfig = {};
+            if (config) {
+                testConfig = {
+                    endpoint: config.endpoint || '',
+                    apiKey: config.apiKey || null,
+                    defaultModel: config.defaultModel || 'prebuilt-invoice'
+                };
+            }
+
+            var result = EngineModule.testProviderConnection(providerType, testConfig);
+
+            if (result.success) {
+                return Response.success({ tested: providerType }, result.message || 'Connection test successful');
+            } else {
+                return Response.error('TEST_FAILED', result.message || 'Connection test failed');
+            }
+        } catch (e) {
+            log.error('testProviderConnection', e);
+            return Response.error('TEST_PROVIDER_FAILED', e.message);
+        }
     }
 
     function getStatusDisplayText(status) {
