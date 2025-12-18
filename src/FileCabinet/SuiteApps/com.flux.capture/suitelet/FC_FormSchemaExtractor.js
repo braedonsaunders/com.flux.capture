@@ -8,21 +8,39 @@
  * Strategy:
  * 1. Server-side: Extract ALL fields and sublists from N/record dynamically
  * 2. Client-side: DOM extraction captures actual form layout (tabs, groups, order, visibility)
- * 3. Cache: Store extracted layout per form ID for reuse
+ * 3. Storage: All data persisted to customrecord_flux_config (NOT N/cache)
  *
- * NO HARDCODED LAYOUTS - Everything is extracted dynamically
+ * Config Types:
+ * - form_schema: Server-extracted field metadata (types, labels, options)
+ * - form_layout: Client-extracted DOM layout (tabs, groups, visibility, order)
+ * - form_config: User-customized form definition (from XML upload or manual)
+ *
+ * NO HARDCODED LAYOUTS - Everything is extracted dynamically or user-configured
  */
 
-define(['N/record', 'N/search', 'N/log', 'N/cache'],
-function(record, search, log, cache) {
+define(['N/record', 'N/search', 'N/log', 'N/query', 'N/runtime'],
+function(record, search, log, query, runtime) {
 
-    // Schema version for migrations (bump to invalidate cache)
-    var SCHEMA_VERSION = 5;
+    // Schema version for migrations (bump to invalidate old configs)
+    var SCHEMA_VERSION = 6;
 
-    // Cache configuration
-    var CACHE_NAME = 'FC_FORM_SCHEMA';
-    var CACHE_SCOPE = cache.Scope.PUBLIC;
-    var CACHE_TTL_SECONDS = 2592000; // 30 days (form layouts rarely change)
+    // Config record type
+    var CONFIG_RECORD_TYPE = 'customrecord_flux_config';
+
+    // Config types
+    var CONFIG_TYPE = {
+        SCHEMA: 'form_schema',
+        LAYOUT: 'form_layout',
+        CONFIG: 'form_config'  // User customized
+    };
+
+    // Source types
+    var SOURCE_TYPE = {
+        SERVER_EXTRACT: 'server_extract',
+        CLIENT_CAPTURE: 'client_capture',
+        XML_UPLOAD: 'xml_upload',
+        MANUAL: 'manual'
+    };
 
     // Known sublists by record type (these exist on the record, not form-specific)
     var RECORD_SUBLISTS = {
@@ -37,6 +55,10 @@ function(record, search, log, cache) {
 
     // Fields to skip (internal/system fields)
     var SKIP_FIELDS = ['ntype', 'recordtype', 'nsapiCT', 'sys_id', 'sys_parentid'];
+
+    // ==========================================
+    // RECORD TYPE UTILITIES
+    // ==========================================
 
     /**
      * Get record type enum from string
@@ -80,106 +102,206 @@ function(record, search, log, cache) {
         return normalMap[transactionType.toLowerCase()] || transactionType.toLowerCase();
     }
 
+    // ==========================================
+    // CONFIG RECORD STORAGE (Replaces N/cache)
+    // ==========================================
+
     /**
-     * Get schema cache
+     * Find config record by type, key, and optionally form ID
+     * @returns {number|null} Internal ID of config record or null
      */
-    function getSchemaCache() {
-        return cache.getCache({
-            name: CACHE_NAME,
-            scope: CACHE_SCOPE
-        });
+    function findConfigRecord(configType, recordType, formId) {
+        try {
+            var sql = "SELECT id FROM " + CONFIG_RECORD_TYPE + " WHERE " +
+                "custrecord_flux_cfg_type = ? AND custrecord_flux_cfg_key = ?";
+            var params = [configType, recordType];
+
+            if (formId) {
+                sql += " AND custrecord_flux_cfg_form_id = ?";
+                params.push(String(formId));
+            } else {
+                sql += " AND (custrecord_flux_cfg_form_id IS NULL OR custrecord_flux_cfg_form_id = '')";
+            }
+
+            sql += " AND custrecord_flux_cfg_active = 'T' ORDER BY id DESC";
+
+            var results = query.runSuiteQL({ query: sql, params: params }).asMappedResults();
+            return results.length > 0 ? results[0].id : null;
+        } catch (e) {
+            log.debug('findConfigRecord', 'Not found: ' + e.message);
+            return null;
+        }
     }
 
     /**
-     * Get cache key for schema (field metadata)
+     * Load config data from record
+     * @returns {Object|null} Parsed JSON data or null
      */
-    function getSchemaKey(recordType, formId) {
-        return 'schema_v' + SCHEMA_VERSION + '_' + recordType + (formId ? '_' + formId : '');
+    function loadConfigData(configType, recordType, formId) {
+        try {
+            var recordId = findConfigRecord(configType, recordType, formId);
+            if (!recordId) return null;
+
+            var configRec = record.load({
+                type: CONFIG_RECORD_TYPE,
+                id: recordId
+            });
+
+            var dataJson = configRec.getValue('custrecord_flux_cfg_data');
+            if (!dataJson) return null;
+
+            var data = JSON.parse(dataJson);
+            data._configId = recordId;
+            data._version = configRec.getValue('custrecord_flux_cfg_version');
+            data._source = configRec.getValue('custrecord_flux_cfg_source');
+            data._modified = configRec.getValue('custrecord_flux_cfg_modified');
+
+            return data;
+        } catch (e) {
+            log.debug('loadConfigData', 'Error loading ' + configType + '/' + recordType + ': ' + e.message);
+            return null;
+        }
     }
 
     /**
-     * Get cache key for layout (client-extracted tabs/groups/order)
+     * Save config data to record (create or update)
      */
-    function getLayoutKey(recordType, formId) {
-        return 'layout_v' + SCHEMA_VERSION + '_' + recordType + (formId ? '_' + formId : '');
+    function saveConfigData(configType, recordType, formId, data, source) {
+        try {
+            var existingId = findConfigRecord(configType, recordType, formId);
+            var configRec;
+
+            if (existingId) {
+                configRec = record.load({
+                    type: CONFIG_RECORD_TYPE,
+                    id: existingId
+                });
+            } else {
+                configRec = record.create({
+                    type: CONFIG_RECORD_TYPE
+                });
+                configRec.setValue('custrecord_flux_cfg_type', configType);
+                configRec.setValue('custrecord_flux_cfg_key', recordType);
+                if (formId) {
+                    configRec.setValue('custrecord_flux_cfg_form_id', String(formId));
+                }
+            }
+
+            // Clean data before saving (remove internal fields)
+            var dataToSave = JSON.parse(JSON.stringify(data));
+            delete dataToSave._configId;
+            delete dataToSave._version;
+            delete dataToSave._source;
+            delete dataToSave._modified;
+            delete dataToSave._cached;
+
+            configRec.setValue('custrecord_flux_cfg_data', JSON.stringify(dataToSave));
+            configRec.setValue('custrecord_flux_cfg_version', SCHEMA_VERSION);
+            configRec.setValue('custrecord_flux_cfg_source', source || SOURCE_TYPE.SERVER_EXTRACT);
+            configRec.setValue('custrecord_flux_cfg_active', true);
+            configRec.setValue('custrecord_flux_cfg_modified', new Date());
+
+            try {
+                var userId = runtime.getCurrentUser().id;
+                if (userId) {
+                    configRec.setValue('custrecord_flux_cfg_modified_by', userId);
+                }
+            } catch (e) { /* ignore */ }
+
+            var savedId = configRec.save();
+            log.audit('saveConfigData', 'Saved ' + configType + ' for ' + recordType + ' (ID: ' + savedId + ')');
+
+            return { success: true, id: savedId };
+        } catch (e) {
+            log.error('saveConfigData', e.message);
+            return { success: false, error: e.message };
+        }
     }
 
     /**
-     * Get cached schema
+     * Delete config record
+     */
+    function deleteConfigRecord(configType, recordType, formId) {
+        try {
+            var recordId = findConfigRecord(configType, recordType, formId);
+            if (recordId) {
+                record.delete({ type: CONFIG_RECORD_TYPE, id: recordId });
+                return { success: true };
+            }
+            return { success: true, message: 'No record to delete' };
+        } catch (e) {
+            return { success: false, error: e.message };
+        }
+    }
+
+    // ==========================================
+    // SCHEMA FUNCTIONS (Server-extracted metadata)
+    // ==========================================
+
+    /**
+     * Get cached schema from config record
      */
     function getCachedSchema(recordType, formId) {
-        try {
-            var schemaCache = getSchemaCache();
-            var cacheKey = getSchemaKey(recordType, formId);
-            var cached = schemaCache.get({ key: cacheKey });
-            if (cached) {
-                var schema = JSON.parse(cached);
-                schema._cached = true;
-                return schema;
-            }
-        } catch (e) {
-            log.debug('getCachedSchema', 'Cache miss: ' + e.message);
+        var normalizedType = normalizeRecordType(recordType);
+        var data = loadConfigData(CONFIG_TYPE.SCHEMA, normalizedType, formId);
+        if (data) {
+            data._cached = true;
         }
-        return null;
+        return data;
     }
 
     /**
-     * Save schema to cache
+     * Save schema to config record
      */
-    function saveSchemaToCache(recordType, formId, schema) {
-        try {
-            var schemaCache = getSchemaCache();
-            var cacheKey = getSchemaKey(recordType, formId);
-            var schemaToCache = JSON.parse(JSON.stringify(schema));
-            delete schemaToCache._cached;
-            schemaCache.put({
-                key: cacheKey,
-                value: JSON.stringify(schemaToCache),
-                ttl: CACHE_TTL_SECONDS
-            });
-            return true;
-        } catch (e) {
-            log.error('saveSchemaToCache', e.message);
-            return false;
-        }
+    function saveSchemaToConfig(recordType, formId, schema) {
+        var normalizedType = normalizeRecordType(recordType);
+        return saveConfigData(CONFIG_TYPE.SCHEMA, normalizedType, formId, schema, SOURCE_TYPE.SERVER_EXTRACT);
     }
 
+    // ==========================================
+    // LAYOUT FUNCTIONS (Client-extracted DOM layout)
+    // ==========================================
+
     /**
-     * Get cached layout (client-extracted)
+     * Get cached layout from config record
      */
     function getCachedLayout(recordType, formId) {
-        try {
-            var schemaCache = getSchemaCache();
-            var cacheKey = getLayoutKey(recordType, formId);
-            var cached = schemaCache.get({ key: cacheKey });
-            if (cached) {
-                return JSON.parse(cached);
-            }
-        } catch (e) {
-            log.debug('getCachedLayout', 'No cached layout: ' + e.message);
-        }
-        return null;
+        var normalizedType = normalizeRecordType(recordType);
+        return loadConfigData(CONFIG_TYPE.LAYOUT, normalizedType, formId);
     }
 
     /**
-     * Save client-extracted layout to cache
+     * Save layout to config record
      */
-    function saveLayoutToCache(recordType, formId, layout) {
-        try {
-            var schemaCache = getSchemaCache();
-            var cacheKey = getLayoutKey(recordType, formId);
-            schemaCache.put({
-                key: cacheKey,
-                value: JSON.stringify(layout),
-                ttl: CACHE_TTL_SECONDS
-            });
-            log.audit('saveLayoutToCache', 'Saved layout for ' + recordType + ' form ' + formId);
-            return true;
-        } catch (e) {
-            log.error('saveLayoutToCache', e.message);
-            return false;
-        }
+    function saveLayoutToConfig(recordType, formId, layout) {
+        var normalizedType = normalizeRecordType(recordType);
+        return saveConfigData(CONFIG_TYPE.LAYOUT, normalizedType, formId, layout, SOURCE_TYPE.CLIENT_CAPTURE);
     }
+
+    // ==========================================
+    // USER CONFIG FUNCTIONS (XML upload / Manual)
+    // ==========================================
+
+    /**
+     * Get user-customized form config
+     */
+    function getUserFormConfig(recordType, formId) {
+        var normalizedType = normalizeRecordType(recordType);
+        return loadConfigData(CONFIG_TYPE.CONFIG, normalizedType, formId);
+    }
+
+    /**
+     * Save user-customized form config
+     * @param {string} source - 'xml_upload' or 'manual'
+     */
+    function saveUserFormConfig(recordType, formId, config, source) {
+        var normalizedType = normalizeRecordType(recordType);
+        return saveConfigData(CONFIG_TYPE.CONFIG, normalizedType, formId, config, source);
+    }
+
+    // ==========================================
+    // FIELD EXTRACTION
+    // ==========================================
 
     /**
      * Extract field metadata from record
@@ -282,9 +404,18 @@ function(record, search, log, cache) {
         return fieldInfo;
     }
 
+    // ==========================================
+    // MAIN EXTRACTION FUNCTION
+    // ==========================================
+
     /**
      * Extract complete form schema dynamically
      * Returns ALL fields and sublists from the record
+     *
+     * Priority:
+     * 1. User config (form_config) - if user customized via XML or manual
+     * 2. Client layout (form_layout) - DOM-extracted tabs/groups
+     * 3. Server schema (form_schema) - Field metadata from N/record
      */
     function extractFormSchema(transactionType, options) {
         options = options || {};
@@ -302,17 +433,31 @@ function(record, search, log, cache) {
             };
         }
 
-        // Check cache first
+        // Check for user-customized config first (highest priority)
+        var userConfig = getUserFormConfig(normalizedType, formId);
+        if (userConfig && !forceRefresh) {
+            log.debug('extractFormSchema', 'Using user config for ' + normalizedType);
+            // Merge with cached layout if available
+            var layout = getCachedLayout(normalizedType, formId);
+            if (layout) {
+                userConfig.layout = layout;
+            }
+            userConfig.source = userConfig._source || 'user_config';
+            return { success: true, data: userConfig };
+        }
+
+        // Check cached schema
         if (!forceRefresh) {
             var cached = getCachedSchema(normalizedType, formId);
             if (cached) {
                 // Also attach any cached layout
                 cached.layout = getCachedLayout(normalizedType, formId);
+                cached.source = 'cached';
                 return { success: true, data: cached };
             }
         }
 
-        log.debug('extractFormSchema', 'Extracting schema for ' + normalizedType);
+        log.debug('extractFormSchema', 'Extracting fresh schema for ' + normalizedType);
 
         try {
             // Create temp record
@@ -376,7 +521,7 @@ function(record, search, log, cache) {
                 }
             });
 
-            // Build schema (no hardcoded layout - just the raw data)
+            // Build schema
             var schema = {
                 formInfo: {
                     id: actualFormId,
@@ -387,8 +532,8 @@ function(record, search, log, cache) {
                 },
                 bodyFields: bodyFields,
                 sublists: sublists,
-                // Layout will be populated from client-side extraction
                 layout: getCachedLayout(normalizedType, actualFormId),
+                source: 'server_extract',
                 config: {
                     sublistColumnLimit: 10
                 }
@@ -396,8 +541,8 @@ function(record, search, log, cache) {
 
             log.debug('extractFormSchema', 'Extracted ' + bodyFields.length + ' body fields, ' + sublists.length + ' sublists');
 
-            // Cache the schema
-            saveSchemaToCache(normalizedType, actualFormId, schema);
+            // Save to config record
+            saveSchemaToConfig(normalizedType, actualFormId, schema);
 
             return { success: true, data: schema };
 
@@ -428,10 +573,17 @@ function(record, search, log, cache) {
                 };
             }
 
-            // Save to cache
-            saveLayoutToCache(normalizedType, formId, layout);
+            // Add metadata
+            layout.capturedAt = new Date().toISOString();
 
-            return { success: true, message: 'Layout saved' };
+            // Save to config record
+            var result = saveLayoutToConfig(normalizedType, formId, layout);
+
+            if (result.success) {
+                return { success: true, message: 'Layout saved to config record', id: result.id };
+            } else {
+                return { success: false, error: result.error };
+            }
         } catch (e) {
             log.error('saveFormLayout', e.message);
             return { success: false, error: e.message };
@@ -439,18 +591,60 @@ function(record, search, log, cache) {
     }
 
     /**
-     * Invalidate cache for a record type
+     * Save user-customized form configuration (from XML upload or manual edit)
+     */
+    function saveUserConfig(recordType, formId, config, source) {
+        try {
+            var normalizedType = normalizeRecordType(recordType);
+
+            // Validate config structure
+            if (!config) {
+                return {
+                    success: false,
+                    error: 'INVALID_CONFIG',
+                    message: 'Config is required'
+                };
+            }
+
+            // Add metadata
+            config.savedAt = new Date().toISOString();
+
+            // Determine source
+            var sourceType = SOURCE_TYPE.MANUAL;
+            if (source === 'xml_upload' || source === 'xml') {
+                sourceType = SOURCE_TYPE.XML_UPLOAD;
+            } else if (source === 'client_capture') {
+                sourceType = SOURCE_TYPE.CLIENT_CAPTURE;
+            }
+
+            // Save to config record
+            var result = saveUserFormConfig(normalizedType, formId, config, sourceType);
+
+            if (result.success) {
+                return { success: true, message: 'User config saved', id: result.id, source: sourceType };
+            } else {
+                return { success: false, error: result.error };
+            }
+        } catch (e) {
+            log.error('saveUserConfig', e.message);
+            return { success: false, error: e.message };
+        }
+    }
+
+    /**
+     * Invalidate/delete config for a record type
      */
     function invalidateCache(recordType, formId) {
         try {
             var normalizedType = normalizeRecordType(recordType);
-            var schemaCache = getSchemaCache();
 
-            // Remove schema cache
-            schemaCache.remove({ key: getSchemaKey(normalizedType, formId) });
+            // Delete schema
+            deleteConfigRecord(CONFIG_TYPE.SCHEMA, normalizedType, formId);
 
-            // Remove layout cache
-            schemaCache.remove({ key: getLayoutKey(normalizedType, formId) });
+            // Delete layout
+            deleteConfigRecord(CONFIG_TYPE.LAYOUT, normalizedType, formId);
+
+            // Note: We don't delete user config (form_config) - that's intentional
 
             return { success: true };
         } catch (e) {
@@ -459,31 +653,26 @@ function(record, search, log, cache) {
     }
 
     /**
-     * Clear all form layout and schema caches
+     * Clear all form layout and schema configs
      * Used when user wants to force re-extraction of all forms
      */
     function clearAllCache() {
         try {
-            var schemaCache = getSchemaCache();
             var recordTypes = Object.keys(RECORD_SUBLISTS);
-            var cleared = 0;
+            var deleted = 0;
 
             recordTypes.forEach(function(recordType) {
-                try {
-                    // Clear schema cache (no form ID)
-                    schemaCache.remove({ key: getSchemaKey(recordType, null) });
-                    cleared++;
+                // Delete schema configs
+                var schemaResult = deleteConfigRecord(CONFIG_TYPE.SCHEMA, recordType, null);
+                if (schemaResult.success) deleted++;
 
-                    // Clear layout cache (no form ID)
-                    schemaCache.remove({ key: getLayoutKey(recordType, null) });
-                    cleared++;
-                } catch (e) {
-                    // Ignore errors for individual keys (might not exist)
-                }
+                // Delete layout configs
+                var layoutResult = deleteConfigRecord(CONFIG_TYPE.LAYOUT, recordType, null);
+                if (layoutResult.success) deleted++;
             });
 
-            log.debug('clearAllCache', 'Cleared ' + cleared + ' cache entries');
-            return { success: true, cleared: cleared };
+            log.audit('clearAllCache', 'Deleted ' + deleted + ' config records');
+            return { success: true, deleted: deleted };
         } catch (e) {
             log.error('clearAllCache', e.message);
             return { success: false, error: e.message };
@@ -491,7 +680,31 @@ function(record, search, log, cache) {
     }
 
     /**
-     * Update configuration
+     * Clear all configs of a specific type
+     */
+    function clearConfigsByType(configType) {
+        try {
+            var sql = "SELECT id FROM " + CONFIG_RECORD_TYPE + " WHERE custrecord_flux_cfg_type = ?";
+            var results = query.runSuiteQL({ query: sql, params: [configType] }).asMappedResults();
+
+            var deleted = 0;
+            results.forEach(function(row) {
+                try {
+                    record.delete({ type: CONFIG_RECORD_TYPE, id: row.id });
+                    deleted++;
+                } catch (e) {
+                    log.debug('clearConfigsByType', 'Could not delete ' + row.id + ': ' + e.message);
+                }
+            });
+
+            return { success: true, deleted: deleted };
+        } catch (e) {
+            return { success: false, error: e.message };
+        }
+    }
+
+    /**
+     * Update configuration options
      */
     function updateConfig(recordType, formId, newConfig) {
         try {
@@ -505,7 +718,7 @@ function(record, search, log, cache) {
             }
 
             cached.config = Object.assign({}, cached.config || {}, newConfig);
-            saveSchemaToCache(normalizedType, formId, cached);
+            saveSchemaToConfig(normalizedType, formId, cached);
 
             return { success: true, config: cached.config };
         } catch (e) {
@@ -513,14 +726,50 @@ function(record, search, log, cache) {
         }
     }
 
+    /**
+     * List all stored configs (for debugging/admin)
+     */
+    function listConfigs(configType) {
+        try {
+            var sql = "SELECT id, custrecord_flux_cfg_type as type, custrecord_flux_cfg_key as key, " +
+                "custrecord_flux_cfg_form_id as formId, custrecord_flux_cfg_source as source, " +
+                "custrecord_flux_cfg_version as version, custrecord_flux_cfg_modified as modified " +
+                "FROM " + CONFIG_RECORD_TYPE + " WHERE custrecord_flux_cfg_active = 'T'";
+
+            if (configType) {
+                sql += " AND custrecord_flux_cfg_type = '" + configType + "'";
+            }
+
+            sql += " ORDER BY custrecord_flux_cfg_type, custrecord_flux_cfg_key";
+
+            var results = query.runSuiteQL({ query: sql }).asMappedResults();
+            return { success: true, data: results };
+        } catch (e) {
+            return { success: false, error: e.message };
+        }
+    }
+
     return {
+        // Main functions
         extractFormSchema: extractFormSchema,
         saveFormLayout: saveFormLayout,
+        saveUserConfig: saveUserConfig,
+
+        // Cache/config management
         invalidateCache: invalidateCache,
         clearAllCache: clearAllCache,
+        clearConfigsByType: clearConfigsByType,
         updateConfig: updateConfig,
+
+        // Direct access (for advanced use)
         getCachedSchema: getCachedSchema,
         getCachedLayout: getCachedLayout,
-        SCHEMA_VERSION: SCHEMA_VERSION
+        getUserFormConfig: getUserFormConfig,
+        listConfigs: listConfigs,
+
+        // Constants
+        SCHEMA_VERSION: SCHEMA_VERSION,
+        CONFIG_TYPE: CONFIG_TYPE,
+        SOURCE_TYPE: SOURCE_TYPE
     };
 });
