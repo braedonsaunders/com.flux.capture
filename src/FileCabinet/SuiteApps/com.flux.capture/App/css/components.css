@@ -4967,9 +4967,19 @@ body.fullscreen-mode .sidebar-expand-btn {
     border-radius: var(--radius-md);
     max-height: 220px;
     overflow-y: auto;
-    z-index: 200;
+    z-index: 9999;
     box-shadow: var(--shadow-lg);
     margin-top: 2px;
+}
+
+/* Ensure dropdowns can show above card boundaries */
+.form-section,
+.form-field,
+.form-grid,
+.form-row,
+.field-group,
+.group-content {
+    overflow: visible !important;
 }
 
 .typeahead-option {

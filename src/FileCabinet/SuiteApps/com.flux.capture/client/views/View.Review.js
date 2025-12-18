@@ -1254,10 +1254,10 @@
             var isDisabled = nsField.isDisabled || nsField.isReadonly || nsField.mode === 'inline' ||
                              nsField.displayType === 'DISABLED' || nsField.displayType === 'INLINETEXT';
 
-            // Determine if this is a select field (by type or by known field ID)
-            var isSelectType = nsField.type === 'select' || this.isSelectField(nsField.id);
+            // Get inferred field type for proper rendering
+            var inferredType = this.getInferredFieldType(nsField);
 
-            if (isSelectType && nsField.options && nsField.options.length > 0) {
+            if (inferredType === 'select' && nsField.options && nsField.options.length > 0) {
                 // Select with pre-loaded options - render dropdown
                 html += '<select id="' + fieldId + '" class="ns-field-select" data-field="' + nsField.id + '"' + (isDisabled ? ' disabled' : '') + (isRequired ? ' required' : '') + '>';
                 html += '<option value="">-- Select --</option>';
@@ -1266,7 +1266,7 @@
                     html += '<option value="' + escapeHtml(opt.value) + '"' + selected + '>' + escapeHtml(opt.text) + '</option>';
                 });
                 html += '</select>';
-            } else if (isSelectType) {
+            } else if (inferredType === 'select') {
                 // Select without pre-loaded options - use typeahead for server-side search
                 var lookupType = this.getLookupType(nsField.id);
                 var displayValue = doc[docKey + '_display'] || doc[docKey + '_text'] || '';
@@ -1284,23 +1284,24 @@
                         '<div class="typeahead-dropdown"></div>' +
                     '</div>';
                 }
-            } else if (nsField.type === 'date') {
+            } else if (inferredType === 'date') {
                 html += '<input type="date" id="' + fieldId + '" class="ns-field-input" data-field="' + nsField.id + '" value="' + formatDateInput(value) + '"' +
                     (isDisabled ? ' disabled' : '') + (isRequired ? ' required' : '') + '>';
-            } else if (nsField.type === 'currency' || nsField.type === 'float') {
+            } else if (inferredType === 'currency' || inferredType === 'float') {
                 html += '<div class="input-with-prefix">' +
                     '<span class="input-prefix">$</span>' +
                     '<input type="number" step="0.01" id="' + fieldId + '" class="ns-field-input" data-field="' + nsField.id + '" value="' + (parseFloat(value) || 0).toFixed(2) + '"' +
                     (isDisabled ? ' disabled' : '') + (isRequired ? ' required' : '') + '>' +
                 '</div>';
-            } else if (nsField.type === 'integer') {
+            } else if (inferredType === 'integer') {
                 html += '<input type="number" step="1" id="' + fieldId + '" class="ns-field-input" data-field="' + nsField.id + '" value="' + escapeHtml(value) + '"' +
                     (isDisabled ? ' disabled' : '') + (isRequired ? ' required' : '') + '>';
-            } else if (nsField.type === 'checkbox') {
+            } else if (inferredType === 'checkbox') {
+                var isChecked = value === true || value === 'T' || value === 'true' || value === '1';
                 html += '<input type="checkbox" id="' + fieldId + '" class="ns-field-input" data-field="' + nsField.id + '"' +
-                    (value ? ' checked' : '') + (isDisabled ? ' disabled' : '') + '>';
-            } else if (nsField.type === 'textarea') {
-                html += '<textarea id="' + fieldId + '" class="ns-field-input" data-field="' + nsField.id + '" rows="2"' +
+                    (isChecked ? ' checked' : '') + (isDisabled ? ' disabled' : '') + '>';
+            } else if (inferredType === 'textarea') {
+                html += '<textarea id="' + fieldId + '" class="ns-field-input" data-field="' + nsField.id + '" rows="3"' +
                     (isDisabled ? ' disabled' : '') + (isRequired ? ' required' : '') + '>' + escapeHtml(value) + '</textarea>';
             } else {
                 html += '<input type="text" id="' + fieldId + '" class="ns-field-input" data-field="' + nsField.id + '" value="' + escapeHtml(value) + '"' +
@@ -1308,7 +1309,7 @@
             }
 
             // Add suggestion button if available (only for text inputs, not checkboxes or selects with options)
-            if (suggestionHtml && nsField.type !== 'checkbox' && !isDisabled) {
+            if (suggestionHtml && inferredType !== 'checkbox' && inferredType !== 'select' && !isDisabled) {
                 html += suggestionHtml;
             }
 
@@ -1536,6 +1537,62 @@
             return selectFields.indexOf(normalizedId) !== -1;
         },
 
+        // Detect date fields by ID or type
+        isDateField: function(fieldId, fieldType) {
+            if (fieldType === 'date' || fieldType === 'DATE') return true;
+            var normalizedId = (fieldId || '').toLowerCase();
+            var dateFields = [
+                'trandate', 'duedate', 'startdate', 'enddate', 'shipdate',
+                'expectedclosedate', 'datecreated', 'lastmodifieddate',
+                'createddate', 'closeddate', 'invoicedate', 'orderdate'
+            ];
+            return dateFields.indexOf(normalizedId) !== -1 || normalizedId.indexOf('date') !== -1;
+        },
+
+        // Detect checkbox fields
+        isCheckboxField: function(fieldId, fieldType) {
+            if (fieldType === 'checkbox' || fieldType === 'CHECKBOX') return true;
+            var normalizedId = (fieldId || '').toLowerCase();
+            return normalizedId.indexOf('is') === 0 || normalizedId.indexOf('has') === 0;
+        },
+
+        // Detect currency/amount fields
+        isCurrencyField: function(fieldId, fieldType) {
+            if (fieldType === 'currency' || fieldType === 'CURRENCY') return true;
+            var normalizedId = (fieldId || '').toLowerCase();
+            var currencyFields = [
+                'amount', 'total', 'subtotal', 'taxtotal', 'rate', 'cost',
+                'price', 'balance', 'credit', 'debit', 'exchangerate'
+            ];
+            return currencyFields.some(function(cf) { return normalizedId.indexOf(cf) !== -1; });
+        },
+
+        // Detect long text fields
+        isLongTextField: function(fieldId, fieldType) {
+            if (fieldType === 'textarea' || fieldType === 'TEXTAREA' ||
+                fieldType === 'richtext' || fieldType === 'RICHTEXT' ||
+                fieldType === 'longtext' || fieldType === 'LONGTEXT' ||
+                fieldType === 'clobtext' || fieldType === 'CLOBTEXT') return true;
+            var normalizedId = (fieldId || '').toLowerCase();
+            var longFields = ['memo', 'message', 'description', 'notes', 'comments', 'address'];
+            return longFields.some(function(lf) { return normalizedId.indexOf(lf) !== -1; });
+        },
+
+        // Get inferred field type for rendering
+        getInferredFieldType: function(nsField) {
+            var fieldId = nsField.id || '';
+            var fieldType = nsField.type || '';
+
+            if (this.isSelectField(fieldId)) return 'select';
+            if (this.isDateField(fieldId, fieldType)) return 'date';
+            if (this.isCheckboxField(fieldId, fieldType)) return 'checkbox';
+            if (this.isCurrencyField(fieldId, fieldType)) return 'currency';
+            if (this.isLongTextField(fieldId, fieldType)) return 'textarea';
+            if (fieldType === 'integer' || fieldType === 'INTEGER') return 'integer';
+
+            return fieldType || 'text';
+        },
+
         // Initialize sublist data structure
         initSublistData: function(sublists) {
             var self = this;
@@ -1721,6 +1778,9 @@
                     var query = input.value.trim();
                     var wrapper = input.closest('.typeahead-select');
                     var lookupType = input.dataset.lookup;
+                    var row = input.closest('tr');
+                    var sublistId = row ? (row.dataset.sublist || '').toLowerCase() : '';
+                    var fieldId = (input.dataset.field || '').toLowerCase();
 
                     clearTimeout(self.typeaheadTimeout);
 
@@ -1729,8 +1789,15 @@
                         return;
                     }
 
+                    // Determine account type based on sublist
+                    var options = {};
+                    if (lookupType === 'accounts' && fieldId === 'account') {
+                        // Expense sublist = Expense accounts, Item sublist = COGS/Expense
+                        options.accountType = 'Expense';
+                    }
+
                     self.typeaheadTimeout = setTimeout(function() {
-                        self.searchDatasource(lookupType, query, wrapper, input);
+                        self.searchDatasource(lookupType, query, wrapper, input, options);
                     }, 300);
                 });
 
@@ -1779,6 +1846,7 @@
                 var query = input.value.trim();
                 var wrapper = input.closest('.typeahead-select');
                 var lookupType = input.dataset.lookup;
+                var fieldId = (input.dataset.field || '').toLowerCase();
 
                 clearTimeout(self.typeaheadTimeout);
 
@@ -1787,8 +1855,15 @@
                     return;
                 }
 
+                // Determine options based on field
+                var options = {};
+                if (lookupType === 'accounts' && fieldId === 'account') {
+                    // Body-level account field on vendor bill = AP accounts
+                    options.accountType = 'AcctPay';
+                }
+
                 self.typeaheadTimeout = setTimeout(function() {
-                    self.searchDatasource(lookupType, query, wrapper, input);
+                    self.searchDatasource(lookupType, query, wrapper, input, options);
                 }, 300);
             });
 
@@ -2126,7 +2201,7 @@
         // ==========================================
         // TYPEAHEAD SEARCH (for sublist select fields)
         // ==========================================
-        searchDatasource: function(type, query, wrapper, input) {
+        searchDatasource: function(type, query, wrapper, input, options) {
             var self = this;
             var dropdown = wrapper.querySelector('.typeahead-dropdown');
             if (!dropdown) return;
@@ -2135,7 +2210,13 @@
             dropdown.innerHTML = '<div class="typeahead-loading"><i class="fas fa-spinner fa-spin"></i> Searching...</div>';
             dropdown.style.display = 'block';
 
-            API.get('datasource', { type: type, query: query, limit: 20 })
+            // Build API params
+            var params = { type: type, query: query, limit: 20 };
+            if (options && options.accountType) {
+                params.accountType = options.accountType;
+            }
+
+            API.get('datasource', params)
                 .then(function(result) {
                     var data = result.data || result;
                     self.renderTypeaheadResults(dropdown, data, wrapper, input);

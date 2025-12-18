@@ -740,6 +740,102 @@ define([
     }
 
     /**
+     * Get accounting periods for posting period dropdown
+     * Defaults to current open period
+     */
+    function getAccountingPeriods(context) {
+        try {
+            var searchQuery = context.query || '';
+            var includeDefault = context.includeDefault !== false;
+
+            var filters = [
+                ['isinactive', 'is', 'F'],
+                'AND',
+                ['isquarter', 'is', 'F'],
+                'AND',
+                ['isyear', 'is', 'F']
+            ];
+
+            if (searchQuery && searchQuery.length >= 1) {
+                filters.push('AND');
+                filters.push(['periodname', 'contains', searchQuery]);
+            }
+
+            var periodSearch = search.create({
+                type: search.Type.ACCOUNTING_PERIOD,
+                filters: filters,
+                columns: [
+                    search.createColumn({ name: 'internalid' }),
+                    search.createColumn({ name: 'periodname', sort: search.Sort.DESC }),
+                    search.createColumn({ name: 'startdate' }),
+                    search.createColumn({ name: 'enddate' }),
+                    search.createColumn({ name: 'closed' }),
+                    search.createColumn({ name: 'aplocked' })
+                ]
+            });
+
+            var periods = [];
+            var currentPeriodId = null;
+            var today = new Date();
+
+            var results = periodSearch.run().getRange({ start: 0, end: 100 });
+            results.forEach(function(result) {
+                var startDate = result.getValue('startdate');
+                var endDate = result.getValue('enddate');
+                var isClosed = result.getValue('closed') === 'T';
+                var isApLocked = result.getValue('aplocked') === 'T';
+
+                // Parse dates for comparison
+                var start = startDate ? new Date(startDate) : null;
+                var end = endDate ? new Date(endDate) : null;
+
+                // Determine if this is the current period
+                var isCurrent = start && end && today >= start && today <= end;
+                if (isCurrent && !isClosed && !isApLocked) {
+                    currentPeriodId = result.getValue('internalid');
+                }
+
+                periods.push({
+                    value: result.getValue('internalid'),
+                    text: result.getValue('periodname'),
+                    startDate: startDate,
+                    endDate: endDate,
+                    isClosed: isClosed,
+                    isApLocked: isApLocked,
+                    isCurrent: isCurrent
+                });
+            });
+
+            return Response.success({
+                options: periods,
+                defaultValue: currentPeriodId
+            });
+        } catch (e) {
+            log.error('getAccountingPeriods Error', e);
+            return Response.error('PERIODS_ERROR', e.message);
+        }
+    }
+
+    /**
+     * Get approval statuses for approval status dropdown
+     */
+    function getApprovalStatuses() {
+        try {
+            // Standard NetSuite approval statuses
+            var statuses = [
+                { value: '1', text: 'Pending Approval' },
+                { value: '2', text: 'Approved' },
+                { value: '3', text: 'Rejected' }
+            ];
+
+            return Response.success(statuses);
+        } catch (e) {
+            log.error('getApprovalStatuses Error', e);
+            return Response.error('STATUS_ERROR', e.message);
+        }
+    }
+
+    /**
      * Get expense accounts for line item dropdowns
      * Returns accounts that can be used on vendor bills (expense type)
      */
@@ -989,7 +1085,7 @@ define([
                 case 'employee':
                     searchType = search.Type.EMPLOYEE;
                     columns = ['internalid', 'entityid', 'firstname', 'lastname'];
-                    displayFormat = 'id-name';
+                    displayFormat = 'employee-name'; // Special format for employees
                     break;
                 case 'vendors':
                 case 'vendor':
@@ -1005,6 +1101,13 @@ define([
                     columns = ['internalid', 'entityid', 'companyname', 'customer'];
                     displayFormat = 'id-name';
                     break;
+                case 'accountingperiods':
+                case 'accountingperiod':
+                case 'postingperiod':
+                    return getAccountingPeriods(context);
+                case 'approvalstatuses':
+                case 'approvalstatus':
+                    return getApprovalStatuses();
                 case 'accounts':
                 case 'account':
                     return getAccounts(context);
@@ -1048,11 +1151,15 @@ define([
                     var num = result.getValue(columns[1]) || '';
                     var name = result.getValue(columns[2]) || '';
                     text = num ? num + ' - ' + name : name;
+                } else if (displayFormat === 'employee-name') {
+                    // Employee: just show "Firstname Lastname"
+                    var firstName = result.getValue(columns[2]) || '';
+                    var lastName = result.getValue(columns[3]) || '';
+                    text = (firstName + ' ' + lastName).trim();
                 } else if (displayFormat === 'id-name') {
                     var id = result.getValue(columns[1]) || '';
                     var nm = result.getValue(columns[2]) || '';
                     if (columns.length > 3) {
-                        // For employees with firstname/lastname
                         nm = (result.getValue(columns[2]) || '') + ' ' + (result.getValue(columns[3]) || '');
                     }
                     text = id ? id + ' - ' + nm.trim() : nm.trim();
