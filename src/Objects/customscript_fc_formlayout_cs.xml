@@ -12,7 +12,7 @@
         <scriptdeployment scriptid="customdeploy_fc_formlayout_vendorbill">
             <status>RELEASED</status>
             <title>FC Layout Capture - Vendor Bill</title>
-            <isdeployed>T</isdeployed>
+            <isdeployed>F</isdeployed>
             <loglevel>ERROR</loglevel>
             <allroles>T</allroles>
             <recordtype>VENDOR_BILL</recordtype>
@@ -21,7 +21,7 @@
         <scriptdeployment scriptid="customdeploy_fc_formlayout_expense">
             <status>RELEASED</status>
             <title>FC Layout Capture - Expense Report</title>
-            <isdeployed>T</isdeployed>
+            <isdeployed>F</isdeployed>
             <loglevel>ERROR</loglevel>
             <allroles>T</allroles>
             <recordtype>EXPENSE_REPORT</recordtype>
@@ -30,7 +30,7 @@
         <scriptdeployment scriptid="customdeploy_fc_formlayout_po">
             <status>RELEASED</status>
             <title>FC Layout Capture - Purchase Order</title>
-            <isdeployed>T</isdeployed>
+            <isdeployed>F</isdeployed>
             <loglevel>ERROR</loglevel>
             <allroles>T</allroles>
             <recordtype>PURCHASE_ORDER</recordtype>
