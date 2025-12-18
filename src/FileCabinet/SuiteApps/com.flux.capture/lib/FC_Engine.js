@@ -1115,6 +1115,7 @@ define([
         ProviderFactory: ProviderFactoryModule,
         getAvailableProviders: ProviderFactoryModule.getAvailableProviders,
         getProviderConfig: ProviderFactoryModule.getProviderConfigForUI,
+        getProviderConfigForUI: ProviderFactoryModule.getProviderConfigForUI,
         saveProviderConfig: ProviderFactoryModule.saveProviderConfig,
         testProviderConnection: ProviderFactoryModule.testProviderConnection
     };
