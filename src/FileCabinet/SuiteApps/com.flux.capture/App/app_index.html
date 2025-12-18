@@ -721,10 +721,16 @@
 
                 <li class="nav-section-title">Workflow</li>
                 <li class="nav-item">
-                    <a href="#" class="nav-link" data-route="flow">
+                    <a href="#" class="nav-link" data-route="ingest">
                         <i class="fas fa-bolt"></i>
-                        <span>Flow</span>
-                        <span class="nav-badge nav-badge-pulse" id="flow-processing-badge" style="display:none;">0</span>
+                        <span>Ingest</span>
+                        <span class="nav-badge nav-badge-pulse" id="ingest-processing-badge" style="display:none;">0</span>
+                    </a>
+                </li>
+                <li class="nav-item">
+                    <a href="#" class="nav-link" data-route="review">
+                        <i class="fas fa-eye"></i>
+                        <span>Review</span>
                     </a>
                 </li>
                 <li class="nav-item">
@@ -1205,14 +1211,14 @@
     </script>
 
 
-    <!-- FLOW TEMPLATE - Card-Based Upload Experience -->
+    <!-- INGEST TEMPLATE - Card-Based Upload Experience -->
     <script type="text/template" id="tpl-rail">
         <div class="view-flow">
             <!-- Compact Header -->
             <div class="flow-header-compact">
                 <div class="flow-title">
                     <i class="fas fa-bolt"></i>
-                    <span>Flow</span>
+                    <span>Ingest</span>
                 </div>
                 <div class="flow-summary" id="flow-summary" style="display:none;">
                     <span class="summary-stat"><span id="summary-queued">0</span> queued</span>
@@ -1253,24 +1259,6 @@
                     <input type="file" id="flow-file-input" multiple accept=".pdf,.png,.jpg,.jpeg,.tiff,.tif" hidden>
                 </div>
 
-                <!-- Document Type Selector -->
-                <div class="flow-type-selector" id="flow-type-selector">
-                    <label class="type-option active">
-                        <input type="radio" name="flowDocType" value="auto" checked>
-                        <i class="fas fa-wand-magic-sparkles"></i>
-                        <span>Auto-detect</span>
-                    </label>
-                    <label class="type-option">
-                        <input type="radio" name="flowDocType" value="vendorbill">
-                        <i class="fas fa-file-invoice-dollar"></i>
-                        <span>Vendor Bill</span>
-                    </label>
-                    <label class="type-option">
-                        <input type="radio" name="flowDocType" value="expensereport">
-                        <i class="fas fa-receipt"></i>
-                        <span>Expense</span>
-                    </label>
-                </div>
             </div>
 
             <!-- Upload Cards Grid -->
@@ -1283,9 +1271,6 @@
                 <div class="flow-complete-actions" id="flow-complete-actions" style="display:none;">
                     <button class="btn btn-primary btn-lg btn-glow" id="btn-review-all">
                         <i class="fas fa-arrow-right"></i> Review Documents
-                    </button>
-                    <button class="btn btn-ghost" id="btn-upload-more">
-                        <i class="fas fa-plus"></i> Upload More
                     </button>
                 </div>
             </div>
@@ -1538,8 +1523,9 @@
                 </div>
             </div>
 
-            <!-- Keyboard HUD -->
-            <div class="keyboard-hud" id="keyboard-hud">
+            <!-- Keyboard HUD (hidden until hover near bottom) -->
+            <div class="keyboard-hover-zone docs-keyboard-hover"></div>
+            <div class="keyboard-hud docs-keyboard-hud" id="keyboard-hud">
                 <div class="hud-item"><kbd>J</kbd><span>Next</span></div>
                 <div class="hud-item"><kbd>K</kbd><span>Prev</span></div>
                 <div class="hud-item"><kbd>⏎</kbd><span>Open</span></div>

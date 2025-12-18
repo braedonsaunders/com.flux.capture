@@ -81,20 +81,6 @@
                 });
             }
 
-            // Document type selector
-            var typeSelector = el('#flow-type-selector');
-            if (typeSelector) {
-                typeSelector.addEventListener('change', function(e) {
-                    if (e.target.name === 'flowDocType') {
-                        self.selectedDocType = e.target.value;
-                        // Update active class
-                        typeSelector.querySelectorAll('.type-option').forEach(function(opt) {
-                            opt.classList.toggle('active', opt.contains(e.target));
-                        });
-                    }
-                });
-            }
-
             // Navigation buttons
             this.on('#btn-go-to-documents', 'click', function() {
                 Router.navigate('documents');
@@ -102,10 +88,6 @@
 
             this.on('#btn-review-all', 'click', function() {
                 Router.navigate('documents');
-            });
-
-            this.on('#btn-upload-more', 'click', function() {
-                self.resetToUpload();
             });
 
             this.on('#btn-clear-complete', 'click', function() {
@@ -543,18 +525,23 @@
         }
     };
 
-    // Register with router
+    // Register with router - primary route is 'ingest'
+    Router.register('ingest',
+        function() { FlowController.init(); },
+        function() { FlowController.cleanup(); }
+    );
+
+    // Also register flow and rail aliases for backwards compatibility
     Router.register('flow',
         function() { FlowController.init(); },
         function() { FlowController.cleanup(); }
     );
 
-    // Also register rail alias for backwards compatibility
     Router.register('rail',
         function() { FlowController.init(); },
         function() { FlowController.cleanup(); }
     );
 
-    console.log('[View.Flow] Card-Based Flow Loaded');
+    console.log('[View.Ingest] Card-Based Ingest Loaded');
 
 })();

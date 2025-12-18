@@ -229,7 +229,7 @@
             var self = this;
 
             this.on('#btn-go-to-flow', 'click', function() {
-                Router.navigate('flow');
+                Router.navigate('ingest');
             });
 
             this.on('#btn-view-anomalies', 'click', function() {

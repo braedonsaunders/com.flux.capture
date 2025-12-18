@@ -25,7 +25,7 @@
         { id: 'upload', label: 'Upload new documents', icon: 'fa-cloud-arrow-up', shortcut: 'U' },
         { id: 'refresh', label: 'Refresh document list', icon: 'fa-sync-alt', shortcut: '⌘R' },
         { id: 'dashboard', label: 'Go to Mission Control', icon: 'fa-gauge-high', shortcut: 'G M' },
-        { id: 'flow', label: 'Go to Flow', icon: 'fa-sparkles', shortcut: 'G F' }
+        { id: 'ingest', label: 'Go to Ingest', icon: 'fa-bolt', shortcut: 'G I' }
     ];
 
     var DocumentsController = {
@@ -263,11 +263,11 @@
             });
 
             this.on('#btn-go-to-flow', 'click', function() {
-                Router.navigate('flow');
+                Router.navigate('ingest');
             });
 
             this.on('#btn-upload-from-zero', 'click', function() {
-                Router.navigate('flow');
+                Router.navigate('ingest');
             });
 
             // Keyboard navigation
@@ -860,7 +860,7 @@
                     if (search) search.focus();
                     break;
                 case 'upload':
-                    Router.navigate('flow');
+                    Router.navigate('ingest');
                     break;
                 case 'refresh':
                     this.loadData();
@@ -869,8 +869,8 @@
                 case 'dashboard':
                     Router.navigate('dashboard');
                     break;
-                case 'flow':
-                    Router.navigate('flow');
+                case 'ingest':
+                    Router.navigate('ingest');
                     break;
             }
         },
