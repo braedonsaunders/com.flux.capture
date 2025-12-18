@@ -1231,9 +1231,10 @@
             }
 
             if (this.pdfPage && this.pdfCanvas) {
-                // Re-render annotations
+                // Use CSS dimensions (not canvas.width which includes DPI scaling)
+                var cssWidth = parseFloat(this.pdfCanvas.style.width) || this.pdfCanvas.clientWidth;
                 var viewport = this.pdfPage.getViewport({
-                    scale: (this.pdfCanvas.width / this.pdfPage.getViewport({ scale: 1 }).width),
+                    scale: cssWidth / this.pdfPage.getViewport({ scale: 1 }).width,
                     rotation: this.rotation
                 });
                 if (this.extractionPool.showAnnotations) {
@@ -3837,10 +3838,12 @@
             // Refresh extraction pool display
             this.refreshExtractionPool();
 
-            // Update annotations if showing
+            // Update annotations if showing - always refresh to show green status
             if (this.extractionPool.showAnnotations && this.pdfPage) {
+                // Use CSS dimensions (not canvas.width which includes DPI scaling)
+                var cssWidth = parseFloat(this.pdfCanvas.style.width) || this.pdfCanvas.clientWidth;
                 var viewport = this.pdfPage.getViewport({
-                    scale: (this.pdfCanvas.width / this.pdfPage.getViewport({ scale: 1 }).width),
+                    scale: cssWidth / this.pdfPage.getViewport({ scale: 1 }).width,
                     rotation: this.rotation
                 });
                 this.renderExtractionAnnotations(viewport);
