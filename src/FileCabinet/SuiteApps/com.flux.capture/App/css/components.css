@@ -1871,6 +1871,7 @@
 /* Table wrapper for horizontal scroll when needed */
 .sublist-table-wrapper {
     overflow-x: auto;
+    overflow-y: visible; /* Allow dropdowns to overflow vertically */
     max-width: 100%;
 }
 
@@ -1902,6 +1903,21 @@
     vertical-align: middle;
     overflow: hidden;
     text-overflow: ellipsis;
+}
+
+/* Allow select/typeahead cells to overflow so dropdowns are visible */
+.sublist-table td.select-cell {
+    overflow: visible;
+    position: relative;
+}
+
+.sublist-table td.select-cell .typeahead-select {
+    position: relative;
+}
+
+.sublist-table td.select-cell .typeahead-dropdown {
+    z-index: 10000;
+    min-width: 200px;
 }
 
 .sublist-table .line-input {
