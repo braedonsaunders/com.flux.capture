@@ -142,15 +142,6 @@
         body.sidebar-collapsed .app-sidebar { width: 0; padding: 0; overflow: hidden; transform: translateX(-100%); }
         body.sidebar-collapsed .sidebar-expand-btn { transform: translateY(-50%) translateX(0); }
         body.sidebar-collapsed .app-main { margin-left: 0; }
-        .sidebar-user { display: flex; align-items: center; gap: var(--space-md); }
-        .user-avatar {
-            width: 36px; height: 36px; border-radius: 8px;
-            background: var(--color-primary); color: white;
-            display: flex; align-items: center; justify-content: center;
-            font-weight: 600; font-size: 13px;
-        }
-        .user-name { font-weight: 500; color: white; font-size: 13px; }
-        .user-role { font-size: 11px; color: rgba(255,255,255,0.65); }
         .app-main {
             flex: 1;
             margin-left: var(--sidebar-width);
@@ -761,13 +752,6 @@
                     <button class="sidebar-control" id="btn-collapse-sidebar" title="Collapse Sidebar">
                         <i class="fas fa-angles-left"></i>
                     </button>
-                </div>
-                <div class="sidebar-user">
-                    <div class="user-avatar" id="user-avatar">U</div>
-                    <div class="user-info">
-                        <div class="user-name" id="user-name">User</div>
-                        <div class="user-role">Administrator</div>
-                    </div>
                 </div>
             </div>
         </nav>
