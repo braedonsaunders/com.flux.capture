@@ -401,7 +401,7 @@ define([
             uploadedByName: docRecord.getText('custrecord_flux_uploaded_by'),
             createdDate: docRecord.getValue('custrecord_flux_created_date'),
             modifiedDate: docRecord.getValue('custrecord_flux_modified_date'),
-            confidence: docRecord.getValue('custrecord_flux_confidence_score'),
+            confidence: Math.round((docRecord.getValue('custrecord_flux_confidence_score') || 0) * 100),
             vendor: docRecord.getValue('custrecord_flux_vendor'),
             vendorName: docRecord.getText('custrecord_flux_vendor'),
             vendorMatchConfidence: docRecord.getValue('custrecord_flux_vendor_match_confidence'),
@@ -523,12 +523,15 @@ define([
         var documents = paginatedResults.map(function(row) {
             var v = row.values;
             var docAnomalies = v[9] ? JSON.parse(v[9]) : [];
+            // PERCENT fields return decimals (0.85 for 85%), convert to integer percentage
+            var confidenceRaw = v[4];
+            var confidence = confidenceRaw != null ? Math.round(confidenceRaw * 100) : 0;
             return {
                 id: v[0],
                 name: v[1],
                 status: v[2],
                 documentType: v[3],
-                confidence: v[4],
+                confidence: confidence,
                 vendorId: v[5],
                 vendorName: v[6],
                 invoiceNumber: v[7],
@@ -575,12 +578,15 @@ define([
             var queue = paginatedResults.map(function(row) {
                 var v = row.values;
                 var docAnomalies = v[9] ? JSON.parse(v[9]) : [];
+                // PERCENT fields return decimals (0.85 for 85%), convert to integer percentage
+                var confidenceRaw = v[4];
+                var confidence = confidenceRaw != null ? Math.round(confidenceRaw * 100) : 0;
                 return {
                     id: v[0],
                     name: v[1] || ('Document ' + v[0]),
                     status: v[2],
                     documentType: v[3],
-                    confidence: v[4],
+                    confidence: confidence,
                     vendorName: v[5],
                     invoiceNumber: v[6],
                     totalAmount: v[7],
@@ -620,7 +626,7 @@ define([
         try {
             var statsSql = 'SELECT COUNT(*) as total, ' +
                 'SUM(CASE WHEN custrecord_flux_status = ' + DocStatus.COMPLETED + ' THEN 1 ELSE 0 END) as completed, ' +
-                'SUM(CASE WHEN custrecord_flux_status = ' + DocStatus.COMPLETED + ' AND custrecord_flux_confidence_score >= 85 THEN 1 ELSE 0 END) as autoProcessed, ' +
+                'SUM(CASE WHEN custrecord_flux_status = ' + DocStatus.COMPLETED + ' AND custrecord_flux_confidence_score >= 0.85 THEN 1 ELSE 0 END) as autoProcessed, ' +
                 'SUM(CASE WHEN custrecord_flux_status IN (' + DocStatus.PENDING + ', ' + DocStatus.PROCESSING + ', ' + DocStatus.EXTRACTED + ', ' + DocStatus.NEEDS_REVIEW + ') THEN 1 ELSE 0 END) as pending, ' +
                 'SUM(CASE WHEN custrecord_flux_status = ' + DocStatus.REJECTED + ' THEN 1 ELSE 0 END) as rejected, ' +
                 'SUM(CASE WHEN custrecord_flux_status = ' + DocStatus.ERROR + ' THEN 1 ELSE 0 END) as errors, ' +
@@ -659,7 +665,7 @@ define([
                     pendingReview: stats[3] || 0,
                     rejected: stats[4] || 0,
                     errors: stats[5] || 0,
-                    avgConfidence: Math.round(stats[6] || 0),
+                    avgConfidence: Math.round((stats[6] || 0) * 100),
                     totalValue: stats[7] || 0
                 },
                 typeBreakdown: typeBreakdown,
@@ -704,7 +710,7 @@ define([
                                 severity: anomaly.severity,
                                 message: anomaly.message,
                                 createdDate: row.values[4],
-                                confidence: row.values[5]
+                                confidence: row.values[5] != null ? Math.round(row.values[5] * 100) : 0
                             });
                         });
                     } catch (parseErr) {
@@ -1762,7 +1768,7 @@ define([
                 date: row.values[0],
                 total: row.values[1],
                 completed: row.values[2],
-                avgConfidence: Math.round(row.values[3] || 0)
+                avgConfidence: Math.round((row.values[3] || 0) * 100)
             };
         });
 
