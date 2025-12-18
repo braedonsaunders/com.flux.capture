@@ -1283,6 +1283,9 @@
                                         nsField.type = domField.type || nsField.type;
                                         nsField.mandatory = domField.required || nsField.mandatory;
                                         nsField.isDisplay = domField.mode !== 'hidden' && domField.visible !== false;
+                                        // Merge default values from layout field config
+                                        if (domField.defaultValue) nsField.defaultValue = domField.defaultValue;
+                                        if (domField.defaultValueText) nsField.defaultValueText = domField.defaultValueText;
                                     }
                                     groupFields.push(nsField);
                                 } else if (domFieldVisible) {
