@@ -4101,3 +4101,153 @@ body.fullscreen-mode .sidebar-expand-btn {
 @keyframes btn-glow { 0%, 100% { box-shadow: 0 0 20px rgba(37, 99, 235, 0.4); } 50% { box-shadow: 0 0 30px rgba(37, 99, 235, 0.6); } }
 .nav-badge-pulse { animation: badge-pulse 2s ease infinite; }
 @keyframes badge-pulse { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.1); } }
+
+/* ============================================
+   REVIEW PAGE ENHANCEMENTS
+   ============================================ */
+
+/* Review Progress Bar */
+.review-progress-bar {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 3px;
+    background: var(--gray-200);
+    z-index: 10;
+}
+.review-progress-bar .progress-fill {
+    height: 100%;
+    background: linear-gradient(90deg, var(--color-primary), var(--color-success));
+    transition: width 0.3s ease;
+    border-radius: 0 2px 2px 0;
+}
+
+/* Queue Position Indicator */
+.queue-position {
+    display: flex;
+    align-items: center;
+    gap: var(--space-xs);
+    padding: var(--space-xs) var(--space-sm);
+    background: var(--gray-100);
+    border-radius: var(--radius-md);
+    font-size: var(--font-size-sm);
+}
+.position-current {
+    font-weight: 700;
+    font-size: 1.1em;
+    color: var(--color-primary);
+}
+.position-separator {
+    color: var(--text-tertiary);
+}
+.position-total {
+    font-weight: 600;
+    color: var(--text-primary);
+}
+.position-label {
+    color: var(--text-tertiary);
+    font-size: 0.9em;
+}
+
+/* Review Keyboard HUD */
+.review-keyboard-hud {
+    position: fixed;
+    bottom: var(--space-lg);
+    left: 50%;
+    transform: translateX(-50%);
+    display: flex;
+    gap: var(--space-lg);
+    padding: var(--space-sm) var(--space-lg);
+    background: var(--gray-900);
+    border-radius: var(--radius-lg);
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+    z-index: 100;
+    opacity: 0.9;
+    transition: opacity var(--transition);
+}
+.review-keyboard-hud:hover {
+    opacity: 1;
+}
+.review-keyboard-hud .kbd-group {
+    display: flex;
+    align-items: center;
+    gap: var(--space-xs);
+    color: var(--gray-400);
+    font-size: var(--font-size-sm);
+    white-space: nowrap;
+}
+.review-keyboard-hud kbd {
+    padding: 2px 6px;
+    background: var(--gray-800);
+    border: 1px solid var(--gray-700);
+    border-radius: var(--radius-sm);
+    font-family: monospace;
+    color: var(--gray-300);
+    font-size: 0.85em;
+}
+
+/* Approve & Next Button Enhancement */
+.btn-approve-next {
+    position: relative;
+    padding-right: calc(var(--space-md) + 28px);
+}
+.btn-approve-next .btn-kbd {
+    position: absolute;
+    right: var(--space-sm);
+    top: 50%;
+    transform: translateY(-50%);
+    padding: 2px 6px;
+    background: rgba(255, 255, 255, 0.2);
+    border-radius: var(--radius-sm);
+    font-family: monospace;
+    font-size: 0.75em;
+    font-weight: 600;
+}
+
+/* Shortcuts Modal Sections */
+.shortcuts-modal .shortcuts-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: var(--space-lg);
+}
+.shortcut-section {
+    background: var(--gray-50);
+    border-radius: var(--radius-md);
+    padding: var(--space-md);
+}
+.shortcut-section-title {
+    font-size: var(--font-size-xs);
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--text-tertiary);
+    margin-bottom: var(--space-sm);
+    padding-bottom: var(--space-xs);
+    border-bottom: 1px solid var(--gray-200);
+}
+.shortcuts-modal .shortcut-item {
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
+    padding: var(--space-xs) 0;
+}
+.shortcuts-modal .shortcut-item kbd {
+    min-width: 24px;
+    text-align: center;
+}
+
+/* Toolbar Button Text Responsive */
+@media (max-width: 900px) {
+    .toolbar-actions .btn-text {
+        display: none;
+    }
+    .toolbar-actions .btn {
+        padding: var(--space-sm);
+    }
+    .review-keyboard-hud {
+        font-size: var(--font-size-xs);
+        gap: var(--space-md);
+        padding: var(--space-xs) var(--space-md);
+    }
+}
