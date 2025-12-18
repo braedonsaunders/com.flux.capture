@@ -418,6 +418,7 @@ define([
             lineItems: lineItems,
             anomalies: anomalies,
             extractedData: extractedData,
+            extractedText: docRecord.getValue('custrecord_flux_extracted_text'),
             amountValidated: docRecord.getValue('custrecord_flux_amount_validated'),
             createdTransaction: docRecord.getValue('custrecord_flux_created_transaction'),
             source: docRecord.getValue('custrecord_flux_source'),
@@ -2044,10 +2045,11 @@ define([
                 // Additional metadata
                 extractedDataObj._confidence = extraction.confidence;
                 extractedDataObj._vendorMatch = extraction.vendorMatch;
-                extractedDataObj._rawText = extraction.rawText ? extraction.rawText.substring(0, 5000) : ''; // Truncate
                 extractedDataObj._extractedAt = new Date().toISOString();
 
                 updateValues['custrecord_flux_extracted_data'] = JSON.stringify(extractedDataObj);
+                // Store raw text in dedicated field (separate from JSON data)
+                updateValues['custrecord_flux_extracted_text'] = extraction.rawText ? extraction.rawText.substring(0, 100000) : '';
 
                 record.submitFields({
                     type: 'customrecord_flux_document',

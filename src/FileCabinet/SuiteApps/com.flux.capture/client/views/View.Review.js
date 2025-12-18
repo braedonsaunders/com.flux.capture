@@ -806,8 +806,8 @@
                                 var fieldId = typeof fieldRef === 'object' ? fieldRef.id : fieldRef;
                                 var normalizedFieldId = (fieldId || '').toLowerCase();
 
-                                // Skip vendor/entity field - it's rendered specially at the top
-                                if (normalizedFieldId === 'entity' || normalizedFieldId === 'vendor') return;
+                                // Skip vendor/entity field (rendered specially at top) and customform (internal NS field)
+                                if (normalizedFieldId === 'entity' || normalizedFieldId === 'vendor' || normalizedFieldId === 'customform') return;
 
                                 // First check if DOM extraction gave us field metadata
                                 var domField = typeof fieldRef === 'object' ? fieldRef : null;
@@ -910,9 +910,10 @@
                     '</div>' +
                 '</div>';
 
-                // Filter visible body fields (exclude entity - handled above)
+                // Filter visible body fields (exclude entity - handled above, and customform - internal NS field)
                 var visibleFields = bodyFields.filter(function(f) {
-                    return f.id !== 'entity' && f.isDisplay !== false;
+                    var fieldId = (f.id || '').toLowerCase();
+                    return fieldId !== 'entity' && fieldId !== 'customform' && f.isDisplay !== false;
                 });
 
                 // Sort by displayOrder
