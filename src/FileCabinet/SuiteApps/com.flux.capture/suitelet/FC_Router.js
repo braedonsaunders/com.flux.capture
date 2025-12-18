@@ -475,11 +475,15 @@ define([
         var sortColumn = sortColumns[sortBy] || 'custrecord_flux_created_date';
 
         sql += ' ORDER BY ' + sortColumn + ' ' + sortDir;
-        sql += ' OFFSET ' + ((page - 1) * pageSize) + ' ROWS FETCH NEXT ' + pageSize + ' ROWS ONLY';
 
         var results = query.runSuiteQL({ query: sql, params: params });
 
-        var documents = results.results.map(function(row) {
+        // Manual pagination since SuiteQL doesn't support OFFSET/FETCH
+        var startIndex = (page - 1) * pageSize;
+        var endIndex = startIndex + pageSize;
+        var paginatedResults = results.results.slice(startIndex, endIndex);
+
+        var documents = paginatedResults.map(function(row) {
             var v = row.values;
             var docAnomalies = v[9] ? JSON.parse(v[9]) : [];
             return {
@@ -520,14 +524,18 @@ define([
                 'ORDER BY CASE custrecord_flux_status WHEN ' + DocStatus.ERROR + ' THEN 0 ' +
                 'WHEN ' + DocStatus.NEEDS_REVIEW + ' THEN 1 ' +
                 'WHEN ' + DocStatus.EXTRACTED + ' THEN 2 WHEN ' + DocStatus.PROCESSING + ' THEN 3 ' +
-                'WHEN ' + DocStatus.PENDING + ' THEN 4 END, custrecord_flux_created_date ASC ' +
-                'OFFSET ' + ((page - 1) * pageSize) + ' ROWS FETCH NEXT ' + pageSize + ' ROWS ONLY';
+                'WHEN ' + DocStatus.PENDING + ' THEN 4 END, custrecord_flux_created_date ASC';
 
             log.debug('getProcessingQueue', 'SQL: ' + sql);
             var results = query.runSuiteQL({ query: sql });
             log.debug('getProcessingQueue', 'Results count: ' + (results.results ? results.results.length : 0));
 
-            var queue = results.results.map(function(row) {
+            // Manual pagination since SuiteQL doesn't support OFFSET/FETCH
+            var startIndex = (page - 1) * pageSize;
+            var endIndex = startIndex + pageSize;
+            var paginatedResults = results.results.slice(startIndex, endIndex);
+
+            var queue = paginatedResults.map(function(row) {
                 var v = row.values;
                 var docAnomalies = v[10] ? JSON.parse(v[10]) : [];
                 return {
