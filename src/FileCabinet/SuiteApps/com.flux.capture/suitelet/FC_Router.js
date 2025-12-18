@@ -367,7 +367,6 @@ define([
             documentTypeText: getDocTypeDisplayText(docRecord.getValue('custrecord_flux_document_type')),
             sourceFile: docRecord.getValue('custrecord_flux_source_file'),
             documentId: docRecord.getValue('custrecord_flux_document_id'),
-            batchId: docRecord.getValue('custrecord_flux_batch_id'),
             uploadedBy: docRecord.getValue('custrecord_flux_uploaded_by'),
             uploadedByName: docRecord.getText('custrecord_flux_uploaded_by'),
             createdDate: docRecord.getValue('custrecord_flux_created_date'),
@@ -422,7 +421,6 @@ define([
         var dateFrom = context.dateFrom;
         var dateTo = context.dateTo;
         var vendorId = context.vendorId;
-        var batchId = context.batchId;
         var sortBy = context.sortBy || 'created';
         var sortDir = context.sortDir === 'asc' ? 'ASC' : 'DESC';
 
@@ -447,10 +445,6 @@ define([
         if (vendorId) {
             sql += ' AND custrecord_flux_vendor = ?';
             params.push(vendorId);
-        }
-        if (batchId) {
-            sql += ' AND custrecord_flux_batch_id = ?';
-            params.push(batchId);
         }
         if (dateFrom) {
             sql += " AND custrecord_flux_created_date >= TO_DATE(?, 'YYYY-MM-DD')";
@@ -517,7 +511,7 @@ define([
             var sql = 'SELECT id, custrecord_flux_document_id as name, custrecord_flux_status as status, custrecord_flux_document_type as documentType, ' +
                 'custrecord_flux_confidence_score as confidence, BUILTIN.DF(custrecord_flux_vendor) as vendorName, ' +
                 'custrecord_flux_invoice_number as invoiceNumber, custrecord_flux_total_amount as totalAmount, ' +
-                'custrecord_flux_created_date as createdDate, custrecord_flux_batch_id as batchId, ' +
+                'custrecord_flux_created_date as createdDate, ' +
                 'custrecord_flux_anomalies as anomalies, custrecord_flux_error_message as errorMessage FROM customrecord_flux_document ' +
                 'WHERE custrecord_flux_status IN (' + DocStatus.PENDING + ', ' + DocStatus.PROCESSING + ', ' +
                 DocStatus.EXTRACTED + ', ' + DocStatus.NEEDS_REVIEW + ', ' + DocStatus.ERROR + ') ' +
@@ -537,7 +531,7 @@ define([
 
             var queue = paginatedResults.map(function(row) {
                 var v = row.values;
-                var docAnomalies = v[10] ? JSON.parse(v[10]) : [];
+                var docAnomalies = v[9] ? JSON.parse(v[9]) : [];
                 return {
                     id: v[0],
                     name: v[1] || ('Document ' + v[0]),
@@ -548,9 +542,8 @@ define([
                     invoiceNumber: v[6],
                     totalAmount: v[7],
                     createdDate: v[8],
-                    batchId: v[9],
                     hasAnomalies: docAnomalies.length > 0,
-                    errorMessage: v[11] || ''
+                    errorMessage: v[10] || ''
                 };
             });
 
