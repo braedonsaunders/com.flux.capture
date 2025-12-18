@@ -52,6 +52,7 @@
         fieldConfidences: {},
         formFields: null, // Dynamic form fields from NetSuite
         transactionType: 'vendorbill', // Default transaction type
+        typeaheadTimeout: null, // Debounce timeout for typeahead search
 
         // ==========================================
         // INITIALIZATION
@@ -1335,6 +1336,13 @@
             if (fieldId === 'class') return 'classes';
             if (fieldId === 'location') return 'locations';
             if (fieldId === 'entity') return 'vendors';
+            if (fieldId === 'job' || fieldId === 'project') return 'projects';
+            if (fieldId === 'subsidiary') return 'subsidiaries';
+            if (fieldId === 'currency') return 'currencies';
+            if (fieldId === 'terms') return 'terms';
+            if (fieldId === 'taxcode') return 'taxcodes';
+            if (fieldId === 'category' || fieldId === 'expensecategory') return 'expensecategories';
+            if (fieldId === 'employee') return 'employees';
             return 'generic';
         },
 
@@ -1514,6 +1522,46 @@
 
                     self.updateSublistLine(sublistId, idx, fieldId, value);
                 });
+
+                // ========== TYPEAHEAD SEARCH FOR SELECT FIELDS ==========
+                lineSection.addEventListener('input', function(e) {
+                    var input = e.target;
+                    if (!input.classList.contains('typeahead-input')) return;
+
+                    var query = input.value.trim();
+                    var wrapper = input.closest('.typeahead-select');
+                    var lookupType = input.dataset.lookup;
+
+                    clearTimeout(self.typeaheadTimeout);
+
+                    if (query.length < 2) {
+                        self.hideTypeaheadDropdown(wrapper);
+                        return;
+                    }
+
+                    self.typeaheadTimeout = setTimeout(function() {
+                        self.searchDatasource(lookupType, query, wrapper, input);
+                    }, 300);
+                });
+
+                // Typeahead option selection
+                lineSection.addEventListener('click', function(e) {
+                    var option = e.target.closest('.typeahead-option');
+                    if (!option) return;
+
+                    var wrapper = option.closest('.typeahead-select');
+                    self.selectTypeaheadOption(wrapper, option);
+                });
+
+                // Hide typeahead on blur
+                lineSection.addEventListener('focusout', function(e) {
+                    if (!e.target.classList.contains('typeahead-input')) return;
+
+                    setTimeout(function() {
+                        var wrapper = e.target.closest('.typeahead-select');
+                        self.hideTypeaheadDropdown(wrapper);
+                    }, 200);
+                });
             });
 
             // Shortcuts help
@@ -1683,6 +1731,78 @@
 
         hideVendorDropdown: function() {
             var dropdown = el('#vendor-dropdown');
+            if (dropdown) dropdown.style.display = 'none';
+        },
+
+        // ==========================================
+        // TYPEAHEAD SEARCH (for sublist select fields)
+        // ==========================================
+        searchDatasource: function(type, query, wrapper, input) {
+            var self = this;
+            var dropdown = wrapper.querySelector('.typeahead-dropdown');
+            if (!dropdown) return;
+
+            // Show loading state
+            dropdown.innerHTML = '<div class="typeahead-loading"><i class="fas fa-spinner fa-spin"></i> Searching...</div>';
+            dropdown.style.display = 'block';
+
+            API.get('datasource', { type: type, query: query, limit: 20 })
+                .then(function(result) {
+                    var data = result.data || result;
+                    self.renderTypeaheadResults(dropdown, data, wrapper, input);
+                })
+                .catch(function(err) {
+                    dropdown.innerHTML = '<div class="typeahead-error">Error loading options</div>';
+                });
+        },
+
+        renderTypeaheadResults: function(dropdown, results, wrapper, input) {
+            if (!results || results.length === 0) {
+                dropdown.innerHTML = '<div class="typeahead-empty">No results found</div>';
+                return;
+            }
+
+            var html = results.map(function(r) {
+                return '<div class="typeahead-option" data-value="' + escapeHtml(r.value) + '" data-text="' + escapeHtml(r.text) + '">' +
+                    '<span class="typeahead-text">' + escapeHtml(r.text) + '</span>' +
+                    '</div>';
+            }).join('');
+
+            dropdown.innerHTML = html;
+        },
+
+        selectTypeaheadOption: function(wrapper, option) {
+            var hiddenInput = wrapper.querySelector('input[type="hidden"]');
+            var displayInput = wrapper.querySelector('.typeahead-input');
+            var dropdown = wrapper.querySelector('.typeahead-dropdown');
+
+            var value = option.dataset.value;
+            var text = option.dataset.text;
+
+            if (hiddenInput) hiddenInput.value = value;
+            if (displayInput) displayInput.value = text;
+            if (dropdown) dropdown.style.display = 'none';
+
+            // Trigger line update
+            var row = wrapper.closest('tr');
+            if (row) {
+                var idx = parseInt(row.dataset.idx, 10);
+                var sublistId = row.dataset.sublist;
+                var fieldId = hiddenInput ? hiddenInput.dataset.field : displayInput.dataset.field;
+                this.updateSublistLine(sublistId, idx, fieldId, value);
+
+                // Also store the display text
+                if (this.sublistData && this.sublistData[sublistId] && this.sublistData[sublistId][idx]) {
+                    this.sublistData[sublistId][idx][fieldId + '_display'] = text;
+                }
+            }
+
+            this.markUnsaved();
+        },
+
+        hideTypeaheadDropdown: function(wrapper) {
+            if (!wrapper) return;
+            var dropdown = wrapper.querySelector('.typeahead-dropdown');
             if (dropdown) dropdown.style.display = 'none';
         },
 
