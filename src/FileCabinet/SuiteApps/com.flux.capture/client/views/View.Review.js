@@ -2557,10 +2557,10 @@
             UI.toast('Loading ' + newTypeText + ' form...', 'info');
 
             // Re-render the extraction form with new document type form
+            // Note: renderExtractionForm() already calls bindFormEvents() which handles sublist events
             this.renderExtractionForm();
             this.updateApplyAllButton();
             this.bindBodyFieldTypeahead();
-            this.bindSublistEvents();
         },
 
         goToNextDocument: function() {
