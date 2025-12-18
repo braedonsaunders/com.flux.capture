@@ -25,7 +25,7 @@
         { id: 'upload', label: 'Upload new documents', icon: 'fa-cloud-arrow-up', shortcut: 'U' },
         { id: 'refresh', label: 'Refresh document list', icon: 'fa-sync-alt', shortcut: '⌘R' },
         { id: 'dashboard', label: 'Go to Mission Control', icon: 'fa-gauge-high', shortcut: 'G M' },
-        { id: 'ingest', label: 'Go to Ingest', icon: 'fa-bolt', shortcut: 'G I' }
+        { id: 'ingest', label: 'Go to Ingest', icon: 'fa-upload', shortcut: 'G I' }
     ];
 
     var DocumentsController = {

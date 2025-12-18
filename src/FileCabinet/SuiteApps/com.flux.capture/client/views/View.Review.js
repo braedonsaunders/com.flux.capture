@@ -3850,11 +3850,11 @@
                     '<div class="empty-icon error"><i class="fas fa-file-circle-question"></i></div>' +
                     '<h4>Document not found</h4>' +
                     '<p>' + escapeHtml(message) + '</p>' +
-                    '<button class="btn btn-primary" id="btn-back-error">Back to Queue</button>' +
+                    '<button class="btn btn-primary" id="btn-back-error"><i class="fas fa-upload"></i> Upload Documents</button>' +
                 '</div>';
 
                 el('#btn-back-error').addEventListener('click', function() {
-                    Router.navigate('queue');
+                    Router.navigate('ingest');
                 });
             }
         },
