@@ -453,6 +453,7 @@ define([
         var dateFrom = context.dateFrom;
         var dateTo = context.dateTo;
         var vendorId = context.vendorId;
+        var ids = context.ids;
         var sortBy = context.sortBy || 'created';
         var sortDir = context.sortDir === 'asc' ? 'ASC' : 'DESC';
 
@@ -465,6 +466,16 @@ define([
             'FROM customrecord_flux_document WHERE 1=1';
 
         var params = [];
+
+        // Handle filtering by specific IDs (used by upload rail to check processing status)
+        if (ids) {
+            var idList = ids.split(',').map(function(id) { return id.trim(); }).filter(function(id) { return id; });
+            if (idList.length > 0) {
+                var placeholders = idList.map(function() { return '?'; }).join(',');
+                sql += ' AND id IN (' + placeholders + ')';
+                idList.forEach(function(id) { params.push(id); });
+            }
+        }
 
         if (status) {
             sql += ' AND custrecord_flux_status = ?';
