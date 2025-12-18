@@ -66,6 +66,39 @@ define([
         });
 
         try {
+            // CRITICAL: Check if document is still PENDING before processing
+            // This prevents race conditions when multiple MapReduce tasks run concurrently
+            // (each upload triggers a new task, and they may overlap)
+            const currentStatus = search.lookupFields({
+                type: 'customrecord_flux_document',
+                id: documentId,
+                columns: ['custrecord_flux_status']
+            });
+
+            const statusValue = currentStatus.custrecord_flux_status &&
+                currentStatus.custrecord_flux_status[0] ?
+                currentStatus.custrecord_flux_status[0].value : null;
+
+            if (statusValue != DocStatus.PENDING) {
+                // Document already claimed by another task or already processed
+                log.audit('FC_ProcessDocuments.map.skip', {
+                    documentId: documentId,
+                    docCode: docCode,
+                    currentStatus: statusValue,
+                    reason: 'Document no longer PENDING - already being processed by another task'
+                });
+                // Write a skip result so summarize() knows this was intentional
+                context.write({
+                    key: documentId,
+                    value: {
+                        success: true,
+                        skipped: true,
+                        reason: 'Already processing or processed'
+                    }
+                });
+                return;
+            }
+
             // Mark as processing
             record.submitFields({
                 type: 'customrecord_flux_document',
@@ -203,11 +236,14 @@ define([
         let processed = 0;
         let succeeded = 0;
         let failed = 0;
+        let skipped = 0;
 
         summary.output.iterator().each(function(key, value) {
             processed++;
             const result = JSON.parse(value);
-            if (result.success) {
+            if (result.skipped) {
+                skipped++;
+            } else if (result.success) {
                 succeeded++;
             } else {
                 failed++;
@@ -219,6 +255,7 @@ define([
             totalProcessed: processed,
             succeeded: succeeded,
             failed: failed,
+            skipped: skipped,
             totalTime: summary.seconds + 's'
         });
 
