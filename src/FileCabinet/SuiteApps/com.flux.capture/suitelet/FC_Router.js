@@ -1634,18 +1634,17 @@ define([
             }
 
             var deployment = deploymentResult[0];
-            var status = deployment.getValue('status');
             var isDeployed = deployment.getValue('isdeployed');
 
-            // Status 'RELEASED' means enabled, 'NOTSCHEDULED' or 'TESTING' means disabled
-            var enabled = status === 'RELEASED';
+            // Use isdeployed field directly for client scripts
+            var enabled = isDeployed === true || isDeployed === 'T';
 
             return Response.success({
                 enabled: enabled,
                 found: true,
                 internalId: deployment.getValue('internalid'),
                 deploymentId: deployment.getValue('scriptid'),
-                status: status
+                isDeployed: isDeployed
             });
         } catch (e) {
             log.error('getScriptDeploymentStatus', e);
@@ -1690,10 +1689,10 @@ define([
                 id: internalId
             });
 
-            // Set status: 'RELEASED' = enabled, 'NOTSCHEDULED' = disabled
+            // Set isdeployed field directly (client scripts don't use status values)
             deploymentRec.setValue({
-                fieldId: 'status',
-                value: enabled ? 'RELEASED' : 'NOTSCHEDULED'
+                fieldId: 'isdeployed',
+                value: enabled
             });
 
             deploymentRec.save();

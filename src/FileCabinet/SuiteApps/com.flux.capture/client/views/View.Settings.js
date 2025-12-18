@@ -186,6 +186,7 @@
             var collapseAllBtn = el('#btn-collapse-all');
             var resetConfigBtn = el('#btn-reset-config');
             var saveConfigBtn = el('#btn-save-form-config');
+            var deleteAllBtn = el('#btn-delete-all');
 
             if (expandAllBtn) {
                 expandAllBtn.addEventListener('click', function() {
@@ -195,6 +196,11 @@
             if (collapseAllBtn) {
                 collapseAllBtn.addEventListener('click', function() {
                     self.expandAllEditorNodes(false);
+                });
+            }
+            if (deleteAllBtn) {
+                deleteAllBtn.addEventListener('click', function() {
+                    self.deleteAllItems();
                 });
             }
             if (resetConfigBtn) {
@@ -702,7 +708,7 @@
 
             var isOverLimit = jsonSize > 3500; // Leave some buffer under 4000
             indicator.innerHTML = isOverLimit ?
-                '<i class="fas fa-exclamation-triangle" style="color:var(--color-warning);"></i> Estimated size: ' + sizeKb + ' KB (over limit!)' :
+                '<i class="fas fa-exclamation-triangle" style="color:var(--color-warning);"></i> Estimated size: ' + sizeKb + ' KB (may need to split)' :
                 '<i class="fas fa-check-circle" style="color:var(--color-success);"></i> Estimated size: ' + sizeKb + ' KB';
         },
 
@@ -737,11 +743,30 @@
             var selectedConfig = this.buildSelectedConfig();
 
             var jsonSize = JSON.stringify(selectedConfig).length;
+            var sizeKb = (jsonSize / 1024).toFixed(1);
+
+            // If over limit, warn but allow proceeding
             if (jsonSize > 3800) {
-                UI.toast('Selection too large. Please deselect some items.', 'error');
+                UI.confirm(
+                    'The configuration size (' + sizeKb + ' KB) is large and may exceed storage limits. ' +
+                    'You can still save it, but consider deselecting some items if you encounter issues.',
+                    'Large Configuration Warning',
+                    {
+                        confirmText: 'Import Anyway',
+                        cancelText: 'Cancel',
+                        onConfirm: function() {
+                            self.doImportXmlConfig(selectedConfig);
+                        }
+                    }
+                );
                 return;
             }
 
+            this.doImportXmlConfig(selectedConfig);
+        },
+
+        doImportXmlConfig: function(selectedConfig) {
+            var self = this;
             var btn = el('#btn-import-selected-xml');
             if (btn) {
                 btn.disabled = true;
@@ -1100,6 +1125,47 @@
                         self.removeConfigItem(dataset, type);
                         self.renderFormEditor();
                         UI.toast(type.charAt(0).toUpperCase() + type.slice(1) + ' deleted', 'success');
+                    }
+                }
+            );
+        },
+
+        deleteAllItems: function() {
+            var self = this;
+
+            if (!this.editedConfig) {
+                UI.toast('No configuration to delete', 'error');
+                return;
+            }
+
+            UI.confirm(
+                'This will delete ALL tabs, field groups, fields, and sublists from the current configuration. This cannot be undone!',
+                'Delete All Items',
+                {
+                    confirmText: 'Delete All',
+                    danger: true,
+                    onConfirm: function() {
+                        var layout = self.editedConfig.layout || self.editedConfig;
+
+                        // Clear all tabs
+                        if (layout.tabs) {
+                            layout.tabs = [];
+                        }
+
+                        // Clear sublists
+                        if (self.editedConfig.sublists) {
+                            self.editedConfig.sublists = [];
+                        } else if (layout.sublists) {
+                            layout.sublists = [];
+                        }
+
+                        // Clear body fields
+                        if (self.editedConfig.bodyFields) {
+                            self.editedConfig.bodyFields = [];
+                        }
+
+                        self.renderFormEditor();
+                        UI.toast('All items deleted', 'success');
                     }
                 }
             );
