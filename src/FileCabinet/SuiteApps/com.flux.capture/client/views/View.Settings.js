@@ -349,6 +349,7 @@
         DEPLOYMENT_IDS: {
             'vendorbill': 'customdeploy_fc_formlayout_vendorbill',
             'expensereport': 'customdeploy_fc_formlayout_expense',
+            'vendorcredit': 'customdeploy_fc_formlayout_creditmemo',
             'purchaseorder': 'customdeploy_fc_formlayout_po'
         },
 
