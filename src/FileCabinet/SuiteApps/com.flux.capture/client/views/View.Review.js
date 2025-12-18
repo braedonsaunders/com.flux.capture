@@ -1078,51 +1078,100 @@
         },
 
         populateFieldSelect: function(select) {
+            var self = this;
             var formFields = this.formFields || {};
             var bodyFields = formFields.bodyFields || [];
+            var layout = formFields.layout || {};
+            var tabs = formFields.tabs || layout.tabs || [];
 
-            // Add standard invoice fields first
-            var standardFields = [
-                { id: 'vendor', label: 'Vendor' },
-                { id: 'invoiceNumber', label: 'Invoice Number' },
-                { id: 'invoiceDate', label: 'Invoice Date' },
-                { id: 'dueDate', label: 'Due Date' },
-                { id: 'poNumber', label: 'PO Number' },
-                { id: 'subtotal', label: 'Subtotal' },
-                { id: 'taxAmount', label: 'Tax Amount' },
-                { id: 'totalAmount', label: 'Total Amount' }
-            ];
-
-            standardFields.forEach(function(field) {
+            // Helper to add a field option
+            function addFieldOption(parent, fieldId, label) {
                 var option = document.createElement('option');
-                option.value = field.id;
-                option.textContent = field.label;
-                select.appendChild(option);
-            });
-
-            // Add separator if there are body fields
-            if (bodyFields.length > 0) {
-                var separator = document.createElement('option');
-                separator.disabled = true;
-                separator.textContent = '──────────';
-                select.appendChild(separator);
+                option.value = fieldId;
+                option.textContent = label || fieldId;
+                parent.appendChild(option);
             }
 
-            // Add body fields
-            bodyFields.forEach(function(field) {
-                if (field.isDisplay !== false && field.id !== 'entity') {
-                    // Skip if already in standard fields
-                    var isStandard = standardFields.some(function(sf) {
-                        return sf.id.toLowerCase() === field.id.toLowerCase();
-                    });
-                    if (isStandard) return;
+            // Add vendor field first (always at top)
+            addFieldOption(select, 'vendor', 'Vendor');
 
-                    var option = document.createElement('option');
-                    option.value = field.id;
-                    option.textContent = field.label || field.id;
-                    select.appendChild(option);
+            // If we have tabs with field groups, mirror that structure
+            if (tabs.length > 0) {
+                tabs.forEach(function(tab) {
+                    // Skip tabs without field groups
+                    if (!tab.fieldGroups || tab.fieldGroups.length === 0) return;
+
+                    // Create optgroup for each tab
+                    var tabGroup = document.createElement('optgroup');
+                    tabGroup.label = '── ' + (tab.label || tab.id) + ' ──';
+                    var hasFields = false;
+
+                    tab.fieldGroups.forEach(function(group) {
+                        if (group.visible === false) return;
+
+                        var fields = group.fields || [];
+                        fields.forEach(function(fieldRef) {
+                            var fieldId = typeof fieldRef === 'object' ? fieldRef.id : fieldRef;
+                            if (!fieldId || fieldId.toLowerCase() === 'entity' || fieldId.toLowerCase() === 'vendor') return;
+
+                            // Look up field in bodyFields for label
+                            var nsField = bodyFields.find(function(f) { return f.id === fieldId; });
+                            var label = (nsField && nsField.label) || (typeof fieldRef === 'object' && fieldRef.label) || fieldId;
+
+                            // Skip hidden fields
+                            if (nsField && nsField.isDisplay === false) return;
+
+                            addFieldOption(tabGroup, fieldId, label);
+                            hasFields = true;
+                        });
+                    });
+
+                    if (hasFields) {
+                        select.appendChild(tabGroup);
+                    }
+                });
+            } else {
+                // Fallback: group by common categories
+                var amounts = document.createElement('optgroup');
+                amounts.label = '── Amounts ──';
+                addFieldOption(amounts, 'subtotal', 'Subtotal');
+                addFieldOption(amounts, 'taxAmount', 'Tax Amount');
+                addFieldOption(amounts, 'totalAmount', 'Total Amount');
+                select.appendChild(amounts);
+
+                var dates = document.createElement('optgroup');
+                dates.label = '── Dates ──';
+                addFieldOption(dates, 'invoiceDate', 'Invoice Date');
+                addFieldOption(dates, 'dueDate', 'Due Date');
+                select.appendChild(dates);
+
+                var refs = document.createElement('optgroup');
+                refs.label = '── References ──';
+                addFieldOption(refs, 'invoiceNumber', 'Invoice Number');
+                addFieldOption(refs, 'poNumber', 'PO Number');
+                select.appendChild(refs);
+
+                // Add remaining body fields
+                if (bodyFields.length > 0) {
+                    var other = document.createElement('optgroup');
+                    other.label = '── Other Fields ──';
+                    var standardIds = ['vendor', 'entity', 'subtotal', 'taxamount', 'totalamount',
+                        'invoicedate', 'duedate', 'invoicenumber', 'ponumber'];
+                    var hasOther = false;
+
+                    bodyFields.forEach(function(field) {
+                        if (field.isDisplay === false) return;
+                        if (standardIds.indexOf(field.id.toLowerCase()) !== -1) return;
+
+                        addFieldOption(other, field.id, field.label || field.id);
+                        hasOther = true;
+                    });
+
+                    if (hasOther) {
+                        select.appendChild(other);
+                    }
                 }
-            });
+            }
         },
 
         getMatchedFieldIds: function() {
@@ -1156,6 +1205,16 @@
                     matched.push(fieldId);
                 }
             });
+
+            // Include extraction keys that have been applied via drag/drop
+            var self = this;
+            if (this.extractionPool && this.extractionPool.applied) {
+                this.extractionPool.applied.forEach(function(item) {
+                    if (item.extractionKey && matched.indexOf(item.extractionKey) === -1) {
+                        matched.push(item.extractionKey);
+                    }
+                });
+            }
 
             // Remove duplicates
             return matched.filter(function(item, pos) {
