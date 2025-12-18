@@ -244,15 +244,18 @@
             var self = this;
             this.stopRefresh();
             this.refreshInterval = setInterval(function() {
-                if (!self.commandPaletteOpen) {
+                if (!self.commandPaletteOpen && !API.sessionExpired) {
                     self.loadData();
                 }
             }, this.REFRESH_MS);
+            // Register with API for centralized session management
+            API.registerInterval('documents', this.refreshInterval);
         },
 
         stopRefresh: function() {
             if (this.refreshInterval) {
                 clearInterval(this.refreshInterval);
+                API.clearInterval('documents');
                 this.refreshInterval = null;
             }
         },

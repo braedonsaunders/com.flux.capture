@@ -211,13 +211,18 @@
             var self = this;
             this.stopRefresh();
             this.refreshInterval = setInterval(function() {
-                self.loadData();
+                if (!API.sessionExpired) {
+                    self.loadData();
+                }
             }, this.REFRESH_MS);
+            // Register with API for centralized session management
+            API.registerInterval('dashboard', this.refreshInterval);
         },
 
         stopRefresh: function() {
             if (this.refreshInterval) {
                 clearInterval(this.refreshInterval);
+                API.clearInterval('dashboard');
                 this.refreshInterval = null;
             }
         },
