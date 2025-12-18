@@ -806,10 +806,9 @@ define([
                 });
             });
 
-            return Response.success({
-                options: periods,
-                defaultValue: currentPeriodId
-            });
+            // Return flat array for typeahead compatibility
+            // Mark the current period for UI highlighting
+            return Response.success(periods);
         } catch (e) {
             log.error('getAccountingPeriods Error', e);
             return Response.error('PERIODS_ERROR', e.message);
@@ -821,11 +820,10 @@ define([
      */
     function getApprovalStatuses() {
         try {
-            // Standard NetSuite approval statuses
+            // Standard NetSuite approval statuses for vendor bills
             var statuses = [
                 { value: '1', text: 'Pending Approval' },
-                { value: '2', text: 'Approved' },
-                { value: '3', text: 'Rejected' }
+                { value: '2', text: 'Approved' }
             ];
 
             return Response.success(statuses);

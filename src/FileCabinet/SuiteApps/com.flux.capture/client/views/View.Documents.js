@@ -484,7 +484,9 @@
             var isFocused = index === this.focusedIndex;
             var isSelected = this.selectedIds.indexOf(String(doc.id)) !== -1;
             var isExpanded = index === this.previewExpanded;
-            var conf = parseInt(doc.confidence) || 0;
+            // Confidence may be stored as decimal (0-1) or percentage (0-100)
+            var rawConf = parseFloat(doc.confidence) || 0;
+            var conf = rawConf <= 1 ? Math.round(rawConf * 100) : Math.round(rawConf);
             var confClass = conf >= 85 ? 'high' : conf >= 60 ? 'medium' : 'low';
             var hasAnomaly = doc.anomalies && doc.anomalies.length > 0;
             var hasError = String(doc.status) === DocStatus.ERROR;

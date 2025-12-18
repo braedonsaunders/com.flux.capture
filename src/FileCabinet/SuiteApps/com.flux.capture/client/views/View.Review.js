@@ -278,6 +278,33 @@
         bindEvents: function() {
             var self = this;
 
+            // Document type dropdown
+            this.on('#doc-type-badge', 'click', function(e) {
+                e.stopPropagation();
+                var dropdown = el('#doc-type-dropdown');
+                if (dropdown) dropdown.classList.toggle('open');
+            });
+
+            this.on('#doc-type-options', 'click', function(e) {
+                var option = e.target.closest('.doc-type-option');
+                if (!option) return;
+
+                var newType = option.dataset.type;
+                var newTypeText = option.textContent;
+                self.changeDocumentType(newType, newTypeText);
+
+                var dropdown = el('#doc-type-dropdown');
+                if (dropdown) dropdown.classList.remove('open');
+            });
+
+            // Close dropdown when clicking outside
+            document.addEventListener('click', function(e) {
+                if (!e.target.closest('#doc-type-dropdown')) {
+                    var dropdown = el('#doc-type-dropdown');
+                    if (dropdown) dropdown.classList.remove('open');
+                }
+            });
+
             // Back button
             this.on('#btn-back', 'click', function() {
                 self.navigateBack();
@@ -579,9 +606,16 @@
 
             // Update title and badge
             var titleEl = el('#doc-title');
-            var badgeEl = el('#doc-type-badge');
+            var badgeText = el('#doc-type-badge .badge-text');
             if (titleEl) titleEl.textContent = doc.invoiceNumber || doc.name || 'Document Review';
-            if (badgeEl) badgeEl.textContent = doc.documentTypeText || 'Invoice';
+            if (badgeText) badgeText.textContent = doc.documentTypeText || 'Invoice';
+
+            // Mark current document type as selected
+            var currentType = String(doc.documentType || '1');
+            var options = document.querySelectorAll('.doc-type-option');
+            options.forEach(function(opt) {
+                opt.classList.toggle('selected', opt.dataset.type === currentType);
+            });
 
             // Update queue position indicator
             var positionEl = el('#queue-position');
@@ -1334,14 +1368,12 @@
 
             // Store in controller for later updates
             if (!this.sublistData) this.sublistData = {};
-            this.sublistData[sublistId] = items;
 
+            // Always have at least one blank row
             if (items.length === 0) {
-                return '<div class="empty-line-items">' +
-                    '<i class="fas fa-' + (sublist.type === 'expense' ? 'receipt' : 'box') + '"></i>' +
-                    '<span>No ' + sublist.label.toLowerCase() + ' added</span>' +
-                '</div>';
+                items = [{}]; // Add one empty row
             }
+            this.sublistData[sublistId] = items;
 
             // Determine visible columns (important fields first)
             var visibleFields = this.getVisibleSublistFields(sublist);
@@ -1551,8 +1583,15 @@
 
         // Detect checkbox fields
         isCheckboxField: function(fieldId, fieldType) {
-            if (fieldType === 'checkbox' || fieldType === 'CHECKBOX') return true;
+            var ft = (fieldType || '').toLowerCase();
+            if (ft === 'checkbox' || ft === '_checkbox') return true;
             var normalizedId = (fieldId || '').toLowerCase();
+            // Common checkbox field patterns
+            var checkboxFields = [
+                'isadvanced', 'isperson', 'isbudgetapproved', 'istaxable', 'isbillable',
+                'isresidential', 'isactive', 'isinactive', 'isdefault', 'isprimary'
+            ];
+            if (checkboxFields.indexOf(normalizedId) !== -1) return true;
             return normalizedId.indexOf('is') === 0 || normalizedId.indexOf('has') === 0;
         },
 
@@ -1792,8 +1831,12 @@
                     // Determine account type based on sublist
                     var options = {};
                     if (lookupType === 'accounts' && fieldId === 'account') {
-                        // Expense sublist = Expense accounts, Item sublist = COGS/Expense
-                        options.accountType = 'Expense';
+                        // Expense sublist = Expense accounts, Item sublist = COGS accounts
+                        if (sublistId === 'item') {
+                            options.accountType = 'COGS';
+                        } else {
+                            options.accountType = 'Expense';
+                        }
                     }
 
                     self.typeaheadTimeout = setTimeout(function() {
@@ -2489,6 +2532,31 @@
                 // Last document - go back to documents list
                 Router.navigate('documents');
             }
+        },
+
+        changeDocumentType: function(newType, newTypeText) {
+            var self = this;
+
+            // Update local data
+            this.data.documentType = newType;
+            this.data.documentTypeText = newTypeText;
+
+            // Update UI immediately
+            var badgeText = el('#doc-type-badge .badge-text');
+            if (badgeText) badgeText.textContent = newTypeText;
+
+            // Mark as changed
+            this.changes['documentType'] = newType;
+            this.markUnsaved();
+
+            // Show loading while we reload form config
+            UI.toast('Loading ' + newTypeText + ' form...', 'info');
+
+            // Re-render the extraction form with new document type form
+            this.renderExtractionForm();
+            this.updateApplyAllButton();
+            this.bindBodyFieldTypeahead();
+            this.bindSublistEvents();
         },
 
         goToNextDocument: function() {
