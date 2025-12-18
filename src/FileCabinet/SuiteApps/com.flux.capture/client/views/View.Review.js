@@ -1625,9 +1625,13 @@
             var extractedData = doc.extractedData || {};
             var value = this.getExtractedFieldValue(nsField.id, docKey, doc, extractedData);
 
+            // Track if we're using default value (for display text handling)
+            var usingDefaultValue = false;
+
             // If no value found, use default value from field schema
             if (!value && nsField.defaultValue) {
                 value = nsField.defaultValue;
+                usingDefaultValue = true;
             }
 
             // Track default value text for select fields (to show display name)
@@ -1677,8 +1681,8 @@
             } else if (inferredType === 'select') {
                 // Select without pre-loaded options - use typeahead for server-side search
                 var lookupType = this.getLookupType(nsField.id);
-                // Use display value from doc, or defaultValueText from schema if using default
-                var displayValue = doc[docKey + '_display'] || doc[docKey + '_text'] || defaultValueText || '';
+                // Use defaultValueText if using default value, otherwise use display value from doc
+                var displayValue = usingDefaultValue ? defaultValueText : (doc[docKey + '_display'] || doc[docKey + '_text'] || '');
 
                 if (isDisabled) {
                     // Disabled select - just show display value
