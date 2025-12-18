@@ -449,14 +449,46 @@ define([
                 documentType: DocumentTypeLabels[documentType]
             });
 
+            // Collect ALL extracted label/value pairs for flexible field mapping
+            // This allows the UI to offer suggestions for any form field
+            const allExtractedFields = {};
+            for (const rawField of rawResult.rawFields) {
+                if (rawField.label && rawField.value) {
+                    // Normalize label to a field key
+                    const normalizedKey = this._normalizeFieldKey(rawField.label);
+                    if (normalizedKey && !allExtractedFields[normalizedKey]) {
+                        allExtractedFields[normalizedKey] = {
+                            label: rawField.label,
+                            value: rawField.value,
+                            confidence: rawField.valueConfidence || 0.5,
+                            position: rawField.position
+                        };
+                    }
+                }
+            }
+
             return {
                 documentType: documentType,
                 fields: fields,
                 fieldConfidences: fieldConfidences,
                 lineItems: lineItems,
                 rawText: rawResult.rawText,
-                pageCount: rawResult.pageCount
+                pageCount: rawResult.pageCount,
+                // Include all raw extractions for flexible field suggestions
+                allExtractedFields: allExtractedFields,
+                fieldCandidates: fieldCandidates
             };
+        }
+
+        /**
+         * Normalize a field label to a key for matching
+         */
+        _normalizeFieldKey(label) {
+            if (!label) return null;
+            return label
+                .toLowerCase()
+                .replace(/[^a-z0-9]/g, '')
+                .substring(0, 50);
         }
 
         /**

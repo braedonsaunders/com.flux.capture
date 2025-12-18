@@ -2029,6 +2029,17 @@ define([
                 extractedDataObj.vendorName = extraction.vendorMatch ? extraction.vendorMatch.vendorName : '';
                 extractedDataObj.vendor = extraction.vendorMatch ? extraction.vendorMatch.vendorId : '';
 
+                // Include ALL raw extracted label/value pairs for flexible suggestions
+                // These can be matched to any form field by label similarity
+                if (extraction.allExtractedFields) {
+                    extractedDataObj._allExtractedFields = extraction.allExtractedFields;
+                }
+
+                // Include field confidences for showing suggestion quality
+                if (extraction.fieldConfidences) {
+                    extractedDataObj._fieldConfidences = extraction.fieldConfidences;
+                }
+
                 // Additional metadata
                 extractedDataObj._confidence = extraction.confidence;
                 extractedDataObj._vendorMatch = extraction.vendorMatch;
