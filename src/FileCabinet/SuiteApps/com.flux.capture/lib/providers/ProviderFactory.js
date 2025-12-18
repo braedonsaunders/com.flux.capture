@@ -180,10 +180,10 @@ define([
                 // If _useSavedApiKey flag is set, load the encrypted key from saved config
                 let testConfig = { ...config };
                 if (config && config._useSavedApiKey) {
-                    const savedConfig = this._loadConfig();
+                    const savedConfig = this._loadProviderConfig();
                     if (savedConfig && savedConfig.azure && savedConfig.azure.apiKey) {
-                        // Decrypt the saved API key for testing
-                        testConfig.apiKey = this._decryptValue(savedConfig.azure.apiKey);
+                        // _loadProviderConfig already decrypts the API key
+                        testConfig.apiKey = savedConfig.azure.apiKey;
                     }
                     delete testConfig._useSavedApiKey;
                 }
@@ -235,7 +235,7 @@ define([
         saveProviderConfig(config) {
             try {
                 // Load existing config to preserve encrypted API key if needed
-                const existingConfig = this._loadConfig();
+                const existingConfig = this._loadProviderConfig();
 
                 // Encrypt sensitive fields
                 const configToSave = { ...config };
@@ -245,9 +245,9 @@ define([
                         configToSave.azure.apiKey = this._encryptValue(configToSave.azure.apiKey);
                         configToSave.azure._apiKeyEncrypted = true;
                     } else if (configToSave.azure._preserveExistingApiKey && existingConfig && existingConfig.azure && existingConfig.azure.apiKey) {
-                        // Preserve existing encrypted API key
-                        configToSave.azure.apiKey = existingConfig.azure.apiKey;
-                        configToSave.azure._apiKeyEncrypted = existingConfig.azure._apiKeyEncrypted;
+                        // Preserve existing API key - re-encrypt since _loadProviderConfig decrypted it
+                        configToSave.azure.apiKey = this._encryptValue(existingConfig.azure.apiKey);
+                        configToSave.azure._apiKeyEncrypted = true;
                     }
                     // Clean up internal flags
                     delete configToSave.azure._preserveExistingApiKey;
