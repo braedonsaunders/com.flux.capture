@@ -2262,7 +2262,9 @@
             API.get('datasource', params)
                 .then(function(result) {
                     var data = result.data || result;
-                    self.renderTypeaheadResults(dropdown, data, wrapper, input);
+                    // Handle both formats: array or { options: [], defaultValue }
+                    var options = Array.isArray(data) ? data : (data.options || data);
+                    self.renderTypeaheadResults(dropdown, options, wrapper, input);
                 })
                 .catch(function(err) {
                     dropdown.innerHTML = '<div class="typeahead-error">Error loading options</div>';
@@ -2270,12 +2272,14 @@
         },
 
         renderTypeaheadResults: function(dropdown, results, wrapper, input) {
-            if (!results || results.length === 0) {
+            // Handle both array and object with options
+            var options = Array.isArray(results) ? results : (results.options || results);
+            if (!options || options.length === 0) {
                 dropdown.innerHTML = '<div class="typeahead-empty">No results found</div>';
                 return;
             }
 
-            var html = results.map(function(r) {
+            var html = options.map(function(r) {
                 return '<div class="typeahead-option" data-value="' + escapeHtml(r.value) + '" data-text="' + escapeHtml(r.text) + '">' +
                     '<span class="typeahead-text">' + escapeHtml(r.text) + '</span>' +
                     '</div>';

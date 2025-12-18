@@ -816,6 +816,52 @@ define([
     }
 
     /**
+     * Get subsidiaries for dropdown
+     * Returns defaultValue if only one subsidiary exists
+     */
+    function getSubsidiaries(context) {
+        try {
+            var searchQuery = context.query || '';
+
+            var filters = [['isinactive', 'is', 'F']];
+            if (searchQuery && searchQuery.length >= 1) {
+                filters.push('AND');
+                filters.push(['name', 'contains', searchQuery]);
+            }
+
+            var subSearch = search.create({
+                type: search.Type.SUBSIDIARY,
+                filters: filters,
+                columns: [
+                    search.createColumn({ name: 'internalid' }),
+                    search.createColumn({ name: 'name', sort: search.Sort.ASC })
+                ]
+            });
+
+            var subsidiaries = [];
+            var results = subSearch.run().getRange({ start: 0, end: 100 });
+
+            results.forEach(function(result) {
+                subsidiaries.push({
+                    value: result.getValue('internalid'),
+                    text: result.getValue('name')
+                });
+            });
+
+            // If only one subsidiary, set it as default
+            var defaultValue = subsidiaries.length === 1 ? subsidiaries[0].value : null;
+
+            return Response.success({
+                options: subsidiaries,
+                defaultValue: defaultValue
+            });
+        } catch (e) {
+            log.error('getSubsidiaries Error', e);
+            return Response.error('SUBSIDIARY_ERROR', e.message);
+        }
+    }
+
+    /**
      * Get approval statuses for approval status dropdown
      */
     function getApprovalStatuses() {
@@ -1049,9 +1095,7 @@ define([
                     break;
                 case 'subsidiaries':
                 case 'subsidiary':
-                    searchType = search.Type.SUBSIDIARY;
-                    columns = ['internalid', 'name'];
-                    break;
+                    return getSubsidiaries(context);
                 case 'currencies':
                 case 'currency':
                     searchType = search.Type.CURRENCY;
