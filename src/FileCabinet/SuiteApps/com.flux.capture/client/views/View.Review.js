@@ -430,8 +430,14 @@
 
             // Download button
             this.on('#btn-download', 'click', function() {
-                if (self.data && self.data.sourceFile) {
-                    window.open('/core/media/media.nl?id=' + self.data.sourceFile, '_blank');
+                if (self.data && self.data.fileUrl) {
+                    // Use the actual file URL from NetSuite
+                    window.open(self.data.fileUrl, '_blank');
+                } else if (self.data && self.data.sourceFile) {
+                    // Fallback to NetSuite media URL format
+                    window.open('/core/media/media.nl?id=' + self.data.sourceFile + '&c=' + (window.companyId || ''), '_blank');
+                } else {
+                    UI.toast('No file available for download', 'warning');
                 }
             });
 
@@ -847,13 +853,23 @@
                 var container = el('#pdf-container');
                 var containerWidth = container ? container.clientWidth - 40 : 600;
                 var originalViewport = page.getViewport({ scale: 1 });
-                var scale = (containerWidth / originalViewport.width) * self.zoom;
+                var baseScale = (containerWidth / originalViewport.width) * self.zoom;
 
-                var viewport = page.getViewport({ scale: scale, rotation: self.rotation });
+                var viewport = page.getViewport({ scale: baseScale, rotation: self.rotation });
 
-                // Set canvas dimensions
-                self.pdfCanvas.width = viewport.width;
-                self.pdfCanvas.height = viewport.height;
+                // Handle high DPI displays (Retina, etc.) for crisp rendering
+                var dpr = window.devicePixelRatio || 1;
+
+                // Set canvas dimensions - scale up for DPI
+                self.pdfCanvas.width = Math.floor(viewport.width * dpr);
+                self.pdfCanvas.height = Math.floor(viewport.height * dpr);
+
+                // Set CSS dimensions to display at correct size
+                self.pdfCanvas.style.width = viewport.width + 'px';
+                self.pdfCanvas.style.height = viewport.height + 'px';
+
+                // Scale the context to match DPI
+                self.pdfContext.setTransform(dpr, 0, 0, dpr, 0, 0);
 
                 // Set annotation overlay dimensions
                 if (self.annotationOverlay) {
@@ -1019,18 +1035,36 @@
             // Return list of field keys that have been matched to form fields
             var matched = [];
             var extractedData = this.data.extractedData || {};
+            var doc = this.data || {};
 
-            // Standard mapped fields
-            var standardFields = ['vendorname', 'invoicenumber', 'invoicedate', 'duedate',
-                'subtotal', 'taxamount', 'totalamount', 'ponumber', 'currency'];
+            // Standard mapped fields (these are extracted and mapped to specific form fields)
+            var standardFields = ['vendor', 'vendorname', 'vendorName', 'invoicenumber', 'invoiceNumber',
+                'invoicedate', 'invoiceDate', 'duedate', 'dueDate', 'subtotal', 'taxamount', 'taxAmount',
+                'totalamount', 'totalAmount', 'ponumber', 'poNumber', 'currency'];
 
             standardFields.forEach(function(f) {
-                if (extractedData[f] !== undefined) {
-                    matched.push(f);
+                // Check both extractedData and doc for the field
+                if (extractedData[f] !== undefined && extractedData[f] !== '' && extractedData[f] !== null) {
+                    matched.push(f.toLowerCase());
+                }
+                if (doc[f] !== undefined && doc[f] !== '' && doc[f] !== null) {
+                    matched.push(f.toLowerCase());
                 }
             });
 
-            return matched;
+            // Also add any top-level extractedData fields that aren't internal (_prefixed)
+            // These are fields that were matched and stored at the top level
+            Object.keys(extractedData).forEach(function(key) {
+                if (!key.startsWith('_') && extractedData[key] !== undefined &&
+                    extractedData[key] !== '' && extractedData[key] !== null) {
+                    matched.push(key.toLowerCase());
+                }
+            });
+
+            // Remove duplicates
+            return matched.filter(function(item, pos) {
+                return matched.indexOf(item) === pos;
+            });
         },
 
         toggleAnnotations: function() {
@@ -3309,7 +3343,8 @@
         // ==========================================
 
         /**
-         * Compute unmatched extractions from _allExtractedFields or construct from extracted_data
+         * Compute unmatched extractions from _allExtractedFields
+         * Shows all extracted fields that haven't been matched to standard form fields
          */
         computeUnmatchedExtractions: function() {
             var self = this;
@@ -3317,34 +3352,82 @@
             var extractedData = doc.extractedData || {};
             var allFields = extractedData._allExtractedFields || {};
 
-            // If _allExtractedFields is empty, try to construct from extractedData and doc fields
-            if (Object.keys(allFields).length === 0) {
-                allFields = this.buildAllExtractedFields(doc, extractedData);
-            }
+            // Debug: Log what data we have
+            FCDebug.log('[ExtractionPool] extractedData keys:', Object.keys(extractedData));
+            FCDebug.log('[ExtractionPool] _allExtractedFields keys:', Object.keys(allFields));
 
+            // Get the field IDs that are already matched to form fields
             var matchedIds = this.getMatchedFieldIds();
+            FCDebug.log('[ExtractionPool] Matched field IDs:', matchedIds);
 
             // Also check what's already been applied this session
             var appliedKeys = this.extractionPool.applied.map(function(a) { return a.extractionKey; });
 
             this.extractionPool.unmatched = [];
 
+            // Process _allExtractedFields - these are the raw OCR extractions
             Object.keys(allFields).forEach(function(key) {
-                // Skip if already matched or applied
-                if (matchedIds.indexOf(key) !== -1) return;
+                var normalizedKey = key.toLowerCase();
+
+                // Skip if already matched to a form field or applied this session
+                if (matchedIds.indexOf(normalizedKey) !== -1) {
+                    FCDebug.log('[ExtractionPool] Skipping matched field:', key);
+                    return;
+                }
                 if (appliedKeys.indexOf(key) !== -1) return;
 
                 var field = allFields[key];
-                if (!field.value && field.value !== 0) return; // Skip empty values
+                var fieldValue = field.value !== undefined ? field.value : field;
+
+                // Skip empty values
+                if (fieldValue === null || fieldValue === undefined || fieldValue === '') return;
+
+                // Handle both object format {label, value, confidence} and plain values
+                var label = field.label || key;
+                var value = fieldValue;
+                var confidence = field.confidence || 0.5;
+                var position = field.position || null;
+
+                // If it's a plain value (not object with label/value structure)
+                if (typeof field !== 'object' || (!field.label && !field.value)) {
+                    value = field;
+                    confidence = 0.5;
+                }
 
                 self.extractionPool.unmatched.push({
                     id: 'extract_' + key,
                     key: key,
-                    label: field.label || key,
-                    value: field.value,
-                    confidence: field.confidence || 0.5,
-                    position: field.position || null,
-                    category: self.categorizeExtraction(field)
+                    label: label,
+                    value: value,
+                    confidence: confidence,
+                    position: position,
+                    category: self.categorizeExtraction({ label: label, value: value })
+                });
+            });
+
+            // Also add any fields from extractedData that aren't in _allExtractedFields
+            // and haven't been matched (these could be additional extraction results)
+            Object.keys(extractedData).forEach(function(key) {
+                // Skip internal fields and already processed keys
+                if (key.startsWith('_')) return;
+                if (allFields[key]) return;
+
+                var normalizedKey = key.toLowerCase();
+                if (matchedIds.indexOf(normalizedKey) !== -1) return;
+                if (appliedKeys.indexOf(key) !== -1) return;
+
+                var value = extractedData[key];
+                if (value === null || value === undefined || value === '') return;
+                if (typeof value === 'object') return; // Skip complex objects
+
+                self.extractionPool.unmatched.push({
+                    id: 'extract_' + key,
+                    key: key,
+                    label: key.replace(/([A-Z])/g, ' $1').trim(),
+                    value: value,
+                    confidence: 0.6,
+                    position: null,
+                    category: self.categorizeExtraction({ label: key, value: value })
                 });
             });
 
@@ -3353,7 +3436,8 @@
                 return (b.confidence || 0) - (a.confidence || 0);
             });
 
-            FCDebug.log('[ExtractionPool] Found', this.extractionPool.unmatched.length, 'unmatched extractions');
+            FCDebug.log('[ExtractionPool] Found', this.extractionPool.unmatched.length, 'unmatched extractions:',
+                this.extractionPool.unmatched.map(function(u) { return u.label + ': ' + u.value; }));
         },
 
         /**
