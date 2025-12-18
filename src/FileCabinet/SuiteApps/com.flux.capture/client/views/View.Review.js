@@ -258,21 +258,24 @@
                     return Promise.all([
                         API.get('formschema', { transactionType: self.transactionType }),
                         API.get('accounts', { accountType: 'Expense' }),
+                        API.get('accounts', { accountType: 'COGS' }),
                         API.get('items', {})
                     ]);
                 })
                 .then(function(results) {
                     var formSchemaData = results[0];
-                    var accountsData = results[1] || [];
-                    var itemsData = results[2] || [];
+                    var expenseAccountsData = results[1] || [];
+                    var cogsAccountsData = results[2] || [];
+                    var itemsData = results[3] || [];
 
                     self.formFields = formSchemaData; // Now contains layout, config, etc.
-                    self.accountsData = accountsData; // Cache for document type changes
+                    self.expenseAccountsData = expenseAccountsData; // Expense accounts for expense sublist
+                    self.cogsAccountsData = cogsAccountsData; // COGS accounts for item sublist
                     self.itemsData = itemsData; // Cache for document type changes
 
                     // Inject accounts into expense sublist 'account' field
                     // Inject items into item sublist 'item' field
-                    self.injectSublistOptions(accountsData, itemsData);
+                    self.injectSublistOptions(expenseAccountsData, cogsAccountsData, itemsData);
 
                     // Initialize formData from server or create from extractedData
                     self.initializeFormData();
@@ -312,7 +315,7 @@
          * Inject accounts and items into sublist field definitions
          * This makes the account and item fields render as dropdowns
          */
-        injectSublistOptions: function(accountsData, itemsData) {
+        injectSublistOptions: function(expenseAccountsData, cogsAccountsData, itemsData) {
             if (!this.formFields || !this.formFields.sublists) return;
 
             var sublists = this.formFields.sublists;
@@ -321,10 +324,17 @@
                 if (!sublist.fields) return;
 
                 sublist.fields.forEach(function(field) {
-                    // Inject accounts into 'account' field on expense sublist
-                    if (field.id === 'account' && sublist.id === 'expense' && accountsData.length > 0) {
+                    // Inject expense accounts into 'account' field on expense sublist
+                    if (field.id === 'account' && sublist.id === 'expense' && expenseAccountsData.length > 0) {
                         field.type = 'select';
-                        field.options = accountsData;
+                        field.options = expenseAccountsData;
+                    }
+
+                    // Inject COGS + Expense accounts into 'account' field on item sublist
+                    if (field.id === 'account' && sublist.id === 'item') {
+                        field.type = 'select';
+                        // Combine COGS and Expense accounts for item sublist
+                        field.options = [].concat(cogsAccountsData || [], expenseAccountsData || []);
                     }
 
                     // Inject items into 'item' field on item sublist
@@ -3464,7 +3474,7 @@
                         self.formFields = formSchemaData;
 
                         // Re-inject accounts and items into the new form schema
-                        self.injectSublistOptions(self.accountsData, self.itemsData);
+                        self.injectSublistOptions(self.expenseAccountsData, self.cogsAccountsData, self.itemsData);
 
                         // Re-render the extraction form with new document type form
                         self.renderExtractionForm();
@@ -4476,34 +4486,52 @@
                 };
             });
 
-            // Sublist cell drop targets (line-input elements)
-            document.querySelectorAll('.line-input, .line-desc, .line-qty, .line-price, .line-amount').forEach(function(input) {
-                var cell = input.closest('td');
-                if (!cell) return;
-
-                cell.ondragenter = function(e) {
+            // Sublist cell drop targets - use event delegation on line-section for persistence across re-renders
+            var lineSections = document.querySelectorAll('.line-section');
+            lineSections.forEach(function(lineSection) {
+                // Prevent default drop on inputs to stop raw text insertion
+                lineSection.addEventListener('dragover', function(e) {
                     if (!self.extractionPool.dragActive) return;
-                    e.preventDefault();
-                    cell.classList.add('drop-target', 'drop-hover');
-                };
-
-                cell.ondragover = function(e) {
-                    if (!self.extractionPool.dragActive) return;
-                    e.preventDefault();
-                    e.dataTransfer.dropEffect = 'copy';
-                };
-
-                cell.ondragleave = function(e) {
-                    var relatedTarget = e.relatedTarget;
-                    if (!relatedTarget || !cell.contains(relatedTarget)) {
-                        cell.classList.remove('drop-target', 'drop-hover');
+                    var cell = e.target.closest('td');
+                    var input = e.target.closest('.line-input, .line-desc, .line-qty, .line-price, .line-amount');
+                    if (cell || input) {
+                        e.preventDefault();
+                        e.dataTransfer.dropEffect = 'copy';
+                        var targetCell = cell || (input ? input.closest('td') : null);
+                        if (targetCell && !targetCell.classList.contains('drop-hover')) {
+                            // Remove hover from other cells first
+                            lineSection.querySelectorAll('td.drop-hover').forEach(function(c) {
+                                c.classList.remove('drop-target', 'drop-hover');
+                            });
+                            targetCell.classList.add('drop-target', 'drop-hover');
+                        }
                     }
-                };
+                }, true);
 
-                cell.ondrop = function(e) {
+                lineSection.addEventListener('dragleave', function(e) {
+                    var cell = e.target.closest('td');
+                    if (cell) {
+                        var relatedTarget = e.relatedTarget;
+                        if (!relatedTarget || !cell.contains(relatedTarget)) {
+                            cell.classList.remove('drop-target', 'drop-hover');
+                        }
+                    }
+                }, true);
+
+                lineSection.addEventListener('drop', function(e) {
+                    var cell = e.target.closest('td');
+                    var input = e.target.closest('.line-input, .line-desc, .line-qty, .line-price, .line-amount') ||
+                                (cell ? cell.querySelector('.line-input, .line-desc, .line-qty, .line-price, .line-amount, input, select') : null);
+
+                    if (!input) return;
+
                     e.preventDefault();
                     e.stopPropagation();
-                    cell.classList.remove('drop-target', 'drop-hover');
+
+                    // Clear all hover states
+                    lineSection.querySelectorAll('td.drop-hover').forEach(function(c) {
+                        c.classList.remove('drop-target', 'drop-hover');
+                    });
 
                     try {
                         var rawData = e.dataTransfer.getData('text/plain');
@@ -4550,7 +4578,7 @@
                     } catch (err) {
                         console.error('[ExtractionPool] Sublist drop error:', err);
                     }
-                };
+                }, true);
             });
         },
 
