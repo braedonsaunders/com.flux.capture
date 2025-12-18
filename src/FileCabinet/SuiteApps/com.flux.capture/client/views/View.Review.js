@@ -970,78 +970,25 @@
                     html += '</div>'; // close tab content
                 });
             } else {
-                // ========== NO LAYOUT - Render all fields flat ==========
-                // Show notice about missing layout
+                // ========== NO LAYOUT - Show setup notice only ==========
                 var transactionLabel = this.transactionType === 'vendorbill' ? 'Vendor Bill' :
                     this.transactionType === 'expensereport' ? 'Expense Report' :
                     this.transactionType === 'purchaseorder' ? 'Purchase Order' :
+                    this.transactionType === 'vendorcredit' ? 'Vendor Credit' :
                     this.transactionType;
 
                 html += '<div class="layout-notice">' +
-                    '<div class="notice-icon"><i class="fas fa-info-circle"></i></div>' +
+                    '<div class="notice-icon"><i class="fas fa-cog"></i></div>' +
                     '<div class="notice-content">' +
-                        '<strong>Form layout not yet captured</strong>' +
-                        '<p>To display fields grouped by tabs as they appear in NetSuite, open any ' + transactionLabel + ' in NetSuite. ' +
-                        'The layout will be captured automatically and used for all future documents of this type.</p>' +
+                        '<strong>Form not configured for ' + transactionLabel + '</strong>' +
+                        '<p>Go to <strong>Settings</strong> and upload a NetSuite form XML file to configure ' +
+                        'which fields and tabs appear for this document type.</p>' +
+                        '<a href="#settings" class="btn btn-primary btn-sm" style="margin-top: 8px;">' +
+                            '<i class="fas fa-cog"></i> Go to Settings' +
+                        '</a>' +
                     '</div>' +
                 '</div>';
-
-                // Filter visible body fields (exclude entity - handled above, and customform - internal NS field)
-                // Check both isDisplay (schema) and visible (user config) flags
-                var visibleFields = bodyFields.filter(function(f) {
-                    var fieldId = (f.id || '').toLowerCase();
-                    return fieldId !== 'entity' && fieldId !== 'customform' && f.isDisplay !== false && f.visible !== false;
-                });
-
-                // Sort by displayOrder
-                visibleFields.sort(function(a, b) {
-                    return (a.displayOrder || 0) - (b.displayOrder || 0);
-                });
-
-                // Separate standard fields from custom fields
-                var standardFields = visibleFields.filter(function(f) { return !f.isCustom; });
-                var customFields = visibleFields.filter(function(f) { return f.isCustom; });
-
-                // Render standard fields section
-                if (standardFields.length > 0) {
-                    html += '<div class="form-section field-group" data-group="standard">' +
-                        '<h4 class="group-header">' +
-                            '<i class="fas fa-file-invoice"></i> Transaction Details' +
-                            '<button class="btn btn-ghost btn-icon btn-xs group-toggle" title="Toggle section">' +
-                                '<i class="fas fa-chevron-up"></i>' +
-                            '</button>' +
-                        '</h4>' +
-                        '<div class="group-content"><div class="form-grid">';
-
-                    // Render fields directly in form-grid (CSS grid handles 2-column layout)
-                    for (var i = 0; i < standardFields.length; i++) {
-                        html += self.renderNsField(standardFields[i], doc);
-                    }
-                    html += '</div></div></div>';
-                }
-
-                // Render custom fields section
-                if (customFields.length > 0) {
-                    html += '<div class="form-section field-group" data-group="custom">' +
-                        '<h4 class="group-header">' +
-                            '<i class="fas fa-puzzle-piece"></i> Custom Fields' +
-                            '<button class="btn btn-ghost btn-icon btn-xs group-toggle" title="Toggle section">' +
-                                '<i class="fas fa-chevron-up"></i>' +
-                            '</button>' +
-                        '</h4>' +
-                        '<div class="group-content"><div class="form-grid">';
-
-                    // Render fields directly in form-grid (CSS grid handles 2-column layout)
-                    for (var j = 0; j < customFields.length; j++) {
-                        html += self.renderNsField(customFields[j], doc);
-                    }
-                    html += '</div></div></div>';
-                }
-
-                // Render all sublists
-                if (sublists.length > 0) {
-                    html += self.renderSublists(sublists, doc);
-                }
+                // No fields rendered - user must configure form in Settings first
             }
 
 
@@ -2613,13 +2560,8 @@
             // Derive the new transaction type
             var newTransactionType = this.getTransactionType(newType);
 
-            FCDebug.log('[Review] changeDocumentType:', newType, newTypeText);
-            FCDebug.log('[Review] Current transactionType:', this.transactionType);
-            FCDebug.log('[Review] New transactionType:', newTransactionType);
-
             // If transaction type is changing, we need to reload the form schema
             if (newTransactionType !== this.transactionType) {
-                FCDebug.log('[Review] Transaction type changed, fetching new form schema...');
                 this.transactionType = newTransactionType;
 
                 // Show loading state
@@ -2627,10 +2569,8 @@
                 UI.toast('Loading ' + newTypeText + ' form...', 'info');
 
                 // Fetch the new form schema
-                FCDebug.log('[Review] Calling API.get formschema for:', newTransactionType);
                 API.get('formschema', { transactionType: newTransactionType })
                     .then(function(formSchemaData) {
-                        FCDebug.log('[Review] Form schema loaded:', formSchemaData);
                         self.formFields = formSchemaData;
 
                         // Re-inject accounts and items into the new form schema
@@ -2644,14 +2584,12 @@
                         UI.toast(newTypeText + ' form loaded', 'success');
                     })
                     .catch(function(err) {
-                        FCDebug.log('[Review] Form schema error:', err);
                         console.error('[Review] Failed to load form schema:', err);
                         UI.toast('Failed to load ' + newTypeText + ' form', 'error');
                         // Still render with existing form fields
                         self.renderExtractionForm();
                     });
             } else {
-                FCDebug.log('[Review] Same transaction type, just re-rendering');
                 // Same transaction type, just re-render
                 this.renderExtractionForm();
                 this.updateApplyAllButton();
