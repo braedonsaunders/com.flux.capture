@@ -136,7 +136,16 @@
             });
 
             this.on('#btn-review-all', 'click', function() {
-                Router.navigate('documents');
+                // Find the first complete document to review
+                var completeCard = self.uploadCards.find(function(c) {
+                    return c.status === 'complete' && c.documentId;
+                });
+                if (completeCard) {
+                    Router.navigate('review', { docId: completeCard.documentId });
+                } else {
+                    // Fallback to documents list if no complete docs
+                    Router.navigate('documents');
+                }
             });
 
             this.on('#btn-clear-complete', 'click', function() {
