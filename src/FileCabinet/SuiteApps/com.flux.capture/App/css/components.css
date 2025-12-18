@@ -1685,7 +1685,7 @@
 .line-items-table {
     border: 1px solid var(--border-color);
     border-radius: var(--radius-md);
-    overflow: hidden;
+    overflow: visible;
 }
 
 .line-items {
@@ -1881,6 +1881,7 @@
 /* Table wrapper for horizontal scroll when needed */
 .sublist-table-wrapper {
     overflow-x: auto;
+    overflow-y: visible;
     max-width: 100%;
 }
 
