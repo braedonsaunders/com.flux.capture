@@ -267,7 +267,8 @@ define([
                     result = updateSettings(context);
                     break;
                 case 'formconfig':
-                    result = updateFormSchemaConfig(context.transactionType, context.formId, context.config);
+                    // Save user-customized form config (from XML upload or manual)
+                    result = saveUserFormConfig(context.transactionType, context.formId, context.config, context.source);
                     break;
                 case 'invalidatecache':
                     result = invalidateFormSchemaCache(context.transactionType, context.formId);
@@ -324,12 +325,24 @@ define([
                     result = clearCompleted(params);
                     break;
                 case 'clearcache':
-                    // Clear form layout cache
+                    // Clear form layout or datasource cache
                     var cacheType = params && params.cacheType;
                     if (cacheType === 'formlayout') {
+                        // Clear form layouts and schemas (not user configs)
                         result = FormSchemaExtractor.clearAllCache();
+                    } else if (cacheType === 'datasource') {
+                        // Clear datasource configs
+                        result = FormSchemaExtractor.clearConfigsByType('datasource_cache');
+                    } else if (cacheType === 'all') {
+                        // Clear everything except user configs
+                        var layoutResult = FormSchemaExtractor.clearAllCache();
+                        var dsResult = FormSchemaExtractor.clearConfigsByType('datasource_cache');
+                        result = Response.success({
+                            layoutsDeleted: layoutResult.deleted || 0,
+                            datasourcesDeleted: dsResult.deleted || 0
+                        });
                     } else {
-                        result = Response.error('INVALID_CACHE_TYPE', 'Unknown cache type: ' + cacheType);
+                        result = Response.error('INVALID_CACHE_TYPE', 'Unknown cache type: ' + cacheType + '. Use: formlayout, datasource, or all');
                     }
                     break;
                 default:
@@ -1440,10 +1453,43 @@ define([
     }
 
     /**
-     * Update form schema configuration
+     * Save user-customized form configuration
+     * Used when user uploads XML or manually configures form layout
+     * @param {string} transactionType - The transaction type (vendorbill, expensereport)
+     * @param {string} formId - The form ID (optional)
+     * @param {Object} config - The form configuration (tabs, fields, sublists)
+     * @param {string} source - Source type: 'xml_upload' or 'manual'
+     * @returns {Object} Success/failure with config ID
+     */
+    function saveUserFormConfig(transactionType, formId, config, source) {
+        if (!transactionType) {
+            return Response.error('MISSING_PARAM', 'Transaction type is required');
+        }
+        if (!config) {
+            return Response.error('MISSING_PARAM', 'Config is required');
+        }
+
+        try {
+            var result = FormSchemaExtractor.saveUserConfig(transactionType, formId, config, source);
+            if (!result.success) {
+                return Response.error('CONFIG_SAVE_ERROR', result.error);
+            }
+            return Response.success({
+                message: 'Form configuration saved',
+                id: result.id,
+                source: result.source
+            });
+        } catch (e) {
+            log.error('saveUserFormConfig', e);
+            return Response.error('CONFIG_SAVE_ERROR', e.message);
+        }
+    }
+
+    /**
+     * Update form schema configuration options (not full replacement)
      * @param {string} transactionType - The transaction type
      * @param {string} formId - The form ID
-     * @param {Object} config - Configuration updates
+     * @param {Object} config - Configuration updates to merge
      * @returns {Object} Updated configuration
      */
     function updateFormSchemaConfig(transactionType, formId, config) {
