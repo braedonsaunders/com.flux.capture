@@ -519,6 +519,23 @@
             var layout = formFields.layout || {};
             var tabs = layout.tabs || [];
             var config = formFields.config || {};
+            var layoutSublists = layout.sublists || [];
+
+            // Merge column order from layout.sublists into schema sublists
+            // The layout.sublists contain visibleColumns/columnOrder from DOM extraction
+            if (layoutSublists.length > 0) {
+                sublists.forEach(function(sl) {
+                    var layoutSl = layoutSublists.find(function(lsl) { return lsl.id === sl.id; });
+                    if (layoutSl) {
+                        // Copy column order info from DOM extraction
+                        if (layoutSl.visibleColumns && layoutSl.visibleColumns.length > 0) {
+                            sl.visibleColumns = layoutSl.visibleColumns;
+                            sl.columnOrder = layoutSl.columnOrder || layoutSl.visibleColumns;
+                            console.log('[View.Review] Merged column order for', sl.id, ':', sl.columnOrder.join(', '));
+                        }
+                    }
+                });
+            }
 
             // Get column limit from config (default 10)
             this.sublistColumnLimit = config.sublistColumnLimit || 10;
@@ -678,9 +695,31 @@
                     }
 
                     // Render sublists in this tab
+                    // Include orphan sublists (from schema but not in layout) in the first tab
                     var tabSublists = sublists.filter(function(sl) {
                         return (tab.sublists || []).indexOf(sl.id) !== -1;
                     });
+
+                    // For the first tab, also add any sublists from schema that aren't in any tab's layout
+                    if (tabIdx === 0) {
+                        var allLayoutSublistIds = [];
+                        visibleTabs.forEach(function(t) {
+                            (t.sublists || []).forEach(function(slId) {
+                                if (allLayoutSublistIds.indexOf(slId) === -1) {
+                                    allLayoutSublistIds.push(slId);
+                                }
+                            });
+                        });
+
+                        var orphanSublists = sublists.filter(function(sl) {
+                            return allLayoutSublistIds.indexOf(sl.id) === -1;
+                        });
+
+                        if (orphanSublists.length > 0) {
+                            console.log('[View.Review] Adding orphan sublists to first tab:', orphanSublists.map(function(s) { return s.id; }));
+                            tabSublists = tabSublists.concat(orphanSublists);
+                        }
+                    }
 
                     if (tabSublists.length > 0) {
                         html += self.renderSublists(tabSublists, doc);
@@ -688,28 +727,6 @@
 
                     html += '</div>'; // close tab content
                 });
-
-                // ========== RENDER ORPHAN SUBLISTS ==========
-                // Find sublists from schema that weren't in any tab's layout
-                // This handles cases where client-side extraction missed some sublists (e.g., "loading")
-                var renderedSublistIds = [];
-                visibleTabs.forEach(function(tab) {
-                    (tab.sublists || []).forEach(function(slId) {
-                        if (renderedSublistIds.indexOf(slId) === -1) {
-                            renderedSublistIds.push(slId);
-                        }
-                    });
-                });
-
-                var orphanSublists = sublists.filter(function(sl) {
-                    return renderedSublistIds.indexOf(sl.id) === -1;
-                });
-
-                if (orphanSublists.length > 0) {
-                    console.log('[View.Review] Found orphan sublists not in layout:', orphanSublists.map(function(s) { return s.id; }));
-                    // Render orphan sublists outside of tabs (always visible)
-                    html += self.renderSublists(orphanSublists, doc);
-                }
             } else {
                 // ========== NO LAYOUT - Render all fields flat ==========
                 // Show notice about missing layout
@@ -966,29 +983,38 @@
                 '<label>' + escapeHtml(label) + ' ' + this.renderConfidenceBadge(docKey) +
                 (isRequired ? ' <span class="required">*</span>' : '') + '</label>';
 
+            // Check if field should be disabled (readonly or inline mode)
+            var isDisabled = nsField.isDisabled || nsField.isReadonly || nsField.mode === 'inline';
+
             if (nsField.type === 'select' && nsField.options && nsField.options.length > 0) {
-                html += '<select id="' + fieldId + '">';
+                // Select with options - render dropdown
+                html += '<select id="' + fieldId + '"' + (isDisabled ? ' disabled' : '') + '>';
                 html += '<option value="">-- Select --</option>';
                 nsField.options.forEach(function(opt) {
                     var selected = (String(value) === String(opt.value)) ? ' selected' : '';
                     html += '<option value="' + escapeHtml(opt.value) + '"' + selected + '>' + escapeHtml(opt.text) + '</option>';
                 });
                 html += '</select>';
+            } else if (nsField.type === 'select') {
+                // Select without options - render as disabled text showing current value
+                // These are lookups that require server-side search
+                var displayValue = doc[docKey + '_display'] || doc[docKey + '_text'] || value || '';
+                html += '<input type="text" id="' + fieldId + '" value="' + escapeHtml(displayValue) + '" disabled placeholder="(Select field - not editable)">';
             } else if (nsField.type === 'date') {
-                html += '<input type="date" id="' + fieldId + '" value="' + formatDateInput(value) + '">';
+                html += '<input type="date" id="' + fieldId + '" value="' + formatDateInput(value) + '"' + (isDisabled ? ' disabled' : '') + '>';
             } else if (nsField.type === 'currency' || nsField.type === 'float') {
                 html += '<div class="input-with-prefix">' +
                     '<span class="input-prefix">$</span>' +
-                    '<input type="number" step="0.01" id="' + fieldId + '" value="' + (parseFloat(value) || 0).toFixed(2) + '">' +
+                    '<input type="number" step="0.01" id="' + fieldId + '" value="' + (parseFloat(value) || 0).toFixed(2) + '"' + (isDisabled ? ' disabled' : '') + '>' +
                 '</div>';
             } else if (nsField.type === 'integer') {
-                html += '<input type="number" step="1" id="' + fieldId + '" value="' + escapeHtml(value) + '">';
+                html += '<input type="number" step="1" id="' + fieldId + '" value="' + escapeHtml(value) + '"' + (isDisabled ? ' disabled' : '') + '>';
             } else if (nsField.type === 'checkbox') {
-                html += '<input type="checkbox" id="' + fieldId + '"' + (value ? ' checked' : '') + '>';
+                html += '<input type="checkbox" id="' + fieldId + '"' + (value ? ' checked' : '') + (isDisabled ? ' disabled' : '') + '>';
             } else if (nsField.type === 'textarea') {
-                html += '<textarea id="' + fieldId + '" rows="2">' + escapeHtml(value) + '</textarea>';
+                html += '<textarea id="' + fieldId + '" rows="2"' + (isDisabled ? ' disabled' : '') + '>' + escapeHtml(value) + '</textarea>';
             } else {
-                html += '<input type="text" id="' + fieldId + '" value="' + escapeHtml(value) + '">';
+                html += '<input type="text" id="' + fieldId + '" value="' + escapeHtml(value) + '"' + (isDisabled ? ' disabled' : '') + '>';
             }
 
             html += '</div>';
@@ -1074,12 +1100,18 @@
                     }
                 });
             } else {
-                // Fallback to priority-based ordering
+                // Fallback to priority-based ordering based on sublist type or ID
                 var priorityOrder = [];
-                if (sublist.type === 'expense') {
-                    priorityOrder = ['account', 'amount', 'memo', 'department', 'class', 'location', 'taxcode'];
+                var isExpense = sublist.type === 'expense' || sublist.id === 'expense';
+                var isItem = sublist.type === 'item' || sublist.id === 'item';
+
+                if (isExpense) {
+                    priorityOrder = ['account', 'amount', 'memo', 'department', 'class', 'location', 'customer', 'taxcode', 'grossamt', 'tax1amt'];
+                } else if (isItem) {
+                    priorityOrder = ['item', 'description', 'quantity', 'units', 'rate', 'amount', 'department', 'class', 'location', 'customer'];
                 } else {
-                    priorityOrder = ['item', 'description', 'quantity', 'rate', 'amount', 'department', 'class', 'location'];
+                    // Generic fallback for other sublists
+                    priorityOrder = ['item', 'description', 'quantity', 'rate', 'amount', 'account', 'memo', 'department', 'class', 'location'];
                 }
 
                 priorityOrder.forEach(function(fieldId) {
@@ -1088,6 +1120,8 @@
                         visible.push(field);
                     }
                 });
+
+                console.log('[View.Review] Using fallback column order for', sublist.id, '- type:', sublist.type || 'unknown', '- columns:', visible.map(function(f) { return f.id; }).join(', '));
             }
 
             // Add any custom columns not already included
@@ -1108,21 +1142,16 @@
             var displayValue = item[field.id + '_display'] || ''; // For lookups, store display text
             var inputId = 'line-' + sublistId + '-' + idx + '-' + field.id;
 
-            // Select field with inline options (small list) - render searchable select
+            // Select field with inline options - render simple select dropdown
             if (field.type === 'select' && field.options && field.options.length > 0) {
                 var html = '<td class="select-cell">' +
-                    '<div class="searchable-select" data-field="' + field.id + '">' +
-                    '<input type="text" class="select-search line-input" id="' + inputId + '-search" ' +
-                        'placeholder="Search..." data-field="' + field.id + '" autocomplete="off">' +
-                    '<select class="line-input select-hidden" id="' + inputId + '" data-field="' + field.id + '">' +
+                    '<select class="line-input" id="' + inputId + '" data-field="' + field.id + '">' +
                     '<option value="">--</option>';
                 field.options.forEach(function(opt) {
                     var selected = (String(value) === String(opt.value)) ? ' selected' : '';
                     html += '<option value="' + escapeHtml(opt.value) + '"' + selected + '>' + escapeHtml(opt.text) + '</option>';
                 });
-                html += '</select>' +
-                    '<div class="select-dropdown"></div>' +
-                    '</div></td>';
+                html += '</select></td>';
                 return html;
             }
             // Select field requiring API lookup (large list like account, customer, item)
@@ -1301,8 +1330,9 @@
             });
 
             // ========== LINE ITEM OPERATIONS (Delegated for all sublists) ==========
-            var lineSection = el('.line-section');
-            if (lineSection) {
+            // Use querySelectorAll to get ALL line sections (may be multiple across tabs)
+            var lineSections = document.querySelectorAll('.line-section');
+            lineSections.forEach(function(lineSection) {
                 // Add line button clicks
                 lineSection.addEventListener('click', function(e) {
                     var addBtn = e.target.closest('.btn-add-line');
@@ -1339,7 +1369,7 @@
 
                     self.updateSublistLine(sublistId, idx, fieldId, value);
                 });
-            }
+            });
 
             // Shortcuts help
             this.on('#btn-shortcuts', 'click', function() {
