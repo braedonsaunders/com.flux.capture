@@ -57,6 +57,32 @@
         accountsData: [], // Cached accounts for sublist dropdowns
         itemsData: [], // Cached items for sublist dropdowns
 
+        // ==========================================
+        // EXTRACTION POOL STATE
+        // ==========================================
+        extractionPool: {
+            unmatched: [],      // Unmatched extracted fields
+            applied: [],        // Applied items (for undo)
+            panelExpanded: true,
+            filterCategory: 'all',
+            searchQuery: '',
+            selectedCardId: null,
+            dragActive: false,
+            showAnnotations: false
+        },
+
+        // PDF.js state
+        pdfDoc: null,
+        pdfPage: null,
+        pdfCanvas: null,
+        pdfContext: null,
+        pdfScale: 1.5,
+        annotationOverlay: null,
+
+        // Quick assign palette state
+        quickAssignOpen: false,
+        quickAssignTargetField: null,
+
         // Document type ID to transaction type mapping
         // 1: Invoice, 3: Credit Memo, 4: Expense Report, 5: Purchase Order
         DOC_TYPE_TO_TRANSACTION: {
@@ -558,6 +584,12 @@
                         self.saveChanges();
                         return;
                     }
+                    // Cmd/Ctrl+Shift+V for Quick Assign palette (when in an input field)
+                    if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key === 'v') {
+                        e.preventDefault();
+                        self.openQuickAssignPalette(e.target);
+                        return;
+                    }
                     return;
                 }
 
@@ -723,19 +755,17 @@
             var viewport = el('#preview-viewport');
             if (!viewport) return;
 
-            if (this.data.fileUrl) {
-                var iframeStyle = 'width:100%;height:100%;border:none;background:white;' +
-                    'transform:scale(' + this.zoom + ') rotate(' + this.rotation + 'deg);' +
-                    'transform-origin:center center;';
-                var pdfUrl = this.data.fileUrl + '#toolbar=0';
-                viewport.innerHTML = '<iframe src="' + pdfUrl + '" id="doc-preview" style="' + iframeStyle + '"></iframe>';
-            } else if (this.data.sourceFile) {
-                var fileUrl = '/core/media/media.nl?id=' + this.data.sourceFile + '#toolbar=0';
-                var iframeStyle = 'width:100%;height:100%;border:none;background:white;' +
-                    'transform:scale(' + this.zoom + ') rotate(' + this.rotation + 'deg);' +
-                    'transform-origin:center center;';
+            var fileUrl = this.data.fileUrl || (this.data.sourceFile ? '/core/media/media.nl?id=' + this.data.sourceFile : null);
 
-                viewport.innerHTML = '<iframe src="' + fileUrl + '" id="doc-preview" style="' + iframeStyle + '"></iframe>';
+            if (fileUrl && typeof pdfjsLib !== 'undefined') {
+                // Use PDF.js for rendering with annotation support
+                this.renderPdfWithAnnotations(viewport, fileUrl);
+            } else if (fileUrl) {
+                // Fallback to iframe if PDF.js not available
+                var iframeStyle = 'width:100%;height:100%;border:none;background:white;' +
+                    'transform:scale(' + this.zoom + ') rotate(' + this.rotation + 'deg);' +
+                    'transform-origin:center center;';
+                viewport.innerHTML = '<iframe src="' + fileUrl + '#toolbar=0" id="doc-preview" style="' + iframeStyle + '"></iframe>';
             } else {
                 viewport.innerHTML = '<div class="empty-state" style="color:var(--text-inverse);padding:60px;">' +
                     '<div class="empty-icon"><i class="fas fa-file-image"></i></div>' +
@@ -754,6 +784,276 @@
             var pageDisplay = el('#page-display');
             if (pageDisplay) {
                 pageDisplay.textContent = this.currentPage + ' / ' + this.totalPages;
+            }
+        },
+
+        // ==========================================
+        // PDF.JS RENDERING WITH ANNOTATIONS
+        // ==========================================
+        renderPdfWithAnnotations: function(viewport, fileUrl) {
+            var self = this;
+
+            // Create container structure
+            viewport.innerHTML = '<div class="pdf-container" id="pdf-container">' +
+                '<div class="pdf-loading"><div class="loading-spinner"></div><span>Loading document...</span></div>' +
+                '<canvas id="pdf-canvas"></canvas>' +
+                '<div class="annotation-overlay" id="annotation-overlay"></div>' +
+            '</div>';
+
+            var container = el('#pdf-container');
+            var canvas = el('#pdf-canvas');
+            var loadingEl = viewport.querySelector('.pdf-loading');
+
+            if (!canvas) return;
+
+            this.pdfCanvas = canvas;
+            this.pdfContext = canvas.getContext('2d');
+            this.annotationOverlay = el('#annotation-overlay');
+
+            // Load the PDF
+            var loadingTask = pdfjsLib.getDocument(fileUrl);
+            loadingTask.promise.then(function(pdf) {
+                self.pdfDoc = pdf;
+                self.totalPages = pdf.numPages;
+
+                // Update page display
+                var pageDisplay = el('#page-display');
+                if (pageDisplay) {
+                    pageDisplay.textContent = self.currentPage + ' / ' + self.totalPages;
+                }
+
+                // Render the first page
+                self.renderPdfPage(self.currentPage);
+
+                // Hide loading
+                if (loadingEl) loadingEl.style.display = 'none';
+
+            }).catch(function(error) {
+                console.error('[PDF.js] Error loading PDF:', error);
+                // Fallback to iframe
+                viewport.innerHTML = '<iframe src="' + fileUrl + '#toolbar=0" id="doc-preview" ' +
+                    'style="width:100%;height:100%;border:none;background:white;"></iframe>';
+            });
+        },
+
+        renderPdfPage: function(pageNum) {
+            var self = this;
+            if (!this.pdfDoc) return;
+
+            this.pdfDoc.getPage(pageNum).then(function(page) {
+                self.pdfPage = page;
+
+                // Calculate scale to fit container
+                var container = el('#pdf-container');
+                var containerWidth = container ? container.clientWidth - 40 : 600;
+                var originalViewport = page.getViewport({ scale: 1 });
+                var scale = (containerWidth / originalViewport.width) * self.zoom;
+
+                var viewport = page.getViewport({ scale: scale, rotation: self.rotation });
+
+                // Set canvas dimensions
+                self.pdfCanvas.width = viewport.width;
+                self.pdfCanvas.height = viewport.height;
+
+                // Set annotation overlay dimensions
+                if (self.annotationOverlay) {
+                    self.annotationOverlay.style.width = viewport.width + 'px';
+                    self.annotationOverlay.style.height = viewport.height + 'px';
+                }
+
+                // Render the page
+                var renderContext = {
+                    canvasContext: self.pdfContext,
+                    viewport: viewport
+                };
+
+                page.render(renderContext).promise.then(function() {
+                    // Render annotations after page is rendered
+                    if (self.extractionPool.showAnnotations) {
+                        self.renderExtractionAnnotations(viewport);
+                    }
+                });
+            });
+        },
+
+        // ==========================================
+        // EXTRACTION ANNOTATIONS ON DOCUMENT
+        // ==========================================
+        renderExtractionAnnotations: function(pdfViewport) {
+            var self = this;
+            if (!this.annotationOverlay) return;
+
+            // Clear existing annotations
+            this.annotationOverlay.innerHTML = '';
+
+            var extractedData = this.data.extractedData || {};
+            var allFields = extractedData._allExtractedFields || {};
+
+            // Get matched field IDs to distinguish matched vs unmatched
+            var matchedFieldIds = this.getMatchedFieldIds();
+
+            Object.keys(allFields).forEach(function(key) {
+                var field = allFields[key];
+                if (!field.position) return;
+
+                var pos = field.position;
+                var isMatched = matchedFieldIds.indexOf(key) !== -1;
+
+                // Create annotation box
+                var box = document.createElement('div');
+                box.className = 'extraction-annotation ' + (isMatched ? 'matched' : 'unmatched');
+                box.dataset.fieldKey = key;
+                box.dataset.fieldValue = field.value || '';
+                box.dataset.fieldLabel = field.label || key;
+
+                // Convert normalized coordinates (0-1) to pixel coordinates
+                var x = (pos.x || 0) * pdfViewport.width;
+                var y = (pos.y || 0) * pdfViewport.height;
+                var w = (pos.w || 0.1) * pdfViewport.width;
+                var h = (pos.h || 0.02) * pdfViewport.height;
+
+                box.style.left = x + 'px';
+                box.style.top = y + 'px';
+                box.style.width = Math.max(w, 20) + 'px';
+                box.style.height = Math.max(h, 16) + 'px';
+
+                // Add tooltip
+                box.title = field.label + ': ' + field.value + (isMatched ? ' (Matched)' : ' (Unmatched - Click to assign)');
+
+                // Click handler for unmatched annotations
+                if (!isMatched) {
+                    box.addEventListener('click', function(e) {
+                        e.stopPropagation();
+                        self.showAnnotationAssignPopover(box, field, key);
+                    });
+                }
+
+                self.annotationOverlay.appendChild(box);
+            });
+        },
+
+        showAnnotationAssignPopover: function(box, field, key) {
+            var self = this;
+
+            // Remove any existing popover
+            var existing = document.querySelector('.annotation-popover');
+            if (existing) existing.remove();
+
+            // Create popover
+            var popover = document.createElement('div');
+            popover.className = 'annotation-popover';
+            popover.innerHTML = '<div class="popover-header">' +
+                '<span class="popover-label">' + escapeHtml(field.label || key) + '</span>' +
+                '<span class="popover-confidence">' + Math.round((field.confidence || 0) * 100) + '%</span>' +
+            '</div>' +
+            '<div class="popover-value">"' + escapeHtml(String(field.value || '').substring(0, 50)) + '"</div>' +
+            '<div class="popover-assign">' +
+                '<label>Assign to:</label>' +
+                '<select class="popover-field-select" id="popover-field-select">' +
+                    '<option value="">-- Select field --</option>' +
+                '</select>' +
+            '</div>' +
+            '<div class="popover-actions">' +
+                '<button class="btn btn-sm btn-ghost popover-cancel">Cancel</button>' +
+                '<button class="btn btn-sm btn-primary popover-apply" disabled>Apply</button>' +
+            '</div>';
+
+            // Position popover near the box
+            var rect = box.getBoundingClientRect();
+            popover.style.position = 'fixed';
+            popover.style.left = rect.right + 10 + 'px';
+            popover.style.top = rect.top + 'px';
+            popover.style.zIndex = '10001';
+
+            document.body.appendChild(popover);
+
+            // Populate field select with form fields
+            var select = popover.querySelector('#popover-field-select');
+            this.populateFieldSelect(select);
+
+            // Enable apply button when field selected
+            select.addEventListener('change', function() {
+                popover.querySelector('.popover-apply').disabled = !this.value;
+            });
+
+            // Cancel button
+            popover.querySelector('.popover-cancel').addEventListener('click', function() {
+                popover.remove();
+            });
+
+            // Apply button
+            popover.querySelector('.popover-apply').addEventListener('click', function() {
+                var targetFieldId = select.value;
+                if (targetFieldId) {
+                    self.applyExtractionToField(key, field, targetFieldId);
+                    popover.remove();
+                }
+            });
+
+            // Close on click outside
+            setTimeout(function() {
+                document.addEventListener('click', function closePopover(e) {
+                    if (!popover.contains(e.target) && !box.contains(e.target)) {
+                        popover.remove();
+                        document.removeEventListener('click', closePopover);
+                    }
+                });
+            }, 100);
+        },
+
+        populateFieldSelect: function(select) {
+            var formFields = this.formFields || {};
+            var bodyFields = formFields.bodyFields || [];
+
+            bodyFields.forEach(function(field) {
+                if (field.isDisplay !== false && field.id !== 'entity') {
+                    var option = document.createElement('option');
+                    option.value = field.id;
+                    option.textContent = field.label || field.id;
+                    select.appendChild(option);
+                }
+            });
+        },
+
+        getMatchedFieldIds: function() {
+            // Return list of field keys that have been matched to form fields
+            var matched = [];
+            var extractedData = this.data.extractedData || {};
+
+            // Standard mapped fields
+            var standardFields = ['vendorname', 'invoicenumber', 'invoicedate', 'duedate',
+                'subtotal', 'taxamount', 'totalamount', 'ponumber', 'currency'];
+
+            standardFields.forEach(function(f) {
+                if (extractedData[f] !== undefined) {
+                    matched.push(f);
+                }
+            });
+
+            return matched;
+        },
+
+        toggleAnnotations: function() {
+            this.extractionPool.showAnnotations = !this.extractionPool.showAnnotations;
+
+            var btn = el('#btn-toggle-annotations');
+            if (btn) {
+                btn.classList.toggle('active', this.extractionPool.showAnnotations);
+            }
+
+            if (this.pdfPage && this.pdfCanvas) {
+                // Re-render annotations
+                var viewport = this.pdfPage.getViewport({
+                    scale: (this.pdfCanvas.width / this.pdfPage.getViewport({ scale: 1 }).width),
+                    rotation: this.rotation
+                });
+                if (this.extractionPool.showAnnotations) {
+                    this.renderExtractionAnnotations(viewport);
+                } else {
+                    if (this.annotationOverlay) {
+                        this.annotationOverlay.innerHTML = '';
+                    }
+                }
             }
         },
 
@@ -832,6 +1132,20 @@
                         '</div>';
                     }).join('') +
                 '</div>';
+            }
+
+            // ========== EXTRACTION POOL PANEL ==========
+            // Compute unmatched extractions
+            this.computeUnmatchedExtractions();
+            var unmatchedCount = this.extractionPool.unmatched.length;
+
+            if (unmatchedCount > 0) {
+                html += this.renderExtractionPoolPanel();
+            }
+
+            // ========== APPLIED ITEMS TRACKING ==========
+            if (this.extractionPool.applied.length > 0) {
+                html += this.renderAppliedItemsPanel();
             }
 
             // ========== VENDOR SECTION (entity field with search) ==========
@@ -1070,6 +1384,9 @@
             // ========== BIND FORM EVENTS ==========
             this.bindFormEvents();
             this.bindTabEvents();
+
+            // ========== BIND EXTRACTION POOL EVENTS ==========
+            this.bindExtractionPoolEvents();
         },
 
         // Get icon for a field group
@@ -2936,6 +3253,7 @@
                         '<div class="shortcut-section">' +
                             '<div class="shortcut-section-title">Other</div>' +
                             '<div class="shortcut-item"><kbd>Ctrl+S</kbd> <span>Save changes</span></div>' +
+                            '<div class="shortcut-item"><kbd>Ctrl+Shift+V</kbd> <span>Quick assign palette</span></div>' +
                             '<div class="shortcut-item"><kbd>?</kbd> <span>Show this help</span></div>' +
                         '</div>' +
                     '</div>' +
@@ -2962,6 +3280,760 @@
                     Router.navigate('queue');
                 });
             }
+        },
+
+        // ==========================================
+        // EXTRACTION POOL SYSTEM
+        // ==========================================
+
+        /**
+         * Compute unmatched extractions from _allExtractedFields
+         */
+        computeUnmatchedExtractions: function() {
+            var self = this;
+            var extractedData = this.data.extractedData || {};
+            var allFields = extractedData._allExtractedFields || {};
+            var matchedIds = this.getMatchedFieldIds();
+
+            // Also check what's already been applied this session
+            var appliedKeys = this.extractionPool.applied.map(function(a) { return a.extractionKey; });
+
+            this.extractionPool.unmatched = [];
+
+            Object.keys(allFields).forEach(function(key) {
+                // Skip if already matched or applied
+                if (matchedIds.indexOf(key) !== -1) return;
+                if (appliedKeys.indexOf(key) !== -1) return;
+
+                var field = allFields[key];
+                if (!field.value && field.value !== 0) return; // Skip empty values
+
+                self.extractionPool.unmatched.push({
+                    id: 'extract_' + key,
+                    key: key,
+                    label: field.label || key,
+                    value: field.value,
+                    confidence: field.confidence || 0.5,
+                    position: field.position || null,
+                    category: self.categorizeExtraction(field)
+                });
+            });
+
+            // Sort by confidence descending
+            this.extractionPool.unmatched.sort(function(a, b) {
+                return (b.confidence || 0) - (a.confidence || 0);
+            });
+        },
+
+        /**
+         * Categorize an extraction by type
+         */
+        categorizeExtraction: function(field) {
+            var value = String(field.value || '');
+            var label = String(field.label || '').toLowerCase();
+
+            // Check for amounts
+            if (/^\$?[\d,]+\.?\d*$/.test(value.trim()) || label.indexOf('amount') !== -1 ||
+                label.indexOf('total') !== -1 || label.indexOf('price') !== -1) {
+                return 'amounts';
+            }
+
+            // Check for dates
+            if (/^\d{1,2}[\/\-]\d{1,2}[\/\-]\d{2,4}$/.test(value.trim()) ||
+                label.indexOf('date') !== -1) {
+                return 'dates';
+            }
+
+            // Check for references
+            if (label.indexOf('number') !== -1 || label.indexOf('ref') !== -1 ||
+                label.indexOf('po') !== -1 || label.indexOf('invoice') !== -1 ||
+                /^[A-Z]{2,}[\-\d]+/.test(value.trim())) {
+                return 'references';
+            }
+
+            return 'text';
+        },
+
+        /**
+         * Render the Extraction Pool panel
+         */
+        renderExtractionPoolPanel: function() {
+            var self = this;
+            var unmatched = this.extractionPool.unmatched;
+            var isExpanded = this.extractionPool.panelExpanded;
+            var filterCategory = this.extractionPool.filterCategory;
+
+            // Filter by category if not 'all'
+            var filteredItems = filterCategory === 'all' ? unmatched :
+                unmatched.filter(function(item) { return item.category === filterCategory; });
+
+            // Filter by search query
+            var searchQuery = (this.extractionPool.searchQuery || '').toLowerCase();
+            if (searchQuery) {
+                filteredItems = filteredItems.filter(function(item) {
+                    return item.label.toLowerCase().indexOf(searchQuery) !== -1 ||
+                           String(item.value).toLowerCase().indexOf(searchQuery) !== -1;
+                });
+            }
+
+            var html = '<div class="extraction-pool-panel' + (isExpanded ? ' expanded' : ' collapsed') + '" id="extraction-pool-panel">' +
+                '<div class="pool-header" id="pool-header">' +
+                    '<div class="pool-title">' +
+                        '<i class="fas fa-layer-group"></i>' +
+                        '<span>Extraction Pool</span>' +
+                        '<span class="pool-count">' + unmatched.length + ' items</span>' +
+                    '</div>' +
+                    '<div class="pool-actions">' +
+                        '<button class="btn btn-ghost btn-sm" id="btn-toggle-annotations" title="Show extractions on document">' +
+                            '<i class="fas fa-highlighter"></i>' +
+                        '</button>' +
+                        '<button class="btn btn-ghost btn-sm pool-toggle" id="pool-toggle">' +
+                            '<i class="fas fa-chevron-' + (isExpanded ? 'up' : 'down') + '"></i>' +
+                        '</button>' +
+                    '</div>' +
+                '</div>';
+
+            if (isExpanded) {
+                html += '<div class="pool-toolbar">' +
+                    '<div class="pool-search">' +
+                        '<i class="fas fa-search"></i>' +
+                        '<input type="text" id="pool-search-input" placeholder="Search extractions..." value="' + escapeHtml(searchQuery) + '">' +
+                    '</div>' +
+                    '<div class="pool-filters">' +
+                        '<button class="pool-filter-btn' + (filterCategory === 'all' ? ' active' : '') + '" data-category="all">All</button>' +
+                        '<button class="pool-filter-btn' + (filterCategory === 'amounts' ? ' active' : '') + '" data-category="amounts"><i class="fas fa-dollar-sign"></i></button>' +
+                        '<button class="pool-filter-btn' + (filterCategory === 'dates' ? ' active' : '') + '" data-category="dates"><i class="fas fa-calendar"></i></button>' +
+                        '<button class="pool-filter-btn' + (filterCategory === 'references' ? ' active' : '') + '" data-category="references"><i class="fas fa-hashtag"></i></button>' +
+                        '<button class="pool-filter-btn' + (filterCategory === 'text' ? ' active' : '') + '" data-category="text"><i class="fas fa-font"></i></button>' +
+                    '</div>' +
+                '</div>' +
+                '<div class="pool-cards" id="pool-cards">';
+
+                if (filteredItems.length === 0) {
+                    html += '<div class="pool-empty">' +
+                        '<i class="fas fa-filter-circle-xmark"></i>' +
+                        '<span>No matching extractions</span>' +
+                    '</div>';
+                } else {
+                    filteredItems.forEach(function(item) {
+                        var confClass = item.confidence >= 0.85 ? 'high' : item.confidence >= 0.6 ? 'medium' : 'low';
+                        var displayValue = String(item.value).length > 40 ?
+                            String(item.value).substring(0, 40) + '...' : item.value;
+
+                        html += '<div class="pool-card" draggable="true" ' +
+                            'data-extraction-id="' + item.id + '" ' +
+                            'data-extraction-key="' + escapeHtml(item.key) + '" ' +
+                            'data-extraction-value="' + escapeHtml(item.value) + '">' +
+                            '<div class="pool-card-header">' +
+                                '<span class="pool-card-label">' + escapeHtml(item.label) + '</span>' +
+                                '<span class="pool-card-confidence conf-' + confClass + '">' + Math.round(item.confidence * 100) + '%</span>' +
+                            '</div>' +
+                            '<div class="pool-card-value">' + escapeHtml(displayValue) + '</div>' +
+                            '<div class="pool-card-actions">' +
+                                '<button class="btn btn-ghost btn-xs pool-card-copy" title="Copy value"><i class="fas fa-copy"></i></button>' +
+                                '<button class="btn btn-ghost btn-xs pool-card-locate" title="Find in document"><i class="fas fa-crosshairs"></i></button>' +
+                                '<button class="btn btn-ghost btn-xs pool-card-dismiss" title="Dismiss"><i class="fas fa-times"></i></button>' +
+                            '</div>' +
+                        '</div>';
+                    });
+                }
+
+                html += '</div>'; // close pool-cards
+            }
+
+            html += '</div>'; // close extraction-pool-panel
+
+            return html;
+        },
+
+        /**
+         * Render Applied Items panel
+         */
+        renderAppliedItemsPanel: function() {
+            var self = this;
+            var applied = this.extractionPool.applied;
+
+            if (applied.length === 0) return '';
+
+            var html = '<div class="applied-items-panel" id="applied-items-panel">' +
+                '<div class="applied-header">' +
+                    '<i class="fas fa-check-circle"></i>' +
+                    '<span>Recently Applied</span>' +
+                '</div>' +
+                '<div class="applied-items">';
+
+            applied.forEach(function(item, idx) {
+                html += '<div class="applied-item" data-index="' + idx + '">' +
+                    '<span class="applied-from">' + escapeHtml(item.fromLabel) + '</span>' +
+                    '<i class="fas fa-arrow-right"></i>' +
+                    '<span class="applied-to">' + escapeHtml(item.toLabel) + '</span>' +
+                    '<button class="btn btn-ghost btn-xs applied-undo" data-index="' + idx + '" title="Undo">' +
+                        '<i class="fas fa-undo"></i> Undo' +
+                    '</button>' +
+                '</div>';
+            });
+
+            html += '</div></div>';
+
+            return html;
+        },
+
+        /**
+         * Apply an extraction value to a form field
+         */
+        applyExtractionToField: function(extractionKey, extractionData, targetFieldId) {
+            var self = this;
+            var value = extractionData.value;
+
+            // Find the target field input
+            var input = el('#field-' + targetFieldId);
+            if (!input) {
+                // Try finding by data-field attribute
+                input = document.querySelector('[data-field="' + targetFieldId + '"]');
+            }
+
+            if (!input) {
+                UI.toast('Could not find field: ' + targetFieldId, 'error');
+                return;
+            }
+
+            // Get field label for tracking
+            var fieldLabel = targetFieldId;
+            var labelEl = input.closest('.form-field')?.querySelector('label');
+            if (labelEl) {
+                fieldLabel = labelEl.textContent.replace(/[*%\d]/g, '').trim();
+            }
+
+            // Store previous value for undo
+            var previousValue = input.value;
+
+            // Apply the value
+            input.value = value;
+            input.dispatchEvent(new Event('change', { bubbles: true }));
+
+            // Track this application
+            this.extractionPool.applied.push({
+                extractionKey: extractionKey,
+                fromLabel: extractionData.label || extractionKey,
+                fromValue: value,
+                targetFieldId: targetFieldId,
+                toLabel: fieldLabel,
+                previousValue: previousValue,
+                timestamp: Date.now()
+            });
+
+            // Remove from unmatched
+            this.extractionPool.unmatched = this.extractionPool.unmatched.filter(function(item) {
+                return item.key !== extractionKey;
+            });
+
+            // Update UI
+            this.markUnsaved();
+            UI.toast('Applied "' + String(value).substring(0, 30) + '" to ' + fieldLabel, 'success');
+
+            // Refresh extraction pool display
+            this.refreshExtractionPool();
+
+            // Update annotations if showing
+            if (this.extractionPool.showAnnotations && this.pdfPage) {
+                var viewport = this.pdfPage.getViewport({
+                    scale: (this.pdfCanvas.width / this.pdfPage.getViewport({ scale: 1 }).width),
+                    rotation: this.rotation
+                });
+                this.renderExtractionAnnotations(viewport);
+            }
+        },
+
+        /**
+         * Undo an applied item
+         */
+        undoAppliedItem: function(index) {
+            var applied = this.extractionPool.applied[index];
+            if (!applied) return;
+
+            // Restore previous value
+            var input = el('#field-' + applied.targetFieldId);
+            if (!input) {
+                input = document.querySelector('[data-field="' + applied.targetFieldId + '"]');
+            }
+
+            if (input) {
+                input.value = applied.previousValue || '';
+                input.dispatchEvent(new Event('change', { bubbles: true }));
+            }
+
+            // Re-add to unmatched pool
+            this.extractionPool.unmatched.push({
+                id: 'extract_' + applied.extractionKey,
+                key: applied.extractionKey,
+                label: applied.fromLabel,
+                value: applied.fromValue,
+                confidence: 0.5,
+                category: 'text'
+            });
+
+            // Remove from applied
+            this.extractionPool.applied.splice(index, 1);
+
+            UI.toast('Undone: ' + applied.fromLabel, 'info');
+            this.refreshExtractionPool();
+        },
+
+        /**
+         * Refresh extraction pool display
+         */
+        refreshExtractionPool: function() {
+            var poolPanel = el('#extraction-pool-panel');
+            var appliedPanel = el('#applied-items-panel');
+
+            // Re-render pool panel
+            if (poolPanel) {
+                var newPoolHtml = this.renderExtractionPoolPanel();
+                var tempDiv = document.createElement('div');
+                tempDiv.innerHTML = newPoolHtml;
+                poolPanel.parentNode.replaceChild(tempDiv.firstChild, poolPanel);
+            }
+
+            // Re-render or add applied panel
+            var existingApplied = el('#applied-items-panel');
+            if (this.extractionPool.applied.length > 0) {
+                var newAppliedHtml = this.renderAppliedItemsPanel();
+                if (existingApplied) {
+                    var tempDiv2 = document.createElement('div');
+                    tempDiv2.innerHTML = newAppliedHtml;
+                    existingApplied.parentNode.replaceChild(tempDiv2.firstChild, existingApplied);
+                }
+            } else if (existingApplied) {
+                existingApplied.remove();
+            }
+
+            // Re-bind events
+            this.bindExtractionPoolEvents();
+        },
+
+        /**
+         * Bind extraction pool events
+         */
+        bindExtractionPoolEvents: function() {
+            var self = this;
+
+            // Pool toggle
+            var toggleBtn = el('#pool-toggle');
+            if (toggleBtn) {
+                toggleBtn.onclick = function() {
+                    self.extractionPool.panelExpanded = !self.extractionPool.panelExpanded;
+                    self.refreshExtractionPool();
+                };
+            }
+
+            // Pool header toggle (click anywhere on header)
+            var poolHeader = el('#pool-header');
+            if (poolHeader) {
+                poolHeader.onclick = function(e) {
+                    if (e.target.closest('.pool-actions')) return; // Don't toggle when clicking actions
+                    self.extractionPool.panelExpanded = !self.extractionPool.panelExpanded;
+                    self.refreshExtractionPool();
+                };
+            }
+
+            // Toggle annotations button
+            var annotBtn = el('#btn-toggle-annotations');
+            if (annotBtn) {
+                annotBtn.onclick = function(e) {
+                    e.stopPropagation();
+                    self.toggleAnnotations();
+                };
+            }
+
+            // Search input
+            var searchInput = el('#pool-search-input');
+            if (searchInput) {
+                searchInput.oninput = function() {
+                    self.extractionPool.searchQuery = this.value;
+                    self.refreshExtractionPool();
+                };
+            }
+
+            // Filter buttons
+            document.querySelectorAll('.pool-filter-btn').forEach(function(btn) {
+                btn.onclick = function() {
+                    self.extractionPool.filterCategory = this.dataset.category;
+                    self.refreshExtractionPool();
+                };
+            });
+
+            // Card drag events
+            document.querySelectorAll('.pool-card').forEach(function(card) {
+                card.ondragstart = function(e) {
+                    self.extractionPool.dragActive = true;
+                    e.dataTransfer.setData('text/plain', JSON.stringify({
+                        key: card.dataset.extractionKey,
+                        value: card.dataset.extractionValue,
+                        id: card.dataset.extractionId
+                    }));
+                    card.classList.add('dragging');
+                    document.body.classList.add('extraction-dragging');
+                };
+
+                card.ondragend = function() {
+                    self.extractionPool.dragActive = false;
+                    card.classList.remove('dragging');
+                    document.body.classList.remove('extraction-dragging');
+                    document.querySelectorAll('.form-field.drop-target').forEach(function(f) {
+                        f.classList.remove('drop-target', 'drop-hover');
+                    });
+                };
+
+                // Card action buttons
+                var copyBtn = card.querySelector('.pool-card-copy');
+                if (copyBtn) {
+                    copyBtn.onclick = function(e) {
+                        e.stopPropagation();
+                        navigator.clipboard.writeText(card.dataset.extractionValue);
+                        UI.toast('Copied to clipboard', 'success');
+                    };
+                }
+
+                var locateBtn = card.querySelector('.pool-card-locate');
+                if (locateBtn) {
+                    locateBtn.onclick = function(e) {
+                        e.stopPropagation();
+                        // Enable annotations and highlight this field
+                        if (!self.extractionPool.showAnnotations) {
+                            self.toggleAnnotations();
+                        }
+                        // Scroll to the annotation
+                        var annotation = document.querySelector('.extraction-annotation[data-field-key="' + card.dataset.extractionKey + '"]');
+                        if (annotation) {
+                            annotation.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                            annotation.classList.add('highlight-pulse');
+                            setTimeout(function() { annotation.classList.remove('highlight-pulse'); }, 2000);
+                        }
+                    };
+                }
+
+                var dismissBtn = card.querySelector('.pool-card-dismiss');
+                if (dismissBtn) {
+                    dismissBtn.onclick = function(e) {
+                        e.stopPropagation();
+                        var key = card.dataset.extractionKey;
+                        self.extractionPool.unmatched = self.extractionPool.unmatched.filter(function(item) {
+                            return item.key !== key;
+                        });
+                        self.refreshExtractionPool();
+                    };
+                }
+
+                // Click to select (alternative to drag)
+                card.onclick = function(e) {
+                    if (e.target.closest('.pool-card-actions')) return;
+
+                    // Toggle selection
+                    var wasSelected = card.classList.contains('selected');
+                    document.querySelectorAll('.pool-card.selected').forEach(function(c) {
+                        c.classList.remove('selected');
+                    });
+
+                    if (!wasSelected) {
+                        card.classList.add('selected');
+                        self.extractionPool.selectedCardId = card.dataset.extractionId;
+                        document.body.classList.add('extraction-selecting');
+                    } else {
+                        self.extractionPool.selectedCardId = null;
+                        document.body.classList.remove('extraction-selecting');
+                    }
+                };
+            });
+
+            // Form field drop targets
+            document.querySelectorAll('.form-field').forEach(function(field) {
+                field.ondragover = function(e) {
+                    if (!self.extractionPool.dragActive) return;
+                    e.preventDefault();
+                    field.classList.add('drop-target', 'drop-hover');
+                };
+
+                field.ondragleave = function() {
+                    field.classList.remove('drop-hover');
+                };
+
+                field.ondrop = function(e) {
+                    e.preventDefault();
+                    field.classList.remove('drop-target', 'drop-hover');
+
+                    try {
+                        var data = JSON.parse(e.dataTransfer.getData('text/plain'));
+                        var input = field.querySelector('input, select, textarea');
+                        if (input && data.key) {
+                            var extractionData = self.extractionPool.unmatched.find(function(item) {
+                                return item.key === data.key;
+                            });
+                            if (extractionData) {
+                                var fieldId = input.dataset.field || input.id.replace('field-', '');
+                                self.applyExtractionToField(data.key, extractionData, fieldId);
+                            }
+                        }
+                    } catch (err) {
+                        console.error('[ExtractionPool] Drop error:', err);
+                    }
+                };
+
+                // Click to assign when card is selected
+                field.onclick = function(e) {
+                    if (!self.extractionPool.selectedCardId) return;
+                    if (e.target.closest('input, select, textarea, button')) return;
+
+                    var selectedCard = document.querySelector('.pool-card.selected');
+                    if (selectedCard) {
+                        var input = field.querySelector('input, select, textarea');
+                        if (input) {
+                            var key = selectedCard.dataset.extractionKey;
+                            var extractionData = self.extractionPool.unmatched.find(function(item) {
+                                return item.key === key;
+                            });
+                            if (extractionData) {
+                                var fieldId = input.dataset.field || input.id.replace('field-', '');
+                                self.applyExtractionToField(key, extractionData, fieldId);
+                            }
+                        }
+
+                        // Deselect
+                        selectedCard.classList.remove('selected');
+                        self.extractionPool.selectedCardId = null;
+                        document.body.classList.remove('extraction-selecting');
+                    }
+                };
+            });
+
+            // Undo buttons
+            document.querySelectorAll('.applied-undo').forEach(function(btn) {
+                btn.onclick = function() {
+                    var index = parseInt(btn.dataset.index, 10);
+                    self.undoAppliedItem(index);
+                };
+            });
+        },
+
+        // ==========================================
+        // QUICK ASSIGN PALETTE (Cmd+Shift+V)
+        // ==========================================
+        openQuickAssignPalette: function(targetField) {
+            var self = this;
+
+            // Close if already open
+            this.closeQuickAssignPalette();
+
+            if (this.extractionPool.unmatched.length === 0) {
+                UI.toast('No unmatched extractions available', 'info');
+                return;
+            }
+
+            this.quickAssignOpen = true;
+            this.quickAssignTargetField = targetField;
+
+            // Get field label
+            var fieldLabel = 'field';
+            var formField = targetField.closest('.form-field');
+            if (formField) {
+                var label = formField.querySelector('label');
+                if (label) fieldLabel = label.textContent.replace(/[*%\d]/g, '').trim();
+            }
+
+            // Create palette
+            var palette = document.createElement('div');
+            palette.className = 'quick-assign-palette';
+            palette.id = 'quick-assign-palette';
+            palette.innerHTML = '<div class="palette-overlay"></div>' +
+                '<div class="palette-content">' +
+                    '<div class="palette-header">' +
+                        '<span>Assign to: <strong>' + escapeHtml(fieldLabel) + '</strong></span>' +
+                        '<button class="btn btn-ghost btn-xs palette-close"><i class="fas fa-times"></i></button>' +
+                    '</div>' +
+                    '<div class="palette-search">' +
+                        '<i class="fas fa-search"></i>' +
+                        '<input type="text" id="palette-search-input" placeholder="Filter extractions..." autofocus>' +
+                    '</div>' +
+                    '<div class="palette-items" id="palette-items">' +
+                        this.renderPaletteItems('') +
+                    '</div>' +
+                    '<div class="palette-footer">' +
+                        '<span><kbd>↑</kbd><kbd>↓</kbd> Navigate</span>' +
+                        '<span><kbd>Enter</kbd> Select</span>' +
+                        '<span><kbd>Esc</kbd> Cancel</span>' +
+                    '</div>' +
+                '</div>';
+
+            document.body.appendChild(palette);
+
+            // Focus search
+            var searchInput = el('#palette-search-input');
+            if (searchInput) {
+                searchInput.focus();
+
+                searchInput.oninput = function() {
+                    var items = el('#palette-items');
+                    if (items) {
+                        items.innerHTML = self.renderPaletteItems(this.value);
+                        self.bindPaletteItemEvents();
+                    }
+                };
+
+                searchInput.onkeydown = function(e) {
+                    self.handlePaletteKeydown(e);
+                };
+            }
+
+            // Close button
+            palette.querySelector('.palette-close').onclick = function() {
+                self.closeQuickAssignPalette();
+            };
+
+            // Overlay click
+            palette.querySelector('.palette-overlay').onclick = function() {
+                self.closeQuickAssignPalette();
+            };
+
+            this.bindPaletteItemEvents();
+        },
+
+        renderPaletteItems: function(filter) {
+            var self = this;
+            var items = this.extractionPool.unmatched;
+            var filterLower = (filter || '').toLowerCase();
+
+            if (filterLower) {
+                items = items.filter(function(item) {
+                    return item.label.toLowerCase().indexOf(filterLower) !== -1 ||
+                           String(item.value).toLowerCase().indexOf(filterLower) !== -1;
+                });
+            }
+
+            if (items.length === 0) {
+                return '<div class="palette-empty">No matching extractions</div>';
+            }
+
+            var html = '';
+            items.slice(0, 10).forEach(function(item, idx) {
+                var confClass = item.confidence >= 0.85 ? 'high' : item.confidence >= 0.6 ? 'medium' : 'low';
+                html += '<div class="palette-item' + (idx === 0 ? ' selected' : '') + '" ' +
+                    'data-key="' + escapeHtml(item.key) + '" data-index="' + idx + '">' +
+                    '<div class="palette-item-value">' + escapeHtml(String(item.value).substring(0, 50)) + '</div>' +
+                    '<div class="palette-item-meta">' +
+                        '<span class="palette-item-label">from: ' + escapeHtml(item.label) + '</span>' +
+                        '<span class="palette-item-conf conf-' + confClass + '">' + Math.round(item.confidence * 100) + '%</span>' +
+                    '</div>' +
+                '</div>';
+            });
+
+            return html;
+        },
+
+        bindPaletteItemEvents: function() {
+            var self = this;
+            document.querySelectorAll('.palette-item').forEach(function(item) {
+                item.onclick = function() {
+                    self.selectPaletteItem(item);
+                };
+
+                item.onmouseenter = function() {
+                    document.querySelectorAll('.palette-item.selected').forEach(function(i) {
+                        i.classList.remove('selected');
+                    });
+                    item.classList.add('selected');
+                };
+            });
+        },
+
+        handlePaletteKeydown: function(e) {
+            var items = document.querySelectorAll('.palette-item');
+            var selected = document.querySelector('.palette-item.selected');
+            var selectedIdx = selected ? parseInt(selected.dataset.index, 10) : -1;
+
+            if (e.key === 'ArrowDown') {
+                e.preventDefault();
+                var nextIdx = Math.min(selectedIdx + 1, items.length - 1);
+                items.forEach(function(item, idx) {
+                    item.classList.toggle('selected', idx === nextIdx);
+                });
+                items[nextIdx]?.scrollIntoView({ block: 'nearest' });
+            } else if (e.key === 'ArrowUp') {
+                e.preventDefault();
+                var prevIdx = Math.max(selectedIdx - 1, 0);
+                items.forEach(function(item, idx) {
+                    item.classList.toggle('selected', idx === prevIdx);
+                });
+                items[prevIdx]?.scrollIntoView({ block: 'nearest' });
+            } else if (e.key === 'Enter') {
+                e.preventDefault();
+                if (selected) {
+                    this.selectPaletteItem(selected);
+                }
+            } else if (e.key === 'Escape') {
+                this.closeQuickAssignPalette();
+            }
+        },
+
+        selectPaletteItem: function(item) {
+            var key = item.dataset.key;
+            var extractionData = this.extractionPool.unmatched.find(function(i) {
+                return i.key === key;
+            });
+
+            if (extractionData && this.quickAssignTargetField) {
+                var fieldId = this.quickAssignTargetField.dataset.field ||
+                    this.quickAssignTargetField.id.replace('field-', '');
+                this.applyExtractionToField(key, extractionData, fieldId);
+            }
+
+            this.closeQuickAssignPalette();
+        },
+
+        closeQuickAssignPalette: function() {
+            var palette = el('#quick-assign-palette');
+            if (palette) {
+                palette.remove();
+            }
+            this.quickAssignOpen = false;
+            this.quickAssignTargetField = null;
+        },
+
+        // ==========================================
+        // GHOST TEXT SUGGESTIONS
+        // ==========================================
+        getGhostSuggestion: function(fieldId, fieldLabel) {
+            var unmatched = this.extractionPool.unmatched;
+            if (!unmatched || unmatched.length === 0) return null;
+
+            var normalizedLabel = (fieldLabel || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+            var normalizedId = (fieldId || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+
+            // Find best match
+            var bestMatch = null;
+            var bestScore = 0;
+
+            unmatched.forEach(function(item) {
+                var itemLabel = (item.label || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+
+                // Score based on label similarity
+                var score = 0;
+                if (itemLabel === normalizedLabel || itemLabel === normalizedId) {
+                    score = 1.0;
+                } else if (itemLabel.indexOf(normalizedLabel) !== -1 || normalizedLabel.indexOf(itemLabel) !== -1) {
+                    score = 0.7;
+                } else if (itemLabel.indexOf(normalizedId) !== -1 || normalizedId.indexOf(itemLabel) !== -1) {
+                    score = 0.6;
+                }
+
+                // Boost by confidence
+                score *= (0.5 + item.confidence * 0.5);
+
+                if (score > bestScore && score >= 0.4) {
+                    bestScore = score;
+                    bestMatch = item;
+                }
+            });
+
+            return bestMatch;
         },
 
         // ==========================================
