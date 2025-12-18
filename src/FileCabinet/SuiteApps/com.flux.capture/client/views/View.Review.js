@@ -2459,12 +2459,12 @@
                     // Determine account type based on sublist
                     var options = {};
                     if (lookupType === 'accounts' && fieldId === 'account') {
-                        // Expense sublist = Expense accounts, Item sublist = COGS accounts
-                        if (sublistId === 'item') {
-                            options.accountType = 'COGS';
-                        } else {
+                        // Expense sublist = Expense accounts only
+                        // Item sublist = COGS + Expense accounts (don't filter)
+                        if (sublistId === 'expense') {
                             options.accountType = 'Expense';
                         }
+                        // For item sublist, don't set accountType - backend will return all accounts
                     }
 
                     self.typeaheadTimeout = setTimeout(function() {
