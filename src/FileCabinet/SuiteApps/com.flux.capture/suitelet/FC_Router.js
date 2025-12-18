@@ -61,23 +61,6 @@ define([
         7: 'Error'
     });
 
-    const BatchStatus = Object.freeze({
-        PENDING: 1,
-        PROCESSING: 2,
-        COMPLETED: 3,
-        PARTIAL_ERROR: 4,
-        FAILED: 5,
-        CANCELLED: 6
-    });
-
-    const BatchStatusLabels = Object.freeze({
-        1: 'Pending',
-        2: 'Processing',
-        3: 'Completed',
-        4: 'Partial Error',
-        5: 'Failed',
-        6: 'Cancelled'
-    });
 
     const DocType = Object.freeze({
         INVOICE: 1,
@@ -188,11 +171,8 @@ define([
                 case 'purchaseorders':
                     result = searchPurchaseOrders(context);
                     break;
-                case 'batches':
-                    result = getBatches(context);
-                    break;
-                case 'batch':
-                    result = getBatchDetails(context.id);
+                case 'datasource':
+                    result = getDatasource(context);
                     break;
                 case 'settings':
                     result = getSettings();
@@ -237,14 +217,8 @@ define([
                 case 'upload':
                     result = uploadDocument(context);
                     break;
-                case 'batch':
-                    result = uploadBatch(context);
-                    break;
                 case 'process':
                     result = processDocument(context.documentId);
-                    break;
-                case 'processBatch':
-                    result = processBatchDocuments(context);
                     break;
                 case 'reprocess':
                     result = reprocessDocument(context.documentId);
@@ -346,9 +320,6 @@ define([
                     }
                     result = deleteDocument(docId);
                     break;
-                case 'batch':
-                    result = deleteBatch(params && params.batchId);
-                    break;
                 case 'clear':
                     result = clearCompleted(params);
                     break;
@@ -379,53 +350,53 @@ define([
         }
 
         var docRecord = record.load({
-            type: 'customrecord_dm_captured_document',
+            type: 'customrecord_flux_document',
             id: documentId
         });
 
-        var lineItems = JSON.parse(docRecord.getValue('custrecord_dm_line_items') || '[]');
-        var anomalies = JSON.parse(docRecord.getValue('custrecord_dm_anomalies') || '[]');
-        var status = docRecord.getValue('custrecord_dm_status');
+        var lineItems = JSON.parse(docRecord.getValue('custrecord_flux_line_items') || '[]');
+        var anomalies = JSON.parse(docRecord.getValue('custrecord_flux_anomalies') || '[]');
+        var status = docRecord.getValue('custrecord_flux_status');
 
         var document = {
             id: documentId,
             name: docRecord.getValue('name'),
             status: status,
             statusText: getStatusDisplayText(status),
-            documentType: docRecord.getValue('custrecord_dm_document_type'),
-            documentTypeText: getDocTypeDisplayText(docRecord.getValue('custrecord_dm_document_type')),
-            sourceFile: docRecord.getValue('custrecord_dm_source_file'),
-            documentId: docRecord.getValue('custrecord_dm_document_id'),
-            batchId: docRecord.getValue('custrecord_dm_batch_id'),
-            uploadedBy: docRecord.getValue('custrecord_dm_uploaded_by'),
-            uploadedByName: docRecord.getText('custrecord_dm_uploaded_by'),
-            createdDate: docRecord.getValue('custrecord_dm_created_date'),
-            modifiedDate: docRecord.getValue('custrecord_dm_modified_date'),
-            confidence: docRecord.getValue('custrecord_dm_confidence_score'),
-            vendor: docRecord.getValue('custrecord_dm_vendor'),
-            vendorName: docRecord.getText('custrecord_dm_vendor'),
-            vendorMatchConfidence: docRecord.getValue('custrecord_dm_vendor_match_confidence'),
-            invoiceNumber: docRecord.getValue('custrecord_dm_invoice_number'),
-            invoiceDate: docRecord.getValue('custrecord_dm_invoice_date'),
-            dueDate: docRecord.getValue('custrecord_dm_due_date'),
-            poNumber: docRecord.getValue('custrecord_dm_po_number'),
-            subtotal: docRecord.getValue('custrecord_dm_subtotal'),
-            taxAmount: docRecord.getValue('custrecord_dm_tax_amount'),
-            totalAmount: docRecord.getValue('custrecord_dm_total_amount'),
-            currency: docRecord.getValue('custrecord_dm_currency'),
-            currencyText: docRecord.getText('custrecord_dm_currency'),
-            paymentTerms: docRecord.getValue('custrecord_dm_payment_terms'),
+            documentType: docRecord.getValue('custrecord_flux_document_type'),
+            documentTypeText: getDocTypeDisplayText(docRecord.getValue('custrecord_flux_document_type')),
+            sourceFile: docRecord.getValue('custrecord_flux_source_file'),
+            documentId: docRecord.getValue('custrecord_flux_document_id'),
+            batchId: docRecord.getValue('custrecord_flux_batch_id'),
+            uploadedBy: docRecord.getValue('custrecord_flux_uploaded_by'),
+            uploadedByName: docRecord.getText('custrecord_flux_uploaded_by'),
+            createdDate: docRecord.getValue('custrecord_flux_created_date'),
+            modifiedDate: docRecord.getValue('custrecord_flux_modified_date'),
+            confidence: docRecord.getValue('custrecord_flux_confidence_score'),
+            vendor: docRecord.getValue('custrecord_flux_vendor'),
+            vendorName: docRecord.getText('custrecord_flux_vendor'),
+            vendorMatchConfidence: docRecord.getValue('custrecord_flux_vendor_match_confidence'),
+            invoiceNumber: docRecord.getValue('custrecord_flux_invoice_number'),
+            invoiceDate: docRecord.getValue('custrecord_flux_invoice_date'),
+            dueDate: docRecord.getValue('custrecord_flux_due_date'),
+            poNumber: docRecord.getValue('custrecord_flux_po_number'),
+            subtotal: docRecord.getValue('custrecord_flux_subtotal'),
+            taxAmount: docRecord.getValue('custrecord_flux_tax_amount'),
+            totalAmount: docRecord.getValue('custrecord_flux_total_amount'),
+            currency: docRecord.getValue('custrecord_flux_currency'),
+            currencyText: docRecord.getText('custrecord_flux_currency'),
+            paymentTerms: docRecord.getValue('custrecord_flux_payment_terms'),
             lineItems: lineItems,
             anomalies: anomalies,
-            amountValidated: docRecord.getValue('custrecord_dm_amount_validated'),
-            createdTransaction: docRecord.getValue('custrecord_dm_created_transaction'),
-            source: docRecord.getValue('custrecord_dm_source'),
-            sourceText: getSourceDisplayText(docRecord.getValue('custrecord_dm_source')),
-            emailSender: docRecord.getValue('custrecord_dm_email_sender'),
-            emailSubject: docRecord.getValue('custrecord_dm_email_subject'),
-            rejectionReason: docRecord.getValue('custrecord_dm_rejection_reason'),
-            errorMessage: docRecord.getValue('custrecord_dm_error_message'),
-            processingTime: docRecord.getValue('custrecord_dm_processing_time')
+            amountValidated: docRecord.getValue('custrecord_flux_amount_validated'),
+            createdTransaction: docRecord.getValue('custrecord_flux_created_transaction'),
+            source: docRecord.getValue('custrecord_flux_source'),
+            sourceText: getSourceDisplayText(docRecord.getValue('custrecord_flux_source')),
+            emailSender: docRecord.getValue('custrecord_flux_email_sender'),
+            emailSubject: docRecord.getValue('custrecord_flux_email_subject'),
+            rejectionReason: docRecord.getValue('custrecord_flux_rejection_reason'),
+            errorMessage: docRecord.getValue('custrecord_flux_error_message'),
+            processingTime: docRecord.getValue('custrecord_flux_processing_time')
         };
 
         if (document.sourceFile) {
@@ -455,38 +426,38 @@ define([
         var sortBy = context.sortBy || 'created';
         var sortDir = context.sortDir === 'asc' ? 'ASC' : 'DESC';
 
-        var sql = 'SELECT id, custrecord_dm_document_id as name, custrecord_dm_status as status, custrecord_dm_document_type as documentType, ' +
-            'custrecord_dm_confidence_score as confidence, custrecord_dm_vendor as vendorId, ' +
-            'BUILTIN.DF(custrecord_dm_vendor) as vendorName, custrecord_dm_invoice_number as invoiceNumber, ' +
-            'custrecord_dm_total_amount as totalAmount, custrecord_dm_anomalies as anomalies, ' +
-            'custrecord_dm_created_date as createdDate, custrecord_dm_uploaded_by as uploadedBy, ' +
-            'BUILTIN.DF(custrecord_dm_uploaded_by) as uploadedByName, custrecord_dm_source as source ' +
-            'FROM customrecord_dm_captured_document WHERE 1=1';
+        var sql = 'SELECT id, custrecord_flux_document_id as name, custrecord_flux_status as status, custrecord_flux_document_type as documentType, ' +
+            'custrecord_flux_confidence_score as confidence, custrecord_flux_vendor as vendorId, ' +
+            'BUILTIN.DF(custrecord_flux_vendor) as vendorName, custrecord_flux_invoice_number as invoiceNumber, ' +
+            'custrecord_flux_total_amount as totalAmount, custrecord_flux_anomalies as anomalies, ' +
+            'custrecord_flux_created_date as createdDate, custrecord_flux_uploaded_by as uploadedBy, ' +
+            'BUILTIN.DF(custrecord_flux_uploaded_by) as uploadedByName, custrecord_flux_source as source ' +
+            'FROM customrecord_flux_document WHERE 1=1';
 
         var params = [];
 
         if (status) {
-            sql += ' AND custrecord_dm_status = ?';
+            sql += ' AND custrecord_flux_status = ?';
             params.push(status);
         }
         if (docType) {
-            sql += ' AND custrecord_dm_document_type = ?';
+            sql += ' AND custrecord_flux_document_type = ?';
             params.push(docType);
         }
         if (vendorId) {
-            sql += ' AND custrecord_dm_vendor = ?';
+            sql += ' AND custrecord_flux_vendor = ?';
             params.push(vendorId);
         }
         if (batchId) {
-            sql += ' AND custrecord_dm_batch_id = ?';
+            sql += ' AND custrecord_flux_batch_id = ?';
             params.push(batchId);
         }
         if (dateFrom) {
-            sql += " AND custrecord_dm_created_date >= TO_DATE(?, 'YYYY-MM-DD')";
+            sql += " AND custrecord_flux_created_date >= TO_DATE(?, 'YYYY-MM-DD')";
             params.push(dateFrom);
         }
         if (dateTo) {
-            sql += " AND custrecord_dm_created_date <= TO_DATE(?, 'YYYY-MM-DD')";
+            sql += " AND custrecord_flux_created_date <= TO_DATE(?, 'YYYY-MM-DD')";
             params.push(dateTo);
         }
 
@@ -495,13 +466,13 @@ define([
         var total = countResult.results.length > 0 ? countResult.results[0].values[0] : 0;
 
         var sortColumns = {
-            'created': 'custrecord_dm_created_date',
-            'confidence': 'custrecord_dm_confidence_score',
-            'vendor': 'custrecord_dm_vendor',
-            'status': 'custrecord_dm_status',
-            'amount': 'custrecord_dm_total_amount'
+            'created': 'custrecord_flux_created_date',
+            'confidence': 'custrecord_flux_confidence_score',
+            'vendor': 'custrecord_flux_vendor',
+            'status': 'custrecord_flux_status',
+            'amount': 'custrecord_flux_total_amount'
         };
-        var sortColumn = sortColumns[sortBy] || 'custrecord_dm_created_date';
+        var sortColumn = sortColumns[sortBy] || 'custrecord_flux_created_date';
 
         sql += ' ORDER BY ' + sortColumn + ' ' + sortDir;
         sql += ' OFFSET ' + ((page - 1) * pageSize) + ' ROWS FETCH NEXT ' + pageSize + ' ROWS ONLY';
@@ -538,18 +509,18 @@ define([
         var pageSize = Math.min(parseInt(context.pageSize) || 50, 100);
 
         try {
-            // Use COALESCE to handle cases where custrecord_dm_original_filename might not exist
-            var sql = 'SELECT id, custrecord_dm_document_id as name, custrecord_dm_status as status, custrecord_dm_document_type as documentType, ' +
-                'custrecord_dm_confidence_score as confidence, BUILTIN.DF(custrecord_dm_vendor) as vendorName, ' +
-                'custrecord_dm_invoice_number as invoiceNumber, custrecord_dm_total_amount as totalAmount, ' +
-                'custrecord_dm_created_date as createdDate, custrecord_dm_batch_id as batchId, ' +
-                'custrecord_dm_anomalies as anomalies, custrecord_dm_error_message as errorMessage FROM customrecord_dm_captured_document ' +
-                'WHERE custrecord_dm_status IN (' + DocStatus.PENDING + ', ' + DocStatus.PROCESSING + ', ' +
+            // Use COALESCE to handle cases where custrecord_flux_original_filename might not exist
+            var sql = 'SELECT id, custrecord_flux_document_id as name, custrecord_flux_status as status, custrecord_flux_document_type as documentType, ' +
+                'custrecord_flux_confidence_score as confidence, BUILTIN.DF(custrecord_flux_vendor) as vendorName, ' +
+                'custrecord_flux_invoice_number as invoiceNumber, custrecord_flux_total_amount as totalAmount, ' +
+                'custrecord_flux_created_date as createdDate, custrecord_flux_batch_id as batchId, ' +
+                'custrecord_flux_anomalies as anomalies, custrecord_flux_error_message as errorMessage FROM customrecord_flux_document ' +
+                'WHERE custrecord_flux_status IN (' + DocStatus.PENDING + ', ' + DocStatus.PROCESSING + ', ' +
                 DocStatus.EXTRACTED + ', ' + DocStatus.NEEDS_REVIEW + ', ' + DocStatus.ERROR + ') ' +
-                'ORDER BY CASE custrecord_dm_status WHEN ' + DocStatus.ERROR + ' THEN 0 ' +
+                'ORDER BY CASE custrecord_flux_status WHEN ' + DocStatus.ERROR + ' THEN 0 ' +
                 'WHEN ' + DocStatus.NEEDS_REVIEW + ' THEN 1 ' +
                 'WHEN ' + DocStatus.EXTRACTED + ' THEN 2 WHEN ' + DocStatus.PROCESSING + ' THEN 3 ' +
-                'WHEN ' + DocStatus.PENDING + ' THEN 4 END, custrecord_dm_created_date ASC ' +
+                'WHEN ' + DocStatus.PENDING + ' THEN 4 END, custrecord_flux_created_date ASC ' +
                 'OFFSET ' + ((page - 1) * pageSize) + ' ROWS FETCH NEXT ' + pageSize + ' ROWS ONLY';
 
             log.debug('getProcessingQueue', 'SQL: ' + sql);
@@ -575,9 +546,9 @@ define([
                 };
             });
 
-            var countSql = 'SELECT custrecord_dm_status as status, COUNT(*) as count FROM customrecord_dm_captured_document ' +
-                'WHERE custrecord_dm_status IN (' + DocStatus.PENDING + ', ' + DocStatus.PROCESSING + ', ' +
-                DocStatus.EXTRACTED + ', ' + DocStatus.NEEDS_REVIEW + ', ' + DocStatus.ERROR + ') GROUP BY custrecord_dm_status';
+            var countSql = 'SELECT custrecord_flux_status as status, COUNT(*) as count FROM customrecord_flux_document ' +
+                'WHERE custrecord_flux_status IN (' + DocStatus.PENDING + ', ' + DocStatus.PROCESSING + ', ' +
+                DocStatus.EXTRACTED + ', ' + DocStatus.NEEDS_REVIEW + ', ' + DocStatus.ERROR + ') GROUP BY custrecord_flux_status';
 
             var countResults = query.runSuiteQL({ query: countSql });
             var statusCounts = {};
@@ -604,20 +575,20 @@ define([
     function getDashboardStats() {
         try {
             var statsSql = 'SELECT COUNT(*) as total, ' +
-                'SUM(CASE WHEN custrecord_dm_status = ' + DocStatus.COMPLETED + ' THEN 1 ELSE 0 END) as completed, ' +
-                'SUM(CASE WHEN custrecord_dm_status = ' + DocStatus.COMPLETED + ' AND custrecord_dm_confidence_score >= 85 THEN 1 ELSE 0 END) as autoProcessed, ' +
-                'SUM(CASE WHEN custrecord_dm_status IN (' + DocStatus.PENDING + ', ' + DocStatus.PROCESSING + ', ' + DocStatus.EXTRACTED + ', ' + DocStatus.NEEDS_REVIEW + ') THEN 1 ELSE 0 END) as pending, ' +
-                'SUM(CASE WHEN custrecord_dm_status = ' + DocStatus.REJECTED + ' THEN 1 ELSE 0 END) as rejected, ' +
-                'SUM(CASE WHEN custrecord_dm_status = ' + DocStatus.ERROR + ' THEN 1 ELSE 0 END) as errors, ' +
-                'AVG(custrecord_dm_confidence_score) as avgConfidence, ' +
-                'SUM(custrecord_dm_total_amount) as totalValue ' +
-                'FROM customrecord_dm_captured_document WHERE custrecord_dm_created_date >= ADD_MONTHS(SYSDATE, -1)';
+                'SUM(CASE WHEN custrecord_flux_status = ' + DocStatus.COMPLETED + ' THEN 1 ELSE 0 END) as completed, ' +
+                'SUM(CASE WHEN custrecord_flux_status = ' + DocStatus.COMPLETED + ' AND custrecord_flux_confidence_score >= 85 THEN 1 ELSE 0 END) as autoProcessed, ' +
+                'SUM(CASE WHEN custrecord_flux_status IN (' + DocStatus.PENDING + ', ' + DocStatus.PROCESSING + ', ' + DocStatus.EXTRACTED + ', ' + DocStatus.NEEDS_REVIEW + ') THEN 1 ELSE 0 END) as pending, ' +
+                'SUM(CASE WHEN custrecord_flux_status = ' + DocStatus.REJECTED + ' THEN 1 ELSE 0 END) as rejected, ' +
+                'SUM(CASE WHEN custrecord_flux_status = ' + DocStatus.ERROR + ' THEN 1 ELSE 0 END) as errors, ' +
+                'AVG(custrecord_flux_confidence_score) as avgConfidence, ' +
+                'SUM(custrecord_flux_total_amount) as totalValue ' +
+                'FROM customrecord_flux_document WHERE custrecord_flux_created_date >= ADD_MONTHS(SYSDATE, -1)';
 
             var statsResult = query.runSuiteQL({ query: statsSql });
             var stats = (statsResult.results && statsResult.results[0]) ? statsResult.results[0].values : [0,0,0,0,0,0,0,0];
 
-            var typeSql = 'SELECT custrecord_dm_document_type as docType, COUNT(*) as count FROM customrecord_dm_captured_document ' +
-                'WHERE custrecord_dm_created_date >= ADD_MONTHS(SYSDATE, -1) GROUP BY custrecord_dm_document_type';
+            var typeSql = 'SELECT custrecord_flux_document_type as docType, COUNT(*) as count FROM customrecord_flux_document ' +
+                'WHERE custrecord_flux_created_date >= ADD_MONTHS(SYSDATE, -1) GROUP BY custrecord_flux_document_type';
 
             var typeResults = query.runSuiteQL({ query: typeSql });
             var typeBreakdown = {};
@@ -627,9 +598,9 @@ define([
                 });
             }
 
-            var trendSql = "SELECT TO_CHAR(custrecord_dm_created_date, 'YYYY-MM-DD') as day, COUNT(*) as count " +
-                'FROM customrecord_dm_captured_document WHERE custrecord_dm_created_date >= SYSDATE - 7 ' +
-                "GROUP BY TO_CHAR(custrecord_dm_created_date, 'YYYY-MM-DD') ORDER BY day";
+            var trendSql = "SELECT TO_CHAR(custrecord_flux_created_date, 'YYYY-MM-DD') as day, COUNT(*) as count " +
+                'FROM customrecord_flux_document WHERE custrecord_flux_created_date >= SYSDATE - 7 ' +
+                "GROUP BY TO_CHAR(custrecord_flux_created_date, 'YYYY-MM-DD') ORDER BY day";
 
             var trendResults = query.runSuiteQL({ query: trendSql });
             var trend = trendResults.results ? trendResults.results.map(function(row) {
@@ -666,12 +637,12 @@ define([
         try {
             var limit = Math.min(parseInt(context.limit) || 10, 50);
 
-            var sql = 'SELECT * FROM (SELECT id, custrecord_dm_document_id as name, BUILTIN.DF(custrecord_dm_vendor) as vendorName, ' +
-                'custrecord_dm_anomalies as anomalies, custrecord_dm_created_date as createdDate, ' +
-                'custrecord_dm_confidence_score as confidence FROM customrecord_dm_captured_document ' +
-                "WHERE custrecord_dm_anomalies IS NOT NULL AND custrecord_dm_anomalies != '[]' " +
-                'AND custrecord_dm_status NOT IN (' + DocStatus.REJECTED + ', ' + DocStatus.COMPLETED + ') ' +
-                'ORDER BY custrecord_dm_created_date DESC) WHERE ROWNUM <= ' + limit;
+            var sql = 'SELECT * FROM (SELECT id, custrecord_flux_document_id as name, BUILTIN.DF(custrecord_flux_vendor) as vendorName, ' +
+                'custrecord_flux_anomalies as anomalies, custrecord_flux_created_date as createdDate, ' +
+                'custrecord_flux_confidence_score as confidence FROM customrecord_flux_document ' +
+                "WHERE custrecord_flux_anomalies IS NOT NULL AND custrecord_flux_anomalies != '[]' " +
+                'AND custrecord_flux_status NOT IN (' + DocStatus.REJECTED + ', ' + DocStatus.COMPLETED + ') ' +
+                'ORDER BY custrecord_flux_created_date DESC) WHERE ROWNUM <= ' + limit;
 
             var results = query.runSuiteQL({ query: sql });
 
@@ -915,87 +886,145 @@ define([
         return Response.success(purchaseOrders);
     }
 
-    function getBatches(context) {
-        var page = parseInt(context.page) || 1;
-        var pageSize = Math.min(parseInt(context.pageSize) || 25, 100);
-        var status = context.status;
+    /**
+     * Get datasource options for select fields
+     * Supports departments, classes, locations, taxcodes, subsidiaries, currencies, terms, etc.
+     */
+    function getDatasource(context) {
+        try {
+            var dsType = context.type || context.datasource;
+            var searchQuery = context.query || '';
+            var limit = Math.min(parseInt(context.limit) || 200, 1000);
 
-        var sql = 'SELECT id, name, custrecord_dm_batch_status as status, ' +
-            'custrecord_dm_batch_document_count as documentCount, custrecord_dm_batch_processed_count as processedCount, ' +
-            'custrecord_dm_batch_error_count as errorCount, custrecord_dm_batch_created_date as createdDate, ' +
-            'custrecord_dm_batch_completed_date as completedDate, BUILTIN.DF(custrecord_dm_batch_created_by) as createdBy, ' +
-            'custrecord_dm_batch_total_value as totalValue FROM customrecord_dm_batch WHERE 1=1';
+            if (!dsType) {
+                return Response.error('MISSING_PARAM', 'Datasource type is required');
+            }
 
-        var params = [];
-        if (status) {
-            sql += ' AND custrecord_dm_batch_status = ?';
-            params.push(status);
+            var searchType;
+            var columns = [];
+            var filters = [['isinactive', 'is', 'F']];
+            var displayFormat = 'name'; // 'name', 'number-name', 'id-name'
+
+            switch (dsType.toLowerCase()) {
+                case 'departments':
+                case 'department':
+                    searchType = search.Type.DEPARTMENT;
+                    columns = ['internalid', 'name'];
+                    break;
+                case 'classes':
+                case 'class':
+                    searchType = search.Type.CLASSIFICATION;
+                    columns = ['internalid', 'name'];
+                    break;
+                case 'locations':
+                case 'location':
+                    searchType = search.Type.LOCATION;
+                    columns = ['internalid', 'name'];
+                    break;
+                case 'subsidiaries':
+                case 'subsidiary':
+                    searchType = search.Type.SUBSIDIARY;
+                    columns = ['internalid', 'name'];
+                    break;
+                case 'currencies':
+                case 'currency':
+                    searchType = search.Type.CURRENCY;
+                    columns = ['internalid', 'name', 'symbol'];
+                    break;
+                case 'terms':
+                    searchType = search.Type.TERM;
+                    columns = ['internalid', 'name'];
+                    break;
+                case 'taxcodes':
+                case 'taxcode':
+                    searchType = 'salestaxitem';
+                    columns = ['internalid', 'itemid', 'rate'];
+                    displayFormat = 'id-name';
+                    break;
+                case 'expensecategories':
+                case 'expensecategory':
+                case 'category':
+                    searchType = 'expensecategory';
+                    columns = ['internalid', 'name'];
+                    break;
+                case 'customers':
+                case 'customer':
+                    searchType = search.Type.CUSTOMER;
+                    columns = ['internalid', 'entityid', 'companyname'];
+                    displayFormat = 'id-name';
+                    break;
+                case 'employees':
+                case 'employee':
+                    searchType = search.Type.EMPLOYEE;
+                    columns = ['internalid', 'entityid', 'firstname', 'lastname'];
+                    displayFormat = 'id-name';
+                    break;
+                case 'vendors':
+                case 'vendor':
+                    searchType = search.Type.VENDOR;
+                    columns = ['internalid', 'entityid', 'companyname'];
+                    displayFormat = 'id-name';
+                    break;
+                case 'accounts':
+                case 'account':
+                    return getAccounts(context);
+                case 'items':
+                case 'item':
+                    return getItems(context);
+                default:
+                    return Response.error('INVALID_DATASOURCE', 'Unknown datasource type: ' + dsType);
+            }
+
+            // Add search filter if query provided
+            if (searchQuery && searchQuery.length >= 1) {
+                var searchCol = columns[1] || 'name';
+                filters.push('AND');
+                filters.push([searchCol, 'contains', searchQuery]);
+            }
+
+            var dsSearch = search.create({
+                type: searchType,
+                filters: filters,
+                columns: columns.map(function(col) {
+                    return search.createColumn({ name: col, sort: col === 'name' || col === 'entityid' ? search.Sort.ASC : null });
+                })
+            });
+
+            var options = [];
+            var resultSet = dsSearch.run();
+            var results = resultSet.getRange({ start: 0, end: limit });
+
+            results.forEach(function(result) {
+                var value = result.getValue(columns[0]);
+                var text = '';
+
+                if (displayFormat === 'name') {
+                    text = result.getValue(columns[1]) || '';
+                } else if (displayFormat === 'number-name') {
+                    var num = result.getValue(columns[1]) || '';
+                    var name = result.getValue(columns[2]) || '';
+                    text = num ? num + ' - ' + name : name;
+                } else if (displayFormat === 'id-name') {
+                    var id = result.getValue(columns[1]) || '';
+                    var nm = result.getValue(columns[2]) || '';
+                    if (columns.length > 3) {
+                        // For employees with firstname/lastname
+                        nm = (result.getValue(columns[2]) || '') + ' ' + (result.getValue(columns[3]) || '');
+                    }
+                    text = id ? id + ' - ' + nm.trim() : nm.trim();
+                }
+
+                options.push({
+                    value: value,
+                    text: text || value
+                });
+            });
+
+            return Response.success(options);
+        } catch (e) {
+            log.error('getDatasource Error', e);
+            return Response.error('DATASOURCE_ERROR', e.message);
         }
-
-        sql += ' ORDER BY custrecord_dm_batch_created_date DESC';
-        sql += ' OFFSET ' + ((page - 1) * pageSize) + ' ROWS FETCH NEXT ' + pageSize + ' ROWS ONLY';
-
-        var results = query.runSuiteQL({ query: sql, params: params });
-
-        var batches = results.results.map(function(row) {
-            return {
-                id: row.values[0],
-                name: row.values[1],
-                status: row.values[2],
-                documentCount: row.values[3],
-                processedCount: row.values[4],
-                errorCount: row.values[5],
-                createdDate: row.values[6],
-                completedDate: row.values[7],
-                createdBy: row.values[8],
-                totalValue: row.values[9],
-                progress: row.values[3] > 0 ? Math.round((row.values[4] / row.values[3]) * 100) : 0
-            };
-        });
-
-        return Response.success(batches);
-    }
-
-    function getBatchDetails(batchId) {
-        if (!batchId) {
-            return Response.error('MISSING_PARAM', 'Batch ID is required');
-        }
-
-        var batchRecord = record.load({ type: 'customrecord_dm_batch', id: batchId });
-        var status = batchRecord.getValue('custrecord_dm_batch_status');
-
-        var batch = {
-            id: batchId,
-            name: batchRecord.getValue('name'),
-            status: status,
-            statusText: getBatchStatusDisplayText(status),
-            documentCount: batchRecord.getValue('custrecord_dm_batch_document_count'),
-            processedCount: batchRecord.getValue('custrecord_dm_batch_processed_count'),
-            errorCount: batchRecord.getValue('custrecord_dm_batch_error_count'),
-            createdDate: batchRecord.getValue('custrecord_dm_batch_created_date'),
-            completedDate: batchRecord.getValue('custrecord_dm_batch_completed_date'),
-            createdBy: batchRecord.getText('custrecord_dm_batch_created_by'),
-            totalValue: batchRecord.getValue('custrecord_dm_batch_total_value'),
-            avgConfidence: batchRecord.getValue('custrecord_dm_batch_avg_confidence')
-        };
-
-        var docSql = 'SELECT id, custrecord_dm_document_id as name, custrecord_dm_status as status, custrecord_dm_confidence_score as confidence, ' +
-            'BUILTIN.DF(custrecord_dm_vendor) as vendorName, custrecord_dm_total_amount as amount ' +
-            'FROM customrecord_dm_captured_document WHERE custrecord_dm_batch_id = ? ORDER BY id';
-
-        var docResults = query.runSuiteQL({ query: docSql, params: [batchId] });
-        batch.documents = docResults.results.map(function(row) {
-            return {
-                id: row.values[0],
-                name: row.values[1],
-                status: row.values[2],
-                confidence: row.values[3],
-                vendorName: row.values[4],
-                amount: row.values[5]
-            };
-        });
-
-        return Response.success(batch);
     }
 
     /**
@@ -1517,11 +1546,11 @@ define([
     function getAnalytics(context) {
         var period = parseInt(context.period) || 30;
 
-        var volumeSql = "SELECT TO_CHAR(custrecord_dm_created_date, 'YYYY-MM-DD') as day, COUNT(*) as total, " +
-            'SUM(CASE WHEN custrecord_dm_status = ' + DocStatus.COMPLETED + ' THEN 1 ELSE 0 END) as completed, ' +
-            'AVG(custrecord_dm_confidence_score) as avgConfidence FROM customrecord_dm_captured_document ' +
-            'WHERE custrecord_dm_created_date >= SYSDATE - ' + period + ' ' +
-            "GROUP BY TO_CHAR(custrecord_dm_created_date, 'YYYY-MM-DD') ORDER BY day";
+        var volumeSql = "SELECT TO_CHAR(custrecord_flux_created_date, 'YYYY-MM-DD') as day, COUNT(*) as total, " +
+            'SUM(CASE WHEN custrecord_flux_status = ' + DocStatus.COMPLETED + ' THEN 1 ELSE 0 END) as completed, ' +
+            'AVG(custrecord_flux_confidence_score) as avgConfidence FROM customrecord_flux_document ' +
+            'WHERE custrecord_flux_created_date >= SYSDATE - ' + period + ' ' +
+            "GROUP BY TO_CHAR(custrecord_flux_created_date, 'YYYY-MM-DD') ORDER BY day";
 
         var volumeResults = query.runSuiteQL({ query: volumeSql });
         var volumeTrend = volumeResults.results.map(function(row) {
@@ -1606,22 +1635,22 @@ define([
                 docId: docId
             });
 
-            var docRecord = record.create({ type: 'customrecord_dm_captured_document' });
+            var docRecord = record.create({ type: 'customrecord_flux_document' });
 
             // Set custom fields (no Name field - record uses includename=F)
-            docRecord.setValue({ fieldId: 'custrecord_dm_document_id', value: docId });
-            docRecord.setValue({ fieldId: 'custrecord_dm_original_filename', value: fileName || '' });
-            docRecord.setValue({ fieldId: 'custrecord_dm_status', value: DocStatus.PENDING });
-            docRecord.setValue({ fieldId: 'custrecord_dm_source_file', value: fileId });
-            docRecord.setValue({ fieldId: 'custrecord_dm_source', value: Source.UPLOAD });
-            docRecord.setValue({ fieldId: 'custrecord_dm_uploaded_by', value: runtime.getCurrentUser().id });
-            docRecord.setValue({ fieldId: 'custrecord_dm_created_date', value: new Date() });
+            docRecord.setValue({ fieldId: 'custrecord_flux_document_id', value: docId });
+            docRecord.setValue({ fieldId: 'custrecord_flux_original_filename', value: fileName || '' });
+            docRecord.setValue({ fieldId: 'custrecord_flux_status', value: DocStatus.PENDING });
+            docRecord.setValue({ fieldId: 'custrecord_flux_source_file', value: fileId });
+            docRecord.setValue({ fieldId: 'custrecord_flux_source', value: Source.UPLOAD });
+            docRecord.setValue({ fieldId: 'custrecord_flux_uploaded_by', value: runtime.getCurrentUser().id });
+            docRecord.setValue({ fieldId: 'custrecord_flux_created_date', value: new Date() });
 
             // Only set document type if not 'auto'
             if (documentType && documentType !== 'auto') {
                 var docTypeValue = parseInt(documentType, 10);
                 if (!isNaN(docTypeValue) && docTypeValue > 0) {
-                    docRecord.setValue({ fieldId: 'custrecord_dm_document_type', value: docTypeValue });
+                    docRecord.setValue({ fieldId: 'custrecord_flux_document_type', value: docTypeValue });
                 }
             }
 
@@ -1666,104 +1695,25 @@ define([
         }, 'Document uploaded - processing queued');
     }
 
-    function uploadBatch(context) {
-        var files = context.files;
-        var batchName = context.batchName || 'Batch-' + new Date().toISOString().slice(0,10);
-
-        if (!files || !Array.isArray(files) || files.length === 0) {
-            return Response.error('MISSING_PARAM', 'Files array is required');
-        }
-
-        var batchRecord = record.create({ type: 'customrecord_dm_batch' });
-        batchRecord.setValue('name', batchName);
-        batchRecord.setValue('custrecord_dm_batch_status', BatchStatus.PENDING);
-        batchRecord.setValue('custrecord_dm_batch_document_count', files.length);
-        batchRecord.setValue('custrecord_dm_batch_processed_count', 0);
-        batchRecord.setValue('custrecord_dm_batch_created_date', new Date());
-        batchRecord.setValue('custrecord_dm_batch_created_by', runtime.getCurrentUser().id);
-        batchRecord.setValue('custrecord_dm_batch_source', Source.UPLOAD);
-
-        var batchId = batchRecord.save();
-
-        var uploadResults = [];
-        var folderId = getUploadFolder();
-
-        files.forEach(function(fileData, index) {
-            try {
-                var result = uploadDocument({
-                    fileContent: fileData.fileContent,
-                    fileName: fileData.fileName,
-                    documentType: fileData.documentType || 'auto',
-                    folderId: folderId,
-                    autoProcess: false
-                });
-
-                if (result.success) {
-                    record.submitFields({
-                        type: 'customrecord_dm_captured_document',
-                        id: result.data.documentId,
-                        values: { 'custrecord_dm_batch_id': batchId }
-                    });
-
-                    uploadResults.push({
-                        success: true,
-                        index: index,
-                        documentId: result.data.documentId,
-                        fileName: fileData.fileName
-                    });
-                } else {
-                    uploadResults.push({
-                        success: false,
-                        index: index,
-                        fileName: fileData.fileName,
-                        error: result.error.message
-                    });
-                }
-            } catch (e) {
-                uploadResults.push({
-                    success: false,
-                    index: index,
-                    fileName: fileData.fileName,
-                    error: e.message
-                });
-            }
-        });
-
-        record.submitFields({
-            type: 'customrecord_dm_batch',
-            id: batchId,
-            values: { 'custrecord_dm_batch_status': BatchStatus.PROCESSING }
-        });
-
-        return Response.success({
-            batchId: batchId,
-            batchName: batchName,
-            totalFiles: files.length,
-            successCount: uploadResults.filter(function(r) { return r.success; }).length,
-            failedCount: uploadResults.filter(function(r) { return !r.success; }).length,
-            results: uploadResults
-        }, 'Batch uploaded successfully');
-    }
-
     function processDocument(documentId) {
         if (!documentId) {
             return Response.error('MISSING_PARAM', 'Document ID is required');
         }
 
         record.submitFields({
-            type: 'customrecord_dm_captured_document',
+            type: 'customrecord_flux_document',
             id: documentId,
-            values: { 'custrecord_dm_status': DocStatus.PROCESSING }
+            values: { 'custrecord_flux_status': DocStatus.PROCESSING }
         });
 
         try {
             var docRecord = record.load({
-                type: 'customrecord_dm_captured_document',
+                type: 'customrecord_flux_document',
                 id: documentId
             });
 
-            var fileId = docRecord.getValue('custrecord_dm_source_file');
-            var documentType = docRecord.getValue('custrecord_dm_document_type');
+            var fileId = docRecord.getValue('custrecord_flux_source_file');
+            var documentType = docRecord.getValue('custrecord_flux_document_type');
 
             if (!fileId) {
                 throw new Error('No file attached to document');
@@ -1845,36 +1795,36 @@ define([
 
                 // Build update values, skipping currency (requires internal ID lookup)
                 var updateValues = {
-                    'custrecord_dm_status': newStatus,
-                    'custrecord_dm_document_type': extraction.documentType || documentType,
-                    'custrecord_dm_vendor': extraction.vendorMatch && extraction.vendorMatch.vendorId ? extraction.vendorMatch.vendorId : null,
-                    'custrecord_dm_vendor_match_confidence': extraction.vendorMatch ? extraction.vendorMatch.confidence : 0,
-                    'custrecord_dm_invoice_number': extraction.fields && extraction.fields.invoiceNumber ? extraction.fields.invoiceNumber : '',
-                    'custrecord_dm_invoice_date': parseExtractedDate(extraction.fields && extraction.fields.invoiceDate),
-                    'custrecord_dm_due_date': parseExtractedDate(extraction.fields && extraction.fields.dueDate),
-                    'custrecord_dm_subtotal': extraction.fields && extraction.fields.subtotal ? extraction.fields.subtotal : 0,
-                    'custrecord_dm_tax_amount': extraction.fields && extraction.fields.taxAmount ? extraction.fields.taxAmount : 0,
-                    'custrecord_dm_total_amount': extraction.fields && extraction.fields.totalAmount ? extraction.fields.totalAmount : 0,
-                    'custrecord_dm_po_number': extraction.fields && extraction.fields.poNumber ? extraction.fields.poNumber : '',
-                    'custrecord_dm_line_items': JSON.stringify(extraction.lineItems || []),
-                    'custrecord_dm_anomalies': JSON.stringify(extraction.anomalies || []),
-                    'custrecord_dm_confidence_score': extraction.confidence.overall,
-                    'custrecord_dm_amount_validated': extraction.amountValidation ? extraction.amountValidation.valid : false,
-                    'custrecord_dm_processing_time': processingTime,
-                    'custrecord_dm_modified_date': new Date()
+                    'custrecord_flux_status': newStatus,
+                    'custrecord_flux_document_type': extraction.documentType || documentType,
+                    'custrecord_flux_vendor': extraction.vendorMatch && extraction.vendorMatch.vendorId ? extraction.vendorMatch.vendorId : null,
+                    'custrecord_flux_vendor_match_confidence': extraction.vendorMatch ? extraction.vendorMatch.confidence : 0,
+                    'custrecord_flux_invoice_number': extraction.fields && extraction.fields.invoiceNumber ? extraction.fields.invoiceNumber : '',
+                    'custrecord_flux_invoice_date': parseExtractedDate(extraction.fields && extraction.fields.invoiceDate),
+                    'custrecord_flux_due_date': parseExtractedDate(extraction.fields && extraction.fields.dueDate),
+                    'custrecord_flux_subtotal': extraction.fields && extraction.fields.subtotal ? extraction.fields.subtotal : 0,
+                    'custrecord_flux_tax_amount': extraction.fields && extraction.fields.taxAmount ? extraction.fields.taxAmount : 0,
+                    'custrecord_flux_total_amount': extraction.fields && extraction.fields.totalAmount ? extraction.fields.totalAmount : 0,
+                    'custrecord_flux_po_number': extraction.fields && extraction.fields.poNumber ? extraction.fields.poNumber : '',
+                    'custrecord_flux_line_items': JSON.stringify(extraction.lineItems || []),
+                    'custrecord_flux_anomalies': JSON.stringify(extraction.anomalies || []),
+                    'custrecord_flux_confidence_score': extraction.confidence.overall,
+                    'custrecord_flux_amount_validated': extraction.amountValidation ? extraction.amountValidation.valid : false,
+                    'custrecord_flux_processing_time': processingTime,
+                    'custrecord_flux_modified_date': new Date()
                 };
 
                 // Only set currency if it's a numeric ID (not a code like "USD")
                 if (extraction.fields && extraction.fields.currency) {
                     var currencyVal = extraction.fields.currency;
                     if (typeof currencyVal === 'number' || (typeof currencyVal === 'string' && /^\d+$/.test(currencyVal))) {
-                        updateValues['custrecord_dm_currency'] = parseInt(currencyVal, 10);
+                        updateValues['custrecord_flux_currency'] = parseInt(currencyVal, 10);
                     }
                     // Skip text currency codes - would need lookup to convert
                 }
 
                 record.submitFields({
-                    type: 'customrecord_dm_captured_document',
+                    type: 'customrecord_flux_document',
                     id: documentId,
                     values: updateValues
                 });
@@ -1888,11 +1838,11 @@ define([
                 }, 'Document processed successfully');
             } else {
                 record.submitFields({
-                    type: 'customrecord_dm_captured_document',
+                    type: 'customrecord_flux_document',
                     id: documentId,
                     values: {
-                        'custrecord_dm_status': DocStatus.ERROR,
-                        'custrecord_dm_error_message': result.error
+                        'custrecord_flux_status': DocStatus.ERROR,
+                        'custrecord_flux_error_message': result.error
                     }
                 });
 
@@ -1902,64 +1852,16 @@ define([
             log.error('Document processing error', e);
 
             record.submitFields({
-                type: 'customrecord_dm_captured_document',
+                type: 'customrecord_flux_document',
                 id: documentId,
                 values: {
-                    'custrecord_dm_status': DocStatus.ERROR,
-                    'custrecord_dm_error_message': e.message
+                    'custrecord_flux_status': DocStatus.ERROR,
+                    'custrecord_flux_error_message': e.message
                 }
             });
 
             return Response.error('PROCESSING_ERROR', e.message);
         }
-    }
-
-    function processBatchDocuments(context) {
-        var batchId = context.batchId;
-        var documentIds = context.documentIds;
-
-        var docsToProcess = [];
-
-        if (batchId) {
-            var sql = 'SELECT id FROM customrecord_dm_captured_document WHERE custrecord_dm_batch_id = ? AND custrecord_dm_status = ' + DocStatus.PENDING;
-            var results = query.runSuiteQL({ query: sql, params: [batchId] });
-            docsToProcess = results.results.map(function(r) { return r.values[0]; });
-        } else if (documentIds && Array.isArray(documentIds)) {
-            docsToProcess = documentIds;
-        } else {
-            return Response.error('MISSING_PARAM', 'Batch ID or document IDs required');
-        }
-
-        var processResults = [];
-        var processed = 0;
-        var errors = 0;
-
-        docsToProcess.forEach(function(docId) {
-            try {
-                var result = processDocument(docId);
-                if (result.success) {
-                    processed++;
-                    processResults.push({ documentId: docId, success: true });
-                } else {
-                    errors++;
-                    processResults.push({ documentId: docId, success: false, error: result.error.message });
-                }
-            } catch (e) {
-                errors++;
-                processResults.push({ documentId: docId, success: false, error: e.message });
-            }
-        });
-
-        if (batchId) {
-            updateBatchProgress(batchId);
-        }
-
-        return Response.success({
-            total: docsToProcess.length,
-            processed: processed,
-            errors: errors,
-            results: processResults
-        }, 'Batch processing complete');
     }
 
     function reprocessDocument(documentId) {
@@ -1968,14 +1870,14 @@ define([
         }
 
         record.submitFields({
-            type: 'customrecord_dm_captured_document',
+            type: 'customrecord_flux_document',
             id: documentId,
             values: {
-                'custrecord_dm_status': DocStatus.PENDING,
-                'custrecord_dm_line_items': '[]',
-                'custrecord_dm_anomalies': '[]',
-                'custrecord_dm_confidence_score': 0,
-                'custrecord_dm_error_message': ''
+                'custrecord_flux_status': DocStatus.PENDING,
+                'custrecord_flux_line_items': '[]',
+                'custrecord_flux_anomalies': '[]',
+                'custrecord_flux_confidence_score': 0,
+                'custrecord_flux_error_message': ''
             }
         });
 
@@ -2004,13 +1906,13 @@ define([
 
                 if (result.success) {
                     record.submitFields({
-                        type: 'customrecord_dm_captured_document',
+                        type: 'customrecord_flux_document',
                         id: result.data.documentId,
                         values: {
-                            'custrecord_dm_source': Source.EMAIL,
-                            'custrecord_dm_email_sender': emailSender,
-                            'custrecord_dm_email_subject': emailSubject,
-                            'custrecord_dm_email_received': new Date()
+                            'custrecord_flux_source': Source.EMAIL,
+                            'custrecord_flux_email_sender': emailSender,
+                            'custrecord_flux_email_subject': emailSubject,
+                            'custrecord_flux_email_received': new Date()
                         }
                     });
 
@@ -2046,11 +1948,11 @@ define([
 
         try {
             var docRecord = record.load({
-                type: 'customrecord_dm_captured_document',
+                type: 'customrecord_flux_document',
                 id: documentId
             });
 
-            var existingCorrections = JSON.parse(docRecord.getValue('custrecord_dm_user_corrections') || '[]');
+            var existingCorrections = JSON.parse(docRecord.getValue('custrecord_flux_user_corrections') || '[]');
 
             var correction = {
                 field: fieldName,
@@ -2075,11 +1977,11 @@ define([
             }
 
             record.submitFields({
-                type: 'customrecord_dm_captured_document',
+                type: 'customrecord_flux_document',
                 id: documentId,
                 values: {
-                    'custrecord_dm_user_corrections': JSON.stringify(existingCorrections),
-                    'custrecord_dm_modified_date': new Date()
+                    'custrecord_flux_user_corrections': JSON.stringify(existingCorrections),
+                    'custrecord_flux_modified_date': new Date()
                 }
             });
 
@@ -2101,20 +2003,20 @@ define([
 
         try {
             var fieldMap = {
-                'vendor': 'custrecord_dm_vendor',
-                'invoiceNumber': 'custrecord_dm_invoice_number',
-                'invoiceDate': 'custrecord_dm_invoice_date',
-                'dueDate': 'custrecord_dm_due_date',
-                'subtotal': 'custrecord_dm_subtotal',
-                'taxAmount': 'custrecord_dm_tax_amount',
-                'totalAmount': 'custrecord_dm_total_amount',
-                'currency': 'custrecord_dm_currency',
-                'poNumber': 'custrecord_dm_po_number',
-                'documentType': 'custrecord_dm_document_type',
-                'lineItems': 'custrecord_dm_line_items'
+                'vendor': 'custrecord_flux_vendor',
+                'invoiceNumber': 'custrecord_flux_invoice_number',
+                'invoiceDate': 'custrecord_flux_invoice_date',
+                'dueDate': 'custrecord_flux_due_date',
+                'subtotal': 'custrecord_flux_subtotal',
+                'taxAmount': 'custrecord_flux_tax_amount',
+                'totalAmount': 'custrecord_flux_total_amount',
+                'currency': 'custrecord_flux_currency',
+                'poNumber': 'custrecord_flux_po_number',
+                'documentType': 'custrecord_flux_document_type',
+                'lineItems': 'custrecord_flux_line_items'
             };
 
-            var values = { 'custrecord_dm_modified_date': new Date() };
+            var values = { 'custrecord_flux_modified_date': new Date() };
 
             Object.keys(updates).forEach(function(key) {
                 if (fieldMap[key]) {
@@ -2127,7 +2029,7 @@ define([
             });
 
             record.submitFields({
-                type: 'customrecord_dm_captured_document',
+                type: 'customrecord_flux_document',
                 id: documentId,
                 values: values
             });
@@ -2149,12 +2051,12 @@ define([
 
         try {
             var docRecord = record.load({
-                type: 'customrecord_dm_captured_document',
+                type: 'customrecord_flux_document',
                 id: documentId
             });
 
-            var vendorId = docRecord.getValue('custrecord_dm_vendor');
-            var documentType = docRecord.getValue('custrecord_dm_document_type');
+            var vendorId = docRecord.getValue('custrecord_flux_vendor');
+            var documentType = docRecord.getValue('custrecord_flux_document_type');
 
             var transactionId = null;
             var actualTransactionType = transactionType;
@@ -2174,19 +2076,14 @@ define([
             }
 
             record.submitFields({
-                type: 'customrecord_dm_captured_document',
+                type: 'customrecord_flux_document',
                 id: documentId,
                 values: {
-                    'custrecord_dm_status': DocStatus.COMPLETED,
-                    'custrecord_dm_created_transaction': transactionId ? String(transactionId) : '',
-                    'custrecord_dm_modified_date': new Date()
+                    'custrecord_flux_status': DocStatus.COMPLETED,
+                    'custrecord_flux_created_transaction': transactionId ? String(transactionId) : '',
+                    'custrecord_flux_modified_date': new Date()
                 }
             });
-
-            var batchId = docRecord.getValue('custrecord_dm_batch_id');
-            if (batchId) {
-                updateBatchProgress(batchId);
-            }
 
             return Response.success({
                 documentId: documentId,
@@ -2209,26 +2106,15 @@ define([
         }
 
         try {
-            var docRecord = record.load({
-                type: 'customrecord_dm_captured_document',
-                id: documentId
-            });
-
-            var batchId = docRecord.getValue('custrecord_dm_batch_id');
-
             record.submitFields({
-                type: 'customrecord_dm_captured_document',
+                type: 'customrecord_flux_document',
                 id: documentId,
                 values: {
-                    'custrecord_dm_status': DocStatus.REJECTED,
-                    'custrecord_dm_rejection_reason': reason,
-                    'custrecord_dm_modified_date': new Date()
+                    'custrecord_flux_status': DocStatus.REJECTED,
+                    'custrecord_flux_rejection_reason': reason,
+                    'custrecord_flux_modified_date': new Date()
                 }
             });
-
-            if (batchId) {
-                updateBatchProgress(batchId);
-            }
 
             return Response.success({
                 documentId: documentId,
@@ -2249,11 +2135,11 @@ define([
         }
 
         record.submitFields({
-            type: 'customrecord_dm_captured_document',
+            type: 'customrecord_flux_document',
             id: documentId,
             values: {
-                'custrecord_dm_status': status,
-                'custrecord_dm_modified_date': new Date()
+                'custrecord_flux_status': status,
+                'custrecord_flux_modified_date': new Date()
             }
         });
 
@@ -2269,9 +2155,9 @@ define([
         }
 
         record.submitFields({
-            type: 'customrecord_dm_captured_document',
+            type: 'customrecord_flux_document',
             id: documentId,
-            values: { 'custrecord_dm_uploaded_by': assigneeId }
+            values: { 'custrecord_flux_uploaded_by': assigneeId }
         });
 
         return Response.success({ documentId: documentId, assigneeId: assigneeId });
@@ -2290,14 +2176,13 @@ define([
 
         try {
             var docRecord = record.load({
-                type: 'customrecord_dm_captured_document',
+                type: 'customrecord_flux_document',
                 id: documentId
             });
 
-            var fileId = docRecord.getValue('custrecord_dm_source_file');
-            var batchId = docRecord.getValue('custrecord_dm_batch_id');
+            var fileId = docRecord.getValue('custrecord_flux_source_file');
 
-            record.delete({ type: 'customrecord_dm_captured_document', id: documentId });
+            record.delete({ type: 'customrecord_flux_document', id: documentId });
 
             if (fileId) {
                 try {
@@ -2307,51 +2192,9 @@ define([
                 }
             }
 
-            if (batchId) {
-                updateBatchProgress(batchId);
-            }
-
             return Response.success({ documentId: documentId }, 'Document deleted');
         } catch (e) {
             return Response.error('DELETE_FAILED', e.message);
-        }
-    }
-
-    function deleteBatch(batchId) {
-        if (!batchId) {
-            return Response.error('MISSING_PARAM', 'Batch ID required');
-        }
-
-        try {
-            var docSearch = search.create({
-                type: 'customrecord_dm_captured_document',
-                filters: [['custrecord_dm_batch_id', 'is', batchId]],
-                columns: ['internalid', 'custrecord_dm_source_file']
-            });
-
-            var deletedDocs = 0;
-
-            docSearch.run().each(function(result) {
-                var fileId = result.getValue('custrecord_dm_source_file');
-
-                record.delete({ type: 'customrecord_dm_captured_document', id: result.id });
-                deletedDocs++;
-
-                if (fileId) {
-                    try { file.delete({ id: fileId }); } catch (e) { }
-                }
-
-                return true;
-            });
-
-            record.delete({ type: 'customrecord_dm_batch', id: batchId });
-
-            return Response.success({
-                batchId: batchId,
-                deletedDocuments: deletedDocs
-            }, 'Batch deleted');
-        } catch (e) {
-            return Response.error('BATCH_DELETE_FAILED', e.message);
         }
     }
 
@@ -2360,11 +2203,11 @@ define([
 
         try {
             var docSearch = search.create({
-                type: 'customrecord_dm_captured_document',
+                type: 'customrecord_flux_document',
                 filters: [
-                    ['custrecord_dm_status', 'anyof', [DocStatus.REJECTED, DocStatus.COMPLETED]],
+                    ['custrecord_flux_status', 'anyof', [DocStatus.REJECTED, DocStatus.COMPLETED]],
                     'AND',
-                    ['custrecord_dm_modified_date', 'before', 'daysago' + olderThanDays]
+                    ['custrecord_flux_modified_date', 'before', 'daysago' + olderThanDays]
                 ],
                 columns: ['internalid']
             });
@@ -2372,7 +2215,7 @@ define([
             var deletedCount = 0;
 
             docSearch.run().each(function(result) {
-                record.delete({ type: 'customrecord_dm_captured_document', id: result.id });
+                record.delete({ type: 'customrecord_flux_document', id: result.id });
                 deletedCount++;
                 return true;
             });
@@ -2427,42 +2270,14 @@ define([
         return ('FC-' + timestamp + '-' + random).toUpperCase();
     }
 
-    function updateBatchProgress(batchId) {
-        var sql = 'SELECT COUNT(*) as total, ' +
-            'SUM(CASE WHEN custrecord_dm_status IN (' + DocStatus.REJECTED + ', ' + DocStatus.COMPLETED + ') THEN 1 ELSE 0 END) as processed, ' +
-            'SUM(CASE WHEN custrecord_dm_status = ' + DocStatus.ERROR + ' THEN 1 ELSE 0 END) as errors ' +
-            'FROM customrecord_dm_captured_document WHERE custrecord_dm_batch_id = ?';
-
-        var results = query.runSuiteQL({ query: sql, params: [batchId] });
-        var total = results.results[0].values[0] || 0;
-        var processed = results.results[0].values[1] || 0;
-        var errors = results.results[0].values[2] || 0;
-
-        var updates = {
-            'custrecord_dm_batch_processed_count': processed,
-            'custrecord_dm_batch_error_count': errors
-        };
-
-        if (processed >= total && total > 0) {
-            updates['custrecord_dm_batch_status'] = BatchStatus.COMPLETED;
-            updates['custrecord_dm_batch_completed_date'] = new Date();
-        }
-
-        record.submitFields({
-            type: 'customrecord_dm_batch',
-            id: batchId,
-            values: updates
-        });
-    }
-
     function createTransactionFromDocument(docRecord, transactionType) {
-        var vendorId = docRecord.getValue('custrecord_dm_vendor');
-        var invoiceNumber = docRecord.getValue('custrecord_dm_invoice_number');
-        var invoiceDate = docRecord.getValue('custrecord_dm_invoice_date');
-        var dueDate = docRecord.getValue('custrecord_dm_due_date');
-        var totalAmount = docRecord.getValue('custrecord_dm_total_amount');
-        var currency = docRecord.getValue('custrecord_dm_currency');
-        var lineItems = JSON.parse(docRecord.getValue('custrecord_dm_line_items') || '[]');
+        var vendorId = docRecord.getValue('custrecord_flux_vendor');
+        var invoiceNumber = docRecord.getValue('custrecord_flux_invoice_number');
+        var invoiceDate = docRecord.getValue('custrecord_flux_invoice_date');
+        var dueDate = docRecord.getValue('custrecord_flux_due_date');
+        var totalAmount = docRecord.getValue('custrecord_flux_total_amount');
+        var currency = docRecord.getValue('custrecord_flux_currency');
+        var lineItems = JSON.parse(docRecord.getValue('custrecord_flux_line_items') || '[]');
 
         var txnRecord;
 
@@ -2519,10 +2334,6 @@ define([
 
     function getStatusDisplayText(status) {
         return DocStatusLabels[status] || status;
-    }
-
-    function getBatchStatusDisplayText(status) {
-        return BatchStatusLabels[status] || status;
     }
 
     function getSourceDisplayText(source) {

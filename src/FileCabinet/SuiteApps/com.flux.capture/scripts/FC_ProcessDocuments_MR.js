@@ -36,15 +36,15 @@ define([
         log.audit('FC_ProcessDocuments', 'Starting document processing job');
 
         return search.create({
-            type: 'customrecord_dm_captured_document',
+            type: 'customrecord_flux_document',
             filters: [
-                ['custrecord_dm_status', 'is', DocStatus.PENDING]
+                ['custrecord_flux_status', 'is', DocStatus.PENDING]
             ],
             columns: [
                 'internalid',
-                'custrecord_dm_source_file',
-                'custrecord_dm_document_type',
-                'custrecord_dm_document_id'
+                'custrecord_flux_source_file',
+                'custrecord_flux_document_type',
+                'custrecord_flux_document_id'
             ]
         });
     }
@@ -55,9 +55,9 @@ define([
     function map(context) {
         const searchResult = JSON.parse(context.value);
         const documentId = searchResult.id;
-        const fileId = searchResult.values.custrecord_dm_source_file.value;
-        const documentType = searchResult.values.custrecord_dm_document_type || 1;
-        const docCode = searchResult.values.custrecord_dm_document_id;
+        const fileId = searchResult.values.custrecord_flux_source_file.value;
+        const documentType = searchResult.values.custrecord_flux_document_type || 1;
+        const docCode = searchResult.values.custrecord_flux_document_id;
 
         log.audit('FC_ProcessDocuments.map', {
             documentId: documentId,
@@ -68,10 +68,10 @@ define([
         try {
             // Mark as processing
             record.submitFields({
-                type: 'customrecord_dm_captured_document',
+                type: 'customrecord_flux_document',
                 id: documentId,
                 values: {
-                    'custrecord_dm_status': DocStatus.PROCESSING
+                    'custrecord_flux_status': DocStatus.PROCESSING
                 }
             });
 
@@ -103,35 +103,35 @@ define([
 
                 // Update the record with extracted data
                 const updateValues = {
-                    'custrecord_dm_status': newStatus,
-                    'custrecord_dm_document_type': extraction.documentType || documentType,
-                    'custrecord_dm_vendor': extraction.vendorMatch && extraction.vendorMatch.vendorId ? extraction.vendorMatch.vendorId : null,
-                    'custrecord_dm_vendor_match_confidence': extraction.vendorMatch ? extraction.vendorMatch.confidence : 0,
-                    'custrecord_dm_invoice_number': extraction.fields && extraction.fields.invoiceNumber ? extraction.fields.invoiceNumber : '',
-                    'custrecord_dm_invoice_date': invoiceDate,
-                    'custrecord_dm_due_date': dueDate,
-                    'custrecord_dm_subtotal': extraction.fields && extraction.fields.subtotal ? extraction.fields.subtotal : 0,
-                    'custrecord_dm_tax_amount': extraction.fields && extraction.fields.taxAmount ? extraction.fields.taxAmount : 0,
-                    'custrecord_dm_total_amount': extraction.fields && extraction.fields.totalAmount ? extraction.fields.totalAmount : 0,
-                    'custrecord_dm_po_number': extraction.fields && extraction.fields.poNumber ? extraction.fields.poNumber : '',
-                    'custrecord_dm_line_items': JSON.stringify(extraction.lineItems || []),
-                    'custrecord_dm_anomalies': JSON.stringify(extraction.anomalies || []),
-                    'custrecord_dm_confidence_score': extraction.confidence.overall,
-                    'custrecord_dm_amount_validated': extraction.amountValidation ? extraction.amountValidation.valid : false,
-                    'custrecord_dm_processing_time': processingTime,
-                    'custrecord_dm_modified_date': new Date()
+                    'custrecord_flux_status': newStatus,
+                    'custrecord_flux_document_type': extraction.documentType || documentType,
+                    'custrecord_flux_vendor': extraction.vendorMatch && extraction.vendorMatch.vendorId ? extraction.vendorMatch.vendorId : null,
+                    'custrecord_flux_vendor_match_confidence': extraction.vendorMatch ? extraction.vendorMatch.confidence : 0,
+                    'custrecord_flux_invoice_number': extraction.fields && extraction.fields.invoiceNumber ? extraction.fields.invoiceNumber : '',
+                    'custrecord_flux_invoice_date': invoiceDate,
+                    'custrecord_flux_due_date': dueDate,
+                    'custrecord_flux_subtotal': extraction.fields && extraction.fields.subtotal ? extraction.fields.subtotal : 0,
+                    'custrecord_flux_tax_amount': extraction.fields && extraction.fields.taxAmount ? extraction.fields.taxAmount : 0,
+                    'custrecord_flux_total_amount': extraction.fields && extraction.fields.totalAmount ? extraction.fields.totalAmount : 0,
+                    'custrecord_flux_po_number': extraction.fields && extraction.fields.poNumber ? extraction.fields.poNumber : '',
+                    'custrecord_flux_line_items': JSON.stringify(extraction.lineItems || []),
+                    'custrecord_flux_anomalies': JSON.stringify(extraction.anomalies || []),
+                    'custrecord_flux_confidence_score': extraction.confidence.overall,
+                    'custrecord_flux_amount_validated': extraction.amountValidation ? extraction.amountValidation.valid : false,
+                    'custrecord_flux_processing_time': processingTime,
+                    'custrecord_flux_modified_date': new Date()
                 };
 
                 // Only set currency if it's a numeric ID
                 if (extraction.fields && extraction.fields.currency) {
                     const currencyVal = extraction.fields.currency;
                     if (typeof currencyVal === 'number' || (typeof currencyVal === 'string' && /^\d+$/.test(currencyVal))) {
-                        updateValues['custrecord_dm_currency'] = parseInt(currencyVal, 10);
+                        updateValues['custrecord_flux_currency'] = parseInt(currencyVal, 10);
                     }
                 }
 
                 record.submitFields({
-                    type: 'customrecord_dm_captured_document',
+                    type: 'customrecord_flux_document',
                     id: documentId,
                     values: updateValues
                 });
@@ -148,11 +148,11 @@ define([
             } else {
                 // Processing failed
                 record.submitFields({
-                    type: 'customrecord_dm_captured_document',
+                    type: 'customrecord_flux_document',
                     id: documentId,
                     values: {
-                        'custrecord_dm_status': DocStatus.ERROR,
-                        'custrecord_dm_error_message': result.error || 'Unknown processing error'
+                        'custrecord_flux_status': DocStatus.ERROR,
+                        'custrecord_flux_error_message': result.error || 'Unknown processing error'
                     }
                 });
 
@@ -175,11 +175,11 @@ define([
             // Mark as error
             try {
                 record.submitFields({
-                    type: 'customrecord_dm_captured_document',
+                    type: 'customrecord_flux_document',
                     id: documentId,
                     values: {
-                        'custrecord_dm_status': DocStatus.ERROR,
-                        'custrecord_dm_error_message': e.message
+                        'custrecord_flux_status': DocStatus.ERROR,
+                        'custrecord_flux_error_message': e.message
                     }
                 });
             } catch (updateErr) {

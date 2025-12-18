@@ -1,0 +1,101 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<customrecordtype scriptid="customrecord_flux_config">
+    <recordname>Flux Configuration</recordname>
+    <includename>T</includename>
+    <showid>T</showid>
+    <shownotes>F</shownotes>
+    <allowattachments>F</allowattachments>
+    <allowinlineediting>T</allowinlineediting>
+    <allowinlinedeleting>F</allowinlinedeleting>
+    <allowquicksearch>T</allowquicksearch>
+    <hierarchical>F</hierarchical>
+    <enablenumbering>F</enablenumbering>
+    <enablekeywords>F</enablekeywords>
+    <isordered>F</isordered>
+    <description>Flux Capture Configuration - Stores form definitions, settings, and datasource cache</description>
+
+    <customrecordcustomfields>
+        <customrecordcustomfield scriptid="custrecord_flux_cfg_type">
+            <fieldtype>TEXT</fieldtype>
+            <label>Config Type</label>
+            <description>Type of configuration: form_definition, settings, datasource_cache</description>
+            <ismandatory>T</ismandatory>
+            <displaytype>NORMAL</displaytype>
+            <showinlist>T</showinlist>
+        </customrecordcustomfield>
+
+        <customrecordcustomfield scriptid="custrecord_flux_cfg_key">
+            <fieldtype>TEXT</fieldtype>
+            <label>Config Key</label>
+            <description>Configuration key (e.g., vendorbill, expensereport, or setting name)</description>
+            <ismandatory>T</ismandatory>
+            <displaytype>NORMAL</displaytype>
+            <showinlist>T</showinlist>
+        </customrecordcustomfield>
+
+        <customrecordcustomfield scriptid="custrecord_flux_cfg_form_id">
+            <fieldtype>TEXT</fieldtype>
+            <label>Form ID</label>
+            <description>NetSuite form ID if applicable</description>
+            <ismandatory>F</ismandatory>
+            <displaytype>NORMAL</displaytype>
+            <showinlist>T</showinlist>
+        </customrecordcustomfield>
+
+        <customrecordcustomfield scriptid="custrecord_flux_cfg_data">
+            <fieldtype>TEXTAREA</fieldtype>
+            <label>Config Data</label>
+            <description>Configuration data as JSON (form definition, settings, etc.)</description>
+            <ismandatory>F</ismandatory>
+            <displaytype>NORMAL</displaytype>
+            <showinlist>F</showinlist>
+        </customrecordcustomfield>
+
+        <customrecordcustomfield scriptid="custrecord_flux_cfg_version">
+            <fieldtype>INTEGER</fieldtype>
+            <label>Version</label>
+            <description>Configuration version for migrations</description>
+            <ismandatory>F</ismandatory>
+            <displaytype>NORMAL</displaytype>
+            <showinlist>T</showinlist>
+        </customrecordcustomfield>
+
+        <customrecordcustomfield scriptid="custrecord_flux_cfg_active">
+            <fieldtype>CHECKBOX</fieldtype>
+            <label>Active</label>
+            <description>Whether this configuration is currently active</description>
+            <ismandatory>F</ismandatory>
+            <displaytype>NORMAL</displaytype>
+            <showinlist>T</showinlist>
+            <defaultchecked>T</defaultchecked>
+        </customrecordcustomfield>
+
+        <customrecordcustomfield scriptid="custrecord_flux_cfg_modified">
+            <fieldtype>DATETIMETZ</fieldtype>
+            <label>Last Modified</label>
+            <description>Date configuration was last modified</description>
+            <ismandatory>F</ismandatory>
+            <displaytype>NORMAL</displaytype>
+            <showinlist>T</showinlist>
+        </customrecordcustomfield>
+
+        <customrecordcustomfield scriptid="custrecord_flux_cfg_modified_by">
+            <fieldtype>SELECT</fieldtype>
+            <label>Modified By</label>
+            <description>User who last modified this configuration</description>
+            <ismandatory>F</ismandatory>
+            <displaytype>NORMAL</displaytype>
+            <showinlist>T</showinlist>
+            <selectrecordtype>-4</selectrecordtype>
+        </customrecordcustomfield>
+
+        <customrecordcustomfield scriptid="custrecord_flux_cfg_source">
+            <fieldtype>TEXT</fieldtype>
+            <label>Source</label>
+            <description>How configuration was created: xml_upload, client_capture, manual</description>
+            <ismandatory>F</ismandatory>
+            <displaytype>NORMAL</displaytype>
+            <showinlist>T</showinlist>
+        </customrecordcustomfield>
+    </customrecordcustomfields>
+</customrecordtype>
