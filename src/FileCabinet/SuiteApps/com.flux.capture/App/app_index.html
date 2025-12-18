@@ -1154,7 +1154,8 @@
                 </div>
             </div>
 
-            <!-- Keyboard HUD -->
+            <!-- Keyboard HUD (hidden until hover near bottom) -->
+            <div class="keyboard-hover-zone"></div>
             <div class="review-keyboard-hud" id="review-keyboard-hud">
                 <div class="kbd-group"><kbd>A</kbd> Approve</div>
                 <div class="kbd-group"><kbd>R</kbd> Reject</div>
@@ -1204,156 +1205,89 @@
     </script>
 
 
-    <!-- FLOW TEMPLATE - Upload + Theatrical Processing -->
+    <!-- FLOW TEMPLATE - Card-Based Upload Experience -->
     <script type="text/template" id="tpl-rail">
         <div class="view-flow">
-            <!-- Ambient particles background -->
-            <div class="flow-particles" id="flow-particles"></div>
-
-            <!-- Flow Header Stats -->
-            <div class="flow-header">
-                <div class="flow-stats">
-                    <div class="flow-stat" id="stat-incoming">
-                        <i class="fas fa-inbox"></i>
-                        <span class="stat-value">0</span>
-                        <span class="stat-label">Incoming</span>
-                    </div>
-                    <div class="flow-stat processing" id="stat-processing">
-                        <i class="fas fa-cog fa-spin"></i>
-                        <span class="stat-value">0</span>
-                        <span class="stat-label">Processing</span>
-                    </div>
-                    <div class="flow-stat ready" id="stat-ready">
-                        <i class="fas fa-check-circle"></i>
-                        <span class="stat-value">0</span>
-                        <span class="stat-label">Ready</span>
-                    </div>
+            <!-- Compact Header -->
+            <div class="flow-header-compact">
+                <div class="flow-title">
+                    <i class="fas fa-bolt"></i>
+                    <span>Flow</span>
                 </div>
-                <div class="flow-actions">
-                    <button class="btn btn-secondary" id="btn-go-to-documents">
-                        <i class="fas fa-inbox"></i> Go to Documents
+                <div class="flow-summary" id="flow-summary" style="display:none;">
+                    <span class="summary-stat"><span id="summary-queued">0</span> queued</span>
+                    <span class="summary-divider">•</span>
+                    <span class="summary-stat processing"><span id="summary-processing">0</span> processing</span>
+                    <span class="summary-divider">•</span>
+                    <span class="summary-stat complete"><span id="summary-complete">0</span> complete</span>
+                </div>
+                <div class="flow-header-actions">
+                    <button class="btn btn-ghost btn-sm" id="btn-clear-complete" style="display:none;">
+                        <i class="fas fa-broom"></i> Clear Done
+                    </button>
+                    <button class="btn btn-primary btn-sm" id="btn-go-to-documents">
+                        <i class="fas fa-inbox"></i> Documents
                     </button>
                 </div>
             </div>
 
-            <!-- Main Flow Content -->
-            <div class="flow-main">
-                <!-- Upload Portal Stage -->
-                <div class="flow-stage" id="stage-upload">
-                    <div class="upload-portal" id="upload-portal">
-                        <div class="portal-glow"></div>
-                        <div class="portal-ring portal-ring-1"></div>
-                        <div class="portal-ring portal-ring-2"></div>
-                        <div class="portal-ring portal-ring-3"></div>
-                        <div class="portal-center">
-                            <div class="portal-icon">
-                                <i class="fas fa-cloud-arrow-up"></i>
-                            </div>
-                            <div class="portal-text">
-                                <h3>Drop files here</h3>
-                                <p>or click to browse</p>
-                            </div>
+            <!-- Drop Zone Container -->
+            <div class="flow-drop-container" id="flow-drop-container">
+                <!-- Upload Drop Zone -->
+                <div class="flow-dropzone" id="flow-dropzone">
+                    <div class="dropzone-content">
+                        <div class="dropzone-icon">
+                            <i class="fas fa-cloud-arrow-up"></i>
                         </div>
-                        <input type="file" id="flow-file-input" multiple accept=".pdf,.png,.jpg,.jpeg,.tiff,.tif" hidden>
+                        <div class="dropzone-text">
+                            <span class="dropzone-primary">Drop files here</span>
+                            <span class="dropzone-secondary">or click to browse</span>
+                        </div>
+                        <div class="dropzone-formats">
+                            <span>PDF</span>
+                            <span>PNG</span>
+                            <span>JPG</span>
+                            <span>TIFF</span>
+                        </div>
                     </div>
-                    <div class="upload-formats">
-                        <span class="format-pill">PDF</span>
-                        <span class="format-pill">PNG</span>
-                        <span class="format-pill">JPG</span>
-                        <span class="format-pill">TIFF</span>
-                    </div>
-                    <div class="upload-type-selector" id="flow-type-selector">
-                        <label class="type-pill active">
-                            <input type="radio" name="flowDocType" value="auto" checked>
-                            <i class="fas fa-wand-magic-sparkles"></i>
-                            <span>Auto</span>
-                        </label>
-                        <label class="type-pill">
-                            <input type="radio" name="flowDocType" value="vendorbill">
-                            <i class="fas fa-file-invoice-dollar"></i>
-                            <span>Bill</span>
-                        </label>
-                        <label class="type-pill">
-                            <input type="radio" name="flowDocType" value="expensereport">
-                            <i class="fas fa-receipt"></i>
-                            <span>Expense</span>
-                        </label>
-                    </div>
+                    <input type="file" id="flow-file-input" multiple accept=".pdf,.png,.jpg,.jpeg,.tiff,.tif" hidden>
                 </div>
 
-                <!-- Processing Theater Stage -->
-                <div class="flow-stage" id="stage-processing" style="display:none;">
-                    <div class="processing-theater">
-                        <!-- Queue Column -->
-                        <div class="theater-column queue-column">
-                            <div class="column-header">
-                                <i class="fas fa-layer-group"></i> Queue
-                                <span class="column-count" id="queue-count">0</span>
-                            </div>
-                            <div class="column-items" id="queue-items"></div>
-                        </div>
-
-                        <!-- Processing Column - Center Stage -->
-                        <div class="theater-column processing-column">
-                            <div class="column-header">
-                                <i class="fas fa-microchip"></i> Extracting
-                            </div>
-                            <div class="processing-visualizer" id="processing-visualizer">
-                                <div class="visualizer-empty">
-                                    <i class="fas fa-cube"></i>
-                                    <span>Waiting for documents...</span>
-                                </div>
-                            </div>
-                        </div>
-
-                        <!-- Ready Column -->
-                        <div class="theater-column ready-column">
-                            <div class="column-header">
-                                <i class="fas fa-check-double"></i> Ready
-                                <span class="column-count" id="ready-count">0</span>
-                            </div>
-                            <div class="column-items" id="ready-items"></div>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- Completion Stage -->
-                <div class="flow-stage" id="stage-complete" style="display:none;">
-                    <div class="completion-display">
-                        <div class="completion-icon">
-                            <i class="fas fa-check-circle"></i>
-                        </div>
-                        <h2 class="completion-title">All Documents Processed!</h2>
-                        <div class="completion-stats">
-                            <div class="comp-stat">
-                                <span class="comp-value" id="comp-total">0</span>
-                                <span class="comp-label">Processed</span>
-                            </div>
-                            <div class="comp-stat high">
-                                <span class="comp-value" id="comp-high-conf">0</span>
-                                <span class="comp-label">High Confidence</span>
-                            </div>
-                            <div class="comp-stat">
-                                <span class="comp-value" id="comp-needs-review">0</span>
-                                <span class="comp-label">Need Review</span>
-                            </div>
-                        </div>
-                        <div class="completion-actions">
-                            <button class="btn btn-primary btn-lg btn-glow" id="btn-review-documents">
-                                <i class="fas fa-inbox"></i> Review Documents
-                            </button>
-                            <button class="btn btn-secondary" id="btn-upload-more">
-                                <i class="fas fa-plus"></i> Upload More
-                            </button>
-                        </div>
-                    </div>
+                <!-- Document Type Selector -->
+                <div class="flow-type-selector" id="flow-type-selector">
+                    <label class="type-option active">
+                        <input type="radio" name="flowDocType" value="auto" checked>
+                        <i class="fas fa-wand-magic-sparkles"></i>
+                        <span>Auto-detect</span>
+                    </label>
+                    <label class="type-option">
+                        <input type="radio" name="flowDocType" value="vendorbill">
+                        <i class="fas fa-file-invoice-dollar"></i>
+                        <span>Vendor Bill</span>
+                    </label>
+                    <label class="type-option">
+                        <input type="radio" name="flowDocType" value="expensereport">
+                        <i class="fas fa-receipt"></i>
+                        <span>Expense</span>
+                    </label>
                 </div>
             </div>
 
-            <!-- Drop More Zone (visible during processing) -->
-            <div class="drop-more-zone" id="drop-more-zone" style="display:none;">
-                <i class="fas fa-plus-circle"></i>
-                <span>Drop more files to add to queue</span>
+            <!-- Upload Cards Grid -->
+            <div class="flow-cards-container" id="flow-cards-container" style="display:none;">
+                <div class="flow-cards-grid" id="flow-cards-grid">
+                    <!-- Cards render dynamically -->
+                </div>
+
+                <!-- All Complete Actions -->
+                <div class="flow-complete-actions" id="flow-complete-actions" style="display:none;">
+                    <button class="btn btn-primary btn-lg btn-glow" id="btn-review-all">
+                        <i class="fas fa-arrow-right"></i> Review Documents
+                    </button>
+                    <button class="btn btn-ghost" id="btn-upload-more">
+                        <i class="fas fa-plus"></i> Upload More
+                    </button>
+                </div>
             </div>
         </div>
     </script>
