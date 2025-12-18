@@ -1866,14 +1866,13 @@
     position: relative;
 }
 
-.sublist-toolbar {
-    position: absolute;
-    top: 0;
-    right: 0;
-    z-index: 5;
+.sublist-footer {
+    display: flex;
+    justify-content: flex-start;
+    padding: var(--space-xs) 0;
 }
 
-.sublist-toolbar .btn-add-line {
+.sublist-footer .btn-add-line {
     padding: var(--space-xs) var(--space-sm);
     font-size: var(--font-size-xs);
 }
@@ -5493,7 +5492,15 @@ tr.doc-row.approving { animation: compress-out 0.3s ease forwards; }
 .form-grid,
 .form-row,
 .field-group,
-.group-content {
+.group-content,
+.line-section,
+.sublist-container,
+.line-items-table,
+.sublist-table-wrapper,
+.sublist-table,
+.sublist-table tbody,
+.sublist-table td,
+.select-cell {
     overflow: visible !important;
 }
 
@@ -5503,6 +5510,10 @@ tr.doc-row.approving { animation: compress-out 0.3s ease forwards; }
     transition: background var(--transition);
     border-bottom: 1px solid var(--border-subtle);
     font-size: var(--font-size-sm);
+}
+
+.typeahead-option.highlighted {
+    background: var(--color-primary-bg);
 }
 
 .typeahead-option:last-child {
