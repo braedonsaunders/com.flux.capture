@@ -63,7 +63,7 @@
         extractionPool: {
             unmatched: [],      // Unmatched extracted fields
             applied: [],        // Applied items (for undo)
-            panelExpanded: true,
+            panelExpanded: false,
             filterCategory: 'all',
             searchQuery: '',
             selectedCardId: null,
@@ -446,6 +446,20 @@
                 self.showShortcutsHelp();
             });
 
+            // Toggle alert details
+            this.on('#alert-status-toggle', 'click', function() {
+                var details = el('#alert-details');
+                var chevron = this.querySelector('.alert-chevron');
+                if (details) {
+                    var isHidden = details.style.display === 'none';
+                    details.style.display = isHidden ? 'block' : 'none';
+                    if (chevron) {
+                        chevron.classList.toggle('fa-chevron-down', !isHidden);
+                        chevron.classList.toggle('fa-chevron-up', isHidden);
+                    }
+                }
+            });
+
             // Panel resizer
             this.initPanelResizer();
         },
@@ -799,11 +813,13 @@
         renderPdfWithAnnotations: function(viewport, fileUrl) {
             var self = this;
 
-            // Create container structure
+            // Create container structure - wrap canvas and overlay in a positioned wrapper
             viewport.innerHTML = '<div class="pdf-container" id="pdf-container">' +
                 '<div class="pdf-loading"><div class="loading-spinner"></div><span>Loading document...</span></div>' +
-                '<canvas id="pdf-canvas"></canvas>' +
-                '<div class="annotation-overlay" id="annotation-overlay"></div>' +
+                '<div class="pdf-page-wrapper" id="pdf-page-wrapper">' +
+                    '<canvas id="pdf-canvas"></canvas>' +
+                    '<div class="annotation-overlay" id="annotation-overlay"></div>' +
+                '</div>' +
             '</div>';
 
             var container = el('#pdf-container');
@@ -1134,41 +1150,35 @@
 
             var html = '';
 
-            // ========== CONFIDENCE HEADER ==========
-            html += '<div class="form-section confidence-section">' +
-                '<div class="confidence-header">' +
-                    '<div class="confidence-gauge">' +
-                        '<svg viewBox="0 0 36 36" class="gauge-svg">' +
-                            '<circle cx="18" cy="18" r="15.5" fill="none" stroke="var(--gray-200)" stroke-width="3"/>' +
-                            '<circle cx="18" cy="18" r="15.5" fill="none" stroke="var(--color-' + (confClass === 'high' ? 'success' : confClass === 'medium' ? 'warning' : 'danger') + ')" stroke-width="3" stroke-dasharray="' + normalizedConfidence + ' 100" transform="rotate(-90 18 18)"/>' +
-                        '</svg>' +
-                        '<div class="gauge-value">' + normalizedConfidence + '%</div>' +
+            // ========== COMPACT STATUS BAR (Confidence + Alerts) ==========
+            html += '<div class="form-section status-bar-section">' +
+                '<div class="status-bar">' +
+                    '<div class="status-item confidence-status ' + confClass + '">' +
+                        '<span class="status-value">' + normalizedConfidence + '%</span>' +
+                        '<span class="status-label">' + (confClass === 'high' ? 'High' : confClass === 'medium' ? 'Medium' : 'Low') + '</span>' +
                     '</div>' +
-                    '<div class="confidence-info">' +
-                        '<div class="confidence-level ' + confClass + '">' + (confClass === 'high' ? 'High' : confClass === 'medium' ? 'Medium' : 'Low') + ' Confidence</div>' +
-                        '<div class="confidence-subtitle">AI extraction accuracy</div>' +
-                    '</div>' +
-                    '<button class="btn btn-primary btn-sm" id="btn-apply-all-suggestions" style="display:none;" title="Apply all AI suggestions">' +
-                        '<i class="fas fa-magic"></i> Apply All' +
-                    '</button>' +
+                    (anomalies.length > 0 ?
+                        '<div class="status-item alert-status" id="alert-status-toggle">' +
+                            '<i class="fas fa-triangle-exclamation"></i>' +
+                            '<span class="status-value">' + anomalies.length + '</span>' +
+                            '<span class="status-label">Alert' + (anomalies.length > 1 ? 's' : '') + '</span>' +
+                            '<i class="fas fa-chevron-down alert-chevron"></i>' +
+                        '</div>' : '') +
+                    '<div class="status-spacer"></div>' +
                     '<button class="btn btn-ghost btn-sm" id="btn-shortcuts" title="Keyboard Shortcuts">' +
                         '<i class="fas fa-keyboard"></i>' +
                     '</button>' +
                 '</div>' +
+                (anomalies.length > 0 ?
+                    '<div class="alert-details" id="alert-details" style="display:none;">' +
+                        anomalies.map(function(a) {
+                            return '<div class="alert-detail-item alert-' + a.severity + '">' +
+                                '<i class="fas fa-' + (a.severity === 'high' ? 'exclamation-circle' : 'info-circle') + '"></i>' +
+                                '<span>' + escapeHtml(a.message) + '</span>' +
+                            '</div>';
+                        }).join('') +
+                    '</div>' : '') +
             '</div>';
-
-            // ========== ANOMALY ALERTS ==========
-            if (anomalies.length > 0) {
-                html += '<div class="form-section anomaly-section">' +
-                    '<div class="anomaly-header"><i class="fas fa-triangle-exclamation"></i> ' + anomalies.length + ' Alert' + (anomalies.length > 1 ? 's' : '') + '</div>' +
-                    anomalies.map(function(a) {
-                        return '<div class="anomaly-item anomaly-' + a.severity + '">' +
-                            '<i class="fas fa-' + (a.severity === 'high' ? 'exclamation-circle' : 'info-circle') + '"></i>' +
-                            '<span>' + escapeHtml(a.message) + '</span>' +
-                        '</div>';
-                    }).join('') +
-                '</div>';
-            }
 
             // ========== EXTRACTION POOL PANEL ==========
             // Compute unmatched extractions
@@ -3502,8 +3512,8 @@
                 '<div class="pool-header" id="pool-header">' +
                     '<div class="pool-title">' +
                         '<i class="fas fa-layer-group"></i>' +
-                        '<span>Extraction Pool</span>' +
-                        '<span class="pool-count">' + unmatched.length + ' items</span>' +
+                        '<span>Additional Extracted Fields</span>' +
+                        '<span class="pool-count">' + unmatched.length + '</span>' +
                     '</div>' +
                     '<div class="pool-actions">' +
                         '<button class="btn btn-ghost btn-sm" id="btn-toggle-annotations" title="Show extractions on document">' +
@@ -3607,10 +3617,14 @@
             var self = this;
             var value = extractionData.value;
 
-            // Find the target field input
+            // Find the target field input - try multiple selectors
             var input = el('#field-' + targetFieldId);
             if (!input) {
-                // Try finding by data-field attribute
+                // Try finding by data-field attribute (non-hidden first)
+                input = document.querySelector('input:not([type="hidden"])[data-field="' + targetFieldId + '"]');
+            }
+            if (!input) {
+                // Try any element with data-field
                 input = document.querySelector('[data-field="' + targetFieldId + '"]');
             }
 
@@ -3621,17 +3635,31 @@
 
             // Get field label for tracking
             var fieldLabel = targetFieldId;
-            var labelEl = input.closest('.form-field')?.querySelector('label');
-            if (labelEl) {
-                fieldLabel = labelEl.textContent.replace(/[*%\d]/g, '').trim();
+            var formField = input.closest('.form-field');
+            if (formField) {
+                var labelEl = formField.querySelector('label');
+                if (labelEl) {
+                    fieldLabel = labelEl.textContent.replace(/[*%\d]/g, '').trim();
+                }
             }
 
             // Store previous value for undo
             var previousValue = input.value;
 
-            // Apply the value
+            // Apply the value - handle typeahead displays too
             input.value = value;
+
+            // If this is a typeahead field, also update the display input
+            var typeaheadWrapper = input.closest('.typeahead-select');
+            if (typeaheadWrapper) {
+                var displayInput = typeaheadWrapper.querySelector('.typeahead-display');
+                if (displayInput) {
+                    displayInput.value = value;
+                }
+            }
+
             input.dispatchEvent(new Event('change', { bubbles: true }));
+            input.dispatchEvent(new Event('input', { bubbles: true }));
 
             // Track this application
             this.extractionPool.applied.push({
@@ -3788,6 +3816,7 @@
             document.querySelectorAll('.pool-card').forEach(function(card) {
                 card.ondragstart = function(e) {
                     self.extractionPool.dragActive = true;
+                    e.dataTransfer.effectAllowed = 'copy';
                     e.dataTransfer.setData('text/plain', JSON.stringify({
                         key: card.dataset.extractionKey,
                         value: card.dataset.extractionValue,
@@ -3869,34 +3898,75 @@
 
             // Form field drop targets
             document.querySelectorAll('.form-field').forEach(function(field) {
-                field.ondragover = function(e) {
+                field.ondragenter = function(e) {
                     if (!self.extractionPool.dragActive) return;
                     e.preventDefault();
                     field.classList.add('drop-target', 'drop-hover');
                 };
 
-                field.ondragleave = function() {
-                    field.classList.remove('drop-hover');
+                field.ondragover = function(e) {
+                    if (!self.extractionPool.dragActive) return;
+                    e.preventDefault();
+                    e.dataTransfer.dropEffect = 'copy';
+                };
+
+                field.ondragleave = function(e) {
+                    // Only remove classes if we're actually leaving the field (not moving to a child)
+                    var relatedTarget = e.relatedTarget;
+                    if (!relatedTarget || !field.contains(relatedTarget)) {
+                        field.classList.remove('drop-target', 'drop-hover');
+                    }
                 };
 
                 field.ondrop = function(e) {
                     e.preventDefault();
+                    e.stopPropagation();
                     field.classList.remove('drop-target', 'drop-hover');
 
                     try {
-                        var data = JSON.parse(e.dataTransfer.getData('text/plain'));
-                        var input = field.querySelector('input, select, textarea');
-                        if (input && data.key) {
-                            var extractionData = self.extractionPool.unmatched.find(function(item) {
-                                return item.key === data.key;
-                            });
-                            if (extractionData) {
-                                var fieldId = input.dataset.field || input.id.replace('field-', '');
-                                self.applyExtractionToField(data.key, extractionData, fieldId);
-                            }
+                        var rawData = e.dataTransfer.getData('text/plain');
+                        if (!rawData) {
+                            console.warn('[ExtractionPool] No data in drop event');
+                            return;
                         }
+                        var data = JSON.parse(rawData);
+
+                        // Find the primary input (skip hidden inputs for typeahead)
+                        var input = field.querySelector('input:not([type="hidden"]), select, textarea');
+                        if (!input) {
+                            input = field.querySelector('input, select, textarea');
+                        }
+
+                        if (!input) {
+                            console.warn('[ExtractionPool] No input found in field');
+                            return;
+                        }
+
+                        if (!data.key) {
+                            console.warn('[ExtractionPool] No key in dropped data');
+                            return;
+                        }
+
+                        // Find extraction data - try both key match and id match
+                        var extractionData = self.extractionPool.unmatched.find(function(item) {
+                            return item.key === data.key || item.id === data.id;
+                        });
+
+                        if (!extractionData) {
+                            // If not found, create from dropped data
+                            extractionData = {
+                                key: data.key,
+                                value: data.value,
+                                label: data.key
+                            };
+                        }
+
+                        var fieldId = input.dataset.field || input.id.replace('field-', '');
+                        self.applyExtractionToField(data.key, extractionData, fieldId);
+
                     } catch (err) {
                         console.error('[ExtractionPool] Drop error:', err);
+                        UI.toast('Failed to apply extraction', 'error');
                     }
                 };
 

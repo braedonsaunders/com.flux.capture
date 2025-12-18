@@ -1448,6 +1448,119 @@
     color: var(--color-danger);
 }
 
+/* Compact Status Bar (Confidence + Alerts) */
+.status-bar-section {
+    padding: var(--space-sm) var(--space-md) !important;
+    margin-bottom: var(--space-md) !important;
+    background: var(--gray-50);
+    border-radius: var(--radius-md);
+}
+
+.status-bar {
+    display: flex;
+    align-items: center;
+    gap: var(--space-md);
+}
+
+.status-item {
+    display: flex;
+    align-items: center;
+    gap: var(--space-xs);
+    padding: var(--space-xs) var(--space-sm);
+    border-radius: var(--radius-sm);
+    font-size: var(--font-size-sm);
+}
+
+.status-item .status-value {
+    font-weight: 700;
+}
+
+.status-item .status-label {
+    color: var(--text-secondary);
+    font-size: var(--font-size-xs);
+}
+
+.confidence-status {
+    background: var(--gray-100);
+}
+
+.confidence-status.high {
+    background: rgba(34, 197, 94, 0.1);
+}
+
+.confidence-status.high .status-value {
+    color: var(--color-success);
+}
+
+.confidence-status.medium {
+    background: rgba(245, 158, 11, 0.1);
+}
+
+.confidence-status.medium .status-value {
+    color: var(--color-warning);
+}
+
+.confidence-status.low {
+    background: rgba(239, 68, 68, 0.1);
+}
+
+.confidence-status.low .status-value {
+    color: var(--color-danger);
+}
+
+.alert-status {
+    background: rgba(245, 158, 11, 0.15);
+    cursor: pointer;
+    transition: background 0.15s ease;
+}
+
+.alert-status:hover {
+    background: rgba(245, 158, 11, 0.25);
+}
+
+.alert-status i {
+    color: var(--color-warning);
+}
+
+.alert-status .status-value {
+    color: var(--color-warning);
+}
+
+.alert-status .alert-chevron {
+    font-size: 10px;
+    margin-left: var(--space-xs);
+    transition: transform 0.2s ease;
+}
+
+.status-spacer {
+    flex: 1;
+}
+
+.alert-details {
+    margin-top: var(--space-sm);
+    padding-top: var(--space-sm);
+    border-top: 1px solid var(--gray-200);
+}
+
+.alert-detail-item {
+    display: flex;
+    align-items: flex-start;
+    gap: var(--space-sm);
+    padding: var(--space-xs) 0;
+    font-size: var(--font-size-sm);
+    color: var(--text-primary);
+}
+
+.alert-detail-item i {
+    color: var(--color-warning);
+    margin-top: 2px;
+    flex-shrink: 0;
+}
+
+.alert-detail-item.alert-high i {
+    color: var(--color-danger);
+}
+
 /* Layout Notice */
 .layout-notice {
     display: flex;
@@ -6531,6 +6644,12 @@ tr.doc-row.approving { animation: compress-out 0.3s ease forwards; }
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
     backface-visibility: hidden;
+}
+
+/* Wrapper to keep canvas and annotations aligned */
+.pdf-page-wrapper {
+    position: relative;
+    display: inline-block;
 }
 
 .pdf-loading {
