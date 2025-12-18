@@ -1108,6 +1108,40 @@
             });
         },
 
+        // Get field value from extractedData or document fields
+        // Handles field mapping, case-insensitive matching, and custom field syntax
+        getExtractedFieldValue: function(nsFieldId, docKey, doc, extractedData) {
+            var normalizedId = (nsFieldId || '').toLowerCase();
+
+            // First check extractedData (contains all AI-extracted fields)
+            if (extractedData) {
+                // Direct match
+                if (extractedData[nsFieldId] !== undefined) return extractedData[nsFieldId];
+                if (extractedData[normalizedId] !== undefined) return extractedData[normalizedId];
+                if (extractedData[docKey] !== undefined) return extractedData[docKey];
+
+                // Try lowercase docKey
+                var lowerDocKey = (docKey || '').toLowerCase();
+                if (extractedData[lowerDocKey] !== undefined) return extractedData[lowerDocKey];
+
+                // Handle custom field syntax [scriptid=custbody_xxx]
+                if (nsFieldId.indexOf('[scriptid=') !== -1) {
+                    var match = nsFieldId.match(/\[scriptid=([^\]]+)\]/);
+                    if (match) {
+                        var scriptId = match[1];
+                        if (extractedData[scriptId] !== undefined) return extractedData[scriptId];
+                    }
+                }
+            }
+
+            // Fall back to document's fixed fields
+            if (doc[docKey] !== undefined) return doc[docKey];
+            if (doc[normalizedId] !== undefined) return doc[normalizedId];
+            if (doc[nsFieldId] !== undefined) return doc[nsFieldId];
+
+            return '';
+        },
+
         // Render a NetSuite field directly
         renderNsField: function(nsField, doc) {
             var fieldId = 'field-' + nsField.id;
@@ -1123,8 +1157,12 @@
                 'account': 'apAccount',
                 'exchangerate': 'exchangeRate'
             };
-            var docKey = fieldMapping[nsField.id] || nsField.id;
-            var value = doc[docKey] || '';
+            var docKey = fieldMapping[nsField.id.toLowerCase()] || nsField.id;
+
+            // Get value - check extractedData first (contains all AI-extracted fields)
+            // then fall back to fixed document fields
+            var extractedData = doc.extractedData || {};
+            var value = this.getExtractedFieldValue(nsField.id, docKey, doc, extractedData);
 
             var html = '<div class="form-field">' +
                 '<label>' + escapeHtml(label) + ' ' + this.renderConfidenceBadge(docKey) +

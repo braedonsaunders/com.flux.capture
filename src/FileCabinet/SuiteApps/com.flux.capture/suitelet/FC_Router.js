@@ -384,6 +384,7 @@ define([
 
         var lineItems = JSON.parse(docRecord.getValue('custrecord_flux_line_items') || '[]');
         var anomalies = JSON.parse(docRecord.getValue('custrecord_flux_anomalies') || '[]');
+        var extractedData = JSON.parse(docRecord.getValue('custrecord_flux_extracted_data') || '{}');
         var status = docRecord.getValue('custrecord_flux_status');
 
         var document = {
@@ -415,6 +416,7 @@ define([
             paymentTerms: docRecord.getValue('custrecord_flux_payment_terms'),
             lineItems: lineItems,
             anomalies: anomalies,
+            extractedData: extractedData,
             amountValidated: docRecord.getValue('custrecord_flux_amount_validated'),
             createdTransaction: docRecord.getValue('custrecord_flux_created_transaction'),
             source: docRecord.getValue('custrecord_flux_source'),
@@ -2008,6 +2010,29 @@ define([
                     // Skip text currency codes - would need lookup to convert
                 }
 
+                // Store ALL extracted data as JSON for flexible field mapping
+                // This allows mapping to any NetSuite field configured in form layout
+                var extractedDataObj = {};
+
+                // Start with all extracted fields (includes custom fields from AI)
+                if (extraction.fields) {
+                    Object.keys(extraction.fields).forEach(function(key) {
+                        extractedDataObj[key] = extraction.fields[key];
+                    });
+                }
+
+                // Core fields (also stored in dedicated columns for reporting)
+                extractedDataObj.vendorName = extraction.vendorMatch ? extraction.vendorMatch.vendorName : '';
+                extractedDataObj.vendor = extraction.vendorMatch ? extraction.vendorMatch.vendorId : '';
+
+                // Additional metadata
+                extractedDataObj._confidence = extraction.confidence;
+                extractedDataObj._vendorMatch = extraction.vendorMatch;
+                extractedDataObj._rawText = extraction.rawText ? extraction.rawText.substring(0, 5000) : ''; // Truncate
+                extractedDataObj._extractedAt = new Date().toISOString();
+
+                updateValues['custrecord_flux_extracted_data'] = JSON.stringify(extractedDataObj);
+
                 record.submitFields({
                     type: 'customrecord_flux_document',
                     id: documentId,
@@ -2318,20 +2343,48 @@ define([
                 'currency': 'custrecord_flux_currency',
                 'poNumber': 'custrecord_flux_po_number',
                 'documentType': 'custrecord_flux_document_type',
-                'lineItems': 'custrecord_flux_line_items'
+                'lineItems': 'custrecord_flux_line_items',
+                'extractedData': 'custrecord_flux_extracted_data'
             };
+
+            // Fields that should be JSON stringified
+            var jsonFields = ['lineItems', 'extractedData'];
 
             var values = { 'custrecord_flux_modified_date': new Date() };
 
             Object.keys(updates).forEach(function(key) {
                 if (fieldMap[key]) {
                     var value = updates[key];
-                    if (key === 'lineItems' && typeof value === 'object') {
+                    if (jsonFields.indexOf(key) !== -1 && typeof value === 'object') {
                         value = JSON.stringify(value);
                     }
                     values[fieldMap[key]] = value;
                 }
             });
+
+            // Also merge any updates into extractedData if we're updating known fields
+            // This keeps extractedData in sync with fixed fields
+            if (!updates.extractedData) {
+                var extractedDataUpdates = {};
+                Object.keys(updates).forEach(function(key) {
+                    if (key !== 'lineItems' && key !== 'extractedData') {
+                        extractedDataUpdates[key] = updates[key];
+                    }
+                });
+                if (Object.keys(extractedDataUpdates).length > 0) {
+                    // Load current extractedData and merge
+                    try {
+                        var docRec = record.load({ type: 'customrecord_flux_document', id: documentId });
+                        var currentExtracted = JSON.parse(docRec.getValue('custrecord_flux_extracted_data') || '{}');
+                        Object.keys(extractedDataUpdates).forEach(function(k) {
+                            currentExtracted[k] = extractedDataUpdates[k];
+                        });
+                        values['custrecord_flux_extracted_data'] = JSON.stringify(currentExtracted);
+                    } catch (mergeErr) {
+                        log.debug('updateDocument.mergeExtracted', mergeErr.message);
+                    }
+                }
+            }
 
             record.submitFields({
                 type: 'customrecord_flux_document',
