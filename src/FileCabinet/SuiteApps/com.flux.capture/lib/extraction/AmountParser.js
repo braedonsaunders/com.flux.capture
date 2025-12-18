@@ -7,7 +7,7 @@
  * Handles regional number formats, currency detection, and negative amounts
  */
 
-define(['N/log'], function(log) {
+define(['N/log', '../FC_Debug'], function(log, fcDebug) {
     'use strict';
 
     /**
@@ -111,7 +111,7 @@ define(['N/log'], function(log) {
             }
 
             const strValue = String(value).trim();
-            log.debug('AmountParser.parse', `Input: "${strValue}"`);
+            fcDebug.debug('AmountParser.parse', `Input: "${strValue}"`);
 
             // Extract currency symbol/code
             const currencyInfo = this.extractCurrency(strValue);
@@ -142,7 +142,7 @@ define(['N/log'], function(log) {
                 format: numberFormat
             };
 
-            log.debug('AmountParser.parse', `Result: ${result.amount} ${result.currency || ''} (conf: ${result.confidence.toFixed(2)})`);
+            fcDebug.debug('AmountParser.parse', `Result: ${result.amount} ${result.currency || ''} (conf: ${result.confidence.toFixed(2)})`);
 
             return result;
         }

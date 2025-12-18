@@ -23,8 +23,9 @@ define([
     'N/format',
     'N/task',
     '/SuiteApps/com.flux.capture/lib/FC_Engine',
+    '/SuiteApps/com.flux.capture/lib/FC_Debug',
     '/SuiteApps/com.flux.capture/suitelet/FC_FormSchemaExtractor'
-], function(file, record, search, query, runtime, errorModule, log, encode, email, format, task, FC_Engine, FormSchemaExtractor) {
+], function(file, record, search, query, runtime, errorModule, log, encode, email, format, task, FC_Engine, fcDebug, FormSchemaExtractor) {
 
     const API_VERSION = '2.0.0';
 
@@ -318,7 +319,7 @@ define([
                 }
             }
 
-            log.debug('_delete', {
+            fcDebug.debug('_delete', {
                 contextType: typeof context,
                 params: JSON.stringify(params),
                 hasId: !!(params && params.id),
@@ -434,7 +435,7 @@ define([
                 document.fileSize = fileObj.size;
                 document.fileType = fileObj.fileType;
             } catch (e) {
-                log.debug('File load error', e.message);
+                fcDebug.debug('File load error', e.message);
             }
         }
 
@@ -548,9 +549,9 @@ define([
                 'WHEN ' + DocStatus.EXTRACTED + ' THEN 2 WHEN ' + DocStatus.PROCESSING + ' THEN 3 ' +
                 'WHEN ' + DocStatus.PENDING + ' THEN 4 END, custrecord_flux_created_date ASC';
 
-            log.debug('getProcessingQueue', 'SQL: ' + sql);
+            fcDebug.debug('getProcessingQueue', 'SQL: ' + sql);
             var results = query.runSuiteQL({ query: sql });
-            log.debug('getProcessingQueue', 'Results count: ' + (results.results ? results.results.length : 0));
+            fcDebug.debug('getProcessingQueue', 'Results count: ' + (results.results ? results.results.length : 0));
 
             // Manual pagination since SuiteQL doesn't support OFFSET/FETCH
             var startIndex = (page - 1) * pageSize;
@@ -693,7 +694,7 @@ define([
                             });
                         });
                     } catch (parseErr) {
-                        log.debug('Anomaly parse error', parseErr.message);
+                        fcDebug.debug('Anomaly parse error', parseErr.message);
                     }
                 });
             }
@@ -1374,7 +1375,7 @@ define([
                     } catch (e) { /* ignore */ }
 
                 } catch (e) {
-                    log.debug('getTransactionFormFields', 'Could not get sublist fields for ' + sublistId + ': ' + e.message);
+                    fcDebug.debug('getTransactionFormFields', 'Could not get sublist fields for ' + sublistId + ': ' + e.message);
                     // Use defaults
                     sublistFields = sublistConfig.defaultFields.map(function(f) {
                         return { id: f, label: f, type: 'text' };
@@ -1799,7 +1800,7 @@ define([
                 isOnline: true
             });
             fileId = fileObj.save();
-            log.debug('uploadDocument', 'File saved with ID: ' + fileId);
+            fcDebug.debug('uploadDocument', 'File saved with ID: ' + fileId);
         } catch (fileError) {
             log.error('uploadDocument.fileCreate', fileError);
             return Response.error('FILE_CREATE_FAILED', 'Failed to save file: ' + fileError.message);
@@ -1836,7 +1837,7 @@ define([
             }
 
             documentId = docRecord.save();
-            log.debug('uploadDocument', 'Document record saved with ID: ' + documentId);
+            fcDebug.debug('uploadDocument', 'Document record saved with ID: ' + documentId);
         } catch (recordError) {
             log.error('uploadDocument.recordCreate', recordError);
             // Try to clean up the file we just created
@@ -2164,7 +2165,7 @@ define([
                     });
                 }
             } catch (queryErr) {
-                log.debug('getLearningStats', 'Config query failed: ' + queryErr.message);
+                fcDebug.debug('getLearningStats', 'Config query failed: ' + queryErr.message);
             }
 
             return Response.success({
@@ -2489,7 +2490,7 @@ define([
                 try {
                     file.delete({ id: fileId });
                 } catch (e) {
-                    log.debug('File delete skipped', e.message);
+                    fcDebug.debug('File delete skipped', e.message);
                 }
             }
 

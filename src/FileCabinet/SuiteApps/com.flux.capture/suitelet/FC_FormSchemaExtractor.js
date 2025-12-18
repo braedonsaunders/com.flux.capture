@@ -18,8 +18,8 @@
  * NO HARDCODED LAYOUTS - Everything is extracted dynamically or user-configured
  */
 
-define(['N/record', 'N/search', 'N/log', 'N/query', 'N/runtime'],
-function(record, search, log, query, runtime) {
+define(['N/record', 'N/search', 'N/log', 'N/query', 'N/runtime', '/SuiteApps/com.flux.capture/lib/FC_Debug'],
+function(record, search, log, query, runtime, fcDebug) {
 
     // Schema version for migrations (bump to invalidate old configs)
     var SCHEMA_VERSION = 6;
@@ -128,7 +128,7 @@ function(record, search, log, query, runtime) {
             var results = query.runSuiteQL({ query: sql, params: params }).asMappedResults();
             return results.length > 0 ? results[0].id : null;
         } catch (e) {
-            log.debug('findConfigRecord', 'Not found: ' + e.message);
+            fcDebug.debug('findConfigRecord', 'Not found: ' + e.message);
             return null;
         }
     }
@@ -158,7 +158,7 @@ function(record, search, log, query, runtime) {
 
             return data;
         } catch (e) {
-            log.debug('loadConfigData', 'Error loading ' + configType + '/' + recordType + ': ' + e.message);
+            fcDebug.debug('loadConfigData', 'Error loading ' + configType + '/' + recordType + ': ' + e.message);
             return null;
         }
     }
@@ -349,7 +349,7 @@ function(record, search, log, query, runtime) {
                 }
             }
         } catch (e) {
-            log.debug('extractFieldMetadata', 'Error for ' + fieldId + ': ' + e.message);
+            fcDebug.debug('extractFieldMetadata', 'Error for ' + fieldId + ': ' + e.message);
         }
 
         return fieldInfo;
@@ -399,7 +399,7 @@ function(record, search, log, query, runtime) {
                 }
             }
         } catch (e) {
-            log.debug('extractSublistFieldMetadata', 'Error for ' + sublistId + '.' + fieldId + ': ' + e.message);
+            fcDebug.debug('extractSublistFieldMetadata', 'Error for ' + sublistId + '.' + fieldId + ': ' + e.message);
         } finally {
             try {
                 tempRecord.cancelLine({ sublistId: sublistId });
@@ -441,7 +441,7 @@ function(record, search, log, query, runtime) {
         // Check for user-customized config first (highest priority)
         var userConfig = getUserFormConfig(normalizedType, formId);
         if (userConfig && !forceRefresh) {
-            log.debug('extractFormSchema', 'Using user config for ' + normalizedType);
+            fcDebug.debug('extractFormSchema', 'Using user config for ' + normalizedType);
             // Merge with cached layout if available
             var layout = getCachedLayout(normalizedType, formId);
             if (layout) {
@@ -462,7 +462,7 @@ function(record, search, log, query, runtime) {
             }
         }
 
-        log.debug('extractFormSchema', 'Extracting fresh schema for ' + normalizedType);
+        fcDebug.debug('extractFormSchema', 'Extracting fresh schema for ' + normalizedType);
 
         try {
             // Create temp record
@@ -484,7 +484,7 @@ function(record, search, log, query, runtime) {
             var bodyFields = [];
             var displayOrder = 0;
 
-            log.debug('extractFormSchema', 'Found ' + bodyFieldIds.length + ' body field IDs');
+            fcDebug.debug('extractFormSchema', 'Found ' + bodyFieldIds.length + ' body field IDs');
 
             bodyFieldIds.forEach(function(fieldId) {
                 if (SKIP_FIELDS.indexOf(fieldId) !== -1) return;
@@ -520,9 +520,9 @@ function(record, search, log, query, runtime) {
                         fieldCount: sublistFields.length
                     });
 
-                    log.debug('extractFormSchema', 'Sublist ' + sublistId + ': ' + sublistFields.length + ' fields');
+                    fcDebug.debug('extractFormSchema', 'Sublist ' + sublistId + ': ' + sublistFields.length + ' fields');
                 } catch (e) {
-                    log.debug('extractFormSchema', 'Could not extract sublist ' + sublistId + ': ' + e.message);
+                    fcDebug.debug('extractFormSchema', 'Could not extract sublist ' + sublistId + ': ' + e.message);
                 }
             });
 
@@ -544,7 +544,7 @@ function(record, search, log, query, runtime) {
                 }
             };
 
-            log.debug('extractFormSchema', 'Extracted ' + bodyFields.length + ' body fields, ' + sublists.length + ' sublists');
+            fcDebug.debug('extractFormSchema', 'Extracted ' + bodyFields.length + ' body fields, ' + sublists.length + ' sublists');
 
             // Save to config record
             saveSchemaToConfig(normalizedType, actualFormId, schema);
@@ -698,7 +698,7 @@ function(record, search, log, query, runtime) {
                     record.delete({ type: CONFIG_RECORD_TYPE, id: row.id });
                     deleted++;
                 } catch (e) {
-                    log.debug('clearConfigsByType', 'Could not delete ' + row.id + ': ' + e.message);
+                    fcDebug.debug('clearConfigsByType', 'Could not delete ' + row.id + ': ' + e.message);
                 }
             });
 

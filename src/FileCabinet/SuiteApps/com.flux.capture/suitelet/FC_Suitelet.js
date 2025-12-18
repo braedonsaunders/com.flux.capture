@@ -6,7 +6,7 @@
  * Flux Capture - Main Suitelet
  * Uses iframe to preserve NetSuite menu while serving app
  */
-define(['N/file', 'N/runtime', 'N/url', 'N/ui/serverWidget', 'N/search'], function(file, runtime, url, serverWidget, search) {
+define(['N/file', 'N/runtime', 'N/url', 'N/ui/serverWidget', 'N/search', '/SuiteApps/com.flux.capture/lib/FC_Debug'], function(file, runtime, url, serverWidget, search, fcDebug) {
 
     'use strict';
 
@@ -19,6 +19,7 @@ define(['N/file', 'N/runtime', 'N/url', 'N/ui/serverWidget', 'N/search'], functi
         'html_app': 'App/app_index.html',
         'css_base': 'App/css/base.css',
         'css_components': 'App/css/components.css',
+        'js_debug': 'client/core/FC.Debug.js',
         'js_core': 'client/core/FC.Core.js',
         'js_main': 'client/FC.Main.js',
         'js_view_dashboard': 'client/views/View.Dashboard.js',
@@ -291,6 +292,7 @@ define(['N/file', 'N/runtime', 'N/url', 'N/ui/serverWidget', 'N/search'], functi
         // 4. Replace all placeholders
         htmlContent = htmlContent.replace(/\{\{CSS_BASE_URL\}\}/g, fileUrls['css_base'] || '');
         htmlContent = htmlContent.replace(/\{\{CSS_COMPONENTS_URL\}\}/g, fileUrls['css_components'] || '');
+        htmlContent = htmlContent.replace(/\{\{JS_DEBUG_URL\}\}/g, fileUrls['js_debug'] || '');
         htmlContent = htmlContent.replace(/\{\{JS_CORE_URL\}\}/g, fileUrls['js_core'] || '');
         htmlContent = htmlContent.replace(/\{\{JS_MAIN_URL\}\}/g, fileUrls['js_main'] || '');
         htmlContent = htmlContent.replace(/\{\{JS_VIEW_DASHBOARD_URL\}\}/g, fileUrls['js_view_dashboard'] || '');
@@ -304,10 +306,12 @@ define(['N/file', 'N/runtime', 'N/url', 'N/ui/serverWidget', 'N/search'], functi
 
         // 5. Inject runtime configuration
         var currentUser = runtime.getCurrentUser();
+        var isDebugMode = fcDebug.isDebugMode();
         var configScript = '<script>\n' +
             'window.FC_CONFIG = {\n' +
             '    apiUrl: "' + routerUrl + '",\n' +
             '    accountId: "' + runtime.accountId + '",\n' +
+            '    isDebugMode: ' + isDebugMode + ',\n' +
             '    user: {\n' +
             '        id: ' + currentUser.id + ',\n' +
             '        name: "' + escapeJs(currentUser.name) + '",\n' +
@@ -320,7 +324,7 @@ define(['N/file', 'N/runtime', 'N/url', 'N/ui/serverWidget', 'N/search'], functi
         htmlContent = htmlContent.replace('</head>', configScript + '</head>');
 
         // 6. Log file resolution status for debugging
-        log.debug('File URLs Resolved', JSON.stringify(fileUrls));
+        fcDebug.debug('File URLs Resolved', JSON.stringify(fileUrls));
 
         // 7. Set content type and serve raw HTML
         context.response.setHeader({
@@ -344,7 +348,7 @@ define(['N/file', 'N/runtime', 'N/url', 'N/ui/serverWidget', 'N/search'], functi
             try {
                 var fileObj = file.load({ id: fullPath });
                 fileUrls[key] = fileObj.url;
-                log.debug('File Loaded', key + ' -> ' + fileObj.url);
+                fcDebug.debug('File Loaded', key + ' -> ' + fileObj.url);
             } catch (e) {
                 log.error('File Load Failed', key + ' -> ' + fullPath + ' : ' + e.message);
 
@@ -359,7 +363,7 @@ define(['N/file', 'N/runtime', 'N/url', 'N/ui/serverWidget', 'N/search'], functi
                     var results = fileSearch.run().getRange({ start: 0, end: 1 });
                     if (results && results.length > 0) {
                         fileUrls[key] = results[0].getValue('url');
-                        log.debug('File Found via Search', key + ' -> ' + fileUrls[key]);
+                        fcDebug.debug('File Found via Search', key + ' -> ' + fileUrls[key]);
                     } else {
                         log.error('File Search Failed', 'No results for: ' + fileName);
                         fileUrls[key] = null;

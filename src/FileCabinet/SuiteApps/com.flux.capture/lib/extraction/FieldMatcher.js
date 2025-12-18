@@ -7,7 +7,7 @@
  * Replaces naive substring matching with intelligent pattern-based matching
  */
 
-define(['N/log'], function(log) {
+define(['N/log', '../FC_Debug'], function(log, fcDebug) {
     'use strict';
 
     /**
@@ -220,7 +220,7 @@ define(['N/log'], function(log) {
             // Return highest scoring candidate
             candidates.sort((a, b) => b.score - a.score);
 
-            log.debug('FieldMatcher.match', `"${label}" -> ${candidates[0].field} (score: ${candidates[0].score.toFixed(3)})`);
+            fcDebug.debug('FieldMatcher.match', `"${label}" -> ${candidates[0].field} (score: ${candidates[0].score.toFixed(3)})`);
 
             return candidates[0];
         }
@@ -250,7 +250,7 @@ define(['N/log'], function(log) {
 
             scored.sort((a, b) => b.combinedScore - a.combinedScore);
 
-            log.debug('FieldMatcher.resolveMultiple',
+            fcDebug.debug('FieldMatcher.resolveMultiple',
                 `${fieldName}: ${scored.length} candidates, best: "${scored[0].label}" (${scored[0].combinedScore.toFixed(3)})`);
 
             return scored[0];

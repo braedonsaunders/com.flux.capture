@@ -7,7 +7,7 @@
  * Uses multiple signals (name, tax ID, email, address, aliases) for accurate vendor matching
  */
 
-define(['N/log', 'N/query', 'N/search'], function(log, query, search) {
+define(['N/log', 'N/query', 'N/search', '../FC_Debug'], function(log, query, search, fcDebug) {
     'use strict';
 
     /**
@@ -108,7 +108,7 @@ define(['N/log', 'N/query', 'N/search'], function(log, query, search) {
                 allKeys: Object.keys(extractedData)
             }));
 
-            log.debug('VendorMatcher.match', {
+            fcDebug.debug('VendorMatcher.match', {
                 vendorName: extractedData.vendorName,
                 taxId: extractedData.taxId,
                 email: extractedData.email
@@ -131,7 +131,7 @@ define(['N/log', 'N/query', 'N/search'], function(log, query, search) {
                         value: extractedData.taxId,
                         score: 0.98
                     });
-                    log.debug('VendorMatcher', `Tax ID match: ${taxMatch.companyName}`);
+                    fcDebug.debug('VendorMatcher', `Tax ID match: ${taxMatch.companyName}`);
                     return result;
                 }
             } else {
@@ -155,7 +155,7 @@ define(['N/log', 'N/query', 'N/search'], function(log, query, search) {
                         value: extractedData.vendorName,
                         score: aliasMatch.confidence
                     });
-                    log.debug('VendorMatcher', `Alias match: ${aliasMatch.vendorName}`);
+                    fcDebug.debug('VendorMatcher', `Alias match: ${aliasMatch.vendorName}`);
                     return result;
                 }
             }
@@ -221,7 +221,7 @@ define(['N/log', 'N/query', 'N/search'], function(log, query, search) {
                 suggestionCount: result.suggestions.length
             }));
 
-            log.debug('VendorMatcher.match', {
+            fcDebug.debug('VendorMatcher.match', {
                 bestMatch: bestMatch.companyName,
                 score: bestMatch.totalScore.toFixed(3),
                 candidateCount: scoredCandidates.length
@@ -268,7 +268,7 @@ define(['N/log', 'N/query', 'N/search'], function(log, query, search) {
                     };
                 }
             } catch (e) {
-                log.debug('VendorMatcher.matchByTaxId', e.message);
+                fcDebug.debug('VendorMatcher.matchByTaxId', e.message);
             }
 
             return null;
@@ -412,7 +412,7 @@ define(['N/log', 'N/query', 'N/search'], function(log, query, search) {
                     phone: r.values[4]
                 }));
             } catch (e) {
-                log.debug('VendorMatcher.searchByEmailDomain', e.message);
+                fcDebug.debug('VendorMatcher.searchByEmailDomain', e.message);
                 return [];
             }
         }
