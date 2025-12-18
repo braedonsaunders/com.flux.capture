@@ -2945,14 +2945,22 @@ define([
                 return Response.error('MODULE_NOT_AVAILABLE', 'Provider configuration module not available');
             }
 
+            // Load existing config to preserve settings when switching providers
+            var existingConfig = null;
+            if (EngineModule.getProviderConfigForUI) {
+                existingConfig = EngineModule.getProviderConfigForUI();
+            }
+
             // Build config from context
             var config = {
                 providerType: context.providerType || 'oci'
             };
 
-            // Include OCI config if present
+            // Include OCI config if present (or preserve existing)
             if (context.oci) {
                 config.oci = context.oci;
+            } else if (existingConfig && existingConfig.oci) {
+                config.oci = existingConfig.oci;
             }
 
             // Include Azure config if present
@@ -2964,6 +2972,18 @@ define([
                 // Only include API key if a new one was provided
                 if (context.azure.apiKey) {
                     config.azure.apiKey = context.azure.apiKey;
+                }
+                // Preserve existing encrypted API key flag
+                config.azure._preserveExistingApiKey = !context.azure.apiKey;
+            } else if (existingConfig && existingConfig.azure) {
+                // Preserve existing Azure config when switching to OCI
+                config.azure = {
+                    endpoint: existingConfig.azure.endpoint || '',
+                    defaultModel: existingConfig.azure.defaultModel || 'prebuilt-invoice',
+                    _preserveExistingApiKey: true
+                };
+                if (existingConfig.azure._hasApiKey) {
+                    config.azure._hasApiKey = true;
                 }
             }
 
@@ -2990,14 +3010,27 @@ define([
                 return Response.error('MODULE_NOT_AVAILABLE', 'Provider module not available');
             }
 
-            // Build test config
+            // Load existing saved config to merge with test config
+            var savedConfig = null;
+            if (EngineModule.getProviderConfigForUI) {
+                savedConfig = EngineModule.getProviderConfigForUI();
+            }
+
+            // Build test config, using saved values for missing fields
             var testConfig = {};
             if (config) {
                 testConfig = {
-                    endpoint: config.endpoint || '',
-                    apiKey: config.apiKey || null,
-                    defaultModel: config.defaultModel || 'prebuilt-invoice'
+                    endpoint: config.endpoint || (savedConfig && savedConfig.azure ? savedConfig.azure.endpoint : '') || '',
+                    defaultModel: config.defaultModel || (savedConfig && savedConfig.azure ? savedConfig.azure.defaultModel : 'prebuilt-invoice')
                 };
+
+                // If apiKey is provided, use it; otherwise use saved encrypted key
+                if (config.apiKey) {
+                    testConfig.apiKey = config.apiKey;
+                } else if (savedConfig && savedConfig.azure && savedConfig.azure._hasApiKey) {
+                    // Signal to use the saved encrypted key
+                    testConfig._useSavedApiKey = true;
+                }
             }
 
             var result = EngineModule.testProviderConnection(providerType, testConfig);

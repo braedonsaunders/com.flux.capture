@@ -1963,6 +1963,7 @@
         },
 
         selectProvider: function(provider) {
+            var self = this;
             this.currentProvider = provider;
 
             // Update UI
@@ -1987,6 +1988,25 @@
                         azurePanel.style.opacity = '1';
                         azurePanel.style.transform = 'translateY(0)';
                     });
+
+                    // Populate Azure fields from saved config if available
+                    if (self.providerConfig && self.providerConfig.azure) {
+                        var config = self.providerConfig.azure;
+                        var endpointInput = el('#azure-endpoint');
+                        var apiKeyInput = el('#azure-api-key');
+                        var modelSelect = el('#azure-model');
+
+                        if (endpointInput && config.endpoint) {
+                            endpointInput.value = config.endpoint;
+                        }
+                        if (apiKeyInput && config._hasApiKey) {
+                            apiKeyInput.placeholder = 'API key configured (enter new to replace)';
+                        }
+                        if (modelSelect && config.defaultModel) {
+                            modelSelect.value = config.defaultModel;
+                        }
+                        self.updateAzureStatus(config);
+                    }
                 }
             } else {
                 if (ociRadio) ociRadio.checked = true;
