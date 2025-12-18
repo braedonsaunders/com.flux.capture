@@ -601,6 +601,34 @@
             };
         },
 
+        // Detect checkbox fields using checkBoxDefault element or naming heuristics
+        // NetSuite's form XML doesn't include field type metadata for native fields
+        isCheckboxField: function(fieldId, checkBoxDefault) {
+            // Explicit checkbox indicator from XML
+            if (checkBoxDefault) return true;
+
+            // Normalize field ID (strip scriptid brackets, lowercase)
+            var cleanId = (fieldId || '').replace(/^\[.*?scriptid=([^\]]+)\]$/, '$1')
+                                         .replace(/^\[.*?\]$/, '')
+                                         .toLowerCase();
+
+            // Common checkbox field patterns (exact matches)
+            var checkboxPatterns = [
+                'paymenthold', 'tobepaid', 'tobeemailed', 'tobeprinted', 'tobefaxed',
+                'taxable', 'billable', 'closed', 'complete', 'approved', 'isbasecurrency',
+                'landedcostperline', 'excludefromglnumbering', 'ismultishipto'
+            ];
+            if (checkboxPatterns.indexOf(cleanId) !== -1) return true;
+
+            // Heuristic: fields starting with 'is', 'has', or 'tobe' are typically booleans
+            if (/^(is|has|tobe|include|exclude)/.test(cleanId)) return true;
+
+            // Heuristic: fields ending with common boolean suffixes
+            if (/(_flag|_yn|_bool|_checkbox)$/.test(cleanId)) return true;
+
+            return false;
+        },
+
         parseXmlFields: function(container) {
             var self = this;
             var fields = [];
@@ -612,9 +640,9 @@
 
                 if (!id) return;
 
-                // Detect checkbox type from checkBoxDefault element
+                // Detect checkbox type from checkBoxDefault element or known native fields
                 var checkBoxDefault = self.getXmlText(f, 'checkBoxDefault');
-                var fieldType = checkBoxDefault ? 'checkbox' : 'text';
+                var fieldType = self.isCheckboxField(id, checkBoxDefault) ? 'checkbox' : 'text';
 
                 var fieldObj = {
                     id: id,
@@ -712,9 +740,9 @@
             element.querySelectorAll('columns > column').forEach(function(col) {
                 var colId = self.getXmlText(col, 'id') || col.getAttribute('scriptid');
                 if (colId) {
-                    // Detect checkbox type from checkBoxDefault element
+                    // Detect checkbox type from checkBoxDefault element or known native fields
                     var checkBoxDefault = self.getXmlText(col, 'checkBoxDefault');
-                    var colType = checkBoxDefault ? 'checkbox' : 'text';
+                    var colType = self.isCheckboxField(colId, checkBoxDefault) ? 'checkbox' : 'text';
 
                     var colObj = {
                         id: colId,
