@@ -6207,3 +6207,222 @@ tr.doc-row.approving { animation: compress-out 0.3s ease forwards; }
 .editor-node.is-hidden .node-actions {
     opacity: 1;
 }
+
+/* ====================================
+   EXTRACTION PROVIDER SETTINGS
+   ==================================== */
+
+.provider-selector {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-md);
+    margin-bottom: var(--space-lg);
+}
+
+.provider-option {
+    display: flex;
+    gap: var(--space-md);
+    padding: var(--space-md);
+    border: 2px solid var(--border-color);
+    border-radius: var(--radius-lg);
+    cursor: pointer;
+    transition: all var(--transition);
+    background: var(--surface-card);
+}
+
+.provider-option:hover {
+    border-color: var(--gray-300);
+    background: var(--gray-50);
+}
+
+.provider-option.selected {
+    border-color: var(--color-primary);
+    background: var(--color-primary-bg);
+}
+
+.provider-radio {
+    padding-top: 2px;
+}
+
+.provider-radio input[type="radio"] {
+    width: 20px;
+    height: 20px;
+    accent-color: var(--color-primary);
+    cursor: pointer;
+}
+
+.provider-info {
+    flex: 1;
+}
+
+.provider-header {
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
+    margin-bottom: var(--space-xs);
+}
+
+.provider-name {
+    font-weight: 600;
+    font-size: var(--font-size-base);
+    color: var(--text-primary);
+}
+
+.provider-badge {
+    font-size: var(--font-size-xs);
+    padding: 2px 8px;
+    border-radius: var(--radius-full);
+    font-weight: 500;
+}
+
+.badge-default {
+    background: var(--gray-100);
+    color: var(--text-secondary);
+}
+
+.badge-pro {
+    background: linear-gradient(135deg, #6366f1, #8b5cf6);
+    color: white;
+}
+
+.provider-desc {
+    font-size: var(--font-size-sm);
+    color: var(--text-secondary);
+    margin-bottom: var(--space-sm);
+    line-height: 1.5;
+}
+
+.provider-status {
+    display: flex;
+    align-items: center;
+    gap: var(--space-xs);
+    font-size: var(--font-size-sm);
+    color: var(--text-secondary);
+}
+
+.provider-status i {
+    font-size: 14px;
+}
+
+/* Provider Configuration Panel */
+.provider-config-panel {
+    background: var(--gray-50);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-lg);
+    padding: var(--space-lg);
+    margin-bottom: var(--space-lg);
+}
+
+.provider-config-panel h4 {
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
+    margin: 0 0 var(--space-lg) 0;
+    color: var(--text-primary);
+    font-size: var(--font-size-base);
+}
+
+.provider-config-panel h4 i {
+    color: var(--color-primary);
+}
+
+.provider-config-form {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-md);
+}
+
+.provider-config-form .form-field {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-xs);
+}
+
+.provider-config-form label {
+    font-weight: 500;
+    font-size: var(--font-size-sm);
+    color: var(--text-primary);
+}
+
+.provider-config-form label .required {
+    color: var(--color-danger);
+}
+
+.provider-config-form input[type="url"],
+.provider-config-form input[type="password"],
+.provider-config-form input[type="text"],
+.provider-config-form select {
+    padding: var(--space-sm) var(--space-md);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-md);
+    font-size: var(--font-size-base);
+    background: var(--surface-card);
+    transition: all var(--transition);
+}
+
+.provider-config-form input:focus,
+.provider-config-form select:focus {
+    outline: none;
+    border-color: var(--color-primary);
+    box-shadow: 0 0 0 3px var(--color-primary-bg);
+}
+
+.provider-config-form small {
+    font-size: var(--font-size-xs);
+    color: var(--text-tertiary);
+}
+
+.input-with-icon {
+    position: relative;
+    display: flex;
+}
+
+.input-with-icon input {
+    flex: 1;
+    padding-right: 44px !important;
+}
+
+.input-with-icon .btn-toggle-password {
+    position: absolute;
+    right: 4px;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 36px;
+    height: 36px;
+    border: none;
+    background: transparent;
+    color: var(--text-tertiary);
+    cursor: pointer;
+    border-radius: var(--radius-sm);
+    transition: all var(--transition);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.input-with-icon .btn-toggle-password:hover {
+    background: var(--gray-100);
+    color: var(--text-primary);
+}
+
+.provider-config-actions {
+    display: flex;
+    align-items: center;
+    gap: var(--space-md);
+    padding-top: var(--space-md);
+    border-top: 1px solid var(--border-color);
+}
+
+.test-result {
+    display: flex;
+    align-items: center;
+    gap: var(--space-xs);
+    font-size: var(--font-size-sm);
+}
+
+.provider-save-row {
+    display: flex;
+    justify-content: flex-end;
+    padding-top: var(--space-md);
+    border-top: 1px solid var(--border-color);
+}
