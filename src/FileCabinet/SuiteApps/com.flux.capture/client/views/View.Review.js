@@ -663,7 +663,8 @@
             var bodyFields = formFields.bodyFields || [];
             var sublists = formFields.sublists || [];
             var layout = formFields.layout || {};
-            var tabs = layout.tabs || [];
+            // Tabs can be at formFields.tabs (user config from XML) or layout.tabs (cached layout)
+            var tabs = formFields.tabs || layout.tabs || [];
             var config = formFields.config || {};
             var layoutSublists = layout.sublists || [];
 
@@ -736,14 +737,14 @@
             '</div>';
 
             // ========== RENDER FORM CONTENT ==========
-            // If we have a cached layout (from DOM extraction), use tabs/groups
+            // If we have tabs (from user config/XML or cached layout), use tabs/groups
             // Otherwise, render all fields in a flat list
 
-            var hasLayout = layout && layout.tabs && layout.tabs.length > 0;
+            var hasLayout = tabs && tabs.length > 0;
 
             if (hasLayout) {
-                // ========== RENDER WITH LAYOUT (tabs/groups from DOM extraction) ==========
-                var visibleTabs = layout.tabs.filter(function(tab) {
+                // ========== RENDER WITH LAYOUT (tabs/groups from user config or DOM extraction) ==========
+                var visibleTabs = tabs.filter(function(tab) {
                     var hasGroups = tab.fieldGroups && tab.fieldGroups.some(function(g) {
                         return g.fields && g.fields.some(function(fieldRef) {
                             // Handle both field ID strings and field objects
