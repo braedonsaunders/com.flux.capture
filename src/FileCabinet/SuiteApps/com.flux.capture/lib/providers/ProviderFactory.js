@@ -246,6 +246,7 @@ define([
                 } else {
                     // Create new
                     const configRecord = record.create({ type: CONFIG_RECORD_TYPE });
+                    configRecord.setValue({ fieldId: 'name', value: 'Extraction Provider Settings' });
                     configRecord.setValue({ fieldId: CONFIG_FIELDS.type, value: PROVIDER_CONFIG_TYPE });
                     configRecord.setValue({ fieldId: CONFIG_FIELDS.key, value: PROVIDER_CONFIG_KEY });
                     configRecord.setValue({ fieldId: CONFIG_FIELDS.data, value: JSON.stringify(configToSave) });
