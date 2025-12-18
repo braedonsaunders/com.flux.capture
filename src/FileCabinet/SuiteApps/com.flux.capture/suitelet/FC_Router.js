@@ -23,8 +23,9 @@ define([
     'N/format',
     'N/task',
     '/SuiteApps/com.flux.capture/lib/FC_Engine',
+    '/SuiteApps/com.flux.capture/lib/FC_Debug',
     '/SuiteApps/com.flux.capture/suitelet/FC_FormSchemaExtractor'
-], function(file, record, search, query, runtime, errorModule, log, encode, email, format, task, FC_Engine, FormSchemaExtractor) {
+], function(file, record, search, query, runtime, errorModule, log, encode, email, format, task, FC_Engine, fcDebug, FormSchemaExtractor) {
 
     const API_VERSION = '2.0.0';
 
@@ -318,7 +319,7 @@ define([
                 }
             }
 
-            log.debug('_delete', {
+            fcDebug.debug('_delete', {
                 contextType: typeof context,
                 params: JSON.stringify(params),
                 hasId: !!(params && params.id),
@@ -400,7 +401,7 @@ define([
             uploadedByName: docRecord.getText('custrecord_flux_uploaded_by'),
             createdDate: docRecord.getValue('custrecord_flux_created_date'),
             modifiedDate: docRecord.getValue('custrecord_flux_modified_date'),
-            confidence: docRecord.getValue('custrecord_flux_confidence_score'),
+            confidence: Math.round((docRecord.getValue('custrecord_flux_confidence_score') || 0) * 100),
             vendor: docRecord.getValue('custrecord_flux_vendor'),
             vendorName: docRecord.getText('custrecord_flux_vendor'),
             vendorMatchConfidence: docRecord.getValue('custrecord_flux_vendor_match_confidence'),
@@ -437,7 +438,7 @@ define([
                 document.fileSize = fileObj.size;
                 document.fileType = fileObj.fileType;
             } catch (e) {
-                log.debug('File load error', e.message);
+                fcDebug.debug('File load error', e.message);
             }
         }
 
@@ -452,6 +453,7 @@ define([
         var dateFrom = context.dateFrom;
         var dateTo = context.dateTo;
         var vendorId = context.vendorId;
+        var ids = context.ids;
         var sortBy = context.sortBy || 'created';
         var sortDir = context.sortDir === 'asc' ? 'ASC' : 'DESC';
 
@@ -464,6 +466,16 @@ define([
             'FROM customrecord_flux_document WHERE 1=1';
 
         var params = [];
+
+        // Handle filtering by specific IDs (used by upload rail to check processing status)
+        if (ids) {
+            var idList = ids.split(',').map(function(id) { return id.trim(); }).filter(function(id) { return id; });
+            if (idList.length > 0) {
+                var placeholders = idList.map(function() { return '?'; }).join(',');
+                sql += ' AND id IN (' + placeholders + ')';
+                idList.forEach(function(id) { params.push(id); });
+            }
+        }
 
         if (status) {
             sql += ' AND custrecord_flux_status = ?';
@@ -511,12 +523,15 @@ define([
         var documents = paginatedResults.map(function(row) {
             var v = row.values;
             var docAnomalies = v[9] ? JSON.parse(v[9]) : [];
+            // PERCENT fields return decimals (0.85 for 85%), convert to integer percentage
+            var confidenceRaw = v[4];
+            var confidence = confidenceRaw != null ? Math.round(confidenceRaw * 100) : 0;
             return {
                 id: v[0],
                 name: v[1],
                 status: v[2],
                 documentType: v[3],
-                confidence: v[4],
+                confidence: confidence,
                 vendorId: v[5],
                 vendorName: v[6],
                 invoiceNumber: v[7],
@@ -551,9 +566,9 @@ define([
                 'WHEN ' + DocStatus.EXTRACTED + ' THEN 2 WHEN ' + DocStatus.PROCESSING + ' THEN 3 ' +
                 'WHEN ' + DocStatus.PENDING + ' THEN 4 END, custrecord_flux_created_date ASC';
 
-            log.debug('getProcessingQueue', 'SQL: ' + sql);
+            fcDebug.debug('getProcessingQueue', 'SQL: ' + sql);
             var results = query.runSuiteQL({ query: sql });
-            log.debug('getProcessingQueue', 'Results count: ' + (results.results ? results.results.length : 0));
+            fcDebug.debug('getProcessingQueue', 'Results count: ' + (results.results ? results.results.length : 0));
 
             // Manual pagination since SuiteQL doesn't support OFFSET/FETCH
             var startIndex = (page - 1) * pageSize;
@@ -563,12 +578,15 @@ define([
             var queue = paginatedResults.map(function(row) {
                 var v = row.values;
                 var docAnomalies = v[9] ? JSON.parse(v[9]) : [];
+                // PERCENT fields return decimals (0.85 for 85%), convert to integer percentage
+                var confidenceRaw = v[4];
+                var confidence = confidenceRaw != null ? Math.round(confidenceRaw * 100) : 0;
                 return {
                     id: v[0],
                     name: v[1] || ('Document ' + v[0]),
                     status: v[2],
                     documentType: v[3],
-                    confidence: v[4],
+                    confidence: confidence,
                     vendorName: v[5],
                     invoiceNumber: v[6],
                     totalAmount: v[7],
@@ -608,7 +626,7 @@ define([
         try {
             var statsSql = 'SELECT COUNT(*) as total, ' +
                 'SUM(CASE WHEN custrecord_flux_status = ' + DocStatus.COMPLETED + ' THEN 1 ELSE 0 END) as completed, ' +
-                'SUM(CASE WHEN custrecord_flux_status = ' + DocStatus.COMPLETED + ' AND custrecord_flux_confidence_score >= 85 THEN 1 ELSE 0 END) as autoProcessed, ' +
+                'SUM(CASE WHEN custrecord_flux_status = ' + DocStatus.COMPLETED + ' AND custrecord_flux_confidence_score >= 0.85 THEN 1 ELSE 0 END) as autoProcessed, ' +
                 'SUM(CASE WHEN custrecord_flux_status IN (' + DocStatus.PENDING + ', ' + DocStatus.PROCESSING + ', ' + DocStatus.EXTRACTED + ', ' + DocStatus.NEEDS_REVIEW + ') THEN 1 ELSE 0 END) as pending, ' +
                 'SUM(CASE WHEN custrecord_flux_status = ' + DocStatus.REJECTED + ' THEN 1 ELSE 0 END) as rejected, ' +
                 'SUM(CASE WHEN custrecord_flux_status = ' + DocStatus.ERROR + ' THEN 1 ELSE 0 END) as errors, ' +
@@ -647,7 +665,7 @@ define([
                     pendingReview: stats[3] || 0,
                     rejected: stats[4] || 0,
                     errors: stats[5] || 0,
-                    avgConfidence: Math.round(stats[6] || 0),
+                    avgConfidence: Math.round((stats[6] || 0) * 100),
                     totalValue: stats[7] || 0
                 },
                 typeBreakdown: typeBreakdown,
@@ -692,11 +710,11 @@ define([
                                 severity: anomaly.severity,
                                 message: anomaly.message,
                                 createdDate: row.values[4],
-                                confidence: row.values[5]
+                                confidence: row.values[5] != null ? Math.round(row.values[5] * 100) : 0
                             });
                         });
                     } catch (parseErr) {
-                        log.debug('Anomaly parse error', parseErr.message);
+                        fcDebug.debug('Anomaly parse error', parseErr.message);
                     }
                 });
             }
@@ -1530,7 +1548,7 @@ define([
                     } catch (e) { /* ignore */ }
 
                 } catch (e) {
-                    log.debug('getTransactionFormFields', 'Could not get sublist fields for ' + sublistId + ': ' + e.message);
+                    fcDebug.debug('getTransactionFormFields', 'Could not get sublist fields for ' + sublistId + ': ' + e.message);
                     // Use defaults
                     sublistFields = sublistConfig.defaultFields.map(function(f) {
                         return { id: f, label: f, type: 'text' };
@@ -1899,7 +1917,7 @@ define([
                 date: row.values[0],
                 total: row.values[1],
                 completed: row.values[2],
-                avgConfidence: Math.round(row.values[3] || 0)
+                avgConfidence: Math.round((row.values[3] || 0) * 100)
             };
         });
 
@@ -1959,7 +1977,7 @@ define([
                 isOnline: true
             });
             fileId = fileObj.save();
-            log.debug('uploadDocument', 'File saved with ID: ' + fileId);
+            fcDebug.debug('uploadDocument', 'File saved with ID: ' + fileId);
         } catch (fileError) {
             log.error('uploadDocument.fileCreate', fileError);
             return Response.error('FILE_CREATE_FAILED', 'Failed to save file: ' + fileError.message);
@@ -1996,7 +2014,7 @@ define([
             }
 
             documentId = docRecord.save();
-            log.debug('uploadDocument', 'Document record saved with ID: ' + documentId);
+            fcDebug.debug('uploadDocument', 'Document record saved with ID: ' + documentId);
         } catch (recordError) {
             log.error('uploadDocument.recordCreate', recordError);
             // Try to clean up the file we just created
@@ -2359,7 +2377,7 @@ define([
                     });
                 }
             } catch (queryErr) {
-                log.debug('getLearningStats', 'Config query failed: ' + queryErr.message);
+                fcDebug.debug('getLearningStats', 'Config query failed: ' + queryErr.message);
             }
 
             return Response.success({
@@ -2712,7 +2730,7 @@ define([
                 try {
                     file.delete({ id: fileId });
                 } catch (e) {
-                    log.debug('File delete skipped', e.message);
+                    fcDebug.debug('File delete skipped', e.message);
                 }
             }
 

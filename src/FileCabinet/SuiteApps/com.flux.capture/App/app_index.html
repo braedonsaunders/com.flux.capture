@@ -1174,13 +1174,13 @@
 
             <!-- Keyboard HUD (hidden until hover near bottom) -->
             <div class="keyboard-hover-zone"></div>
-            <div class="review-keyboard-hud" id="review-keyboard-hud">
-                <div class="kbd-group"><kbd>A</kbd> Approve</div>
-                <div class="kbd-group"><kbd>R</kbd> Reject</div>
-                <div class="kbd-group"><kbd>S</kbd> Skip</div>
-                <div class="kbd-group"><kbd>←</kbd><kbd>→</kbd> Nav</div>
-                <div class="kbd-group"><kbd>Esc</kbd> Back</div>
-                <div class="kbd-group"><kbd>?</kbd> Help</div>
+            <div class="keyboard-hud review-keyboard-hud" id="review-keyboard-hud">
+                <div class="hud-item"><kbd>A</kbd><span>Approve</span></div>
+                <div class="hud-item"><kbd>R</kbd><span>Reject</span></div>
+                <div class="hud-item"><kbd>S</kbd><span>Skip</span></div>
+                <div class="hud-item"><kbd>←</kbd><kbd>→</kbd><span>Nav</span></div>
+                <div class="hud-item"><kbd>Esc</kbd><span>Back</span></div>
+                <div class="hud-item"><kbd>?</kbd><span>Help</span></div>
             </div>
 
             <div class="review-content" id="review-content">
@@ -1765,13 +1765,13 @@
             <!-- Keyboard HUD (hidden until hover near bottom) -->
             <div class="keyboard-hover-zone docs-keyboard-hover"></div>
             <div class="keyboard-hud docs-keyboard-hud" id="keyboard-hud">
-                <div class="hud-item"><kbd>J</kbd><span>Next</span></div>
-                <div class="hud-item"><kbd>K</kbd><span>Prev</span></div>
+                <div class="hud-item"><kbd>J</kbd><kbd>K</kbd><span>Nav</span></div>
                 <div class="hud-item"><kbd>⏎</kbd><span>Open</span></div>
                 <div class="hud-item"><kbd>A</kbd><span>Approve</span></div>
-                <div class="hud-item"><kbd>R</kbd><span>Reject</span></div>
+                <div class="hud-item"><kbd>D</kbd><span>Delete</span></div>
                 <div class="hud-item"><kbd>Space</kbd><span>Select</span></div>
                 <div class="hud-item"><kbd>⌘K</kbd><span>Commands</span></div>
+                <div class="hud-item"><kbd>?</kbd><span>Help</span></div>
             </div>
 
             <!-- Command Palette (hidden by default) -->
@@ -1796,6 +1796,8 @@
     <!-- ============================================
          JAVASCRIPT - Order matters!
          ============================================ -->
+    <!-- 0. Debug utility (must load before all other scripts) -->
+    <script src="{{JS_DEBUG_URL}}"></script>
     <!-- 1. Core framework first -->
     <script src="{{JS_CORE_URL}}"></script>
     <!-- 2. Main app setup -->

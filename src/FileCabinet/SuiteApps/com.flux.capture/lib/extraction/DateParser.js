@@ -7,7 +7,7 @@
  * Handles regional format ambiguity (MM/DD vs DD/MM) using vendor locale and cross-validation
  */
 
-define(['N/log', 'N/format'], function(log, format) {
+define(['N/log', 'N/format', '../FC_Debug'], function(log, format, fcDebug) {
     'use strict';
 
     /**
@@ -145,7 +145,7 @@ define(['N/log', 'N/format'], function(log, format) {
             }
 
             const cleanValue = this.cleanDateString(value);
-            log.debug('DateParser.parse', `Input: "${value}" -> cleaned: "${cleanValue}"`);
+            fcDebug.debug('DateParser.parse', `Input: "${value}" -> cleaned: "${cleanValue}"`);
 
             // Try NetSuite format.parse first (respects account settings)
             try {
@@ -171,11 +171,11 @@ define(['N/log', 'N/format'], function(log, format) {
                         const validation = this.validateDate(result.date, context);
                         if (validation.valid) {
                             result.confidence = Math.min(result.confidence * validation.factor, 1.0);
-                            log.debug('DateParser.parse', `Success: ${result.date.toISOString()} (conf: ${result.confidence.toFixed(2)})`);
+                            fcDebug.debug('DateParser.parse', `Success: ${result.date.toISOString()} (conf: ${result.confidence.toFixed(2)})`);
                             return result;
                         } else if (validation.alternateDate) {
                             // Try alternate interpretation
-                            log.debug('DateParser.parse', `Using alternate: ${validation.alternateDate.toISOString()}`);
+                            fcDebug.debug('DateParser.parse', `Using alternate: ${validation.alternateDate.toISOString()}`);
                             return {
                                 date: validation.alternateDate,
                                 confidence: result.confidence * 0.8,
@@ -200,7 +200,7 @@ define(['N/log', 'N/format'], function(log, format) {
                 // Ignore
             }
 
-            log.debug('DateParser.parse', `Failed to parse: "${value}"`);
+            fcDebug.debug('DateParser.parse', `Failed to parse: "${value}"`);
             return { date: null, confidence: 0, format: null };
         }
 

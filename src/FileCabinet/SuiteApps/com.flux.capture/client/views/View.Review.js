@@ -715,7 +715,7 @@
                         if (layoutSl.visibleColumns && layoutSl.visibleColumns.length > 0) {
                             sl.visibleColumns = layoutSl.visibleColumns;
                             sl.columnOrder = layoutSl.columnOrder || layoutSl.visibleColumns;
-                            console.log('[View.Review] Merged column order for', sl.id, ':', sl.columnOrder.join(', '));
+                            FCDebug.log('[View.Review] Merged column order for', sl.id, ':', sl.columnOrder.join(', '));
                         }
                     }
                 });
@@ -916,7 +916,7 @@
                         });
 
                         if (orphanSublists.length > 0) {
-                            console.log('[View.Review] Adding orphan sublists to first tab:', orphanSublists.map(function(s) { return s.id; }));
+                            FCDebug.log('[View.Review] Adding orphan sublists to first tab:', orphanSublists.map(function(s) { return s.id; }));
                             tabSublists = tabSublists.concat(orphanSublists);
                         }
                     }
@@ -1465,7 +1465,7 @@
                     }
                 });
 
-                console.log('[View.Review] Using fallback column order for', sublist.id, '- type:', sublist.type || 'unknown', '- columns:', visible.map(function(f) { return f.id; }).join(', '));
+                FCDebug.log('[View.Review] Using fallback column order for', sublist.id, '- type:', sublist.type || 'unknown', '- columns:', visible.map(function(f) { return f.id; }).join(', '));
             }
 
             // Add any custom columns not already included
@@ -2745,6 +2745,6 @@
         function() { ReviewController.cleanup(); }
     );
 
-    console.log('[View.Review] World-Class Review Loaded');
+    FCDebug.log('[View.Review] World-Class Review Loaded');
 
 })();

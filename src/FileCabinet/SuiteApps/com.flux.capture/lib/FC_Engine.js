@@ -20,6 +20,8 @@ define([
     'N/format',
     'N/encode',
     'N/documentCapture',
+    // Debug utility
+    './FC_Debug',
     // Extraction modules
     './extraction/FieldMatcher',
     './extraction/DateParser',
@@ -36,6 +38,7 @@ define([
     './validation/CrossFieldValidator'
 ], function(
     file, record, search, query, runtime, log, format, encode, documentCapture,
+    fcDebug,
     FieldMatcherModule, DateParserModule, AmountParserModule, LayoutAnalyzerModule, TableAnalyzerModule,
     VendorMatcherModule, TaxIdExtractorModule,
     CorrectionLearnerModule, AliasManagerModule,
@@ -247,11 +250,11 @@ define([
                     extractOptions.timeout = Math.max(30000, options.timeout);
                 }
 
-                log.debug('FluxCapture.extract', `Calling documentToStructure with type: ${captureDocType}`);
+                fcDebug.debug('FluxCapture.extract', `Calling documentToStructure with type: ${captureDocType}`);
 
                 const result = docCapture.documentToStructure(extractOptions);
 
-                log.debug('FluxCapture.extract', `Received result with ${result.pages ? result.pages.length : 0} pages`);
+                fcDebug.debug('FluxCapture.extract', `Received result with ${result.pages ? result.pages.length : 0} pages`);
 
                 return this._normalizeRawResult(result, docCapture);
 
@@ -280,8 +283,35 @@ define([
             const rawFields = [];
             const rawTables = [];
 
+            // ============= DEBUG: Log raw result structure =============
+            fcDebug.debugAudit('DEBUG.RawResult', '========== RAW N/documentCapture RESULT ==========');
+            fcDebug.debugAudit('DEBUG.RawResult.Keys', `Top-level keys: ${Object.keys(result || {}).join(', ')}`);
+            fcDebug.debugAudit('DEBUG.RawResult.PageCount', `Pages: ${result.pages ? result.pages.length : 'NO PAGES'}`);
+
+            // Log the entire raw result structure (truncated for large objects)
+            try {
+                const resultSummary = {
+                    hasPages: !!result.pages,
+                    pageCount: result.pages?.length || 0,
+                    mimeType: result.mimeType,
+                    topLevelKeys: Object.keys(result || {})
+                };
+                fcDebug.debugAudit('DEBUG.RawResult.Summary', JSON.stringify(resultSummary));
+            } catch (e) {
+                fcDebug.debug('DEBUG.RawResult.Summary', 'Could not stringify summary: ' + e.message);
+            }
+
             if (result.pages && result.pages.length > 0) {
                 result.pages.forEach((page, pageIndex) => {
+                    // ============= DEBUG: Log page structure =============
+                    fcDebug.debugAudit(`DEBUG.Page[${pageIndex}]`, `Page ${pageIndex + 1} keys: ${Object.keys(page || {}).join(', ')}`);
+                    fcDebug.debugAudit(`DEBUG.Page[${pageIndex}].Counts`, JSON.stringify({
+                        fields: page.fields?.length || 0,
+                        tables: page.tables?.length || 0,
+                        lines: page.lines?.length || 0,
+                        hasGetText: typeof page.getText === 'function'
+                    }));
+
                     // Extract text
                     if (typeof page.getText === 'function') {
                         rawText += page.getText() + '\n';
@@ -292,23 +322,91 @@ define([
                         });
                     }
 
-                    // Collect raw fields
+                    // Collect raw fields with DEBUG logging
                     if (page.fields && page.fields.length > 0) {
-                        page.fields.forEach(field => {
+                        fcDebug.debugAudit(`DEBUG.Page[${pageIndex}].Fields`, `Processing ${page.fields.length} fields...`);
+
+                        page.fields.forEach((field, fieldIndex) => {
+                            // ============= DEBUG: Log each field's raw structure =============
+                            const fieldDebug = {
+                                index: fieldIndex,
+                                fieldKeys: Object.keys(field || {}),
+                                labelType: typeof field.label,
+                                labelKeys: typeof field.label === 'object' ? Object.keys(field.label || {}) : null,
+                                labelRaw: this._safeStringify(field.label, 100),
+                                valueType: typeof field.value,
+                                valueKeys: typeof field.value === 'object' ? Object.keys(field.value || {}) : null,
+                                valueRaw: this._safeStringify(field.value, 100),
+                                confidence: field.confidence,
+                                type: field.type,
+                                boundingBox: field.boundingBox ? 'present' : 'absent'
+                            };
+                            fcDebug.debug(`DEBUG.Field[${pageIndex}][${fieldIndex}]`, JSON.stringify(fieldDebug));
+
+                            const extractedLabel = this._extractText(field.label);
+                            const extractedValue = this._extractText(field.value);
+
+                            // Log what we extracted
+                            fcDebug.debugAudit(`DEBUG.Field.Extracted[${fieldIndex}]`,
+                                `"${extractedLabel}" = "${extractedValue}" (conf: ${field.label?.confidence || field.confidence || 'N/A'})`);
+
                             rawFields.push({
                                 page: pageIndex,
-                                label: this._extractText(field.label),
+                                label: extractedLabel,
                                 labelConfidence: field.label?.confidence || 0.5,
-                                value: this._extractText(field.value),
+                                value: extractedValue,
                                 valueConfidence: field.value?.confidence || field.confidence || 0.5,
-                                position: field.boundingBox || field.bbox || null
+                                position: field.boundingBox || field.bbox || null,
+                                // Store raw for debugging
+                                _rawLabel: field.label,
+                                _rawValue: field.value,
+                                _rawType: field.type
                             });
                         });
                     }
 
-                    // Collect raw tables
+                    // Collect raw tables with DEBUG logging
                     if (page.tables && page.tables.length > 0) {
+                        fcDebug.debugAudit(`DEBUG.Page[${pageIndex}].Tables`, `Processing ${page.tables.length} tables...`);
+
                         page.tables.forEach((table, tableIndex) => {
+                            // ============= DEBUG: Log table structure =============
+                            const tableDebug = {
+                                index: tableIndex,
+                                tableKeys: Object.keys(table || {}),
+                                headerRowCount: table.headerRows?.length || 0,
+                                bodyRowCount: table.bodyRows?.length || 0,
+                                footerRowCount: table.footerRows?.length || 0,
+                                confidence: table.confidence
+                            };
+                            fcDebug.debugAudit(`DEBUG.Table[${pageIndex}][${tableIndex}]`, JSON.stringify(tableDebug));
+
+                            // Log first header row structure if present
+                            if (table.headerRows && table.headerRows.length > 0) {
+                                const headerRow = table.headerRows[0];
+                                fcDebug.debug(`DEBUG.Table[${tableIndex}].HeaderRow`,
+                                    `Type: ${typeof headerRow}, IsArray: ${Array.isArray(headerRow)}, ` +
+                                    `Keys: ${typeof headerRow === 'object' ? Object.keys(headerRow).join(',') : 'N/A'}`);
+                                if (headerRow.cells || Array.isArray(headerRow)) {
+                                    const cells = headerRow.cells || headerRow;
+                                    fcDebug.debug(`DEBUG.Table[${tableIndex}].HeaderCells`,
+                                        `Count: ${cells.length}, Values: ${cells.slice(0, 5).map(c => this._safeStringify(c, 30)).join(' | ')}`);
+                                }
+                            }
+
+                            // Log first body row structure if present
+                            if (table.bodyRows && table.bodyRows.length > 0) {
+                                const bodyRow = table.bodyRows[0];
+                                fcDebug.debug(`DEBUG.Table[${tableIndex}].BodyRow[0]`,
+                                    `Type: ${typeof bodyRow}, IsArray: ${Array.isArray(bodyRow)}, ` +
+                                    `Keys: ${typeof bodyRow === 'object' ? Object.keys(bodyRow).join(',') : 'N/A'}`);
+                                if (bodyRow.cells || Array.isArray(bodyRow)) {
+                                    const cells = bodyRow.cells || bodyRow;
+                                    fcDebug.debug(`DEBUG.Table[${tableIndex}].BodyCells[0]`,
+                                        `Count: ${cells.length}, Values: ${cells.slice(0, 5).map(c => this._safeStringify(c, 30)).join(' | ')}`);
+                                }
+                            }
+
                             rawTables.push({
                                 page: pageIndex,
                                 index: tableIndex,
@@ -322,6 +420,20 @@ define([
                 });
             }
 
+            // ============= DEBUG: Log final extracted data summary =============
+            fcDebug.debugAudit('DEBUG.Extraction.Summary', JSON.stringify({
+                totalFields: rawFields.length,
+                totalTables: rawTables.length,
+                rawTextLength: rawText.length,
+                rawTextPreview: rawText.substring(0, 500)
+            }));
+
+            // Log all extracted field label/value pairs
+            fcDebug.debugAudit('DEBUG.AllFields', '---------- ALL EXTRACTED FIELDS ----------');
+            rawFields.forEach((f, i) => {
+                fcDebug.debugAudit(`DEBUG.AllFields[${i}]`, `"${f.label}" => "${f.value}"`);
+            });
+
             return {
                 pages: result.pages,
                 rawFields: rawFields,
@@ -330,6 +442,22 @@ define([
                 pageCount: pageCount,
                 mimeType: result.mimeType || null
             };
+        }
+
+        /**
+         * Safely stringify an object for logging (with truncation)
+         */
+        _safeStringify(obj, maxLen = 200) {
+            if (obj === null) return 'null';
+            if (obj === undefined) return 'undefined';
+            if (typeof obj === 'string') return obj.substring(0, maxLen);
+            if (typeof obj === 'number' || typeof obj === 'boolean') return String(obj);
+            try {
+                const str = JSON.stringify(obj);
+                return str.length > maxLen ? str.substring(0, maxLen) + '...' : str;
+            } catch (e) {
+                return `[Object: ${typeof obj}]`;
+            }
         }
 
         /**
@@ -443,7 +571,7 @@ define([
             // Try to infer missing amounts
             this._inferMissingAmounts(fields, lineItems);
 
-            log.debug('FluxCapture.intelligentExtraction', {
+            fcDebug.debug('FluxCapture.intelligentExtraction', {
                 fieldsExtracted: Object.keys(fields).filter(k => fields[k]).length,
                 lineItems: lineItems.length,
                 documentType: DocumentTypeLabels[documentType]
@@ -699,7 +827,7 @@ define([
                 const result = query.runSuiteQL({ query: sql, params: [vendorId, invoiceNumber] });
                 return result.results[0].values[0] > 0;
             } catch (e) {
-                log.debug('FluxCapture._checkDuplicateInvoice', e.message);
+                fcDebug.debug('FluxCapture._checkDuplicateInvoice', e.message);
                 return false;
             }
         }
@@ -950,7 +1078,7 @@ define([
                 try {
                     return docCapture.getRemainingFreeUsage();
                 } catch (e) {
-                    log.debug('getRemainingUsage', e.message);
+                    fcDebug.debug('getRemainingUsage', e.message);
                 }
             }
             return null;

@@ -7,7 +7,7 @@
  * Intelligent column detection, multi-row item handling, and line item extraction
  */
 
-define(['N/log'], function(log) {
+define(['N/log', '../FC_Debug'], function(log, fcDebug) {
     'use strict';
 
     /**
@@ -124,7 +124,7 @@ define(['N/log'], function(log) {
             // Step 4: Post-process and validate
             const processed = this.postProcess(lineItems, columns);
 
-            log.debug('TableAnalyzer.analyze', {
+            fcDebug.debug('TableAnalyzer.analyze', {
                 columns: columns.map(c => c.type),
                 lineItems: processed.lineItems.length,
                 confidence: processed.confidence.toFixed(2)

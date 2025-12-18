@@ -42,6 +42,8 @@
         previewExpanded: -1,
         refreshInterval: null,
         REFRESH_MS: 10000,
+        _clickHandler: null,
+        _keydownHandler: null,
 
         // ==========================================
         // INITIALIZATION
@@ -81,6 +83,15 @@
             this.stopRefresh();
             this.documents = [];
             this.closeCommandPalette();
+            // Remove event listeners
+            if (this._clickHandler) {
+                document.removeEventListener('click', this._clickHandler);
+                this._clickHandler = null;
+            }
+            if (this._keydownHandler) {
+                document.removeEventListener('keydown', this._keydownHandler);
+                this._keydownHandler = null;
+            }
         },
 
         // ==========================================
@@ -192,23 +203,55 @@
         bindEvents: function() {
             var self = this;
 
-            // Triage tabs
-            document.addEventListener('click', function(e) {
+            // Remove any existing handlers first (safety)
+            if (this._clickHandler) {
+                document.removeEventListener('click', this._clickHandler);
+            }
+            if (this._keydownHandler) {
+                document.removeEventListener('keydown', this._keydownHandler);
+            }
+
+            // Create click handler
+            this._clickHandler = function(e) {
                 var tab = e.target.closest('.triage-tab');
                 if (tab) {
                     self.setFilter(tab.dataset.filter);
                     return;
                 }
 
-                // Document row click
-                var row = e.target.closest('.doc-row');
-                if (row && !e.target.closest('.row-action')) {
-                    var index = parseInt(row.dataset.index);
-                    self.focusRow(index);
+                // Select-all checkbox
+                if (e.target.id === 'select-all') {
+                    self.toggleSelectAll(e.target.checked);
+                    return;
+                }
 
-                    // Double-click opens review
+                // Row checkbox
+                var checkbox = e.target.closest('.row-checkbox');
+                if (checkbox) {
+                    var docId = checkbox.dataset.id;
+                    self.toggleRowSelection(docId, checkbox.checked);
+                    return;
+                }
+
+                // Bulk action buttons
+                if (e.target.closest('#bulk-clear')) {
+                    e.stopPropagation();
+                    self.clearSelection();
+                    return;
+                }
+
+                if (e.target.closest('#bulk-delete')) {
+                    e.stopPropagation();
+                    self.deleteSelected();
+                    return;
+                }
+
+                // Document row double-click opens review (no single-click focus)
+                var row = e.target.closest('.doc-row');
+                if (row && !e.target.closest('.row-action') && !e.target.closest('.checkbox-wrapper')) {
                     if (e.detail === 2) {
-                        self.openCurrentDocument();
+                        var docId = row.dataset.docId;
+                        Router.navigate('review', { docId: docId });
                     }
                     return;
                 }
@@ -216,6 +259,7 @@
                 // Quick action buttons
                 var action = e.target.closest('.row-action');
                 if (action) {
+                    e.stopPropagation();
                     var docId = action.closest('.doc-row').dataset.docId;
                     self.handleRowAction(action.dataset.action, docId);
                     return;
@@ -240,7 +284,8 @@
                     self.closeCommandPalette();
                     return;
                 }
-            });
+            };
+            document.addEventListener('click', this._clickHandler);
 
             // Search input
             var searchInput = el('#doc-search');
@@ -270,8 +315,8 @@
                 Router.navigate('ingest');
             });
 
-            // Keyboard navigation
-            document.addEventListener('keydown', function(e) {
+            // Create keydown handler
+            this._keydownHandler = function(e) {
                 // Don't handle if in input
                 if (e.target.matches('input, textarea, select')) {
                     if (e.key === 'Escape') {
@@ -343,12 +388,17 @@
                         var search = el('#doc-search');
                         if (search) search.focus();
                         break;
+                    case '?':
+                        e.preventDefault();
+                        self.showShortcutsHelp();
+                        break;
                     case 'Escape':
                         self.previewExpanded = -1;
                         self.render();
                         break;
                 }
-            });
+            };
+            document.addEventListener('keydown', this._keydownHandler);
         },
 
         on: function(selector, event, handler) {
@@ -475,13 +525,45 @@
                 return;
             }
 
-            container.innerHTML = this.filteredDocuments.map(function(doc, index) {
+            var allSelected = this.filteredDocuments.length > 0 &&
+                this.filteredDocuments.every(function(d) { return self.selectedIds.indexOf(String(d.id)) !== -1; });
+
+            var html = '<div class="docs-table-wrapper">' +
+                '<table class="docs-table">' +
+                '<thead>' +
+                    '<tr>' +
+                        '<th class="col-checkbox"><label class="checkbox-wrapper"><input type="checkbox" id="select-all" ' + (allSelected ? 'checked' : '') + '><span class="checkmark"></span></label></th>' +
+                        '<th class="col-confidence">Conf</th>' +
+                        '<th class="col-status">Status</th>' +
+                        '<th class="col-vendor">Vendor</th>' +
+                        '<th class="col-invoice">Invoice #</th>' +
+                        '<th class="col-amount">Amount</th>' +
+                        '<th class="col-date">Date</th>' +
+                        '<th class="col-type">Type</th>' +
+                        '<th class="col-actions">Actions</th>' +
+                    '</tr>' +
+                '</thead>' +
+                '<tbody>';
+
+            html += this.filteredDocuments.map(function(doc, index) {
                 return self.renderDocumentRow(doc, index);
             }).join('');
+
+            html += '</tbody></table></div>';
+
+            // Bulk actions bar
+            html += '<div class="bulk-actions-bar" id="bulk-actions-bar" style="display:' + (this.selectedIds.length > 0 ? 'flex' : 'none') + ';">' +
+                '<span class="bulk-count"><strong>' + this.selectedIds.length + '</strong> selected</span>' +
+                '<div class="bulk-buttons">' +
+                    '<button class="btn btn-sm btn-secondary" id="bulk-clear"><i class="fas fa-times"></i> Clear</button>' +
+                    '<button class="btn btn-sm btn-danger" id="bulk-delete"><i class="fas fa-trash-can"></i> Delete Selected</button>' +
+                '</div>' +
+            '</div>';
+
+            container.innerHTML = html;
         },
 
         renderDocumentRow: function(doc, index) {
-            var isFocused = index === this.focusedIndex;
             var isSelected = this.selectedIds.indexOf(String(doc.id)) !== -1;
             var isExpanded = index === this.previewExpanded;
             // Confidence may be stored as decimal (0-1) or percentage (0-100)
@@ -490,54 +572,82 @@
             var confClass = conf >= 85 ? 'high' : conf >= 60 ? 'medium' : 'low';
             var hasAnomaly = doc.anomalies && doc.anomalies.length > 0;
             var hasError = String(doc.status) === DocStatus.ERROR;
+            var statusText = this.getStatusText(doc.status);
+            var statusClass = this.getStatusClass(doc.status);
+            var docTypeText = this.getDocTypeText(doc.documentType);
 
             var classes = ['doc-row'];
-            if (isFocused) classes.push('focused');
             if (isSelected) classes.push('selected');
-            if (isExpanded) classes.push('expanded');
 
-            var html = '<div class="' + classes.join(' ') + '" data-index="' + index + '" data-doc-id="' + doc.id + '">' +
-                '<div class="row-main">' +
-                    '<span class="row-focus-indicator">' + (isFocused ? '▸' : '') + '</span>' +
-                    '<span class="row-select-indicator">' + (isSelected ? '■' : '□') + '</span>' +
-                    '<span class="row-confidence conf-' + confClass + '">' +
-                        '<span class="conf-bar"><span class="conf-fill" style="width:' + conf + '%"></span></span>' +
-                    '</span>' +
-                    '<span class="row-vendor">' + escapeHtml(doc.vendorName || 'Unknown') + '</span>' +
-                    '<span class="row-invoice">' + escapeHtml(doc.invoiceNumber || '-') + '</span>' +
-                    '<span class="row-amount">$' + formatNumber(doc.totalAmount || 0) + '</span>' +
-                    '<span class="row-conf-badge conf-' + confClass + '">' + conf + '%' + (conf >= 85 ? ' ✓' : '') + '</span>' +
-                    (hasAnomaly || hasError ? '<span class="row-flag"><i class="fas fa-flag"></i></span>' : '') +
+            var html = '<tr class="' + classes.join(' ') + '" data-index="' + index + '" data-doc-id="' + doc.id + '">' +
+                '<td class="col-checkbox"><label class="checkbox-wrapper"><input type="checkbox" class="row-checkbox" data-id="' + doc.id + '" ' + (isSelected ? 'checked' : '') + '><span class="checkmark"></span></label></td>' +
+                '<td class="col-confidence"><span class="conf-badge conf-' + confClass + '">' + conf + '%</span></td>' +
+                '<td class="col-status"><span class="status-pill status-' + statusClass + '">' + statusText + '</span>' +
+                    (hasAnomaly || hasError ? ' <i class="fas fa-flag text-warning" title="Has anomalies"></i>' : '') + '</td>' +
+                '<td class="col-vendor">' + escapeHtml(doc.vendorName || 'Unknown') + '</td>' +
+                '<td class="col-invoice">' + escapeHtml(doc.invoiceNumber || '-') + '</td>' +
+                '<td class="col-amount">$' + formatNumber(doc.totalAmount || 0) + '</td>' +
+                '<td class="col-date">' + this.formatDate(doc.createdDate) + '</td>' +
+                '<td class="col-type">' + escapeHtml(docTypeText) + '</td>' +
+                '<td class="col-actions">' +
                     '<div class="row-actions">' +
-                        '<button class="row-action btn-approve" data-action="approve" title="Approve (A)"><i class="fas fa-check"></i></button>' +
-                        '<button class="row-action btn-open" data-action="open" title="Open (⏎)"><i class="fas fa-expand"></i></button>' +
-                        '<button class="row-action btn-delete" data-action="delete" title="Delete (D)"><i class="fas fa-trash-can"></i></button>' +
+                        '<button class="row-action btn-approve" data-action="approve" title="Approve"><i class="fas fa-check"></i></button>' +
+                        '<button class="row-action btn-open" data-action="open" title="Open"><i class="fas fa-expand"></i></button>' +
+                        '<button class="row-action btn-delete" data-action="delete" title="Delete"><i class="fas fa-trash-can"></i></button>' +
                     '</div>' +
-                '</div>';
+                '</td>' +
+            '</tr>';
 
-            // Expanded preview
-            if (isExpanded) {
-                html += '<div class="row-preview">' +
-                    '<div class="preview-thumb"><i class="fas fa-file-pdf"></i></div>' +
-                    '<div class="preview-details">' +
-                        '<div class="preview-field"><span class="field-label">Vendor</span><span class="field-value">' + escapeHtml(doc.vendorName || '-') + '</span></div>' +
-                        '<div class="preview-field"><span class="field-label">Invoice</span><span class="field-value">' + escapeHtml(doc.invoiceNumber || '-') + '</span></div>' +
-                        '<div class="preview-field"><span class="field-label">Amount</span><span class="field-value">$' + formatNumber(doc.totalAmount || 0) + '</span></div>' +
-                        '<div class="preview-field"><span class="field-label">Date</span><span class="field-value">' + (doc.invoiceDate || '-') + '</span></div>' +
-                    '</div>' +
-                    '<div class="preview-confidence">' +
-                        '<div class="why-conf">' +
-                            '<strong>Why ' + conf + '%:</strong> ' +
-                            (conf >= 85 ? '✓ Vendor matched ✓ Amount validated ✓ Format recognized' :
-                             conf >= 60 ? '✓ Partial match ⚠ Verify details' :
-                             '⚠ Low confidence - manual review needed') +
-                        '</div>' +
-                    '</div>' +
-                '</div>';
-            }
-
-            html += '</div>';
             return html;
+        },
+
+        getStatusText: function(status) {
+            var statusMap = {
+                '1': 'Pending',
+                '2': 'Processing',
+                '3': 'Extracted',
+                '4': 'Review',
+                '5': 'Rejected',
+                '6': 'Completed',
+                '7': 'Error'
+            };
+            return statusMap[String(status)] || 'Unknown';
+        },
+
+        getStatusClass: function(status) {
+            var classMap = {
+                '1': 'pending',
+                '2': 'processing',
+                '3': 'extracted',
+                '4': 'review',
+                '5': 'rejected',
+                '6': 'completed',
+                '7': 'error'
+            };
+            return classMap[String(status)] || 'unknown';
+        },
+
+        getDocTypeText: function(docType) {
+            var typeMap = {
+                '1': 'Invoice',
+                '2': 'Bill',
+                '3': 'Receipt',
+                '4': 'PO',
+                '5': 'Credit Memo',
+                '6': 'Statement'
+            };
+            return typeMap[String(docType)] || 'Document';
+        },
+
+        formatDate: function(dateStr) {
+            if (!dateStr) return '-';
+            try {
+                var date = new Date(dateStr);
+                if (isNaN(date.getTime())) return dateStr;
+                return (date.getMonth() + 1) + '/' + date.getDate() + '/' + date.getFullYear();
+            } catch (e) {
+                return dateStr;
+            }
         },
 
         checkInboxZero: function() {
@@ -635,6 +745,106 @@
             }
 
             this.render();
+        },
+
+        toggleSelectAll: function(checked) {
+            var self = this;
+            if (checked) {
+                this.filteredDocuments.forEach(function(doc) {
+                    var id = String(doc.id);
+                    if (self.selectedIds.indexOf(id) === -1) {
+                        self.selectedIds.push(id);
+                    }
+                });
+            } else {
+                this.selectedIds = [];
+            }
+            this.render();
+        },
+
+        toggleRowSelection: function(docId, checked) {
+            var id = String(docId);
+            var idx = this.selectedIds.indexOf(id);
+
+            if (checked && idx === -1) {
+                this.selectedIds.push(id);
+            } else if (!checked && idx !== -1) {
+                this.selectedIds.splice(idx, 1);
+            }
+
+            this.updateBulkActionsBar();
+            this.updateSelectAllCheckbox();
+        },
+
+        clearSelection: function() {
+            this.selectedIds = [];
+            this.render();
+        },
+
+        updateBulkActionsBar: function() {
+            var bar = el('#bulk-actions-bar');
+            if (bar) {
+                bar.style.display = this.selectedIds.length > 0 ? 'flex' : 'none';
+                var countEl = bar.querySelector('.bulk-count strong');
+                if (countEl) countEl.textContent = this.selectedIds.length;
+            }
+        },
+
+        updateSelectAllCheckbox: function() {
+            var self = this;
+            var selectAll = el('#select-all');
+            if (selectAll) {
+                var allSelected = this.filteredDocuments.length > 0 &&
+                    this.filteredDocuments.every(function(d) { return self.selectedIds.indexOf(String(d.id)) !== -1; });
+                selectAll.checked = allSelected;
+            }
+        },
+
+        deleteSelected: function() {
+            var self = this;
+            var count = this.selectedIds.length;
+
+            if (count === 0) return;
+
+            UI.confirm({
+                title: 'Delete ' + count + ' Document' + (count > 1 ? 's' : ''),
+                message: 'Are you sure you want to delete ' + count + ' document' + (count > 1 ? 's' : '') + '? This action cannot be undone.',
+                confirmText: 'Delete',
+                cancelText: 'Cancel',
+                type: 'danger'
+            }).then(function(confirmed) {
+                if (!confirmed) return;
+
+                var deleted = 0;
+                var errors = 0;
+                var idsToDelete = self.selectedIds.slice();
+
+                function deleteNext(index) {
+                    if (index >= idsToDelete.length) {
+                        self.selectedIds = [];
+                        if (deleted > 0) {
+                            UI.toast('Deleted ' + deleted + ' document' + (deleted > 1 ? 's' : ''), 'success');
+                        }
+                        if (errors > 0) {
+                            UI.toast(errors + ' document' + (errors > 1 ? 's' : '') + ' failed to delete', 'error');
+                        }
+                        self.loadData();
+                        return;
+                    }
+
+                    API.delete('document', { id: idsToDelete[index] })
+                        .then(function() {
+                            deleted++;
+                            deleteNext(index + 1);
+                        })
+                        .catch(function() {
+                            errors++;
+                            deleteNext(index + 1);
+                        });
+                }
+
+                deleteNext(0);
+            });
         },
 
         // ==========================================
@@ -887,6 +1097,50 @@
         },
 
         // ==========================================
+        // KEYBOARD SHORTCUTS HELP
+        // ==========================================
+        showShortcutsHelp: function() {
+            var html = '<div class="shortcuts-modal">' +
+                '<div class="shortcuts-content">' +
+                    '<h3><i class="fas fa-keyboard"></i> Keyboard Shortcuts</h3>' +
+                    '<div class="shortcuts-grid">' +
+                        '<div class="shortcut-section">' +
+                            '<div class="shortcut-section-title">Navigation</div>' +
+                            '<div class="shortcut-item"><kbd>J</kbd> <span>Next document</span></div>' +
+                            '<div class="shortcut-item"><kbd>K</kbd> <span>Previous document</span></div>' +
+                            '<div class="shortcut-item"><kbd>↓</kbd> <span>Next document</span></div>' +
+                            '<div class="shortcut-item"><kbd>↑</kbd> <span>Previous document</span></div>' +
+                            '<div class="shortcut-item"><kbd>⏎</kbd> <span>Open document</span></div>' +
+                        '</div>' +
+                        '<div class="shortcut-section">' +
+                            '<div class="shortcut-section-title">Actions</div>' +
+                            '<div class="shortcut-item"><kbd>A</kbd> <span>Approve document</span></div>' +
+                            '<div class="shortcut-item"><kbd>D</kbd> <span>Delete document</span></div>' +
+                            '<div class="shortcut-item"><kbd>Space</kbd> <span>Toggle selection</span></div>' +
+                            '<div class="shortcut-item"><kbd>⌘⇧A</kbd> <span>Approve all high confidence</span></div>' +
+                        '</div>' +
+                        '<div class="shortcut-section">' +
+                            '<div class="shortcut-section-title">Search & Commands</div>' +
+                            '<div class="shortcut-item"><kbd>/</kbd> <span>Focus search</span></div>' +
+                            '<div class="shortcut-item"><kbd>⌘K</kbd> <span>Command palette</span></div>' +
+                            '<div class="shortcut-item"><kbd>⌘R</kbd> <span>Refresh list</span></div>' +
+                        '</div>' +
+                        '<div class="shortcut-section">' +
+                            '<div class="shortcut-section-title">Other</div>' +
+                            '<div class="shortcut-item"><kbd>Esc</kbd> <span>Close preview/modal</span></div>' +
+                            '<div class="shortcut-item"><kbd>?</kbd> <span>Show this help</span></div>' +
+                        '</div>' +
+                    '</div>' +
+                    '<button class="btn btn-primary btn-block" onclick="this.closest(\'.shortcuts-modal\').remove()">Got it!</button>' +
+                '</div>' +
+            '</div>';
+
+            var modal = document.createElement('div');
+            modal.innerHTML = html;
+            document.body.appendChild(modal.firstChild);
+        },
+
+        // ==========================================
         // ANIMATIONS & CELEBRATIONS
         // ==========================================
         showApprovalAnimation: function(docId) {
@@ -933,6 +1187,6 @@
         function() { DocumentsController.cleanup(); }
     );
 
-    console.log('[View.Documents] Loaded');
+    FCDebug.log('[View.Documents] Loaded');
 
 })();

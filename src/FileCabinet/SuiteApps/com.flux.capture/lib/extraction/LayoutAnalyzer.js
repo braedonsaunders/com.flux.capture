@@ -7,7 +7,7 @@
  * Detects document zones (header, line items, totals) for context-aware extraction
  */
 
-define(['N/log'], function(log) {
+define(['N/log', '../FC_Debug'], function(log, fcDebug) {
     'use strict';
 
     /**
@@ -113,7 +113,7 @@ define(['N/log'], function(log) {
             // Identify the main line items table
             layout.lineItemsTable = this.findLineItemsTable(tables, layout);
 
-            log.debug('LayoutAnalyzer.analyze', {
+            fcDebug.debug('LayoutAnalyzer.analyze', {
                 elementCount: elements.length,
                 tableCount: tables.length,
                 zones: Object.keys(layout.zones).filter(z => layout.zones[z].length > 0)

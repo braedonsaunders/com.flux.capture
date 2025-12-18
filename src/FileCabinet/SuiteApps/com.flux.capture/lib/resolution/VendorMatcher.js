@@ -7,7 +7,7 @@
  * Uses multiple signals (name, tax ID, email, address, aliases) for accurate vendor matching
  */
 
-define(['N/log', 'N/query', 'N/search'], function(log, query, search) {
+define(['N/log', 'N/query', 'N/search', '../FC_Debug'], function(log, query, search, fcDebug) {
     'use strict';
 
     /**
@@ -97,7 +97,18 @@ define(['N/log', 'N/query', 'N/search'], function(log, query, search) {
 
             if (!extractedData) return result;
 
-            log.debug('VendorMatcher.match', {
+            // ============= DEBUG: Log incoming extracted data =============
+            log.audit('DEBUG.VendorMatcher', '========== VENDOR MATCH INPUT ==========');
+            log.audit('DEBUG.VendorMatcher.Input', JSON.stringify({
+                vendorName: extractedData.vendorName || '(null)',
+                taxId: extractedData.taxId || '(null)',
+                email: extractedData.email || '(null)',
+                address: extractedData.address || '(null)',
+                phone: extractedData.phone || '(null)',
+                allKeys: Object.keys(extractedData)
+            }));
+
+            fcDebug.debug('VendorMatcher.match', {
                 vendorName: extractedData.vendorName,
                 taxId: extractedData.taxId,
                 email: extractedData.email
@@ -105,7 +116,11 @@ define(['N/log', 'N/query', 'N/search'], function(log, query, search) {
 
             // Signal 1: Tax ID match (highest priority)
             if (extractedData.taxId) {
+                log.audit('DEBUG.VendorMatcher.TaxId', `Attempting Tax ID match for: "${extractedData.taxId}"`);
                 const taxMatch = this.matchByTaxId(extractedData.taxId);
+                log.audit('DEBUG.VendorMatcher.TaxId.Result', taxMatch ?
+                    `FOUND: id=${taxMatch.id}, name="${taxMatch.companyName}"` :
+                    'NO MATCH');
                 if (taxMatch) {
                     result.vendorId = taxMatch.id;
                     result.vendorName = taxMatch.companyName;
@@ -116,14 +131,20 @@ define(['N/log', 'N/query', 'N/search'], function(log, query, search) {
                         value: extractedData.taxId,
                         score: 0.98
                     });
-                    log.debug('VendorMatcher', `Tax ID match: ${taxMatch.companyName}`);
+                    fcDebug.debug('VendorMatcher', `Tax ID match: ${taxMatch.companyName}`);
                     return result;
                 }
+            } else {
+                log.audit('DEBUG.VendorMatcher.TaxId', 'No Tax ID provided in extracted data');
             }
 
             // Signal 2: Learned alias match
+            log.audit('DEBUG.VendorMatcher.Alias', `AliasManager available: ${!!this.aliasManager}, vendorName: "${extractedData.vendorName || '(null)'}"`);
             if (this.aliasManager && extractedData.vendorName) {
                 const aliasMatch = this.aliasManager.findVendorByAlias(extractedData.vendorName);
+                log.audit('DEBUG.VendorMatcher.Alias.Result', aliasMatch ?
+                    JSON.stringify({ vendorId: aliasMatch.vendorId, vendorName: aliasMatch.vendorName, confidence: aliasMatch.confidence, matchType: aliasMatch.matchType }) :
+                    'NO ALIAS MATCH');
                 if (aliasMatch && aliasMatch.confidence >= 0.85) {
                     result.vendorId = aliasMatch.vendorId;
                     result.vendorName = aliasMatch.vendorName;
@@ -134,27 +155,52 @@ define(['N/log', 'N/query', 'N/search'], function(log, query, search) {
                         value: extractedData.vendorName,
                         score: aliasMatch.confidence
                     });
-                    log.debug('VendorMatcher', `Alias match: ${aliasMatch.vendorName}`);
+                    fcDebug.debug('VendorMatcher', `Alias match: ${aliasMatch.vendorName}`);
                     return result;
                 }
             }
 
             // Signal 3: Multi-signal scoring
+            log.audit('DEBUG.VendorMatcher.Search', `Searching candidates for: "${extractedData.vendorName || '(null)'}"`);
             const candidates = this.searchCandidates(extractedData);
+            log.audit('DEBUG.VendorMatcher.Search.Result', `Found ${candidates.length} candidates`);
 
             if (candidates.length === 0) {
+                log.audit('DEBUG.VendorMatcher.Result', 'NO CANDIDATES FOUND - returning unmatched');
                 result.vendorName = extractedData.vendorName;
                 return result;
             }
+
+            // Log all candidates
+            log.audit('DEBUG.VendorMatcher.Candidates', JSON.stringify(candidates.slice(0, 10).map(c => ({
+                id: c.id,
+                companyName: c.companyName,
+                entityId: c.entityId,
+                email: c.email || '(null)'
+            }))));
 
             // Score candidates using all available signals
             const scoredCandidates = this.scoreCandidates(candidates, extractedData);
             scoredCandidates.sort((a, b) => b.totalScore - a.totalScore);
 
+            // Log top scored candidates with signal breakdown
+            log.audit('DEBUG.VendorMatcher.Scoring', '========== CANDIDATE SCORING ==========');
+            scoredCandidates.slice(0, 5).forEach((c, idx) => {
+                log.audit(`DEBUG.VendorMatcher.Score.${idx + 1}`, JSON.stringify({
+                    rank: idx + 1,
+                    companyName: c.companyName,
+                    id: c.id,
+                    totalScore: c.totalScore.toFixed(4),
+                    primarySignal: c.primarySignal,
+                    signals: c.signals.map(s => `${s.type}:${s.score.toFixed(3)}`)
+                }));
+            });
+
             const bestMatch = scoredCandidates[0];
 
             // Set result
-            result.vendorId = bestMatch.totalScore >= 0.55 ? bestMatch.id : null;
+            const passesThreshold = bestMatch.totalScore >= 0.55;
+            result.vendorId = passesThreshold ? bestMatch.id : null;
             result.vendorName = bestMatch.companyName;
             result.confidence = bestMatch.totalScore;
             result.matchedBy = bestMatch.primarySignal;
@@ -166,7 +212,16 @@ define(['N/log', 'N/query', 'N/search'], function(log, query, search) {
                 score: c.totalScore
             }));
 
-            log.debug('VendorMatcher.match', {
+            log.audit('DEBUG.VendorMatcher.FinalResult', JSON.stringify({
+                selected: passesThreshold ? 'YES' : 'NO (below 0.55 threshold)',
+                vendorId: result.vendorId,
+                vendorName: result.vendorName,
+                confidence: result.confidence.toFixed(4),
+                matchedBy: result.matchedBy,
+                suggestionCount: result.suggestions.length
+            }));
+
+            fcDebug.debug('VendorMatcher.match', {
                 bestMatch: bestMatch.companyName,
                 score: bestMatch.totalScore.toFixed(3),
                 candidateCount: scoredCandidates.length
@@ -213,7 +268,7 @@ define(['N/log', 'N/query', 'N/search'], function(log, query, search) {
                     };
                 }
             } catch (e) {
-                log.debug('VendorMatcher.matchByTaxId', e.message);
+                fcDebug.debug('VendorMatcher.matchByTaxId', e.message);
             }
 
             return null;
@@ -268,12 +323,24 @@ define(['N/log', 'N/query', 'N/search'], function(log, query, search) {
             const tokens = this.tokenizeName(normalized);
             const variations = this.generateSearchVariations(normalized, tokens);
 
-            if (variations.length === 0) return [];
+            // DEBUG: Log name processing
+            log.audit('DEBUG.VendorMatcher.SearchByName', JSON.stringify({
+                original: vendorName,
+                normalized: normalized,
+                tokens: tokens,
+                variations: variations
+            }));
+
+            if (variations.length === 0) {
+                log.audit('DEBUG.VendorMatcher.SearchByName', 'No variations generated - returning empty');
+                return [];
+            }
 
             const likeConditions = variations.map(() => 'LOWER(v.companyname) LIKE ?').join(' OR ');
 
+            // Use only core vendor fields that are guaranteed to exist
             const sql = `
-                SELECT v.id, v.companyname, v.entityid, v.email, v.address1, v.city, v.phone
+                SELECT v.id, v.companyname, v.entityid, v.email, v.phone
                 FROM vendor v
                 WHERE v.isinactive = 'F'
                 AND (${likeConditions})
@@ -282,10 +349,16 @@ define(['N/log', 'N/query', 'N/search'], function(log, query, search) {
             `;
 
             try {
+                const params = variations.map(v => `%${v}%`);
+                log.audit('DEBUG.VendorMatcher.SearchByName.Query', `Searching with ${params.length} LIKE patterns: ${params.slice(0, 5).join(', ')}${params.length > 5 ? '...' : ''}`);
+
                 const results = query.runSuiteQL({
                     query: sql,
-                    params: variations.map(v => `%${v}%`)
+                    params: params
                 });
+
+                const resultCount = results.results ? results.results.length : 0;
+                log.audit('DEBUG.VendorMatcher.SearchByName.Results', `Query returned ${resultCount} vendors`);
 
                 if (!results.results) return [];
 
@@ -294,12 +367,13 @@ define(['N/log', 'N/query', 'N/search'], function(log, query, search) {
                     companyName: r.values[1],
                     entityId: r.values[2],
                     email: r.values[3],
-                    address: r.values[4],
-                    city: r.values[5],
-                    phone: r.values[6]
+                    address: null, // Address requires sublist join - omit for now
+                    city: null,
+                    phone: r.values[4]
                 }));
             } catch (e) {
                 log.error('VendorMatcher.searchByName', e.message);
+                log.audit('DEBUG.VendorMatcher.SearchByName.Error', e.message);
                 return [];
             }
         }
@@ -311,8 +385,9 @@ define(['N/log', 'N/query', 'N/search'], function(log, query, search) {
             const domain = this.extractEmailDomain(email);
             if (!domain) return [];
 
+            // Use only core vendor fields that are guaranteed to exist
             const sql = `
-                SELECT v.id, v.companyname, v.entityid, v.email, v.address1, v.city, v.phone
+                SELECT v.id, v.companyname, v.entityid, v.email, v.phone
                 FROM vendor v
                 WHERE v.isinactive = 'F'
                 AND LOWER(v.email) LIKE ?
@@ -332,12 +407,12 @@ define(['N/log', 'N/query', 'N/search'], function(log, query, search) {
                     companyName: r.values[1],
                     entityId: r.values[2],
                     email: r.values[3],
-                    address: r.values[4],
-                    city: r.values[5],
-                    phone: r.values[6]
+                    address: null,
+                    city: null,
+                    phone: r.values[4]
                 }));
             } catch (e) {
-                log.debug('VendorMatcher.searchByEmailDomain', e.message);
+                fcDebug.debug('VendorMatcher.searchByEmailDomain', e.message);
                 return [];
             }
         }
@@ -453,6 +528,7 @@ define(['N/log', 'N/query', 'N/search'], function(log, query, search) {
 
             // Exact match
             if (normalizedSearch === normalizedCandidate) {
+                log.audit('DEBUG.VendorMatcher.NameScore', `EXACT MATCH: "${normalizedSearch}" === "${normalizedCandidate}"`);
                 return 1.0;
             }
 
@@ -465,7 +541,21 @@ define(['N/log', 'N/query', 'N/search'], function(log, query, search) {
             const prefixScore = this.calculatePrefixScore(normalizedSearch, normalizedCandidate);
 
             // Weighted combination
-            return (tokenScore * 0.45) + (levenshteinScore * 0.35) + (prefixScore * 0.20);
+            const finalScore = (tokenScore * 0.45) + (levenshteinScore * 0.35) + (prefixScore * 0.20);
+
+            // DEBUG: Log detailed scoring (only for top candidates to reduce log volume)
+            log.audit('DEBUG.VendorMatcher.NameScore.Detail', JSON.stringify({
+                search: normalizedSearch,
+                candidate: normalizedCandidate,
+                searchTokens: searchTokens,
+                candidateTokens: candidateTokens,
+                tokenScore: tokenScore.toFixed(4),
+                levenshteinScore: levenshteinScore.toFixed(4),
+                prefixScore: prefixScore.toFixed(4),
+                finalScore: finalScore.toFixed(4)
+            }));
+
+            return finalScore;
         }
 
         /**

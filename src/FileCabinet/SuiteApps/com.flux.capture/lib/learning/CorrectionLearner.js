@@ -8,7 +8,7 @@
  * Stores learned patterns in Flux Configuration records
  */
 
-define(['N/log', 'N/record', 'N/query', 'N/runtime'], function(log, record, query, runtime) {
+define(['N/log', 'N/record', 'N/query', 'N/runtime', '../FC_Debug'], function(log, record, query, runtime, fcDebug) {
     'use strict';
 
     /**
@@ -49,7 +49,7 @@ define(['N/log', 'N/record', 'N/query', 'N/runtime'], function(log, record, quer
                 return { success: false, reason: 'Invalid correction data' };
             }
 
-            log.debug('CorrectionLearner.learn', {
+            fcDebug.debug('CorrectionLearner.learn', {
                 field: correction.field,
                 original: correction.original,
                 corrected: correction.corrected,
@@ -450,7 +450,7 @@ define(['N/log', 'N/record', 'N/query', 'N/runtime'], function(log, record, quer
 
                 const savedId = configRecord.save();
 
-                log.debug('CorrectionLearner.storeConfig', {
+                fcDebug.debug('CorrectionLearner.storeConfig', {
                     type: type,
                     key: key,
                     id: savedId
@@ -495,7 +495,7 @@ define(['N/log', 'N/record', 'N/query', 'N/runtime'], function(log, record, quer
                     };
                 }
             } catch (e) {
-                log.debug('CorrectionLearner.getConfig', e.message);
+                fcDebug.debug('CorrectionLearner.getConfig', e.message);
             }
 
             return null;

@@ -54,6 +54,7 @@
         },
 
         restoreUIState: function() {
+            var self = this;
             var viewFlow = el('.view-flow');
             var container = el('#flow-cards-container');
             var dropContainer = el('#flow-drop-container');
@@ -66,13 +67,20 @@
                 if (dropContainer) dropContainer.classList.add('compact');
 
                 // Re-render all cards without animation (they're restored)
-                var self = this;
                 this.uploadCards.forEach(function(card) {
                     self.renderCard(card, false);
                 });
 
                 this.updateSummary();
                 this.checkAllComplete();
+
+                // Immediately check processing status for any cards that were processing
+                var hasProcessingCards = this.uploadCards.some(function(c) {
+                    return c.status === 'processing' && c.documentId;
+                });
+                if (hasProcessingCards) {
+                    this.checkProcessingStatus();
+                }
             } else {
                 // No cards - full page mode
                 if (viewFlow) viewFlow.classList.add('fullpage-mode');
@@ -622,6 +630,6 @@
         function() { FlowController.cleanup(); }
     );
 
-    console.log('[View.Ingest] Card-Based Ingest Loaded');
+    FCDebug.log('[View.Ingest] Card-Based Ingest Loaded');
 
 })();

@@ -1576,6 +1576,6 @@
         function() { SettingsController.cleanup(); }
     );
 
-    console.log('[View.Settings] Loaded');
+    FCDebug.log('[View.Settings] Loaded');
 
 })();
