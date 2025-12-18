@@ -15,8 +15,15 @@
         ERROR: '7'
     };
 
+    // Persistent state that survives navigation
+    // Stored outside FlowController to persist across init/cleanup cycles
+    var persistentState = {
+        uploadCards: [],
+        cardIdCounter: 0
+    };
+
     var FlowController = {
-        uploadCards: [],  // Array of upload card states
+        uploadCards: [],  // Reference to persistent cards
         refreshInterval: null,
         REFRESH_MS: 2000,
         selectedDocType: 'auto',
@@ -26,17 +33,51 @@
         // INITIALIZATION
         // ==========================================
         init: function() {
-            this.uploadCards = [];
-            this.cardIdCounter = 0;
+            // Restore from persistent state
+            this.uploadCards = persistentState.uploadCards;
+            this.cardIdCounter = persistentState.cardIdCounter;
 
             renderTemplate('tpl-rail', 'view-container');
             this.bindEvents();
             this.startRefresh();
+
+            // Restore UI state based on existing cards
+            this.restoreUIState();
         },
 
         cleanup: function() {
             this.stopRefresh();
-            this.uploadCards = [];
+            // Save to persistent state (keep the reference, cards persist)
+            persistentState.uploadCards = this.uploadCards;
+            persistentState.cardIdCounter = this.cardIdCounter;
+            // Don't clear uploadCards - they persist!
+        },
+
+        restoreUIState: function() {
+            var viewFlow = el('.view-flow');
+            var container = el('#flow-cards-container');
+            var dropContainer = el('#flow-drop-container');
+
+            if (this.uploadCards.length > 0) {
+                // We have cards - show cards mode
+                if (viewFlow) viewFlow.classList.add('cards-mode');
+                if (viewFlow) viewFlow.classList.remove('fullpage-mode');
+                if (container) container.style.display = 'block';
+                if (dropContainer) dropContainer.classList.add('compact');
+
+                // Re-render all cards without animation (they're restored)
+                var self = this;
+                this.uploadCards.forEach(function(card) {
+                    self.renderCard(card, false);
+                });
+
+                this.updateSummary();
+                this.checkAllComplete();
+            } else {
+                // No cards - full page mode
+                if (viewFlow) viewFlow.classList.add('fullpage-mode');
+                if (viewFlow) viewFlow.classList.remove('cards-mode');
+            }
         },
 
         // ==========================================
@@ -107,17 +148,31 @@
         // ==========================================
         handleFiles: function(files) {
             var self = this;
+            var isFirstBatch = this.uploadCards.length === 0;
 
-            // Show cards container
+            // Transition from fullpage to cards mode
+            var viewFlow = el('.view-flow');
             var container = el('#flow-cards-container');
             var dropContainer = el('#flow-drop-container');
+
+            if (isFirstBatch && viewFlow) {
+                // Animate the transition
+                viewFlow.classList.remove('fullpage-mode');
+                viewFlow.classList.add('cards-mode');
+                if (container) {
+                    container.classList.add('animate-container');
+                }
+            }
+
             if (container) container.style.display = 'block';
             if (dropContainer) dropContainer.classList.add('compact');
 
             // Create cards for each file
             files.forEach(function(file) {
+                self.cardIdCounter++;
+                persistentState.cardIdCounter = self.cardIdCounter;
                 var card = {
-                    id: 'card-' + (++self.cardIdCounter),
+                    id: 'card-' + self.cardIdCounter,
                     fileName: file.name,
                     fileSize: file.size,
                     file: file,
@@ -461,6 +516,7 @@
             var container = el('#flow-cards-container');
             var dropContainer = el('#flow-drop-container');
             var completeActions = el('#flow-complete-actions');
+            var viewFlow = el('.view-flow');
 
             if (dropContainer) dropContainer.classList.remove('compact');
             if (completeActions) completeActions.style.display = 'none';
@@ -469,6 +525,9 @@
             this.uploadCards = this.uploadCards.filter(function(c) {
                 return c.status !== 'complete' && c.status !== 'error';
             });
+
+            // Update persistent state
+            persistentState.uploadCards = this.uploadCards;
 
             // Re-render
             var grid = el('#flow-cards-grid');
@@ -479,8 +538,16 @@
                 self.renderCard(card, false);
             });
 
-            if (this.uploadCards.length === 0 && container) {
-                container.style.display = 'none';
+            if (this.uploadCards.length === 0) {
+                if (container) {
+                    container.style.display = 'none';
+                    container.classList.remove('animate-container');
+                }
+                // Return to fullpage mode
+                if (viewFlow) {
+                    viewFlow.classList.remove('cards-mode');
+                    viewFlow.classList.add('fullpage-mode');
+                }
             }
 
             this.updateSummary();
@@ -512,11 +579,24 @@
                     return c.status !== 'complete' && c.status !== 'error';
                 });
 
+                // Update persistent state
+                persistentState.uploadCards = self.uploadCards;
+
                 var container = el('#flow-cards-container');
-                if (self.uploadCards.length === 0 && container) {
-                    container.style.display = 'none';
+                var viewFlow = el('.view-flow');
+
+                if (self.uploadCards.length === 0) {
+                    // Return to fullpage mode
+                    if (container) {
+                        container.style.display = 'none';
+                        container.classList.remove('animate-container');
+                    }
                     var dropContainer = el('#flow-drop-container');
                     if (dropContainer) dropContainer.classList.remove('compact');
+                    if (viewFlow) {
+                        viewFlow.classList.remove('cards-mode');
+                        viewFlow.classList.add('fullpage-mode');
+                    }
                 }
 
                 self.updateSummary();
