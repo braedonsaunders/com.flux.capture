@@ -628,13 +628,12 @@
         },
 
         getDocTypeText: function(docType) {
+            // Must match server DocTypeLabels in FC_Router.js
             var typeMap = {
                 '1': 'Invoice',
-                '2': 'Bill',
-                '3': 'Receipt',
-                '4': 'PO',
-                '5': 'Credit Memo',
-                '6': 'Statement'
+                '3': 'Credit Memo',
+                '4': 'Expense Report',
+                '5': 'Purchase Order'
             };
             return typeMap[String(docType)] || 'Document';
         },
