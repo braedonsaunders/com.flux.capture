@@ -1457,9 +1457,13 @@ define([
                 formInfo: schema.formInfo,
                 bodyFields: schema.bodyFields,
                 sublists: schema.sublists,
+                tabs: schema.tabs,  // Include tabs from user config (XML upload)
                 layout: schema.layout,
                 config: schema.config,
                 hiddenFields: schema.hiddenFields,
+                capturedAt: schema.capturedAt,
+                savedAt: schema.savedAt,
+                source: schema.source,
                 _cached: schema._cached || false
             });
         } catch (e) {

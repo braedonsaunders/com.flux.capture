@@ -851,15 +851,15 @@
                 return;
             }
 
-            // Get layout data - could be in layout property or directly on config
-            var layout = config.layout || config;
-            var tabs = layout.tabs || [];
+            // Get layout data - tabs can be at config.tabs (user config) or config.layout.tabs (cached)
+            var layout = config.layout || {};
+            var tabs = config.tabs || layout.tabs || [];
             var sublists = config.sublists || layout.sublists || [];
             var bodyFields = config.bodyFields || [];
 
             var html = '<div class="form-editor-tree">';
 
-            // Form info header
+            // Form info header - prefer config.formInfo (user config) over layout.formInfo (cached)
             var formInfo = config.formInfo || layout.formInfo || {};
             html += '<div class="editor-form-header">' +
                 '<i class="fas fa-file-invoice"></i>' +
