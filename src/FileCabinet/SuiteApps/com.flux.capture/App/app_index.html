@@ -1140,7 +1140,19 @@
                     </div>
                 </div>
                 <div class="toolbar-title">
-                    <span class="doc-type-badge" id="doc-type-badge">Invoice</span>
+                    <div class="doc-type-dropdown" id="doc-type-dropdown">
+                        <button class="doc-type-badge" id="doc-type-badge">
+                            <span class="badge-text">Invoice</span>
+                            <i class="fas fa-chevron-down badge-arrow"></i>
+                        </button>
+                        <div class="doc-type-options" id="doc-type-options">
+                            <div class="doc-type-option" data-type="1">Invoice</div>
+                            <div class="doc-type-option" data-type="2">Receipt</div>
+                            <div class="doc-type-option" data-type="3">Credit Memo</div>
+                            <div class="doc-type-option" data-type="4">Expense Report</div>
+                            <div class="doc-type-option" data-type="5">Purchase Order</div>
+                        </div>
+                    </div>
                     <span id="doc-title">Document Review</span>
                 </div>
                 <div class="toolbar-actions">

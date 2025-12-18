@@ -824,13 +824,58 @@ define([
                 });
             });
 
-            return Response.success({
-                options: periods,
-                defaultValue: currentPeriodId
-            });
+            // Return flat array for typeahead compatibility
+            // Mark the current period for UI highlighting
+            return Response.success(periods);
         } catch (e) {
             log.error('getAccountingPeriods Error', e);
             return Response.error('PERIODS_ERROR', e.message);
+        }
+    }
+
+    /**
+     * Get subsidiaries for dropdown
+     * Returns defaultValue if only one subsidiary exists
+     */
+    function getSubsidiaries(context) {
+        try {
+            var searchQuery = context.query || '';
+
+            var filters = [['isinactive', 'is', 'F']];
+            if (searchQuery && searchQuery.length >= 1) {
+                filters.push('AND');
+                filters.push(['name', 'contains', searchQuery]);
+            }
+
+            var subSearch = search.create({
+                type: search.Type.SUBSIDIARY,
+                filters: filters,
+                columns: [
+                    search.createColumn({ name: 'internalid' }),
+                    search.createColumn({ name: 'name', sort: search.Sort.ASC })
+                ]
+            });
+
+            var subsidiaries = [];
+            var results = subSearch.run().getRange({ start: 0, end: 100 });
+
+            results.forEach(function(result) {
+                subsidiaries.push({
+                    value: result.getValue('internalid'),
+                    text: result.getValue('name')
+                });
+            });
+
+            // If only one subsidiary, set it as default
+            var defaultValue = subsidiaries.length === 1 ? subsidiaries[0].value : null;
+
+            return Response.success({
+                options: subsidiaries,
+                defaultValue: defaultValue
+            });
+        } catch (e) {
+            log.error('getSubsidiaries Error', e);
+            return Response.error('SUBSIDIARY_ERROR', e.message);
         }
     }
 
@@ -839,11 +884,10 @@ define([
      */
     function getApprovalStatuses() {
         try {
-            // Standard NetSuite approval statuses
+            // Standard NetSuite approval statuses for vendor bills
             var statuses = [
                 { value: '1', text: 'Pending Approval' },
-                { value: '2', text: 'Approved' },
-                { value: '3', text: 'Rejected' }
+                { value: '2', text: 'Approved' }
             ];
 
             return Response.success(statuses);
@@ -1069,9 +1113,7 @@ define([
                     break;
                 case 'subsidiaries':
                 case 'subsidiary':
-                    searchType = search.Type.SUBSIDIARY;
-                    columns = ['internalid', 'name'];
-                    break;
+                    return getSubsidiaries(context);
                 case 'currencies':
                 case 'currency':
                     searchType = search.Type.CURRENCY;
