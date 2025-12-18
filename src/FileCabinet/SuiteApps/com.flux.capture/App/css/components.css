@@ -5705,11 +5705,16 @@ tr.doc-row.approving { animation: compress-out 0.3s ease forwards; }
     display: flex;
     gap: 2px;
     margin-left: var(--space-sm);
-    opacity: 0;
+    opacity: 0.5;
     transition: opacity var(--transition);
 }
 
 .node-header:hover .node-actions {
+    opacity: 1;
+}
+
+/* Always show visibility toggle button */
+.node-actions .btn-icon[data-action="toggle-visible"] {
     opacity: 1;
 }
 
