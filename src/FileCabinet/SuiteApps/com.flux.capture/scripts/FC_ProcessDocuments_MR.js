@@ -69,22 +69,22 @@ define([
             // CRITICAL: Check if document is still PENDING before processing
             // This prevents race conditions when multiple MapReduce tasks run concurrently
             // (each upload triggers a new task, and they may overlap)
-            const currentStatus = search.lookupFields({
+            // Use a search with filter (same approach as getInputData) for reliable status check
+            const stillPending = search.create({
                 type: 'customrecord_flux_document',
-                id: documentId,
-                columns: ['custrecord_flux_status']
-            });
+                filters: [
+                    ['internalid', 'is', documentId],
+                    'AND',
+                    ['custrecord_flux_status', 'is', DocStatus.PENDING]
+                ],
+                columns: ['internalid']
+            }).run().getRange({ start: 0, end: 1 });
 
-            const statusValue = currentStatus.custrecord_flux_status &&
-                currentStatus.custrecord_flux_status[0] ?
-                currentStatus.custrecord_flux_status[0].value : null;
-
-            if (statusValue != DocStatus.PENDING) {
+            if (stillPending.length === 0) {
                 // Document already claimed by another task or already processed
                 log.audit('FC_ProcessDocuments.map.skip', {
                     documentId: documentId,
                     docCode: docCode,
-                    currentStatus: statusValue,
                     reason: 'Document no longer PENDING - already being processed by another task'
                 });
                 // Write a skip result so summarize() knows this was intentional
