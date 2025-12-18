@@ -1290,13 +1290,17 @@
                                     groupFields.push(nsField);
                                 } else if (domFieldVisible) {
                                     // Field not in schema but visible in DOM - use DOM data
-                                    groupFields.push({
+                                    var newField = {
                                         id: fieldId,
                                         label: domField.label || fieldId,
                                         type: domField.type || 'text',
                                         mandatory: domField.required || false,
                                         isDisplay: true
-                                    });
+                                    };
+                                    // Copy default values from layout field config
+                                    if (domField.defaultValue) newField.defaultValue = domField.defaultValue;
+                                    if (domField.defaultValueText) newField.defaultValueText = domField.defaultValueText;
+                                    groupFields.push(newField);
                                 }
                             });
 
