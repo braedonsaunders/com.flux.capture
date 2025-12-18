@@ -25,6 +25,14 @@
     };
 
     // ==========================================
+    // SHARED QUEUE STATE (persists across navigation)
+    // ==========================================
+    var sharedQueueState = {
+        queueIds: [],
+        lastFetch: 0
+    };
+
+    // ==========================================
     // REVIEW CONTROLLER
     // ==========================================
     var ReviewController = {
@@ -59,38 +67,80 @@
             this.formFields = null;
             this.isLoading = true;
 
-            // Render base template
-            renderTemplate('tpl-review', 'view-container');
-
-            // Bind events and keyboard shortcuts
-            this.bindEvents();
-            this.bindKeyboardShortcuts();
+            // Restore shared queue state if available (prevents flicker on navigation)
+            if (sharedQueueState.queueIds.length > 0) {
+                this.queueIds = sharedQueueState.queueIds;
+                this.queueIndex = this.docId ? this.queueIds.indexOf(parseInt(this.docId, 10)) : 0;
+            }
 
             if (this.docId) {
+                // Navigating to specific doc - render full template immediately
+                renderTemplate('tpl-review', 'view-container');
+                this.bindEvents();
+                this.bindKeyboardShortcuts();
+
+                // Show skeleton state in position indicator until queue loads
+                this.showPositionSkeleton();
+
                 // Load queue context for prev/next navigation, then load document
                 this.loadQueueContext();
                 this.loadData();
             } else {
-                // No docId provided - load first document from review queue
+                // No docId - show centered loading first, then determine what to show
+                this.showCenteredLoading();
                 this.loadFirstDocument();
+            }
+        },
+
+        showCenteredLoading: function() {
+            var container = el('#view-container');
+            if (container) {
+                container.innerHTML = '<div class="review-loading-state">' +
+                    '<div class="loading-spinner-lg"></div>' +
+                    '<p>Loading review queue...</p>' +
+                '</div>';
+            }
+        },
+
+        showPositionSkeleton: function() {
+            // If we already have queue data from shared state, update immediately
+            if (this.queueIndex >= 0 && this.queueIds.length > 0) {
+                var currentEl = el('#position-current');
+                var totalEl = el('#position-total');
+                if (currentEl) currentEl.textContent = this.queueIndex + 1;
+                if (totalEl) totalEl.textContent = this.queueIds.length;
             }
         },
 
         loadFirstDocument: function() {
             var self = this;
-            this.showLoadingState();
 
             // Load documents needing review and start with the first one
             API.get('list', { status: '4', pageSize: 100 }) // NEEDS_REVIEW
                 .then(function(data) {
                     if (data && data.length > 0) {
                         self.queueIds = data.map(function(d) { return d.id; });
+                        // Update shared state
+                        sharedQueueState.queueIds = self.queueIds;
+                        sharedQueueState.lastFetch = Date.now();
+
                         self.docId = self.queueIds[0];
                         self.queueIndex = 0;
+
+                        // NOW render the full template and load data
+                        renderTemplate('tpl-review', 'view-container');
+                        self.bindEvents();
+                        self.bindKeyboardShortcuts();
                         self.updateNavigationButtons();
                         self.loadData();
+
+                        // Animate the view in
+                        var reviewEl = el('.view-review');
+                        if (reviewEl) {
+                            reviewEl.classList.add('animate-in');
+                        }
                     } else {
-                        // No documents to review - show empty state
+                        // No documents to review - show empty state with animation
                         self.showNoDocumentsState();
                     }
                 })
@@ -103,11 +153,22 @@
         showNoDocumentsState: function() {
             var container = el('#view-container');
             if (container) {
-                container.innerHTML = '<div class="empty-state" style="padding-top:100px;">' +
-                    '<div class="empty-icon success"><i class="fas fa-check-circle"></i></div>' +
-                    '<h4>All Caught Up!</h4>' +
-                    '<p>No documents need review right now.</p>' +
-                    '<button class="btn btn-primary" id="btn-go-documents">Go to Documents</button>' +
+                container.innerHTML = '<div class="review-empty-state animate-in">' +
+                    '<div class="empty-celebration">' +
+                        '<div class="celebration-icon">' +
+                            '<i class="fas fa-check-circle"></i>' +
+                            '<div class="celebration-rings">' +
+                                '<div class="ring"></div>' +
+                                '<div class="ring"></div>' +
+                                '<div class="ring"></div>' +
+                            '</div>' +
+                        '</div>' +
+                        '<h2>All Caught Up!</h2>' +
+                        '<p>No documents need review right now.</p>' +
+                        '<button class="btn btn-primary btn-lg" id="btn-go-documents">' +
+                            '<i class="fas fa-inbox"></i> Go to Documents' +
+                        '</button>' +
+                    '</div>' +
                 '</div>';
 
                 var btn = el('#btn-go-documents');
@@ -169,6 +230,11 @@
                     if (data && data.length > 0) {
                         self.queueIds = data.map(function(d) { return d.id; });
                         self.queueIndex = self.queueIds.indexOf(parseInt(self.docId, 10));
+
+                        // Update shared state for future navigations
+                        sharedQueueState.queueIds = self.queueIds;
+                        sharedQueueState.lastFetch = Date.now();
+
                         self.updateNavigationButtons();
                     }
                 })
