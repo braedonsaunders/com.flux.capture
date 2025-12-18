@@ -13,12 +13,15 @@
         parsedXml: null,
         xmlSelections: {},
         captureScriptEnabled: false,
+        providerConfig: null,
+        currentProvider: 'oci',
 
         init: function() {
             renderTemplate('tpl-settings', 'view-container');
             this.bindEvents();
             this.loadFormConfig(this.currentFormType);
             this.loadCaptureScriptStatus();
+            this.loadProviderConfig();
         },
 
         bindEvents: function() {
@@ -219,6 +222,55 @@
             if (shortcutsBtn) {
                 shortcutsBtn.addEventListener('click', function() {
                     self.showShortcutsHelp();
+                });
+            }
+
+            // Provider selection
+            els('.provider-option').forEach(function(option) {
+                option.addEventListener('click', function() {
+                    var provider = this.dataset.provider;
+                    self.selectProvider(provider);
+                });
+            });
+
+            // Provider radio buttons
+            els('input[name="provider"]').forEach(function(radio) {
+                radio.addEventListener('change', function() {
+                    self.selectProvider(this.value);
+                });
+            });
+
+            // Toggle API key visibility
+            var toggleApiKeyBtn = el('#btn-toggle-api-key');
+            if (toggleApiKeyBtn) {
+                toggleApiKeyBtn.addEventListener('click', function() {
+                    var input = el('#azure-api-key');
+                    var icon = this.querySelector('i');
+                    if (input.type === 'password') {
+                        input.type = 'text';
+                        icon.classList.remove('fa-eye');
+                        icon.classList.add('fa-eye-slash');
+                    } else {
+                        input.type = 'password';
+                        icon.classList.remove('fa-eye-slash');
+                        icon.classList.add('fa-eye');
+                    }
+                });
+            }
+
+            // Test Azure connection
+            var testAzureBtn = el('#btn-test-azure');
+            if (testAzureBtn) {
+                testAzureBtn.addEventListener('click', function() {
+                    self.testAzureConnection();
+                });
+            }
+
+            // Save provider settings
+            var saveProviderBtn = el('#btn-save-provider');
+            if (saveProviderBtn) {
+                saveProviderBtn.addEventListener('click', function() {
+                    self.saveProviderSettings();
                 });
             }
         },
@@ -549,6 +601,34 @@
             };
         },
 
+        // Detect checkbox fields using checkBoxDefault element or naming heuristics
+        // NetSuite's form XML doesn't include field type metadata for native fields
+        isCheckboxField: function(fieldId, checkBoxDefault) {
+            // Explicit checkbox indicator from XML
+            if (checkBoxDefault) return true;
+
+            // Normalize field ID (strip scriptid brackets, lowercase)
+            var cleanId = (fieldId || '').replace(/^\[.*?scriptid=([^\]]+)\]$/, '$1')
+                                         .replace(/^\[.*?\]$/, '')
+                                         .toLowerCase();
+
+            // Common checkbox field patterns (exact matches)
+            var checkboxPatterns = [
+                'paymenthold', 'tobepaid', 'tobeemailed', 'tobeprinted', 'tobefaxed',
+                'taxable', 'billable', 'closed', 'complete', 'approved', 'isbasecurrency',
+                'landedcostperline', 'excludefromglnumbering', 'ismultishipto'
+            ];
+            if (checkboxPatterns.indexOf(cleanId) !== -1) return true;
+
+            // Heuristic: fields starting with 'is', 'has', or 'tobe' are typically booleans
+            if (/^(is|has|tobe|include|exclude)/.test(cleanId)) return true;
+
+            // Heuristic: fields ending with common boolean suffixes
+            if (/(_flag|_yn|_bool|_checkbox)$/.test(cleanId)) return true;
+
+            return false;
+        },
+
         parseXmlFields: function(container) {
             var self = this;
             var fields = [];
@@ -560,9 +640,9 @@
 
                 if (!id) return;
 
-                // Detect checkbox type from checkBoxDefault element
+                // Detect checkbox type from checkBoxDefault element or known native fields
                 var checkBoxDefault = self.getXmlText(f, 'checkBoxDefault');
-                var fieldType = checkBoxDefault ? 'checkbox' : 'text';
+                var fieldType = self.isCheckboxField(id, checkBoxDefault) ? 'checkbox' : 'text';
 
                 var fieldObj = {
                     id: id,
@@ -660,9 +740,9 @@
             element.querySelectorAll('columns > column').forEach(function(col) {
                 var colId = self.getXmlText(col, 'id') || col.getAttribute('scriptid');
                 if (colId) {
-                    // Detect checkbox type from checkBoxDefault element
+                    // Detect checkbox type from checkBoxDefault element or known native fields
                     var checkBoxDefault = self.getXmlText(col, 'checkBoxDefault');
-                    var colType = checkBoxDefault ? 'checkbox' : 'text';
+                    var colType = self.isCheckboxField(colId, checkBoxDefault) ? 'checkbox' : 'text';
 
                     var colObj = {
                         id: colId,
@@ -1815,6 +1895,271 @@
                 confirmText: 'Got it',
                 showCancel: false
             });
+        },
+
+        // ==========================================
+        // PROVIDER MANAGEMENT
+        // ==========================================
+
+        loadProviderConfig: function() {
+            var self = this;
+
+            API.get('providerconfig')
+                .then(function(result) {
+                    self.providerConfig = result.data || result || {};
+                    self.currentProvider = self.providerConfig.providerType || 'oci';
+                    self.updateProviderUI();
+                })
+                .catch(function(err) {
+                    console.error('Error loading provider config:', err);
+                    self.providerConfig = { providerType: 'oci' };
+                    self.currentProvider = 'oci';
+                    self.updateProviderUI();
+                });
+        },
+
+        updateProviderUI: function() {
+            var config = this.providerConfig || {};
+
+            // Update radio buttons and selection state
+            var ociRadio = el('#provider-radio-oci');
+            var azureRadio = el('#provider-radio-azure');
+            var ociOption = el('#provider-oci');
+            var azureOption = el('#provider-azure');
+            var azurePanel = el('#azure-config-panel');
+
+            if (this.currentProvider === 'azure') {
+                if (azureRadio) azureRadio.checked = true;
+                if (ociRadio) ociRadio.checked = false;
+                if (ociOption) ociOption.classList.remove('selected');
+                if (azureOption) azureOption.classList.add('selected');
+                if (azurePanel) azurePanel.style.display = 'block';
+            } else {
+                if (ociRadio) ociRadio.checked = true;
+                if (azureRadio) azureRadio.checked = false;
+                if (ociOption) ociOption.classList.add('selected');
+                if (azureOption) azureOption.classList.remove('selected');
+                if (azurePanel) azurePanel.style.display = 'none';
+            }
+
+            // Populate Azure config if present
+            if (config.azure) {
+                var endpointInput = el('#azure-endpoint');
+                var apiKeyInput = el('#azure-api-key');
+                var modelSelect = el('#azure-model');
+
+                if (endpointInput && config.azure.endpoint) {
+                    endpointInput.value = config.azure.endpoint;
+                }
+                if (apiKeyInput && config.azure._hasApiKey) {
+                    // Show masked placeholder for existing key
+                    apiKeyInput.placeholder = 'API key configured (enter new to replace)';
+                }
+                if (modelSelect && config.azure.defaultModel) {
+                    modelSelect.value = config.azure.defaultModel;
+                }
+
+                // Update Azure status
+                this.updateAzureStatus(config.azure);
+            }
+        },
+
+        updateAzureStatus: function(azureConfig) {
+            var statusEl = el('#azure-status');
+            if (!statusEl) return;
+
+            if (azureConfig && azureConfig.endpoint && azureConfig._hasApiKey) {
+                statusEl.innerHTML = '<i class="fas fa-check-circle" style="color:var(--color-success);"></i> <span>Configured</span>';
+            } else if (azureConfig && (azureConfig.endpoint || azureConfig._hasApiKey)) {
+                statusEl.innerHTML = '<i class="fas fa-exclamation-triangle" style="color:var(--color-warning);"></i> <span>Incomplete configuration</span>';
+            } else {
+                statusEl.innerHTML = '<i class="fas fa-exclamation-circle" style="color:var(--color-warning);"></i> <span>Configuration required</span>';
+            }
+        },
+
+        selectProvider: function(provider) {
+            this.currentProvider = provider;
+
+            // Update UI
+            var ociOption = el('#provider-oci');
+            var azureOption = el('#provider-azure');
+            var ociRadio = el('#provider-radio-oci');
+            var azureRadio = el('#provider-radio-azure');
+            var azurePanel = el('#azure-config-panel');
+
+            if (provider === 'azure') {
+                if (azureRadio) azureRadio.checked = true;
+                if (ociRadio) ociRadio.checked = false;
+                if (ociOption) ociOption.classList.remove('selected');
+                if (azureOption) azureOption.classList.add('selected');
+                if (azurePanel) {
+                    azurePanel.style.display = 'block';
+                    // Animate in
+                    azurePanel.style.opacity = '0';
+                    azurePanel.style.transform = 'translateY(-10px)';
+                    requestAnimationFrame(function() {
+                        azurePanel.style.transition = 'opacity 0.3s ease, transform 0.3s ease';
+                        azurePanel.style.opacity = '1';
+                        azurePanel.style.transform = 'translateY(0)';
+                    });
+                }
+            } else {
+                if (ociRadio) ociRadio.checked = true;
+                if (azureRadio) azureRadio.checked = false;
+                if (ociOption) ociOption.classList.add('selected');
+                if (azureOption) azureOption.classList.remove('selected');
+                if (azurePanel) azurePanel.style.display = 'none';
+            }
+        },
+
+        testAzureConnection: function() {
+            var self = this;
+            var btn = el('#btn-test-azure');
+            var resultEl = el('#azure-test-result');
+
+            var endpoint = (el('#azure-endpoint').value || '').trim();
+            var apiKey = (el('#azure-api-key').value || '').trim();
+
+            // Validate inputs
+            if (!endpoint) {
+                if (resultEl) {
+                    resultEl.innerHTML = '<i class="fas fa-times-circle" style="color:var(--color-danger);"></i> Please enter endpoint';
+                }
+                return;
+            }
+
+            // If no new API key entered, check if we have existing
+            if (!apiKey && !(this.providerConfig && this.providerConfig.azure && this.providerConfig.azure._hasApiKey)) {
+                if (resultEl) {
+                    resultEl.innerHTML = '<i class="fas fa-times-circle" style="color:var(--color-danger);"></i> Please enter API key';
+                }
+                return;
+            }
+
+            // Show loading
+            if (btn) {
+                btn.disabled = true;
+                btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Testing...';
+            }
+            if (resultEl) {
+                resultEl.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Testing connection...';
+            }
+
+            // Build test config - use new key if provided, otherwise test with existing
+            var testConfig = {
+                endpoint: endpoint,
+                apiKey: apiKey || null, // null means use existing encrypted key
+                defaultModel: el('#azure-model').value || 'prebuilt-invoice'
+            };
+
+            API.post('testprovider', { providerType: 'azure', config: testConfig })
+                .then(function(result) {
+                    if (btn) {
+                        btn.disabled = false;
+                        btn.innerHTML = '<i class="fas fa-plug"></i> Test Connection';
+                    }
+
+                    if (result.success) {
+                        if (resultEl) {
+                            resultEl.innerHTML = '<i class="fas fa-check-circle" style="color:var(--color-success);"></i> Connection successful!';
+                        }
+                        UI.toast('Azure connection test successful!', 'success');
+                    } else {
+                        if (resultEl) {
+                            resultEl.innerHTML = '<i class="fas fa-times-circle" style="color:var(--color-danger);"></i> ' + (result.message || 'Connection failed');
+                        }
+                        UI.toast('Connection test failed: ' + (result.message || 'Unknown error'), 'error');
+                    }
+                })
+                .catch(function(err) {
+                    if (btn) {
+                        btn.disabled = false;
+                        btn.innerHTML = '<i class="fas fa-plug"></i> Test Connection';
+                    }
+                    if (resultEl) {
+                        resultEl.innerHTML = '<i class="fas fa-times-circle" style="color:var(--color-danger);"></i> ' + (err.message || 'Test failed');
+                    }
+                    UI.toast('Connection test failed: ' + err.message, 'error');
+                });
+        },
+
+        saveProviderSettings: function() {
+            var self = this;
+            var btn = el('#btn-save-provider');
+
+            // Build config
+            var config = {
+                providerType: this.currentProvider
+            };
+
+            // Add Azure config if selected
+            if (this.currentProvider === 'azure') {
+                var endpoint = (el('#azure-endpoint').value || '').trim();
+                var apiKey = (el('#azure-api-key').value || '').trim();
+                var model = el('#azure-model').value || 'prebuilt-invoice';
+
+                if (!endpoint) {
+                    UI.toast('Please enter Azure endpoint', 'error');
+                    return;
+                }
+
+                // Only require API key if not already configured
+                if (!apiKey && !(this.providerConfig && this.providerConfig.azure && this.providerConfig.azure._hasApiKey)) {
+                    UI.toast('Please enter Azure API key', 'error');
+                    return;
+                }
+
+                config.azure = {
+                    endpoint: endpoint,
+                    defaultModel: model
+                };
+
+                // Only include API key if a new one was entered
+                if (apiKey) {
+                    config.azure.apiKey = apiKey;
+                }
+            }
+
+            // Show loading
+            if (btn) {
+                btn.disabled = true;
+                btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Saving...';
+            }
+
+            API.put('providerconfig', config)
+                .then(function(result) {
+                    if (btn) {
+                        btn.disabled = false;
+                        btn.innerHTML = '<i class="fas fa-save"></i> Save Provider Settings';
+                    }
+
+                    if (result.success) {
+                        UI.toast('Provider settings saved successfully!', 'success');
+
+                        // Update local config
+                        self.providerConfig = config;
+                        if (config.azure && config.azure.apiKey) {
+                            self.providerConfig.azure._hasApiKey = true;
+                            // Clear password field
+                            var apiKeyInput = el('#azure-api-key');
+                            if (apiKeyInput) {
+                                apiKeyInput.value = '';
+                                apiKeyInput.placeholder = 'API key configured (enter new to replace)';
+                            }
+                        }
+
+                        self.updateAzureStatus(self.providerConfig.azure);
+                    } else {
+                        UI.toast('Failed to save: ' + (result.message || 'Unknown error'), 'error');
+                    }
+                })
+                .catch(function(err) {
+                    if (btn) {
+                        btn.disabled = false;
+                        btn.innerHTML = '<i class="fas fa-save"></i> Save Provider Settings';
+                    }
+                    UI.toast('Failed to save provider settings: ' + err.message, 'error');
+                });
         },
 
         cleanup: function() {

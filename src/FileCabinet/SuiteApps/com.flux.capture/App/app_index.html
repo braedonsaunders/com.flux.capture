@@ -1328,6 +1328,103 @@
             </div>
 
             <div class="settings-layout">
+                <!-- Extraction Provider Settings -->
+                <div class="settings-card settings-card-large">
+                    <div class="settings-card-header">
+                        <i class="fas fa-cloud-cog"></i>
+                        <div>
+                            <h3>Extraction Provider</h3>
+                            <p>Choose and configure the document extraction service</p>
+                        </div>
+                    </div>
+                    <div class="settings-card-body">
+                        <div class="provider-selector" id="provider-selector">
+                            <!-- OCI Provider Option -->
+                            <div class="provider-option selected" data-provider="oci" id="provider-oci">
+                                <div class="provider-radio">
+                                    <input type="radio" name="provider" value="oci" id="provider-radio-oci" checked>
+                                </div>
+                                <div class="provider-info">
+                                    <div class="provider-header">
+                                        <span class="provider-name">OCI Document Understanding</span>
+                                        <span class="provider-badge badge-default">Built-in</span>
+                                    </div>
+                                    <p class="provider-desc">NetSuite's native OCR using Oracle Cloud Infrastructure. No additional configuration required.</p>
+                                    <div class="provider-status" id="oci-status">
+                                        <i class="fas fa-check-circle" style="color:var(--color-success);"></i>
+                                        <span>Available</span>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Azure Provider Option -->
+                            <div class="provider-option" data-provider="azure" id="provider-azure">
+                                <div class="provider-radio">
+                                    <input type="radio" name="provider" value="azure" id="provider-radio-azure">
+                                </div>
+                                <div class="provider-info">
+                                    <div class="provider-header">
+                                        <span class="provider-name">Azure Form Recognizer</span>
+                                        <span class="provider-badge badge-pro">Premium</span>
+                                    </div>
+                                    <p class="provider-desc">Microsoft Azure Document Intelligence. Higher accuracy for complex documents.</p>
+                                    <div class="provider-status" id="azure-status">
+                                        <i class="fas fa-exclamation-circle" style="color:var(--color-warning);"></i>
+                                        <span>Configuration required</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Azure Configuration Panel -->
+                        <div class="provider-config-panel" id="azure-config-panel" style="display:none;">
+                            <h4><i class="fas fa-cog"></i> Azure Form Recognizer Configuration</h4>
+                            <div class="provider-config-form">
+                                <div class="form-field">
+                                    <label for="azure-endpoint">
+                                        Azure Endpoint <span class="required">*</span>
+                                    </label>
+                                    <input type="url" id="azure-endpoint" placeholder="https://your-resource.cognitiveservices.azure.com" autocomplete="off">
+                                    <small>Your Azure Cognitive Services endpoint URL</small>
+                                </div>
+                                <div class="form-field">
+                                    <label for="azure-api-key">
+                                        API Key <span class="required">*</span>
+                                    </label>
+                                    <div class="input-with-icon">
+                                        <input type="password" id="azure-api-key" placeholder="Enter your API key" autocomplete="new-password">
+                                        <button type="button" class="btn-icon btn-toggle-password" id="btn-toggle-api-key" title="Show/Hide">
+                                            <i class="fas fa-eye"></i>
+                                        </button>
+                                    </div>
+                                    <small>Your API key will be encrypted before storage</small>
+                                </div>
+                                <div class="form-field">
+                                    <label for="azure-model">Default Model</label>
+                                    <select id="azure-model">
+                                        <option value="prebuilt-invoice">Invoice (Recommended)</option>
+                                        <option value="prebuilt-receipt">Receipt</option>
+                                        <option value="prebuilt-document">General Document</option>
+                                    </select>
+                                    <small>The default model used for document analysis</small>
+                                </div>
+                                <div class="provider-config-actions">
+                                    <button class="btn btn-secondary" id="btn-test-azure">
+                                        <i class="fas fa-plug"></i> Test Connection
+                                    </button>
+                                    <span class="test-result" id="azure-test-result"></span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="provider-save-row">
+                            <button class="btn btn-primary" id="btn-save-provider">
+                                <i class="fas fa-save"></i> Save Provider Settings
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
                 <!-- Processing Settings -->
                 <div class="settings-card">
                     <div class="settings-card-header">

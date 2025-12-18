@@ -7,7 +7,9 @@
  * World-class document extraction with semantic understanding,
  * multi-signal entity resolution, and active learning
  *
- * Uses N/documentCapture module (NetSuite 2025.2+) with OCI Document Understanding
+ * Supports multiple extraction providers:
+ * - OCI Document Understanding (via N/documentCapture)
+ * - Azure Form Recognizer
  */
 
 define([
@@ -19,9 +21,10 @@ define([
     'N/log',
     'N/format',
     'N/encode',
-    'N/documentCapture',
     // Debug utility
     './FC_Debug',
+    // Provider factory
+    './providers/ProviderFactory',
     // Extraction modules
     './extraction/FieldMatcher',
     './extraction/DateParser',
@@ -37,8 +40,9 @@ define([
     // Validation modules
     './validation/CrossFieldValidator'
 ], function(
-    file, record, search, query, runtime, log, format, encode, documentCapture,
+    file, record, search, query, runtime, log, format, encode,
     fcDebug,
+    ProviderFactoryModule,
     FieldMatcherModule, DateParserModule, AmountParserModule, LayoutAnalyzerModule, TableAnalyzerModule,
     VendorMatcherModule, TaxIdExtractorModule,
     CorrectionLearnerModule, AliasManagerModule,
@@ -47,8 +51,8 @@ define([
 
     'use strict';
 
-    // N/documentCapture module reference
-    const docCaptureModule = documentCapture;
+    // Provider factory for extraction providers
+    const providerFactory = ProviderFactoryModule.factory;
 
     // ==================== Constants ====================
 
@@ -108,7 +112,45 @@ define([
             this.crossFieldValidator = new CrossFieldValidatorModule.CrossFieldValidator();
 
             this.vendorCache = null;
-            this.docCaptureModule = null;
+
+            // Extraction provider (lazy loaded)
+            this._extractionProvider = null;
+            this._providerConfig = options.providerConfig || null;
+        }
+
+        /**
+         * Get the configured extraction provider
+         * @returns {Object} Extraction provider instance
+         */
+        _getExtractionProvider() {
+            if (!this._extractionProvider) {
+                this._extractionProvider = providerFactory.getProvider(this._providerConfig);
+                log.audit('FluxCaptureEngine', `Using extraction provider: ${this._extractionProvider.getProviderName()}`);
+            }
+            return this._extractionProvider;
+        }
+
+        /**
+         * Set a specific extraction provider configuration
+         * @param {Object} config - Provider configuration
+         */
+        setProviderConfig(config) {
+            this._providerConfig = config;
+            this._extractionProvider = null; // Reset to force reload
+        }
+
+        /**
+         * Get current provider information
+         * @returns {Object} Provider info
+         */
+        getProviderInfo() {
+            const provider = this._getExtractionProvider();
+            return {
+                type: provider.getProviderType(),
+                name: provider.getProviderName(),
+                available: provider.checkAvailability(),
+                usage: provider.getUsageInfo()
+            };
         }
 
         /**
@@ -202,75 +244,45 @@ define([
         }
 
         /**
-         * Get the N/documentCapture module
-         */
-        _getDocCaptureModule() {
-            if (docCaptureModule) {
-                return docCaptureModule;
-            }
-            log.warn('N/documentCapture', 'Module not available');
-            return null;
-        }
-
-        /**
-         * Extract document data using N/documentCapture
+         * Extract document data using configured extraction provider
+         * Supports multiple providers: OCI Document Understanding, Azure Form Recognizer
          */
         _extractDocumentData(fileObj, options) {
-            const docCapture = this._getDocCaptureModule();
+            const provider = this._getExtractionProvider();
 
-            if (!docCapture) {
-                log.audit('FluxCapture', 'N/documentCapture not available, using fallback');
-                return this._simulateExtraction(fileObj);
-            }
+            fcDebug.debug('FluxCapture.extract', `Using provider: ${provider.getProviderName()}`);
 
             try {
-                let captureDocType = docCapture.DocumentType.INVOICE;
-                if (options.documentType === DocumentType.RECEIPT ||
-                    options.documentType === DocumentType.EXPENSE_REPORT ||
-                    options.documentType === 'RECEIPT' ||
-                    options.documentType === 'EXPENSE_REPORT') {
-                    captureDocType = docCapture.DocumentType.RECEIPT;
-                }
+                // Use the provider to extract document data
+                // Provider returns data in normalized format
+                const result = provider.extract(fileObj, {
+                    documentType: options.documentType,
+                    language: options.language,
+                    timeout: options.timeout
+                });
 
-                const extractOptions = {
-                    file: fileObj,
-                    documentType: captureDocType,
-                    features: [
-                        docCapture.Feature.FIELD_EXTRACTION,
-                        docCapture.Feature.TABLE_EXTRACTION,
-                        docCapture.Feature.TEXT_EXTRACTION
-                    ]
-                };
+                fcDebug.debug('FluxCapture.extract', {
+                    provider: provider.getProviderType(),
+                    pageCount: result.pageCount,
+                    fieldCount: result.rawFields?.length || 0,
+                    tableCount: result.rawTables?.length || 0
+                });
 
-                if (options.language && docCapture.Language[options.language]) {
-                    extractOptions.language = docCapture.Language[options.language];
-                }
-
-                if (options.timeout) {
-                    extractOptions.timeout = Math.max(30000, options.timeout);
-                }
-
-                fcDebug.debug('FluxCapture.extract', `Calling documentToStructure with type: ${captureDocType}`);
-
-                const result = docCapture.documentToStructure(extractOptions);
-
-                fcDebug.debug('FluxCapture.extract', `Received result with ${result.pages ? result.pages.length : 0} pages`);
-
-                return this._normalizeRawResult(result, docCapture);
+                return result;
 
             } catch (e) {
                 log.error('FluxCapture._extractDocumentData', {
+                    provider: provider.getProviderType(),
                     message: e.message,
-                    stack: e.stack,
-                    name: e.name
+                    stack: e.stack
                 });
 
-                if (e.message && e.message.includes('usage')) {
-                    throw new Error('Document capture usage limit reached. Please try again later or configure OCI credentials.');
+                // Re-throw critical errors
+                if (e.message && (e.message.includes('usage') || e.message.includes('limit'))) {
+                    throw e;
                 }
 
-                log.audit('FluxCapture', `Extraction failed, using fallback: ${e.message}`);
-                return this._simulateExtraction(fileObj);
+                throw new Error(`Document extraction failed: ${e.message}`);
             }
         }
 
@@ -1069,19 +1081,17 @@ define([
         }
 
         /**
-         * Check remaining free usage for the month
-         * @returns {number|null} Remaining usage or null if unavailable
+         * Check remaining usage for the current provider
+         * @returns {Object|null} Usage info or null if unavailable
          */
         getRemainingUsage() {
-            const docCapture = this._getDocCaptureModule();
-            if (docCapture && typeof docCapture.getRemainingFreeUsage === 'function') {
-                try {
-                    return docCapture.getRemainingFreeUsage();
-                } catch (e) {
-                    fcDebug.debug('getRemainingUsage', e.message);
-                }
+            try {
+                const provider = this._getExtractionProvider();
+                return provider.getUsageInfo();
+            } catch (e) {
+                fcDebug.debug('getRemainingUsage', e.message);
+                return null;
             }
-            return null;
         }
 
         /**
@@ -1100,6 +1110,12 @@ define([
         DocumentTypeLabels: DocumentTypeLabels,
         DocStatus: DocStatus,
         ConfidenceLevel: ConfidenceLevel,
-        SUPPORTED_FILE_TYPES: SUPPORTED_FILE_TYPES
+        SUPPORTED_FILE_TYPES: SUPPORTED_FILE_TYPES,
+        // Provider-related exports
+        ProviderFactory: ProviderFactoryModule,
+        getAvailableProviders: ProviderFactoryModule.getAvailableProviders,
+        getProviderConfig: ProviderFactoryModule.getProviderConfigForUI,
+        saveProviderConfig: ProviderFactoryModule.saveProviderConfig,
+        testProviderConnection: ProviderFactoryModule.testProviderConnection
     };
 });
