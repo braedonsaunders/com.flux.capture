@@ -3,8 +3,14 @@
  * @NModuleScope Public
  * @module FluxCapture/Extraction/DateParser
  *
- * Smart Date Parser - Locale-aware, context-validated date parsing
+ * Smart Date Parser v2.0 - Locale-aware, context-validated date parsing
  * Handles regional format ambiguity (MM/DD vs DD/MM) using vendor locale and cross-validation
+ *
+ * v2.0 Improvements:
+ * - ENFORCES alternate date usage when validation fails
+ * - Better cross-field date inference
+ * - Warnings for ambiguous dates
+ * - Vendor pattern learning integration
  */
 
 define(['N/log', 'N/format', '../FC_Debug'], function(log, format, fcDebug) {
@@ -17,6 +23,28 @@ define(['N/log', 'N/format', '../FC_Debug'], function(log, format, fcDebug) {
     class DateParser {
         constructor() {
             this.initializePatterns();
+            this.warnings = [];
+        }
+
+        /**
+         * Reset warnings for new parse operation
+         */
+        resetWarnings() {
+            this.warnings = [];
+        }
+
+        /**
+         * Add a parsing warning
+         */
+        addWarning(type, message, details = {}) {
+            this.warnings.push({ type, message, ...details });
+        }
+
+        /**
+         * Get warnings from last parse operation
+         */
+        getWarnings() {
+            return this.warnings;
         }
 
         initializePatterns() {
@@ -131,31 +159,63 @@ define(['N/log', 'N/format', '../FC_Debug'], function(log, format, fcDebug) {
 
         /**
          * Parse a date string with locale awareness and context validation
+         * v2.0: ENFORCES alternate date usage when validation fails
+         *
          * @param {string} value - The date string to parse
          * @param {Object} context - Context for parsing
          * @param {string} context.vendorCountry - Vendor's country for format hint
          * @param {string} context.fieldType - 'invoiceDate' or 'dueDate'
          * @param {Date} context.invoiceDate - Reference invoice date (for due date validation)
+         * @param {string} context.learnedFormat - Learned vendor format (MDY or DMY)
          * @param {Array} context.otherDates - Other dates on document for consistency check
-         * @returns {Object} { date: Date|null, confidence: number, format: string }
+         * @returns {Object} { date: Date|null, confidence: number, format: string, warnings: Array }
          */
         parse(value, context = {}) {
+            this.resetWarnings();
+
             if (!value) {
-                return { date: null, confidence: 0, format: null };
+                return { date: null, confidence: 0, format: null, warnings: [] };
             }
 
             const cleanValue = this.cleanDateString(value);
             fcDebug.debug('DateParser.parse', `Input: "${value}" -> cleaned: "${cleanValue}"`);
 
+            // Check if this is a relative date like "Net 30"
+            if (context.fieldType === 'dueDate') {
+                const relativeResult = this.parseRelativeDate(cleanValue, context.invoiceDate);
+                if (relativeResult) {
+                    return {
+                        ...relativeResult,
+                        warnings: this.warnings
+                    };
+                }
+            }
+
             // Try NetSuite format.parse first (respects account settings)
             try {
                 const nsDate = format.parse({ value: cleanValue, type: format.Type.DATE });
                 if (nsDate && !isNaN(nsDate.getTime())) {
-                    return {
-                        date: nsDate,
-                        confidence: 0.85,
-                        format: 'NETSUITE_NATIVE'
-                    };
+                    const validation = this.validateDate(nsDate, context);
+                    if (validation.valid) {
+                        return {
+                            date: nsDate,
+                            confidence: 0.85 * validation.factor,
+                            format: 'NETSUITE_NATIVE',
+                            warnings: this.warnings
+                        };
+                    } else if (validation.alternateDate) {
+                        this.addWarning('date_corrected',
+                            `Date ${this.formatDateSimple(nsDate)} corrected to ${this.formatDateSimple(validation.alternateDate)} (month/day swap)`,
+                            { original: nsDate, corrected: validation.alternateDate }
+                        );
+                        return {
+                            date: validation.alternateDate,
+                            confidence: 0.75,
+                            format: 'NETSUITE_NATIVE_CORRECTED',
+                            corrected: true,
+                            warnings: this.warnings
+                        };
+                    }
                 }
             } catch (e) {
                 // Continue with custom parsing
@@ -165,21 +225,66 @@ define(['N/log', 'N/format', '../FC_Debug'], function(log, format, fcDebug) {
             for (const patternDef of this.DATE_PATTERNS) {
                 const match = cleanValue.match(patternDef.regex);
                 if (match) {
-                    const result = this.parseMatch(match, patternDef, context);
+                    // Check for ambiguous date before parsing
+                    const isAmbiguous = this.isAmbiguousDate(match, patternDef);
+
+                    // Use learned format if available
+                    const parseContext = { ...context };
+                    if (context.learnedFormat) {
+                        parseContext.vendorCountry = context.learnedFormat === 'DMY' ? 'GB' : 'US';
+                    }
+
+                    const result = this.parseMatch(match, patternDef, parseContext);
+
                     if (result.date) {
                         // Validate the parsed date
                         const validation = this.validateDate(result.date, context);
+
                         if (validation.valid) {
+                            // Add warning if date was ambiguous
+                            if (isAmbiguous && !context.learnedFormat) {
+                                this.addWarning('ambiguous_date',
+                                    `Date "${cleanValue}" is ambiguous (MM/DD vs DD/MM). Using ${parseContext.vendorCountry || 'default'} format.`,
+                                    { originalValue: cleanValue, interpretedAs: this.formatDateSimple(result.date) }
+                                );
+                            }
                             result.confidence = Math.min(result.confidence * validation.factor, 1.0);
                             fcDebug.debug('DateParser.parse', `Success: ${result.date.toISOString()} (conf: ${result.confidence.toFixed(2)})`);
-                            return result;
-                        } else if (validation.alternateDate) {
-                            // Try alternate interpretation
-                            fcDebug.debug('DateParser.parse', `Using alternate: ${validation.alternateDate.toISOString()}`);
+                            return {
+                                ...result,
+                                warnings: this.warnings
+                            };
+                        }
+                        // ENFORCED: Use alternate interpretation when validation fails
+                        else if (validation.alternateDate) {
+                            this.addWarning('date_corrected',
+                                `Date "${cleanValue}" was ${this.formatDateSimple(result.date)}, corrected to ${this.formatDateSimple(validation.alternateDate)}`,
+                                {
+                                    original: result.date,
+                                    corrected: validation.alternateDate,
+                                    reason: validation.reason || 'validation_failed'
+                                }
+                            );
+                            fcDebug.debug('DateParser.parse', `ENFORCED alternate: ${validation.alternateDate.toISOString()}`);
                             return {
                                 date: validation.alternateDate,
-                                confidence: result.confidence * 0.8,
-                                format: result.format + '_ALTERNATE'
+                                confidence: result.confidence * 0.85,
+                                format: result.format + '_CORRECTED',
+                                corrected: true,
+                                originalInterpretation: result.date,
+                                warnings: this.warnings
+                            };
+                        }
+                        // Date invalid and no alternate - return with low confidence
+                        else {
+                            this.addWarning('date_validation_failed',
+                                `Date "${cleanValue}" parsed as ${this.formatDateSimple(result.date)} but failed validation`,
+                                { reason: validation.reason }
+                            );
+                            return {
+                                ...result,
+                                confidence: result.confidence * validation.factor,
+                                warnings: this.warnings
                             };
                         }
                     }
@@ -190,10 +295,15 @@ define(['N/log', 'N/format', '../FC_Debug'], function(log, format, fcDebug) {
             try {
                 const jsDate = new Date(cleanValue);
                 if (!isNaN(jsDate.getTime())) {
+                    this.addWarning('js_fallback_used',
+                        `Date "${cleanValue}" parsed using JavaScript fallback - may be unreliable`,
+                        {}
+                    );
                     return {
                         date: jsDate,
                         confidence: 0.50,
-                        format: 'JS_FALLBACK'
+                        format: 'JS_FALLBACK',
+                        warnings: this.warnings
                     };
                 }
             } catch (e) {
@@ -201,7 +311,28 @@ define(['N/log', 'N/format', '../FC_Debug'], function(log, format, fcDebug) {
             }
 
             fcDebug.debug('DateParser.parse', `Failed to parse: "${value}"`);
-            return { date: null, confidence: 0, format: null };
+            return { date: null, confidence: 0, format: null, warnings: this.warnings };
+        }
+
+        /**
+         * Check if a date match is ambiguous (both parts could be month or day)
+         */
+        isAmbiguousDate(match, patternDef) {
+            if (!patternDef.format.includes('AMBIGUOUS')) return false;
+
+            const part1 = parseInt(match[1]);
+            const part2 = parseInt(match[2]);
+
+            // Ambiguous if both parts <= 12
+            return part1 <= 12 && part2 <= 12;
+        }
+
+        /**
+         * Format date for display/logging
+         */
+        formatDateSimple(date) {
+            if (!date) return 'null';
+            return `${date.getMonth() + 1}/${date.getDate()}/${date.getFullYear()}`;
         }
 
         /**
@@ -305,9 +436,10 @@ define(['N/log', 'N/format', '../FC_Debug'], function(log, format, fcDebug) {
 
         /**
          * Validate a parsed date against context
+         * v2.0: Provides reason for validation failure and enforces alternate usage
          */
         validateDate(date, context) {
-            const result = { valid: true, factor: 1.0, alternateDate: null };
+            const result = { valid: true, factor: 1.0, alternateDate: null, reason: null };
             const now = new Date();
             now.setHours(23, 59, 59, 999);
 
@@ -315,8 +447,13 @@ define(['N/log', 'N/format', '../FC_Debug'], function(log, format, fcDebug) {
             const fiveYearsAgo = new Date(now.getFullYear() - 5, 0, 1);
             const oneYearFuture = new Date(now.getFullYear() + 1, 11, 31);
 
-            if (date < fiveYearsAgo || date > oneYearFuture) {
+            if (date < fiveYearsAgo) {
                 result.factor *= 0.5;
+                result.reason = 'date_too_old';
+            }
+            if (date > oneYearFuture) {
+                result.factor *= 0.5;
+                result.reason = 'date_too_future';
             }
 
             // Field-specific validation
@@ -325,6 +462,7 @@ define(['N/log', 'N/format', '../FC_Debug'], function(log, format, fcDebug) {
                 const nearFuture = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
                 if (date > nearFuture) {
                     result.factor *= 0.6;
+                    result.reason = 'invoice_date_in_future';
                     // Try swapping month/day for alternate interpretation
                     result.alternateDate = this.swapMonthDay(date);
                     if (result.alternateDate && result.alternateDate <= nearFuture) {
@@ -337,18 +475,36 @@ define(['N/log', 'N/format', '../FC_Debug'], function(log, format, fcDebug) {
                 // Due date should be >= invoice date
                 if (date < context.invoiceDate) {
                     result.factor *= 0.5;
+                    result.reason = 'due_date_before_invoice_date';
                     // Try swapping month/day
                     result.alternateDate = this.swapMonthDay(date);
                     if (result.alternateDate && result.alternateDate >= context.invoiceDate) {
-                        result.valid = false;
+                        result.valid = false; // ENFORCE use of alternate
+                    }
+                    // Also try if the swapped date is reasonable
+                    else if (result.alternateDate) {
+                        const maxDue = new Date(context.invoiceDate.getTime() + 365 * 24 * 60 * 60 * 1000);
+                        if (result.alternateDate >= context.invoiceDate && result.alternateDate <= maxDue) {
+                            result.valid = false; // ENFORCE use of alternate
+                        }
                     }
                 }
 
-                // Due date typically within 120 days of invoice
+                // Due date typically within 120 days of invoice - warn but don't reject
                 const maxDue = new Date(context.invoiceDate.getTime() + 120 * 24 * 60 * 60 * 1000);
-                if (date > maxDue) {
+                if (date > maxDue && result.valid) {
                     result.factor *= 0.8;
+                    if (!result.reason) {
+                        result.reason = 'due_date_unusually_far';
+                    }
                 }
+            }
+
+            // Additional check: if due date is BEFORE invoice date AND we can't fix it,
+            // at least flag it heavily
+            if (context.fieldType === 'dueDate' && context.invoiceDate && date < context.invoiceDate && !result.alternateDate) {
+                result.factor *= 0.3;
+                result.reason = 'due_date_before_invoice_unfixable';
             }
 
             return result;

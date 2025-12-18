@@ -3,8 +3,14 @@
  * @NModuleScope Public
  * @module FluxCapture/Extraction/TableAnalyzer
  *
- * Smart Table Analyzer
+ * Smart Table Analyzer v2.0
  * Intelligent column detection, multi-row item handling, and line item extraction
+ *
+ * v2.0 Improvements:
+ * - Two-pass row classification for better line item detection
+ * - Description content analysis to extract embedded memos
+ * - Reduced aggressive filtering with explicit warnings
+ * - Better multi-row grouping using proximity
  */
 
 define(['N/log', '../FC_Debug'], function(log, fcDebug) {
@@ -28,13 +34,60 @@ define(['N/log', '../FC_Debug'], function(log, fcDebug) {
     });
 
     /**
+     * Patterns to detect memo content within description text
+     */
+    const MEMO_EXTRACTION_PATTERNS = [
+        // Explicit memo prefixes
+        { pattern: /\b(?:memo|note|remark|comment|instruction)s?\s*[:\-]\s*(.+)$/i, group: 1 },
+        { pattern: /^\s*(?:memo|note|remark|comment|instruction)s?\s*[:\-]\s*(.+)/i, group: 1 },
+        // Parenthetical notes at end
+        { pattern: /\s*\(([^)]{10,})\)\s*$/i, group: 1, minLength: 10 },
+        // Dash or colon separated trailing notes
+        { pattern: /\s+[-–—]\s+([A-Z][^.]+\.?)$/i, group: 1, minLength: 15 },
+        // "Special:" or "Note:" style
+        { pattern: /\bspecial\s*[:\-]\s*(.+)$/i, group: 1 },
+        { pattern: /\bref(?:erence)?\s*[:\-]\s*(.+)$/i, group: 1 },
+        // Multi-line where second part is note-like
+        { pattern: /^(.+?)\n\s*(?:note|memo|remark)?\s*[:\-]?\s*([A-Z].{10,})$/im, group: 2 }
+    ];
+
+    /**
+     * Keywords that indicate a row is likely a memo/note continuation
+     */
+    const MEMO_ROW_INDICATORS = [
+        /^note\s*:/i, /^memo\s*:/i, /^remark\s*:/i, /^comment\s*:/i,
+        /^special\s+instruction/i, /^please\s+/i, /^attention\s*:/i,
+        /^important\s*:/i, /^ref\s*:/i, /^reference\s*:/i,
+        /^\*\s*/, /^•\s*/, /^-\s+[A-Z]/
+    ];
+
+    /**
      * Smart Table Analyzer
      * Uses multiple signals to identify columns and extract line items
      */
     class TableAnalyzer {
         constructor(amountParser) {
             this.amountParser = amountParser;
+            this.warnings = []; // Track extraction warnings
             this.initializePatterns();
+        }
+
+        /**
+         * Reset warnings for new analysis
+         */
+        resetWarnings() {
+            this.warnings = [];
+        }
+
+        /**
+         * Add a warning about extraction issues
+         */
+        addWarning(type, message, details = {}) {
+            this.warnings.push({
+                type: type,
+                message: message,
+                ...details
+            });
         }
 
         initializePatterns() {
@@ -114,8 +167,11 @@ define(['N/log', '../FC_Debug'], function(log, fcDebug) {
          * @returns {Object} Analyzed table with column types and line items
          */
         analyze(table, context = {}) {
+            // Reset warnings for this analysis
+            this.resetWarnings();
+
             if (!table) {
-                return { columns: [], lineItems: [], confidence: 0 };
+                return { columns: [], lineItems: [], confidence: 0, warnings: [] };
             }
 
             // Step 1: Extract raw structure
@@ -124,23 +180,35 @@ define(['N/log', '../FC_Debug'], function(log, fcDebug) {
             // Step 2: Identify columns
             const columns = this.identifyColumns(structure);
 
-            // Step 3: Extract line items
-            const lineItems = this.extractLineItems(structure, columns, context);
+            // Check if we found a MEMO column
+            const hasMemoColumn = columns.some(c => c.type === ColumnType.MEMO);
+            if (!hasMemoColumn) {
+                this.addWarning('memo_column_not_found',
+                    'No dedicated memo column detected. Memos may be embedded in descriptions.',
+                    { willExtractFromDescription: true }
+                );
+            }
 
-            // Step 4: Post-process and validate
+            // Step 3: Extract line items using two-pass classification
+            const lineItems = this.extractLineItemsTwoPass(structure, columns, context);
+
+            // Step 4: Post-process and validate (less aggressive filtering)
             const processed = this.postProcess(lineItems, columns);
 
             fcDebug.debug('TableAnalyzer.analyze', {
                 columns: columns.map(c => c.type),
                 lineItems: processed.lineItems.length,
-                confidence: processed.confidence.toFixed(2)
+                confidence: processed.confidence.toFixed(2),
+                warnings: this.warnings.length
             });
 
             return {
                 columns: columns,
                 lineItems: processed.lineItems,
                 confidence: processed.confidence,
-                totalFromItems: processed.totalFromItems
+                totalFromItems: processed.totalFromItems,
+                warnings: this.warnings,
+                skippedItems: processed.skippedItems || []
             };
         }
 
@@ -449,6 +517,211 @@ define(['N/log', '../FC_Debug'], function(log, fcDebug) {
         }
 
         /**
+         * TWO-PASS LINE ITEM EXTRACTION (v2.0)
+         * Pass 1: Identify all "anchor" rows (rows with amounts)
+         * Pass 2: Associate description-only rows with nearest anchor
+         * This prevents losing line items when amount and description are on different rows
+         */
+        extractLineItemsTwoPass(structure, columns, context) {
+            const items = [];
+            const body = structure.body || [];
+
+            if (body.length === 0) return items;
+
+            // PASS 1: Identify anchor rows (rows with monetary amounts)
+            const rowAnalysis = body.map((row, idx) => {
+                const analysis = this.analyzeRow(row, columns, idx);
+                return analysis;
+            });
+
+            // PASS 2: Group rows into line items
+            let currentItem = null;
+            let itemStartIdx = -1;
+
+            for (let i = 0; i < rowAnalysis.length; i++) {
+                const analysis = rowAnalysis[i];
+                const row = body[i];
+
+                // Skip summary rows
+                if (analysis.isSummary) {
+                    // But check if it might actually be a line item named "Total" or "Discount"
+                    if (analysis.hasAmount && analysis.hasQuantity) {
+                        // Likely a legitimate item with a summary-like name
+                        this.addWarning('potential_line_item_skipped',
+                            `Row "${analysis.descriptionText}" has amount & qty but matches summary pattern`,
+                            { rowIndex: i, description: analysis.descriptionText }
+                        );
+                    }
+                    continue;
+                }
+
+                // Is this an anchor row (has amount)?
+                if (analysis.hasAmount) {
+                    // Save previous item if exists
+                    if (currentItem) {
+                        // Extract memo from description before saving
+                        this.extractMemoFromDescription(currentItem);
+                        items.push(currentItem);
+                    }
+
+                    // Start new item from this anchor row
+                    currentItem = this.createLineItem(row, columns, context);
+                    itemStartIdx = i;
+
+                    // Look backwards for description-only rows that belong to this item
+                    // (if current row has no description but previous rows do)
+                    if (!currentItem.description || currentItem.description.length < 3) {
+                        for (let j = i - 1; j >= 0; j--) {
+                            const prevAnalysis = rowAnalysis[j];
+                            // Stop if we hit another anchor or summary
+                            if (prevAnalysis.hasAmount || prevAnalysis.isSummary || prevAnalysis.used) break;
+                            // Check if prev row has description
+                            if (prevAnalysis.hasDescription) {
+                                const prevRow = body[j];
+                                const descCol = columns.find(c => c.type === ColumnType.DESCRIPTION);
+                                if (descCol) {
+                                    const prevDesc = prevRow[descCol.index]?.text || '';
+                                    currentItem.description = prevDesc + (currentItem.description ? ' ' + currentItem.description : '');
+                                    prevAnalysis.used = true;
+                                }
+                                break; // Only look back one row typically
+                            }
+                        }
+                    }
+                }
+                // This is a non-anchor row (no amount)
+                else if (currentItem) {
+                    // Check if this looks like a memo row
+                    if (this.isMemoRow(analysis.descriptionText)) {
+                        // Append to memo instead of description
+                        const memoText = analysis.descriptionText;
+                        currentItem.memo = currentItem.memo
+                            ? currentItem.memo + ' ' + memoText
+                            : memoText;
+                        analysis.used = true;
+                    }
+                    // Regular continuation - append to description
+                    else if (analysis.hasDescription) {
+                        this.appendToLineItem(currentItem, row, columns);
+                        analysis.used = true;
+                    }
+                }
+                // No current item and no amount - could be a line item missing amount
+                else if (analysis.hasDescription && analysis.hasQuantity) {
+                    // Has description and quantity but no amount - might be valid
+                    currentItem = this.createLineItem(row, columns, context);
+                    currentItem._needsAmountReview = true;
+                    this.addWarning('line_item_missing_amount',
+                        `Line item "${analysis.descriptionText.substring(0, 50)}..." has quantity but no amount`,
+                        { rowIndex: i, quantity: analysis.quantityText }
+                    );
+                }
+            }
+
+            // Don't forget the last item
+            if (currentItem) {
+                this.extractMemoFromDescription(currentItem);
+                items.push(currentItem);
+            }
+
+            return items;
+        }
+
+        /**
+         * Analyze a single row for classification
+         */
+        analyzeRow(row, columns, rowIndex) {
+            const descCol = columns.find(c => c.type === ColumnType.DESCRIPTION);
+            const amtCol = columns.find(c => c.type === ColumnType.AMOUNT);
+            const qtyCol = columns.find(c => c.type === ColumnType.QUANTITY);
+            const memoCol = columns.find(c => c.type === ColumnType.MEMO);
+
+            const descText = descCol ? (row[descCol.index]?.text || '') : '';
+            const amtText = amtCol ? (row[amtCol.index]?.text || '') : '';
+            const qtyText = qtyCol ? (row[qtyCol.index]?.text || '') : '';
+            const memoText = memoCol ? (row[memoCol.index]?.text || '') : '';
+
+            // Check for amount - must have digits and look like currency
+            const hasAmount = amtText && /\d+[.,]?\d*/.test(amtText) && amtText.trim().length > 0;
+
+            // Check for description - meaningful text
+            const hasDescription = descText && descText.trim().length >= 2;
+
+            // Check for quantity
+            const hasQuantity = qtyText && /\d/.test(qtyText);
+
+            // Check if this is a summary row
+            const isSummary = this.isSummaryRow(descText);
+
+            // Count empty cells
+            const emptyCells = row.filter(c => !c.text || c.text.trim() === '').length;
+            const sparseness = emptyCells / row.length;
+
+            return {
+                rowIndex,
+                descriptionText: descText,
+                amountText: amtText,
+                quantityText: qtyText,
+                memoText: memoText,
+                hasDescription,
+                hasAmount,
+                hasQuantity,
+                isSummary,
+                sparseness,
+                used: false // Track if row has been consumed
+            };
+        }
+
+        /**
+         * Check if a row's text indicates it's a memo/note
+         */
+        isMemoRow(text) {
+            if (!text || text.length < 3) return false;
+            return MEMO_ROW_INDICATORS.some(pattern => pattern.test(text));
+        }
+
+        /**
+         * Extract embedded memo from description field
+         * Modifies item in place
+         */
+        extractMemoFromDescription(item) {
+            if (!item.description) return;
+
+            // If there's already a memo, don't overwrite
+            if (item.memo && item.memo.length > 5) return;
+
+            for (const patternDef of MEMO_EXTRACTION_PATTERNS) {
+                const match = item.description.match(patternDef.pattern);
+                if (match && match[patternDef.group]) {
+                    const extractedMemo = match[patternDef.group].trim();
+
+                    // Check minimum length if specified
+                    if (patternDef.minLength && extractedMemo.length < patternDef.minLength) {
+                        continue;
+                    }
+
+                    // Set memo
+                    item.memo = item.memo
+                        ? item.memo + ' ' + extractedMemo
+                        : extractedMemo;
+
+                    // Remove memo from description (keep the main part)
+                    item.description = item.description
+                        .replace(patternDef.pattern, '')
+                        .replace(/\s+/g, ' ')
+                        .trim();
+
+                    fcDebug.debug('TableAnalyzer.extractMemoFromDescription', {
+                        extractedMemo: extractedMemo.substring(0, 50),
+                        remainingDesc: item.description.substring(0, 50)
+                    });
+
+                    break; // Only extract once
+                }
+            }
+        }
+
+        /**
          * Classify a row as new item, continuation, or summary
          */
         classifyRow(row, columns) {
@@ -636,15 +909,45 @@ define(['N/log', '../FC_Debug'], function(log, fcDebug) {
         }
 
         /**
-         * Post-process line items
+         * Post-process line items (v2.0 - less aggressive filtering)
+         * Instead of silently dropping items, we flag them for review
          */
         postProcess(lineItems, columns) {
-            // Filter out invalid items
-            const validItems = lineItems.filter(item =>
-                item.description &&
-                item.description.trim().length >= 2 &&
-                (item.amount > 0 || item.quantity > 0)
-            );
+            const validItems = [];
+            const skippedItems = [];
+
+            for (const item of lineItems) {
+                // Check if item meets minimum requirements
+                const hasValidDescription = item.description && item.description.trim().length >= 2;
+                const hasValidAmount = item.amount > 0;
+                const hasValidQuantity = item.quantity > 0;
+
+                // LESS AGGRESSIVE: Keep items with description OR (amount AND qty)
+                if (hasValidDescription || (hasValidAmount && hasValidQuantity)) {
+                    // Mark items that might need review
+                    if (!hasValidDescription) {
+                        item._needsDescriptionReview = true;
+                    }
+                    if (!hasValidAmount && !hasValidQuantity) {
+                        item._needsAmountReview = true;
+                    }
+                    validItems.push(item);
+                }
+                // Track skipped items for transparency
+                else {
+                    skippedItems.push({
+                        description: item.description || '[empty]',
+                        amount: item.amount,
+                        quantity: item.quantity,
+                        reason: !hasValidDescription ? 'missing_description' :
+                            !hasValidAmount && !hasValidQuantity ? 'missing_amount_and_qty' : 'unknown'
+                    });
+                    this.addWarning('line_item_skipped',
+                        `Skipped item: "${(item.description || '').substring(0, 30)}..." - missing required fields`,
+                        { item: skippedItems[skippedItems.length - 1] }
+                    );
+                }
+            }
 
             // Calculate confidence based on extraction quality
             let confidence = 0.7;
@@ -652,14 +955,19 @@ define(['N/log', '../FC_Debug'], function(log, fcDebug) {
             // Boost confidence if we identified key columns
             const hasDescription = columns.some(c => c.type === ColumnType.DESCRIPTION);
             const hasAmount = columns.some(c => c.type === ColumnType.AMOUNT);
+            const hasMemo = columns.some(c => c.type === ColumnType.MEMO);
 
             if (hasDescription && hasAmount) {
-                confidence += 0.2;
+                confidence += 0.15;
+            }
+            if (hasMemo) {
+                confidence += 0.05;
             }
 
-            // Reduce confidence if we lost many items
-            if (lineItems.length > 0 && validItems.length / lineItems.length < 0.5) {
-                confidence -= 0.2;
+            // Slight penalty if we skipped items (but not as harsh as before)
+            if (lineItems.length > 0 && skippedItems.length > 0) {
+                const skipRatio = skippedItems.length / lineItems.length;
+                confidence -= skipRatio * 0.1; // Max 10% penalty
             }
 
             // Calculate total from line items
@@ -669,6 +977,7 @@ define(['N/log', '../FC_Debug'], function(log, fcDebug) {
 
             return {
                 lineItems: validItems,
+                skippedItems: skippedItems,
                 confidence: Math.max(0, Math.min(confidence, 1.0)),
                 totalFromItems: Math.round(totalFromItems * 100) / 100
             };
