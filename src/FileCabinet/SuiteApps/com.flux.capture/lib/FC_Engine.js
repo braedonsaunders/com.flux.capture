@@ -926,25 +926,33 @@ define([
 
         /**
          * Detect document type from text content
+         * Biased towards INVOICE as that's the most common B2B document type
          */
         _detectDocumentType(result) {
             const text = (result.text || '').toLowerCase();
 
+            // Credit Memo: explicit keywords only
             if (text.includes('credit memo') || text.includes('credit note') ||
-                text.includes('refund') || text.includes('credit adjustment')) {
+                (text.includes('credit') && text.includes('adjustment'))) {
                 return DocumentType.CREDIT_MEMO;
             }
 
-            if (text.includes('receipt') || text.includes('expense') ||
-                text.includes('cash register') || text.includes('thank you for your purchase')) {
-                return DocumentType.RECEIPT;
+            // Expense Report: only for explicit expense/reimbursement documents
+            // NOT regular receipts - those should be invoices
+            if ((text.includes('expense report') || text.includes('expense claim') ||
+                text.includes('reimbursement') || text.includes('travel expense')) &&
+                !text.includes('invoice')) {
+                return DocumentType.EXPENSE_REPORT;
             }
 
-            if (text.includes('purchase order') || text.includes('p.o.') ||
-                (text.includes('order') && !text.includes('invoice'))) {
+            // Purchase Order: very strict - only explicit "purchase order" header
+            // Avoid false positives from "order number", "order date", etc.
+            if (text.includes('purchase order') &&
+                !text.includes('invoice') && !text.includes('bill')) {
                 return DocumentType.PURCHASE_ORDER;
             }
 
+            // Default to INVOICE - most B2B documents are vendor bills/invoices
             return DocumentType.INVOICE;
         }
 
