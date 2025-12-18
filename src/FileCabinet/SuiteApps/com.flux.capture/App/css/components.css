@@ -3248,17 +3248,7 @@ body.dark-mode #btn-dark-mode i::before {
 /* ==========================================
    FULLSCREEN MODE
    ========================================== */
-body.fullscreen-mode .app-sidebar {
-    display: none;
-}
-
-body.fullscreen-mode .app-main {
-    margin-left: 0;
-}
-
-body.fullscreen-mode .sidebar-expand-btn {
-    display: none;
-}
+/* Sidebar stays visible in fullscreen mode - no changes needed */
 
 /* ==========================================
    DOCUMENTS LIST VIEW
@@ -4879,18 +4869,12 @@ tr.doc-row.approving { animation: compress-out 0.3s ease forwards; }
     height: 60px;
     z-index: 99;
 }
+/* Review Keyboard HUD - Extends .keyboard-hud base styles */
 .review-keyboard-hud {
-    position: fixed;
-    bottom: 0;
-    left: 50%;
     transform: translateX(-50%) translateY(100%);
-    display: flex;
-    gap: var(--space-lg);
-    padding: var(--space-sm) var(--space-lg);
-    background: var(--gray-900);
+    bottom: 0;
     border-radius: var(--radius-lg) var(--radius-lg) 0 0;
     box-shadow: 0 -4px 20px rgba(0, 0, 0, 0.3);
-    z-index: 100;
     opacity: 0;
     transition: transform 0.2s ease, opacity 0.2s ease;
 }
@@ -4898,23 +4882,6 @@ tr.doc-row.approving { animation: compress-out 0.3s ease forwards; }
 .review-keyboard-hud:hover {
     transform: translateX(-50%) translateY(0);
     opacity: 1;
-}
-.review-keyboard-hud .kbd-group {
-    display: flex;
-    align-items: center;
-    gap: var(--space-xs);
-    color: var(--gray-400);
-    font-size: var(--font-size-sm);
-    white-space: nowrap;
-}
-.review-keyboard-hud kbd {
-    padding: 2px 6px;
-    background: var(--gray-800);
-    border: 1px solid var(--gray-700);
-    border-radius: var(--radius-sm);
-    font-family: monospace;
-    color: var(--gray-300);
-    font-size: 0.85em;
 }
 
 /* Approve & Next Button Enhancement */
