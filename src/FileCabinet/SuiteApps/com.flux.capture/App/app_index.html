@@ -1427,39 +1427,7 @@
                             <div class="config-source-section">
                                 <h4>Form Layout Source</h4>
 
-                                <!-- Client Script Capture Option -->
-                                <div class="source-option" id="source-option-capture">
-                                    <label>
-                                        <i class="fas fa-magic"></i>
-                                        <div>
-                                            <span class="source-title">Automatic Capture via Client Script</span>
-                                            <span class="source-desc">Captures visible fields when forms are opened. May miss hidden fields.</span>
-                                        </div>
-                                    </label>
-                                    <div class="source-controls" id="capture-controls" style="display:none;">
-                                        <div class="capture-toggle-row">
-                                            <label class="toggle">
-                                                <input type="checkbox" id="capture-script-toggle">
-                                                <span class="toggle-track"><span class="toggle-thumb"></span></span>
-                                            </label>
-                                            <span class="toggle-label-text" id="capture-toggle-label">Loading status...</span>
-                                        </div>
-                                        <div class="capture-status">
-                                            <span class="status-icon" id="capture-status-icon"><i class="fas fa-clock"></i></span>
-                                            <span id="capture-status-text">Checking status...</span>
-                                        </div>
-                                        <div class="capture-actions">
-                                            <button class="btn btn-sm btn-secondary" id="btn-refresh-capture">
-                                                <i class="fas fa-sync-alt"></i> Refresh Status
-                                            </button>
-                                            <button class="btn btn-sm btn-primary" id="btn-trigger-capture">
-                                                <i class="fas fa-external-link-alt"></i> Open Form to Capture
-                                            </button>
-                                        </div>
-                                    </div>
-                                </div>
-
-                                <!-- XML Upload Option -->
+                                <!-- XML Upload Option (Recommended) -->
                                 <div class="source-option selected" id="source-option-xml">
                                     <label>
                                         <i class="fas fa-file-code"></i>
@@ -1493,6 +1461,38 @@
                                                     <i class="fas fa-upload"></i> Import Selected
                                                 </button>
                                             </div>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <!-- Client Script Capture Option -->
+                                <div class="source-option" id="source-option-capture">
+                                    <label>
+                                        <i class="fas fa-magic"></i>
+                                        <div>
+                                            <span class="source-title">Automatic Capture via Client Script</span>
+                                            <span class="source-desc">Captures visible fields when forms are opened. May miss hidden fields.</span>
+                                        </div>
+                                    </label>
+                                    <div class="source-controls" id="capture-controls" style="display:none;">
+                                        <div class="capture-toggle-row">
+                                            <label class="toggle">
+                                                <input type="checkbox" id="capture-script-toggle">
+                                                <span class="toggle-track"><span class="toggle-thumb"></span></span>
+                                            </label>
+                                            <span class="toggle-label-text" id="capture-toggle-label">Loading status...</span>
+                                        </div>
+                                        <div class="capture-status">
+                                            <span class="status-icon" id="capture-status-icon"><i class="fas fa-clock"></i></span>
+                                            <span id="capture-status-text">Checking status...</span>
+                                        </div>
+                                        <div class="capture-actions">
+                                            <button class="btn btn-sm btn-secondary" id="btn-refresh-capture">
+                                                <i class="fas fa-sync-alt"></i> Refresh Status
+                                            </button>
+                                            <button class="btn btn-sm btn-primary" id="btn-trigger-capture">
+                                                <i class="fas fa-external-link-alt"></i> Open Form to Capture
+                                            </button>
                                         </div>
                                     </div>
                                 </div>
