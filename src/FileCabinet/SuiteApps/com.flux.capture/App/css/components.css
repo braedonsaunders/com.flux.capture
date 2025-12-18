@@ -4112,7 +4112,7 @@ body.fullscreen-mode .sidebar-expand-btn {
     top: 0;
     left: 0;
     right: 0;
-    height: 3px;
+    height: 2px;
     background: var(--gray-200);
     z-index: 10;
 }
@@ -4123,19 +4123,19 @@ body.fullscreen-mode .sidebar-expand-btn {
     border-radius: 0 2px 2px 0;
 }
 
-/* Queue Position Indicator */
+/* Queue Position Indicator - Compact */
 .queue-position {
     display: flex;
     align-items: center;
-    gap: var(--space-xs);
-    padding: var(--space-xs) var(--space-sm);
+    gap: 4px;
+    padding: 2px 8px;
     background: var(--gray-100);
-    border-radius: var(--radius-md);
-    font-size: var(--font-size-sm);
+    border-radius: var(--radius-sm);
+    font-size: 12px;
+    line-height: 1.2;
 }
 .position-current {
     font-weight: 700;
-    font-size: 1.1em;
     color: var(--color-primary);
 }
 .position-separator {
@@ -4147,7 +4147,53 @@ body.fullscreen-mode .sidebar-expand-btn {
 }
 .position-label {
     color: var(--text-tertiary);
-    font-size: 0.9em;
+}
+
+/* Review Toolbar - Compact Version */
+.view-review .review-toolbar {
+    padding: 6px var(--space-md);
+    min-height: auto;
+    gap: var(--space-md);
+}
+.view-review .toolbar-left {
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
+}
+.view-review .toolbar-nav {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+}
+.view-review .toolbar-left .btn {
+    padding: 4px 8px;
+    font-size: 12px;
+}
+.view-review .toolbar-left .btn-icon {
+    padding: 4px;
+    width: 28px;
+    height: 28px;
+}
+.view-review .toolbar-title {
+    font-size: 13px;
+}
+.view-review .doc-type-badge {
+    padding: 2px 6px;
+    font-size: 10px;
+}
+.view-review .toolbar-actions {
+    gap: 6px;
+}
+.view-review .toolbar-actions .btn {
+    padding: 4px 10px;
+    font-size: 12px;
+}
+.view-review .toolbar-actions .btn-approve-next {
+    padding-right: 32px;
+}
+.view-review .toolbar-actions .btn-kbd {
+    padding: 1px 4px;
+    font-size: 10px;
 }
 
 /* Review Keyboard HUD */
