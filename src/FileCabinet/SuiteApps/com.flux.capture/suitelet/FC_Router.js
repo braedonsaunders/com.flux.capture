@@ -816,7 +816,7 @@ define([
             });
 
             var periods = [];
-            var currentPeriodId = null;
+            var currentPeriod = null;
             var today = new Date();
 
             var results = periodSearch.run().getRange({ start: 0, end: 100 });
@@ -825,6 +825,8 @@ define([
                 var endDate = result.getValue('enddate');
                 var isClosed = result.getValue('closed') === 'T';
                 var isApLocked = result.getValue('aplocked') === 'T';
+                var periodName = result.getValue('periodname');
+                var periodId = result.getValue('internalid');
 
                 // Parse dates for comparison
                 var start = startDate ? new Date(startDate) : null;
@@ -832,13 +834,16 @@ define([
 
                 // Determine if this is the current period
                 var isCurrent = start && end && today >= start && today <= end;
-                if (isCurrent && !isClosed && !isApLocked) {
-                    currentPeriodId = result.getValue('internalid');
+                if (isCurrent && !isClosed && !isApLocked && !currentPeriod) {
+                    currentPeriod = {
+                        value: periodId,
+                        text: periodName
+                    };
                 }
 
                 periods.push({
-                    value: result.getValue('internalid'),
-                    text: result.getValue('periodname'),
+                    value: periodId,
+                    text: periodName,
                     startDate: startDate,
                     endDate: endDate,
                     isClosed: isClosed,
@@ -847,9 +852,11 @@ define([
                 });
             });
 
-            // Return flat array for typeahead compatibility
-            // Mark the current period for UI highlighting
-            return Response.success(periods);
+            // Return options with currentPeriod for smart defaults
+            return Response.success({
+                options: periods,
+                currentPeriod: currentPeriod
+            });
         } catch (e) {
             log.error('getAccountingPeriods Error', e);
             return Response.error('PERIODS_ERROR', e.message);

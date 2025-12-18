@@ -1457,6 +1457,9 @@
             // Check if this is a select/typeahead field
             var isSelectField = this.isSelectField(fieldId) || fieldType === 'select' || fieldType === 'multiselect';
 
+            // Check if this is the posting period field (special handling)
+            var isPostingPeriod = fieldId.toLowerCase() === 'postingperiod';
+
             // Build modal HTML
             var modalHtml = '<div class="modal-overlay" id="field-settings-modal">' +
                 '<div class="modal modal-sm">' +
@@ -1476,7 +1479,34 @@
                         '<div class="form-field">' +
                             '<label>Default Value</label>';
 
-            if (isSelectField) {
+            if (isPostingPeriod) {
+                // Special handling for posting period - add "Use Current Period" option
+                var isCurrentPeriod = currentDefault === '__CURRENT_PERIOD__';
+                var isSpecificPeriod = currentDefault && !isCurrentPeriod;
+                var isNone = !currentDefault;
+
+                modalHtml += '<div class="posting-period-options">' +
+                    '<label class="radio-label">' +
+                        '<input type="radio" name="period-default-type" value="none"' + (isNone ? ' checked' : '') + '>' +
+                        ' No default' +
+                    '</label>' +
+                    '<label class="radio-label">' +
+                        '<input type="radio" name="period-default-type" value="current"' + (isCurrentPeriod ? ' checked' : '') + '>' +
+                        ' <i class="fas fa-calendar-check"></i> Use Current Period <span class="hint-badge">Recommended</span>' +
+                    '</label>' +
+                    '<label class="radio-label">' +
+                        '<input type="radio" name="period-default-type" value="specific"' + (isSpecificPeriod ? ' checked' : '') + '>' +
+                        ' Specific period:' +
+                    '</label>' +
+                '</div>' +
+                '<div class="typeahead-select default-value-typeahead" data-field="' + fieldId + '" data-lookup="accountingperiods" id="specific-period-wrapper"' + (!isSpecificPeriod ? ' style="display:none; margin-left: 24px;"' : ' style="margin-left: 24px;"') + '>' +
+                    '<input type="hidden" id="field-default-value" value="' + (isSpecificPeriod ? escapeHtml(currentDefault) : '') + '">' +
+                    '<input type="text" class="typeahead-input" id="field-default-display" ' +
+                        'style="background: #ffffff !important; border: 1px solid #ddd;" ' +
+                        'value="' + (isSpecificPeriod ? escapeHtml(currentDefaultText || currentDefault) : '') + '" placeholder="Search to select period..." autocomplete="off">' +
+                    '<div class="typeahead-dropdown" style="background: #ffffff;"></div>' +
+                '</div>';
+            } else if (isSelectField) {
                 var lookupType = this.getLookupTypeForField(fieldId);
                 modalHtml += '<div class="typeahead-select default-value-typeahead" data-field="' + fieldId + '" data-lookup="' + lookupType + '">' +
                     '<input type="hidden" id="field-default-value" value="' + escapeHtml(currentDefault) + '">' +
@@ -1542,7 +1572,23 @@
                 var newDefault;
                 var newDefaultText;
 
-                if (fieldType === 'checkbox') {
+                if (isPostingPeriod) {
+                    // Handle posting period radio buttons
+                    var selectedType = modal.querySelector('input[name="period-default-type"]:checked');
+                    if (selectedType) {
+                        if (selectedType.value === 'current') {
+                            newDefault = '__CURRENT_PERIOD__';
+                            newDefaultText = 'Current Period';
+                        } else if (selectedType.value === 'specific') {
+                            newDefault = defaultValueInput ? defaultValueInput.value : '';
+                            newDefaultText = defaultDisplayInput ? defaultDisplayInput.value : '';
+                        } else {
+                            // 'none' - clear the default
+                            newDefault = '';
+                            newDefaultText = '';
+                        }
+                    }
+                } else if (fieldType === 'checkbox') {
                     newDefault = defaultValueInput.checked ? 'T' : 'F';
                 } else {
                     newDefault = defaultValueInput ? defaultValueInput.value : '';
@@ -1553,7 +1599,7 @@
                 if (newLabel) item.label = newLabel;
                 if (newDefault) {
                     item.defaultValue = newDefault;
-                    if (newDefaultText && isSelectField) {
+                    if (newDefaultText && (isSelectField || isPostingPeriod)) {
                         item.defaultValueText = newDefaultText;
                     }
                 } else {
@@ -1568,7 +1614,7 @@
                     if (newLabel) bodyField.label = newLabel;
                     if (newDefault) {
                         bodyField.defaultValue = newDefault;
-                        if (newDefaultText && isSelectField) {
+                        if (newDefaultText && (isSelectField || isPostingPeriod)) {
                             bodyField.defaultValueText = newDefaultText;
                         }
                     } else {
@@ -1581,8 +1627,23 @@
                 closeModal();
             });
 
-            // Setup typeahead for select fields
-            if (isSelectField) {
+            // Setup posting period radio handlers
+            if (isPostingPeriod) {
+                var periodRadios = modal.querySelectorAll('input[name="period-default-type"]');
+                var specificWrapper = el('#specific-period-wrapper');
+                periodRadios.forEach(function(radio) {
+                    radio.addEventListener('change', function() {
+                        if (this.value === 'specific') {
+                            specificWrapper.style.display = 'block';
+                        } else {
+                            specificWrapper.style.display = 'none';
+                        }
+                    });
+                });
+                // Setup typeahead for specific period selection
+                self.setupDefaultValueTypeahead(modal, fieldId);
+            } else if (isSelectField) {
+                // Setup typeahead for other select fields
                 self.setupDefaultValueTypeahead(modal, fieldId);
             }
         },
