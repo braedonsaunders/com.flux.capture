@@ -1037,7 +1037,10 @@
                 if (g.fields) fieldCount += g.fields.length;
             });
 
-            var html = '<div class="editor-node editor-tab" data-tab-idx="' + tabIdx + '">';
+            var isHidden = tab.visible === false;
+            var hiddenClass = isHidden ? ' is-hidden' : '';
+
+            var html = '<div class="editor-node editor-tab' + hiddenClass + '" data-tab-idx="' + tabIdx + '">';
             html += '<div class="node-header" data-toggle="tab-' + tabIdx + '">' +
                 '<i class="fas fa-chevron-right toggle-icon"></i>' +
                 '<i class="fas fa-folder-open"></i>' +
@@ -1067,7 +1070,10 @@
         renderEditorFieldGroup: function(group, tabIdx, groupIdx) {
             var fields = group.fields || [];
 
-            var html = '<div class="editor-node editor-group" data-tab-idx="' + tabIdx + '" data-group-idx="' + groupIdx + '">';
+            var isHidden = group.visible === false;
+            var hiddenClass = isHidden ? ' is-hidden' : '';
+
+            var html = '<div class="editor-node editor-group' + hiddenClass + '" data-tab-idx="' + tabIdx + '" data-group-idx="' + groupIdx + '">';
             html += '<div class="node-header" data-toggle="group-' + tabIdx + '-' + groupIdx + '">' +
                 '<i class="fas fa-chevron-right toggle-icon"></i>' +
                 '<i class="fas fa-layer-group"></i>' +
