@@ -787,6 +787,10 @@
     border-bottom: 1px solid var(--border-color);
     margin: 0;
     flex-shrink: 0;
+    /* Prevent text blur */
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    text-rendering: optimizeLegibility;
 }
 
 .toolbar-title {
@@ -6507,6 +6511,10 @@ tr.doc-row.approving { animation: compress-out 0.3s ease forwards; }
     overflow: auto;
     background: var(--gray-100);
     padding: var(--space-md);
+    /* Prevent text blur from transforms */
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    backface-visibility: hidden;
 }
 
 .pdf-loading {
