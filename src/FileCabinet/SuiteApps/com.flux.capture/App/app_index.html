@@ -1283,24 +1283,36 @@
             <header class="view-header">
                 <div class="header-content">
                     <h1>Settings</h1>
-                    <p class="header-subtitle">Configure Flux Capture</p>
+                    <p class="header-subtitle">Configure Flux Capture for your organization</p>
                 </div>
             </header>
 
+            <!-- Getting Started Instructions -->
+            <div class="settings-instructions">
+                <h4><i class="fas fa-lightbulb"></i> Quick Start Guide</h4>
+                <p>Flux Capture automatically extracts data from invoices and receipts, matching them to your NetSuite forms. Here's how to get the best results:</p>
+                <ul>
+                    <li><strong>Form Layouts:</strong> Flux automatically captures your NetSuite form layouts. After customizing forms in NetSuite, click "Clear Cache" below to refresh.</li>
+                    <li><strong>Auto-Approval:</strong> Set a confidence threshold to automatically approve high-confidence extractions, saving review time.</li>
+                    <li><strong>Fraud Detection:</strong> Enable duplicate detection and amount validation to catch errors before they reach NetSuite.</li>
+                </ul>
+            </div>
+
             <div class="settings-layout">
+                <!-- Processing Settings -->
                 <div class="settings-card">
                     <div class="settings-card-header">
                         <i class="fas fa-microchip"></i>
                         <div>
-                            <h3>Processing</h3>
-                            <p>Configure AI extraction settings</p>
+                            <h3>AI Processing</h3>
+                            <p>Configure extraction and approval settings</p>
                         </div>
                     </div>
                     <div class="settings-card-body">
                         <div class="setting-row">
                             <div class="setting-label">
                                 <span>Auto-approve Threshold</span>
-                                <small>Documents above this confidence are auto-approved</small>
+                                <small>Documents scoring above this confidence level are automatically approved for posting to NetSuite</small>
                             </div>
                             <div class="setting-control">
                                 <input type="range" min="70" max="100" value="85" id="auto-threshold">
@@ -1310,32 +1322,33 @@
                         <div class="setting-row">
                             <div class="setting-label">
                                 <span>Default Document Type</span>
-                                <small>Used when auto-detect is disabled</small>
+                                <small>Fallback when automatic type detection is uncertain</small>
                             </div>
                             <div class="setting-control">
                                 <select id="default-type">
                                     <option value="auto">Auto-Detect</option>
-                                    <option value="INVOICE">Invoice</option>
-                                    <option value="RECEIPT">Receipt</option>
+                                    <option value="INVOICE">Vendor Bill</option>
+                                    <option value="RECEIPT">Expense Report</option>
                                 </select>
                             </div>
                         </div>
                     </div>
                 </div>
 
+                <!-- Fraud Detection -->
                 <div class="settings-card">
                     <div class="settings-card-header">
                         <i class="fas fa-shield-halved"></i>
                         <div>
                             <h3>Fraud Detection</h3>
-                            <p>Configure anomaly detection rules</p>
+                            <p>Anomaly detection and validation rules</p>
                         </div>
                     </div>
                     <div class="settings-card-body">
                         <div class="setting-row">
                             <div class="setting-label">
                                 <span>Duplicate Detection</span>
-                                <small>Flag potential duplicate invoices</small>
+                                <small>Flag invoices with matching vendor, amount, and date combinations</small>
                             </div>
                             <div class="setting-control">
                                 <label class="toggle">
@@ -1347,7 +1360,7 @@
                         <div class="setting-row">
                             <div class="setting-label">
                                 <span>Amount Validation</span>
-                                <small>Verify line items sum to total</small>
+                                <small>Verify line items sum to the total amount</small>
                             </div>
                             <div class="setting-control">
                                 <label class="toggle">
@@ -1359,19 +1372,109 @@
                     </div>
                 </div>
 
+                <!-- Form Configuration -->
+                <div class="settings-card settings-card-large">
+                    <div class="settings-card-header">
+                        <i class="fas fa-file-invoice"></i>
+                        <div>
+                            <h3>Form Configuration</h3>
+                            <p>Manage how NetSuite transaction forms are rendered in the Review screen</p>
+                        </div>
+                    </div>
+                    <div class="settings-card-body">
+                        <!-- Transaction Type Tabs -->
+                        <div class="form-config-tabs">
+                            <button class="config-tab active" data-type="vendorbill">
+                                <i class="fas fa-file-invoice-dollar"></i> Vendor Bill
+                            </button>
+                            <button class="config-tab" data-type="expensereport">
+                                <i class="fas fa-receipt"></i> Expense Report
+                            </button>
+                        </div>
+
+                        <!-- Configuration Panel -->
+                        <div class="form-config-panel" id="form-config-panel">
+                            <div class="config-source-section">
+                                <h4>Form Layout Source</h4>
+
+                                <!-- Automatic Capture Option -->
+                                <div class="source-option selected" id="source-option-capture">
+                                    <label>
+                                        <i class="fas fa-magic"></i>
+                                        <div>
+                                            <span class="source-title">Automatic Capture (Recommended)</span>
+                                            <span class="source-desc">Form layouts are automatically captured when users open transactions in NetSuite. This ensures your Review screen always matches your current form customizations.</span>
+                                        </div>
+                                    </label>
+                                    <div class="source-controls" id="capture-controls">
+                                        <div class="capture-status">
+                                            <span class="status-icon" id="capture-status-icon"><i class="fas fa-clock"></i></span>
+                                            <span id="capture-status-text">Checking status...</span>
+                                        </div>
+                                        <div class="capture-actions">
+                                            <button class="btn btn-sm btn-secondary" id="btn-refresh-capture">
+                                                <i class="fas fa-sync-alt"></i> Refresh Status
+                                            </button>
+                                            <button class="btn btn-sm btn-primary" id="btn-trigger-capture">
+                                                <i class="fas fa-external-link-alt"></i> Open Form to Capture
+                                            </button>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <!-- XML Upload Option -->
+                                <div class="source-option" id="source-option-xml">
+                                    <label>
+                                        <i class="fas fa-file-code"></i>
+                                        <div>
+                                            <span class="source-title">Upload Form XML</span>
+                                            <span class="source-desc">Manually upload a NetSuite form definition XML file. Export from Customization > Forms > Transaction Forms.</span>
+                                        </div>
+                                    </label>
+                                    <div class="source-controls" id="xml-controls" style="display:none;">
+                                        <div class="file-upload-zone" id="xml-drop-zone">
+                                            <i class="fas fa-cloud-upload-alt"></i>
+                                            <p>Drag & drop form XML here or <button type="button" class="btn-link" id="btn-browse-xml">browse files</button></p>
+                                            <input type="file" accept=".xml" id="xml-file-input" hidden>
+                                        </div>
+                                        <div class="xml-preview" id="xml-preview" style="display:none;">
+                                            <div class="xml-info" id="xml-info"></div>
+                                            <button class="btn btn-primary" id="btn-import-xml">
+                                                <i class="fas fa-upload"></i> Import Form Definition
+                                            </button>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Form Preview -->
+                            <div class="form-preview-section">
+                                <h4>Current Form Configuration</h4>
+                                <div class="form-preview" id="form-preview">
+                                    <div class="preview-placeholder">
+                                        <i class="fas fa-file-alt"></i>
+                                        <p>Loading configuration...</p>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Cache Management -->
                 <div class="settings-card">
                     <div class="settings-card-header">
                         <i class="fas fa-database"></i>
                         <div>
                             <h3>Cache Management</h3>
-                            <p>Clear cached form layouts and schemas</p>
+                            <p>Clear cached data to force refresh</p>
                         </div>
                     </div>
                     <div class="settings-card-body">
                         <div class="setting-row">
                             <div class="setting-label">
                                 <span>Form Layout Cache</span>
-                                <small>Clear cached NetSuite form layouts. Use this after customizing forms.</small>
+                                <small>Clear after making changes to NetSuite transaction forms. Layouts will be recaptured automatically.</small>
                             </div>
                             <div class="setting-control">
                                 <button class="btn btn-secondary" id="btn-clear-cache">
@@ -1381,7 +1484,48 @@
                         </div>
                         <div class="setting-row" id="cache-status" style="display:none;">
                             <div class="setting-label">
-                                <span id="cache-status-text">Cache cleared</span>
+                                <span id="cache-status-text"></span>
+                            </div>
+                        </div>
+                        <div class="setting-row">
+                            <div class="setting-label">
+                                <span>Datasource Cache</span>
+                                <small>Clear cached account lists, departments, classes, etc. Use if dropdown options appear outdated.</small>
+                            </div>
+                            <div class="setting-control">
+                                <button class="btn btn-secondary" id="btn-clear-datasource-cache">
+                                    <i class="fas fa-list"></i> Clear Lists
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Help & Support -->
+                <div class="settings-card">
+                    <div class="settings-card-header">
+                        <i class="fas fa-question-circle"></i>
+                        <div>
+                            <h3>Help & Support</h3>
+                            <p>Resources and documentation</p>
+                        </div>
+                    </div>
+                    <div class="settings-card-body">
+                        <div class="setting-row">
+                            <div class="setting-label">
+                                <span>Keyboard Shortcuts</span>
+                                <small>Speed up document review with keyboard navigation</small>
+                            </div>
+                            <div class="setting-control">
+                                <button class="btn btn-ghost" id="btn-show-shortcuts">
+                                    <i class="fas fa-keyboard"></i> View Shortcuts
+                                </button>
+                            </div>
+                        </div>
+                        <div class="setting-row">
+                            <div class="setting-label">
+                                <span>Version</span>
+                                <small>Flux Capture v2.0</small>
                             </div>
                         </div>
                     </div>

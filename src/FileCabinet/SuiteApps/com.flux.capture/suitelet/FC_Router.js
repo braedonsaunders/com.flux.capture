@@ -965,6 +965,14 @@ define([
                     columns = ['internalid', 'entityid', 'companyname'];
                     displayFormat = 'id-name';
                     break;
+                case 'projects':
+                case 'project':
+                case 'jobs':
+                case 'job':
+                    searchType = search.Type.JOB;
+                    columns = ['internalid', 'entityid', 'companyname', 'customer'];
+                    displayFormat = 'id-name';
+                    break;
                 case 'accounts':
                 case 'account':
                     return getAccounts(context);
