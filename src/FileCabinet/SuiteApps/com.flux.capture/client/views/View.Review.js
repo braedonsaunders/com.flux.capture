@@ -1654,13 +1654,13 @@
                 var isActive = idx === 0;
                 var slType = sl.id === 'expense' ? 'expense' : 'item';
                 html += '<div class="sublist-container' + (isActive ? ' active' : '') + '" id="sublist-' + sl.id + '" data-sublist-id="' + sl.id + '">' +
-                    '<div class="sublist-toolbar">' +
-                        '<button class="btn btn-ghost btn-sm btn-add-line" data-sublist="' + sl.id + '">' +
-                            '<i class="fas fa-plus"></i> Add ' + escapeHtml(sl.label.replace(/s$/, '')) +
-                        '</button>' +
-                    '</div>' +
                     '<div class="line-items-table" id="lines-' + sl.id + '">' +
                         self.renderSublistTable(sl, doc) +
+                    '</div>' +
+                    '<div class="sublist-footer">' +
+                        '<button class="btn btn-ghost btn-sm btn-add-line" data-sublist="' + sl.id + '">' +
+                            '<i class="fas fa-plus"></i> Add Row' +
+                        '</button>' +
                     '</div>' +
                 '</div>';
             });
@@ -2480,6 +2480,45 @@
                         self.hideTypeaheadDropdown(wrapper);
                     }, 200);
                 });
+
+                // Keyboard navigation for typeahead
+                lineSection.addEventListener('keydown', function(e) {
+                    var input = e.target;
+                    if (!input.classList.contains('typeahead-input')) return;
+
+                    var wrapper = input.closest('.typeahead-select');
+                    var dropdown = wrapper ? wrapper.querySelector('.typeahead-dropdown') : null;
+                    if (!dropdown || dropdown.style.display === 'none') return;
+
+                    var options = dropdown.querySelectorAll('.typeahead-option');
+                    if (options.length === 0) return;
+
+                    var highlighted = dropdown.querySelector('.typeahead-option.highlighted');
+                    var currentIdx = highlighted ? Array.prototype.indexOf.call(options, highlighted) : -1;
+
+                    if (e.key === 'ArrowDown') {
+                        e.preventDefault();
+                        if (highlighted) highlighted.classList.remove('highlighted');
+                        var nextIdx = (currentIdx + 1) % options.length;
+                        options[nextIdx].classList.add('highlighted');
+                        options[nextIdx].scrollIntoView({ block: 'nearest' });
+                    } else if (e.key === 'ArrowUp') {
+                        e.preventDefault();
+                        if (highlighted) highlighted.classList.remove('highlighted');
+                        var prevIdx = currentIdx <= 0 ? options.length - 1 : currentIdx - 1;
+                        options[prevIdx].classList.add('highlighted');
+                        options[prevIdx].scrollIntoView({ block: 'nearest' });
+                    } else if (e.key === 'Enter') {
+                        e.preventDefault();
+                        if (highlighted) {
+                            self.selectTypeaheadOption(wrapper, highlighted);
+                        } else if (options.length > 0) {
+                            self.selectTypeaheadOption(wrapper, options[0]);
+                        }
+                    } else if (e.key === 'Escape') {
+                        self.hideTypeaheadDropdown(wrapper);
+                    }
+                });
             });
 
             // Shortcuts help
@@ -2566,6 +2605,46 @@
                     var wrapper = e.target.closest('.typeahead-select');
                     self.hideTypeaheadDropdown(wrapper);
                 }, 200);
+            });
+
+            // Keyboard navigation for body field typeahead
+            panel.addEventListener('keydown', function(e) {
+                var input = e.target;
+                if (!input.classList.contains('typeahead-input')) return;
+                if (input.closest('.line-section')) return;
+
+                var wrapper = input.closest('.typeahead-select');
+                var dropdown = wrapper ? wrapper.querySelector('.typeahead-dropdown') : null;
+                if (!dropdown || dropdown.style.display === 'none') return;
+
+                var options = dropdown.querySelectorAll('.typeahead-option');
+                if (options.length === 0) return;
+
+                var highlighted = dropdown.querySelector('.typeahead-option.highlighted');
+                var currentIdx = highlighted ? Array.prototype.indexOf.call(options, highlighted) : -1;
+
+                if (e.key === 'ArrowDown') {
+                    e.preventDefault();
+                    if (highlighted) highlighted.classList.remove('highlighted');
+                    var nextIdx = (currentIdx + 1) % options.length;
+                    options[nextIdx].classList.add('highlighted');
+                    options[nextIdx].scrollIntoView({ block: 'nearest' });
+                } else if (e.key === 'ArrowUp') {
+                    e.preventDefault();
+                    if (highlighted) highlighted.classList.remove('highlighted');
+                    var prevIdx = currentIdx <= 0 ? options.length - 1 : currentIdx - 1;
+                    options[prevIdx].classList.add('highlighted');
+                    options[prevIdx].scrollIntoView({ block: 'nearest' });
+                } else if (e.key === 'Enter') {
+                    e.preventDefault();
+                    if (highlighted) {
+                        self.selectBodyFieldTypeahead(wrapper, highlighted);
+                    } else if (options.length > 0) {
+                        self.selectBodyFieldTypeahead(wrapper, options[0]);
+                    }
+                } else if (e.key === 'Escape') {
+                    self.hideTypeaheadDropdown(wrapper);
+                }
             });
         },
 
