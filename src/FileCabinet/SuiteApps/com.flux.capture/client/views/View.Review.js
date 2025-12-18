@@ -751,7 +751,14 @@
             if (hasLayout) {
                 // ========== RENDER WITH LAYOUT (tabs/groups from user config or DOM extraction) ==========
                 var visibleTabs = tabs.filter(function(tab) {
+                    // Skip tabs marked as not visible
+                    if (tab.visible === false) return false;
+
+                    // Check if tab has any visible groups with visible fields
                     var hasGroups = tab.fieldGroups && tab.fieldGroups.some(function(g) {
+                        // Skip groups marked as not visible
+                        if (g.visible === false) return false;
+
                         return g.fields && g.fields.some(function(fieldRef) {
                             // Handle both field ID strings and field objects
                             var fieldId = typeof fieldRef === 'object' ? fieldRef.id : fieldRef;
@@ -790,6 +797,9 @@
                     // Render field groups within this tab
                     if (tab.fieldGroups && tab.fieldGroups.length > 0) {
                         tab.fieldGroups.forEach(function(group) {
+                            // Skip groups marked as not visible in form config
+                            if (group.visible === false) return;
+
                             var groupFields = [];
                             (group.fields || []).forEach(function(fieldRef) {
                                 // Handle both field ID strings and field objects from DOM extraction
