@@ -1,7 +1,6 @@
 /**
  * Flux Capture - Flow View Controller
- * Theatrical upload portal + processing visualization
- * Combines upload experience with animated document processing theater
+ * Card-based upload experience with animated status transitions
  */
 (function() {
     'use strict';
@@ -17,78 +16,224 @@
     };
 
     var FlowController = {
-        documents: [],
-        pendingUploads: [],
-        processingDocs: [],
-        readyDocs: [],
+        uploadCards: [],  // Array of upload card states
         refreshInterval: null,
-        REFRESH_MS: 3000,
-        currentStage: 'upload', // upload | processing | complete
-        uploadInProgress: false,
+        REFRESH_MS: 2000,
         selectedDocType: 'auto',
-        particles: [],
-        animationFrame: null,
+        cardIdCounter: 0,
 
         // ==========================================
         // INITIALIZATION
         // ==========================================
         init: function() {
-            this.documents = [];
-            this.pendingUploads = [];
-            this.processingDocs = [];
-            this.readyDocs = [];
-            this.currentStage = 'upload';
-            this.uploadInProgress = false;
+            this.uploadCards = [];
+            this.cardIdCounter = 0;
 
             renderTemplate('tpl-rail', 'view-container');
             this.bindEvents();
-            this.loadData();
             this.startRefresh();
-            this.initParticles();
         },
 
         cleanup: function() {
             this.stopRefresh();
-            this.stopParticles();
-            this.documents = [];
+            this.uploadCards = [];
         },
 
         // ==========================================
-        // DATA LOADING
+        // EVENT BINDING
         // ==========================================
-        loadData: function() {
+        bindEvents: function() {
             var self = this;
 
-            API.get('queue', { pageSize: 100 }).then(function(data) {
-                self.documents = (data && data.queue) || [];
-                self.categorizeDocuments();
-                self.render();
-                self.checkStageTransition();
-            }).catch(function(err) {
-                console.error('[Flow] Load error:', err);
+            // Dropzone click
+            var dropzone = el('#flow-dropzone');
+            var fileInput = el('#flow-file-input');
+
+            if (dropzone && fileInput) {
+                dropzone.addEventListener('click', function() {
+                    fileInput.click();
+                });
+
+                dropzone.addEventListener('dragover', function(e) {
+                    e.preventDefault();
+                    dropzone.classList.add('dragover');
+                });
+
+                dropzone.addEventListener('dragleave', function() {
+                    dropzone.classList.remove('dragover');
+                });
+
+                dropzone.addEventListener('drop', function(e) {
+                    e.preventDefault();
+                    dropzone.classList.remove('dragover');
+                    var files = Array.from(e.dataTransfer.files);
+                    if (files.length > 0) {
+                        self.handleFiles(files);
+                    }
+                });
+
+                fileInput.addEventListener('change', function() {
+                    var files = Array.from(this.files);
+                    if (files.length > 0) {
+                        self.handleFiles(files);
+                    }
+                    this.value = '';
+                });
+            }
+
+            // Document type selector
+            var typeSelector = el('#flow-type-selector');
+            if (typeSelector) {
+                typeSelector.addEventListener('change', function(e) {
+                    if (e.target.name === 'flowDocType') {
+                        self.selectedDocType = e.target.value;
+                        // Update active class
+                        typeSelector.querySelectorAll('.type-option').forEach(function(opt) {
+                            opt.classList.toggle('active', opt.contains(e.target));
+                        });
+                    }
+                });
+            }
+
+            // Navigation buttons
+            this.on('#btn-go-to-documents', 'click', function() {
+                Router.navigate('documents');
+            });
+
+            this.on('#btn-review-all', 'click', function() {
+                Router.navigate('documents');
+            });
+
+            this.on('#btn-upload-more', 'click', function() {
+                self.resetToUpload();
+            });
+
+            this.on('#btn-clear-complete', 'click', function() {
+                self.clearCompleteCards();
             });
         },
 
-        categorizeDocuments: function() {
-            var self = this;
-            this.processingDocs = [];
-            this.readyDocs = [];
+        on: function(selector, event, handler) {
+            var element = el(selector);
+            if (element) {
+                element.addEventListener(event, handler);
+            }
+        },
 
-            this.documents.forEach(function(d) {
-                var status = String(d.status);
-                if (status === DocStatus.PENDING || status === DocStatus.PROCESSING) {
-                    self.processingDocs.push(d);
-                } else if (status === DocStatus.EXTRACTED || status === DocStatus.NEEDS_REVIEW) {
-                    self.readyDocs.push(d);
+        // ==========================================
+        // FILE HANDLING
+        // ==========================================
+        handleFiles: function(files) {
+            var self = this;
+
+            // Show cards container
+            var container = el('#flow-cards-container');
+            var dropContainer = el('#flow-drop-container');
+            if (container) container.style.display = 'block';
+            if (dropContainer) dropContainer.classList.add('compact');
+
+            // Create cards for each file
+            files.forEach(function(file) {
+                var card = {
+                    id: 'card-' + (++self.cardIdCounter),
+                    fileName: file.name,
+                    fileSize: file.size,
+                    file: file,
+                    status: 'queued',  // queued | uploading | processing | complete | error
+                    progress: 0,
+                    documentId: null,
+                    confidence: null,
+                    error: null
+                };
+                self.uploadCards.push(card);
+                self.renderCard(card, true);
+            });
+
+            // Update summary
+            this.updateSummary();
+
+            // Start uploading
+            this.processQueue();
+        },
+
+        processQueue: function() {
+            var self = this;
+            var queuedCards = this.uploadCards.filter(function(c) {
+                return c.status === 'queued';
+            });
+
+            if (queuedCards.length === 0) return;
+
+            // Process up to 3 at a time
+            var toProcess = queuedCards.slice(0, 3);
+            toProcess.forEach(function(card) {
+                self.uploadCard(card);
+            });
+        },
+
+        uploadCard: function(card) {
+            var self = this;
+            card.status = 'uploading';
+            card.progress = 10;
+            this.updateCardUI(card);
+
+            var reader = new FileReader();
+
+            reader.onload = function() {
+                var base64 = reader.result.split(',')[1];
+                card.progress = 40;
+                self.updateCardUI(card);
+
+                API.post('upload', {
+                    fileName: card.file.name,
+                    fileContent: base64,
+                    documentType: self.selectedDocType
+                }).then(function(result) {
+                    card.status = 'processing';
+                    card.progress = 60;
+                    card.documentId = result ? result.documentId : null;
+                    self.updateCardUI(card);
+                    self.updateSummary();
+
+                    // Continue queue
+                    self.processQueue();
+                }).catch(function(err) {
+                    card.status = 'error';
+                    card.error = err.message || 'Upload failed';
+                    self.updateCardUI(card);
+                    self.updateSummary();
+
+                    // Continue queue
+                    self.processQueue();
+                });
+            };
+
+            reader.onerror = function() {
+                card.status = 'error';
+                card.error = 'Failed to read file';
+                self.updateCardUI(card);
+                self.updateSummary();
+                self.processQueue();
+            };
+
+            reader.onprogress = function(e) {
+                if (e.lengthComputable) {
+                    card.progress = Math.round((e.loaded / e.total) * 30) + 10;
+                    self.updateCardUI(card);
                 }
-            });
+            };
+
+            reader.readAsDataURL(card.file);
         },
 
+        // ==========================================
+        // STATUS POLLING
+        // ==========================================
         startRefresh: function() {
             var self = this;
             this.stopRefresh();
             this.refreshInterval = setInterval(function() {
-                self.loadData();
+                self.checkProcessingStatus();
             }, this.REFRESH_MS);
         },
 
@@ -99,507 +244,317 @@
             }
         },
 
-        // ==========================================
-        // PARTICLES ANIMATION
-        // ==========================================
-        initParticles: function() {
-            var container = el('#flow-particles');
-            if (!container) return;
-
-            // Create floating particles
-            for (var i = 0; i < 20; i++) {
-                var particle = document.createElement('div');
-                particle.className = 'flow-particle';
-                particle.style.left = Math.random() * 100 + '%';
-                particle.style.animationDelay = (Math.random() * 5) + 's';
-                particle.style.animationDuration = (5 + Math.random() * 10) + 's';
-                container.appendChild(particle);
-            }
-        },
-
-        stopParticles: function() {
-            if (this.animationFrame) {
-                cancelAnimationFrame(this.animationFrame);
-            }
-        },
-
-        // ==========================================
-        // EVENT BINDING
-        // ==========================================
-        bindEvents: function() {
+        checkProcessingStatus: function() {
             var self = this;
-
-            // Upload portal click
-            this.on('#upload-portal', 'click', function() {
-                el('#flow-file-input').click();
+            var processingCards = this.uploadCards.filter(function(c) {
+                return c.status === 'processing' && c.documentId;
             });
 
-            // File input change
-            this.on('#flow-file-input', 'change', function(e) {
-                self.handleFiles(e.target.files);
-            });
-
-            // Drag and drop on portal
-            var portal = el('#upload-portal');
-            if (portal) {
-                portal.addEventListener('dragover', function(e) {
-                    e.preventDefault();
-                    portal.classList.add('drag-over');
-                });
-
-                portal.addEventListener('dragleave', function(e) {
-                    e.preventDefault();
-                    portal.classList.remove('drag-over');
-                });
-
-                portal.addEventListener('drop', function(e) {
-                    e.preventDefault();
-                    portal.classList.remove('drag-over');
-                    self.handleFiles(e.dataTransfer.files);
-                });
-            }
-
-            // Drop more zone
-            var dropMore = el('#drop-more-zone');
-            if (dropMore) {
-                dropMore.addEventListener('dragover', function(e) {
-                    e.preventDefault();
-                    dropMore.classList.add('drag-over');
-                });
-
-                dropMore.addEventListener('dragleave', function() {
-                    dropMore.classList.remove('drag-over');
-                });
-
-                dropMore.addEventListener('drop', function(e) {
-                    e.preventDefault();
-                    dropMore.classList.remove('drag-over');
-                    self.handleFiles(e.dataTransfer.files);
-                });
-            }
-
-            // Document type selection
-            document.addEventListener('change', function(e) {
-                if (e.target.name === 'flowDocType') {
-                    self.selectedDocType = e.target.value;
-                    // Update active class
-                    els('.type-pill').forEach(function(pill) {
-                        pill.classList.toggle('active', pill.querySelector('input').value === self.selectedDocType);
-                    });
-                }
-            });
-
-            // Navigation buttons
-            this.on('#btn-go-to-documents', 'click', function() {
-                Router.navigate('documents');
-            });
-
-            this.on('#btn-review-documents', 'click', function() {
-                Router.navigate('documents');
-            });
-
-            this.on('#btn-upload-more', 'click', function() {
-                self.resetToUpload();
-            });
-
-            // Card clicks
-            document.addEventListener('click', function(e) {
-                var card = e.target.closest('.theater-card');
-                if (card && card.dataset.docId) {
-                    Router.navigate('review', { docId: card.dataset.docId });
-                }
-            });
-        },
-
-        on: function(selector, event, handler) {
-            var element = document.querySelector(selector);
-            if (element) element.addEventListener(event, handler);
-        },
-
-        // ==========================================
-        // FILE HANDLING
-        // ==========================================
-        handleFiles: function(files) {
-            if (!files || files.length === 0) return;
-
-            var self = this;
-            var validFiles = [];
-
-            for (var i = 0; i < files.length; i++) {
-                var file = files[i];
-                var ext = file.name.split('.').pop().toLowerCase();
-                if (['pdf', 'png', 'jpg', 'jpeg', 'tiff', 'tif'].indexOf(ext) !== -1) {
-                    validFiles.push(file);
-                }
-            }
-
-            if (validFiles.length === 0) {
-                UI.toast('No valid files selected. Please use PDF, PNG, JPG, or TIFF.', 'warning');
+            if (processingCards.length === 0) {
+                this.checkAllComplete();
                 return;
             }
 
-            // Switch to processing stage
-            this.currentStage = 'processing';
-            this.showStage('processing');
-            this.uploadFiles(validFiles);
-        },
+            // Check status of processing documents
+            var docIds = processingCards.map(function(c) { return c.documentId; });
 
-        uploadFiles: function(files) {
-            var self = this;
-            this.uploadInProgress = true;
+            API.get('list', { ids: docIds.join(',') }).then(function(data) {
+                var docs = data || [];
 
-            // Add files to queue display
-            files.forEach(function(file) {
-                self.addToQueue({
-                    name: file.name,
-                    size: file.size,
-                    status: 'uploading'
-                });
-            });
-
-            // Upload each file
-            var uploadPromises = files.map(function(file) {
-                return self.uploadSingleFile(file);
-            });
-
-            Promise.allSettled(uploadPromises).then(function(results) {
-                self.uploadInProgress = false;
-
-                var succeeded = results.filter(function(r) { return r.status === 'fulfilled'; });
-                var failed = results.filter(function(r) { return r.status === 'rejected'; });
-
-                if (succeeded.length > 0) {
-                    UI.toast(succeeded.length + ' file(s) uploaded successfully!', 'success');
-                    self.uploadSuccessCount = (self.uploadSuccessCount || 0) + succeeded.length;
-                    self.loadData(); // Refresh to get processing status
-                }
-
-                if (failed.length > 0) {
-                    UI.toast(failed.length + ' file(s) failed to upload', 'error');
-                }
-
-                // Only transition to processing if we had successful uploads
-                if (succeeded.length === 0) {
-                    // All failed - stay on upload stage
-                    self.resetToUpload();
-                }
-            });
-        },
-
-        uploadSingleFile: function(file) {
-            var self = this;
-
-            return new Promise(function(resolve, reject) {
-                var reader = new FileReader();
-
-                reader.onload = function() {
-                    var base64 = reader.result.split(',')[1];
-
-                    self.updateQueueItem(file.name, {
-                        status: 'uploading',
-                        progress: 50
+                processingCards.forEach(function(card) {
+                    var doc = docs.find(function(d) {
+                        return String(d.id) === String(card.documentId);
                     });
 
-                    API.post('upload', {
-                        fileName: file.name,
-                        fileContent: base64,
-                        documentType: self.selectedDocType
-                    }).then(function(result) {
-                        self.updateQueueItem(file.name, {
-                            status: 'processing',
-                            progress: 100,
-                            docId: result ? result.documentId : null
-                        });
-                        resolve(result);
-                    }).catch(function(err) {
-                        self.updateQueueItem(file.name, {
-                            status: 'error',
-                            error: err.message
-                        });
-                        reject(err);
-                    });
-                };
-
-                reader.onerror = function() {
-                    self.updateQueueItem(file.name, {
-                        status: 'error',
-                        error: 'Failed to read file'
-                    });
-                    reject(new Error('Failed to read file'));
-                };
-
-                reader.onprogress = function(e) {
-                    if (e.lengthComputable) {
-                        var progress = Math.round((e.loaded / e.total) * 30);
-                        self.updateQueueItem(file.name, {
-                            status: 'uploading',
-                            progress: progress
-                        });
+                    if (doc) {
+                        var status = String(doc.status);
+                        // Check if extraction is complete
+                        if (status === DocStatus.EXTRACTED ||
+                            status === DocStatus.NEEDS_REVIEW ||
+                            status === DocStatus.COMPLETED) {
+                            card.status = 'complete';
+                            card.progress = 100;
+                            card.confidence = doc.confidence;
+                            card.vendorName = doc.vendorName;
+                            card.totalAmount = doc.totalAmount;
+                            self.updateCardUI(card);
+                        } else if (status === DocStatus.ERROR) {
+                            card.status = 'error';
+                            card.error = 'Extraction failed';
+                            self.updateCardUI(card);
+                        } else {
+                            // Still processing - animate progress
+                            card.progress = Math.min(95, card.progress + 5);
+                            self.updateCardUI(card);
+                        }
                     }
-                };
+                });
 
-                reader.readAsDataURL(file);
+                self.updateSummary();
+                self.checkAllComplete();
+            }).catch(function(err) {
+                console.error('[Flow] Status check error:', err);
             });
         },
 
-        addToQueue: function(item) {
-            this.pendingUploads.push(item);
-            this.renderQueueColumn();
-        },
-
-        updateQueueItem: function(fileName, updates) {
-            var item = this.pendingUploads.find(function(u) {
-                return u.name === fileName;
+        checkAllComplete: function() {
+            var hasActive = this.uploadCards.some(function(c) {
+                return c.status === 'queued' || c.status === 'uploading' || c.status === 'processing';
             });
-            if (item) {
-                Object.assign(item, updates);
-                this.renderQueueColumn();
+
+            var completeActions = el('#flow-complete-actions');
+            var clearBtn = el('#btn-clear-complete');
+
+            var completeCount = this.uploadCards.filter(function(c) {
+                return c.status === 'complete';
+            }).length;
+
+            if (!hasActive && this.uploadCards.length > 0 && completeCount > 0) {
+                if (completeActions) completeActions.style.display = 'flex';
+            } else {
+                if (completeActions) completeActions.style.display = 'none';
+            }
+
+            if (clearBtn) {
+                clearBtn.style.display = completeCount > 0 ? 'inline-flex' : 'none';
             }
         },
 
         // ==========================================
-        // STAGE MANAGEMENT
+        // RENDERING
         // ==========================================
-        checkStageTransition: function() {
-            // If we have processing docs, stay in processing stage
-            if (this.processingDocs.length > 0) {
-                if (this.currentStage !== 'processing') {
-                    this.currentStage = 'processing';
-                    this.showStage('processing');
-                }
-                return;
+        renderCard: function(card, animate) {
+            var grid = el('#flow-cards-grid');
+            if (!grid) return;
+
+            var existingCard = el('#' + card.id);
+            if (existingCard) {
+                existingCard.remove();
             }
 
-            // If we just finished processing and have ready docs, show complete
-            if (this.currentStage === 'processing' && this.readyDocs.length > 0 && !this.uploadInProgress) {
-                this.currentStage = 'complete';
-                this.showStage('complete');
-                this.renderCompletionStats();
-                return;
+            var cardEl = document.createElement('div');
+            cardEl.id = card.id;
+            cardEl.className = 'flow-card status-' + card.status;
+            if (animate) cardEl.classList.add('animate-in');
+
+            cardEl.innerHTML = this.getCardHTML(card);
+            grid.appendChild(cardEl);
+
+            // Bind card click for complete cards
+            if (card.status === 'complete' && card.documentId) {
+                var self = this;
+                cardEl.addEventListener('click', function() {
+                    Router.navigate('review', { docId: card.documentId });
+                });
+                cardEl.style.cursor = 'pointer';
             }
         },
 
-        showStage: function(stage) {
-            var stages = ['upload', 'processing', 'complete'];
-            stages.forEach(function(s) {
-                var stageEl = el('#stage-' + s);
-                if (stageEl) {
-                    stageEl.style.display = s === stage ? 'flex' : 'none';
-                }
+        updateCardUI: function(card) {
+            var cardEl = el('#' + card.id);
+            if (!cardEl) {
+                this.renderCard(card, false);
+                return;
+            }
+
+            // Update class
+            cardEl.className = 'flow-card status-' + card.status;
+
+            // Update content
+            cardEl.innerHTML = this.getCardHTML(card);
+
+            // Add click handler for complete
+            if (card.status === 'complete' && card.documentId) {
+                var self = this;
+                cardEl.addEventListener('click', function() {
+                    Router.navigate('review', { docId: card.documentId });
+                });
+                cardEl.style.cursor = 'pointer';
+            }
+        },
+
+        getCardHTML: function(card) {
+            var statusIcon = this.getStatusIcon(card.status);
+            var statusText = this.getStatusText(card);
+            var fileIcon = this.getFileIcon(card.fileName);
+
+            var html = '<div class="card-icon">' + fileIcon + '</div>' +
+                '<div class="card-content">' +
+                    '<div class="card-filename" title="' + escapeHtml(card.fileName) + '">' + escapeHtml(this.truncateFilename(card.fileName, 24)) + '</div>' +
+                    '<div class="card-status">' + statusIcon + ' ' + statusText + '</div>';
+
+            // Progress bar for active states
+            if (card.status === 'uploading' || card.status === 'processing') {
+                html += '<div class="card-progress"><div class="card-progress-fill" style="width:' + card.progress + '%"></div></div>';
+            }
+
+            // Show extracted info for complete
+            if (card.status === 'complete' && card.vendorName) {
+                html += '<div class="card-extracted">' +
+                    '<span class="extracted-vendor">' + escapeHtml(card.vendorName) + '</span>' +
+                    (card.totalAmount ? '<span class="extracted-amount">$' + card.totalAmount.toFixed(2) + '</span>' : '') +
+                '</div>';
+            }
+
+            // Show error message
+            if (card.status === 'error' && card.error) {
+                html += '<div class="card-error">' + escapeHtml(card.error) + '</div>';
+            }
+
+            html += '</div>';
+
+            // Confidence badge for complete
+            if (card.status === 'complete' && card.confidence) {
+                var confClass = card.confidence >= 85 ? 'high' : card.confidence >= 60 ? 'medium' : 'low';
+                html += '<div class="card-confidence ' + confClass + '">' + Math.round(card.confidence) + '%</div>';
+            }
+
+            return html;
+        },
+
+        getStatusIcon: function(status) {
+            switch (status) {
+                case 'queued': return '<i class="fas fa-clock"></i>';
+                case 'uploading': return '<i class="fas fa-arrow-up fa-fade"></i>';
+                case 'processing': return '<i class="fas fa-cog fa-spin"></i>';
+                case 'complete': return '<i class="fas fa-check-circle"></i>';
+                case 'error': return '<i class="fas fa-exclamation-circle"></i>';
+                default: return '<i class="fas fa-file"></i>';
+            }
+        },
+
+        getStatusText: function(card) {
+            switch (card.status) {
+                case 'queued': return 'Queued';
+                case 'uploading': return 'Uploading...';
+                case 'processing': return 'Extracting...';
+                case 'complete': return 'Ready to review';
+                case 'error': return 'Failed';
+                default: return '';
+            }
+        },
+
+        getFileIcon: function(fileName) {
+            var ext = fileName.split('.').pop().toLowerCase();
+            if (ext === 'pdf') return '<i class="fas fa-file-pdf"></i>';
+            if (['png', 'jpg', 'jpeg', 'tiff', 'tif'].indexOf(ext) >= 0) return '<i class="fas fa-file-image"></i>';
+            return '<i class="fas fa-file"></i>';
+        },
+
+        truncateFilename: function(name, maxLen) {
+            if (name.length <= maxLen) return name;
+            var ext = name.split('.').pop();
+            var base = name.substring(0, name.length - ext.length - 1);
+            var truncLen = maxLen - ext.length - 4; // 4 for '...' and '.'
+            return base.substring(0, truncLen) + '...' + ext;
+        },
+
+        updateSummary: function() {
+            var queued = 0, processing = 0, complete = 0;
+
+            this.uploadCards.forEach(function(c) {
+                if (c.status === 'queued') queued++;
+                else if (c.status === 'uploading' || c.status === 'processing') processing++;
+                else if (c.status === 'complete') complete++;
             });
 
-            // Show drop more zone during processing
-            var dropMore = el('#drop-more-zone');
-            if (dropMore) {
-                dropMore.style.display = stage === 'processing' ? 'flex' : 'none';
+            var summary = el('#flow-summary');
+            if (summary) {
+                summary.style.display = this.uploadCards.length > 0 ? 'flex' : 'none';
             }
+
+            var queuedEl = el('#summary-queued');
+            var processingEl = el('#summary-processing');
+            var completeEl = el('#summary-complete');
+
+            if (queuedEl) queuedEl.textContent = queued;
+            if (processingEl) processingEl.textContent = processing;
+            if (completeEl) completeEl.textContent = complete;
         },
 
+        // ==========================================
+        // ACTIONS
+        // ==========================================
         resetToUpload: function() {
-            this.currentStage = 'upload';
-            this.pendingUploads = [];
-            this.showStage('upload');
+            var container = el('#flow-cards-container');
+            var dropContainer = el('#flow-drop-container');
+            var completeActions = el('#flow-complete-actions');
+
+            if (dropContainer) dropContainer.classList.remove('compact');
+            if (completeActions) completeActions.style.display = 'none';
+
+            // Clear complete cards only
+            this.uploadCards = this.uploadCards.filter(function(c) {
+                return c.status !== 'complete' && c.status !== 'error';
+            });
+
+            // Re-render
+            var grid = el('#flow-cards-grid');
+            if (grid) grid.innerHTML = '';
+
+            var self = this;
+            this.uploadCards.forEach(function(card) {
+                self.renderCard(card, false);
+            });
+
+            if (this.uploadCards.length === 0 && container) {
+                container.style.display = 'none';
+            }
+
+            this.updateSummary();
 
             // Reset file input
             var fileInput = el('#flow-file-input');
             if (fileInput) fileInput.value = '';
         },
 
-        // ==========================================
-        // RENDERING
-        // ==========================================
-        render: function() {
-            this.renderStats();
+        clearCompleteCards: function() {
+            var self = this;
 
-            if (this.currentStage === 'processing') {
-                this.renderQueueColumn();
-                this.renderProcessingVisualizer();
-                this.renderReadyColumn();
-            }
-        },
-
-        renderStats: function() {
-            var incoming = this.documents.filter(function(d) {
-                return String(d.status) === DocStatus.PENDING;
-            }).length;
-
-            var processing = this.documents.filter(function(d) {
-                return String(d.status) === DocStatus.PROCESSING;
-            }).length;
-
-            var ready = this.readyDocs.length;
-
-            // Update stat displays
-            var incomingStat = el('#stat-incoming .stat-value');
-            var processingStat = el('#stat-processing .stat-value');
-            var readyStat = el('#stat-ready .stat-value');
-
-            if (incomingStat) incomingStat.textContent = incoming;
-            if (processingStat) processingStat.textContent = processing;
-            if (readyStat) readyStat.textContent = ready;
-
-            // Add animation class if processing
-            var processingContainer = el('#stat-processing');
-            if (processingContainer) {
-                processingContainer.classList.toggle('active', processing > 0);
-            }
-        },
-
-        renderQueueColumn: function() {
-            var container = el('#queue-items');
-            var countEl = el('#queue-count');
-            if (!container) return;
-
-            var items = this.pendingUploads.filter(function(u) {
-                return u.status === 'uploading';
+            // Remove complete cards with animation
+            this.uploadCards.forEach(function(card) {
+                if (card.status === 'complete' || card.status === 'error') {
+                    var cardEl = el('#' + card.id);
+                    if (cardEl) {
+                        cardEl.classList.add('animate-out');
+                        setTimeout(function() {
+                            cardEl.remove();
+                        }, 300);
+                    }
+                }
             });
 
-            if (countEl) countEl.textContent = items.length;
+            // Remove from array after animation
+            setTimeout(function() {
+                self.uploadCards = self.uploadCards.filter(function(c) {
+                    return c.status !== 'complete' && c.status !== 'error';
+                });
 
-            if (items.length === 0) {
-                container.innerHTML = '<div class="column-empty"><i class="fas fa-check"></i><span>Queue empty</span></div>';
-                return;
-            }
+                var container = el('#flow-cards-container');
+                if (self.uploadCards.length === 0 && container) {
+                    container.style.display = 'none';
+                    var dropContainer = el('#flow-drop-container');
+                    if (dropContainer) dropContainer.classList.remove('compact');
+                }
 
-            container.innerHTML = items.map(function(item) {
-                var progress = item.progress || 0;
-                return '<div class="theater-card uploading">' +
-                    '<div class="card-icon"><i class="fas fa-file-pdf"></i></div>' +
-                    '<div class="card-info">' +
-                        '<div class="card-name">' + escapeHtml(item.name) + '</div>' +
-                        '<div class="card-progress">' +
-                            '<div class="progress-bar" style="width:' + progress + '%"></div>' +
-                        '</div>' +
-                    '</div>' +
-                '</div>';
-            }).join('');
-        },
-
-        renderProcessingVisualizer: function() {
-            var container = el('#processing-visualizer');
-            if (!container) return;
-
-            // Find actively processing document
-            var processingDoc = this.documents.find(function(d) {
-                return String(d.status) === DocStatus.PROCESSING;
-            });
-
-            if (!processingDoc) {
-                container.innerHTML = '<div class="visualizer-empty">' +
-                    '<i class="fas fa-cube"></i>' +
-                    '<span>Waiting for documents...</span>' +
-                '</div>';
-                return;
-            }
-
-            // Render active extraction visualization
-            container.innerHTML = this.renderExtractionVisual(processingDoc);
-        },
-
-        renderExtractionVisual: function(doc) {
-            return '<div class="extraction-visual">' +
-                '<div class="extraction-doc">' +
-                    '<div class="doc-preview">' +
-                        '<div class="scan-line"></div>' +
-                        '<i class="fas fa-file-invoice"></i>' +
-                    '</div>' +
-                    '<div class="doc-name">' + escapeHtml(doc.fileName || 'Document') + '</div>' +
-                '</div>' +
-                '<div class="extraction-fields">' +
-                    '<div class="field-extract">' +
-                        '<i class="fas fa-building"></i>' +
-                        '<span class="field-label">Vendor</span>' +
-                        '<span class="field-value extracting"><span class="typing-dots"></span></span>' +
-                    '</div>' +
-                    '<div class="field-extract">' +
-                        '<i class="fas fa-hashtag"></i>' +
-                        '<span class="field-label">Invoice #</span>' +
-                        '<span class="field-value pending">...</span>' +
-                    '</div>' +
-                    '<div class="field-extract">' +
-                        '<i class="fas fa-dollar-sign"></i>' +
-                        '<span class="field-label">Amount</span>' +
-                        '<span class="field-value pending">...</span>' +
-                    '</div>' +
-                    '<div class="field-extract">' +
-                        '<i class="fas fa-list"></i>' +
-                        '<span class="field-label">Line Items</span>' +
-                        '<span class="field-value pending">...</span>' +
-                    '</div>' +
-                '</div>' +
-                '<div class="extraction-progress">' +
-                    '<div class="progress-track">' +
-                        '<div class="progress-fill animate"></div>' +
-                    '</div>' +
-                    '<span class="progress-text">Extracting data...</span>' +
-                '</div>' +
-            '</div>';
-        },
-
-        renderReadyColumn: function() {
-            var container = el('#ready-items');
-            var countEl = el('#ready-count');
-            if (!container) return;
-
-            if (countEl) countEl.textContent = this.readyDocs.length;
-
-            if (this.readyDocs.length === 0) {
-                container.innerHTML = '<div class="column-empty"><i class="fas fa-inbox"></i><span>No documents ready</span></div>';
-                return;
-            }
-
-            container.innerHTML = this.readyDocs.slice(0, 10).map(function(doc) {
-                var conf = parseInt(doc.confidence) || 0;
-                var confClass = conf >= 85 ? 'high' : conf >= 60 ? 'medium' : 'low';
-
-                return '<div class="theater-card ready" data-doc-id="' + doc.id + '">' +
-                    '<div class="card-confidence conf-' + confClass + '">' + conf + '%</div>' +
-                    '<div class="card-info">' +
-                        '<div class="card-vendor">' + escapeHtml(doc.vendorName || 'Unknown') + '</div>' +
-                        '<div class="card-amount">$' + formatNumber(doc.totalAmount || 0) + '</div>' +
-                    '</div>' +
-                    '<div class="card-arrow"><i class="fas fa-chevron-right"></i></div>' +
-                '</div>';
-            }).join('');
-
-            if (this.readyDocs.length > 10) {
-                container.innerHTML += '<div class="column-more">+' + (this.readyDocs.length - 10) + ' more</div>';
-            }
-        },
-
-        renderCompletionStats: function() {
-            var total = this.readyDocs.length;
-            var highConf = this.readyDocs.filter(function(d) {
-                return parseInt(d.confidence) >= 85;
-            }).length;
-            var needsReview = total - highConf;
-
-            var totalEl = el('#comp-total');
-            var highEl = el('#comp-high-conf');
-            var reviewEl = el('#comp-needs-review');
-
-            if (totalEl) totalEl.textContent = total;
-            if (highEl) highEl.textContent = highConf;
-            if (reviewEl) reviewEl.textContent = needsReview;
+                self.updateSummary();
+                self.checkAllComplete();
+            }, 350);
         }
     };
 
-    // Register routes
+    // Register with router
     Router.register('flow',
-        function(params) { FlowController.init(params); },
+        function() { FlowController.init(); },
         function() { FlowController.cleanup(); }
     );
 
-    // Backward compatibility
-    Router.register('queue',
-        function(params) { FlowController.init(params); },
-        function() { FlowController.cleanup(); }
-    );
+    // Also register rail alias for backwards compatibility
     Router.register('rail',
-        function(params) { FlowController.init(params); },
+        function() { FlowController.init(); },
         function() { FlowController.cleanup(); }
     );
 
-    console.log('[View.Flow] Loaded');
+    console.log('[View.Flow] Card-Based Flow Loaded');
 
 })();
