@@ -200,6 +200,7 @@ define([
                     extraction: {
                         documentType: extractionResult.documentType || options.documentType || DocumentType.INVOICE,
                         fields: extractionResult.fields,
+                        fieldConfidences: extractionResult.fieldConfidences || {},
                         lineItems: extractionResult.lineItems,
                         vendorMatch: vendorMatch,
                         anomalies: anomalies,
@@ -208,7 +209,6 @@ define([
                         rawText: extractionResult.rawText,
                         pageCount: extractionResult.pageCount,
                         processingTime: processingTime,
-                        // CRITICAL: Include all extracted fields for extraction pool UI
                         allExtractedFields: extractionResult.allExtractedFields || {},
                         extractionMeta: {
                             layout: {
