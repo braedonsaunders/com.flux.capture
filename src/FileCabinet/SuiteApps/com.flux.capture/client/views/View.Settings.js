@@ -1481,9 +1481,9 @@
                 modalHtml += '<div class="typeahead-select default-value-typeahead" data-field="' + fieldId + '" data-lookup="' + lookupType + '">' +
                     '<input type="hidden" id="field-default-value" value="' + escapeHtml(currentDefault) + '">' +
                     '<input type="text" class="typeahead-input" id="field-default-display" ' +
-                        'style="background: white; border: 1px solid var(--border-color);" ' +
+                        'style="background: #ffffff !important; border: 1px solid #ddd;" ' +
                         'value="' + escapeHtml(currentDefaultText || currentDefault) + '" placeholder="Search to select default..." autocomplete="off">' +
-                    '<div class="typeahead-dropdown"></div>' +
+                    '<div class="typeahead-dropdown" style="background: #ffffff;"></div>' +
                 '</div>';
             } else if (fieldType === 'date') {
                 modalHtml += '<input type="date" id="field-default-value" value="' + escapeHtml(currentDefault) + '">';

@@ -5302,12 +5302,18 @@ tr.doc-row.approving { animation: compress-out 0.3s ease forwards; }
     transition: all var(--transition);
 }
 
-/* Typeahead inputs in modals should have white background */
+/* Typeahead inputs and dropdowns in modals should have white background */
 .modal .typeahead-input,
 .modal-overlay .typeahead-input,
 .default-value-typeahead .typeahead-input {
-    background: var(--surface-card) !important;
+    background: #ffffff !important;
     border: 1px solid var(--border-color) !important;
+}
+
+.modal .typeahead-dropdown,
+.modal-overlay .typeahead-dropdown,
+.default-value-typeahead .typeahead-dropdown {
+    background: #ffffff !important;
 }
 
 .typeahead-input:hover {
