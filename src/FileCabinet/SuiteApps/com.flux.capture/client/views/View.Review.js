@@ -3368,7 +3368,7 @@
             var extractedData = doc.extractedData || {};
             var allFields = extractedData._allExtractedFields || {};
 
-            // Debug: Log what data we have
+            // Debug logging
             FCDebug.log('[ExtractionPool] extractedData keys:', Object.keys(extractedData));
             FCDebug.log('[ExtractionPool] _allExtractedFields keys:', Object.keys(allFields));
 
@@ -3376,7 +3376,7 @@
             var matchedIds = this.getMatchedFieldIds();
             FCDebug.log('[ExtractionPool] Matched field IDs:', matchedIds);
 
-            // Also check what's already been applied this session
+            // Track what's already been applied this session
             var appliedKeys = this.extractionPool.applied.map(function(a) { return a.extractionKey; });
 
             this.extractionPool.unmatched = [];
@@ -3386,10 +3386,7 @@
                 var normalizedKey = key.toLowerCase();
 
                 // Skip if already matched to a form field or applied this session
-                if (matchedIds.indexOf(normalizedKey) !== -1) {
-                    FCDebug.log('[ExtractionPool] Skipping matched field:', key);
-                    return;
-                }
+                if (matchedIds.indexOf(normalizedKey) !== -1) return;
                 if (appliedKeys.indexOf(key) !== -1) return;
 
                 var field = allFields[key];
@@ -3421,32 +3418,6 @@
                 });
             });
 
-            // Also add any fields from extractedData that aren't in _allExtractedFields
-            // and haven't been matched (these could be additional extraction results)
-            Object.keys(extractedData).forEach(function(key) {
-                // Skip internal fields and already processed keys
-                if (key.startsWith('_')) return;
-                if (allFields[key]) return;
-
-                var normalizedKey = key.toLowerCase();
-                if (matchedIds.indexOf(normalizedKey) !== -1) return;
-                if (appliedKeys.indexOf(key) !== -1) return;
-
-                var value = extractedData[key];
-                if (value === null || value === undefined || value === '') return;
-                if (typeof value === 'object') return; // Skip complex objects
-
-                self.extractionPool.unmatched.push({
-                    id: 'extract_' + key,
-                    key: key,
-                    label: key.replace(/([A-Z])/g, ' $1').trim(),
-                    value: value,
-                    confidence: 0.6,
-                    position: null,
-                    category: self.categorizeExtraction({ label: key, value: value })
-                });
-            });
-
             // Sort by confidence descending
             this.extractionPool.unmatched.sort(function(a, b) {
                 return (b.confidence || 0) - (a.confidence || 0);
@@ -3454,56 +3425,6 @@
 
             FCDebug.log('[ExtractionPool] Found', this.extractionPool.unmatched.length, 'unmatched extractions:',
                 this.extractionPool.unmatched.map(function(u) { return u.label + ': ' + u.value; }));
-        },
-
-        /**
-         * Build _allExtractedFields from available extracted data when not provided
-         */
-        buildAllExtractedFields: function(doc, extractedData) {
-            var allFields = {};
-
-            // Add fields from extractedData object
-            Object.keys(extractedData).forEach(function(key) {
-                if (key.startsWith('_')) return; // Skip internal fields
-                var val = extractedData[key];
-                if (val && typeof val === 'object' && val.value !== undefined) {
-                    allFields[key] = val;
-                } else if (val !== null && val !== undefined && val !== '') {
-                    allFields[key] = { label: key, value: val, confidence: 0.7 };
-                }
-            });
-
-            // Add fields from document's extracted_text if it's structured
-            if (doc.extracted_text) {
-                try {
-                    var parsed = typeof doc.extracted_text === 'string' ?
-                        JSON.parse(doc.extracted_text) : doc.extracted_text;
-                    if (parsed && typeof parsed === 'object') {
-                        Object.keys(parsed).forEach(function(key) {
-                            if (!allFields[key]) {
-                                allFields[key] = { label: key, value: parsed[key], confidence: 0.5 };
-                            }
-                        });
-                    }
-                } catch (e) {
-                    // Not JSON, ignore
-                }
-            }
-
-            // Add any direct doc fields that might have extracted values
-            var docFields = ['paymentTerms', 'bankAccount', 'bankDetails', 'contactName',
-                'contactEmail', 'notes', 'memo', 'reference', 'shipTo', 'billTo'];
-            docFields.forEach(function(field) {
-                if (doc[field] && !allFields[field]) {
-                    allFields[field] = {
-                        label: field.replace(/([A-Z])/g, ' $1').trim(),
-                        value: doc[field],
-                        confidence: 0.6
-                    };
-                }
-            });
-
-            return allFields;
         },
 
         /**

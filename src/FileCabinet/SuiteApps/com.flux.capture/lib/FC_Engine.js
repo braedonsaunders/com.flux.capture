@@ -200,6 +200,7 @@ define([
                     extraction: {
                         documentType: extractionResult.documentType || options.documentType || DocumentType.INVOICE,
                         fields: extractionResult.fields,
+                        fieldConfidences: extractionResult.fieldConfidences || {},
                         lineItems: extractionResult.lineItems,
                         vendorMatch: vendorMatch,
                         anomalies: anomalies,
@@ -208,6 +209,7 @@ define([
                         rawText: extractionResult.rawText,
                         pageCount: extractionResult.pageCount,
                         processingTime: processingTime,
+                        allExtractedFields: extractionResult.allExtractedFields || {},
                         extractionMeta: {
                             layout: {
                                 zones: Object.keys(layout.zones || {}).filter(z => (layout.zones[z] || []).length > 0),
