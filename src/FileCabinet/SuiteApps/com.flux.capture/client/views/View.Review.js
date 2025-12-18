@@ -819,15 +819,23 @@
 
                             if (groupFields.length === 0) return;
 
+                            // Determine if this group should be collapsed by default
+                            // "Other Fields" / "default" groups are collapsed by default
+                            var isOtherFields = group.id === 'default' ||
+                                                group.label === 'Other Fields' ||
+                                                group.id.indexOf('_default') !== -1;
+                            var collapsedClass = isOtherFields ? ' collapsed' : '';
+                            var chevronClass = isOtherFields ? 'fa-chevron-down' : 'fa-chevron-up';
+
                             var icon = self.getGroupIcon(group.id);
-                            html += '<div class="form-section field-group" data-group="' + group.id + '">' +
+                            html += '<div class="form-section field-group' + collapsedClass + '" data-group="' + group.id + '">' +
                                 '<h4 class="group-header">' +
                                     '<i class="fas ' + icon + '"></i> ' + escapeHtml(group.label) +
                                     '<button class="btn btn-ghost btn-icon btn-xs group-toggle" title="Toggle section">' +
-                                        '<i class="fas fa-chevron-up"></i>' +
+                                        '<i class="fas ' + chevronClass + '"></i>' +
                                     '</button>' +
                                 '</h4>' +
-                                '<div class="group-content"><div class="form-grid">';
+                                '<div class="group-content"' + (isOtherFields ? ' style="display:none;"' : '') + '><div class="form-grid">';
 
                             for (var i = 0; i < groupFields.length; i += 2) {
                                 html += '<div class="form-row">';
@@ -1134,8 +1142,8 @@
             var isDisabled = nsField.isDisabled || nsField.isReadonly || nsField.mode === 'inline';
 
             if (nsField.type === 'select' && nsField.options && nsField.options.length > 0) {
-                // Select with options - render dropdown
-                html += '<select id="' + fieldId + '"' + (isDisabled ? ' disabled' : '') + '>';
+                // Select with pre-loaded options - render dropdown
+                html += '<select id="' + fieldId + '" class="ns-field-select" data-field="' + nsField.id + '"' + (isDisabled ? ' disabled' : '') + (isRequired ? ' required' : '') + '>';
                 html += '<option value="">-- Select --</option>';
                 nsField.options.forEach(function(opt) {
                     var selected = (String(value) === String(opt.value)) ? ' selected' : '';
@@ -1143,25 +1151,44 @@
                 });
                 html += '</select>';
             } else if (nsField.type === 'select') {
-                // Select without options - render as disabled text showing current value
-                // These are lookups that require server-side search
-                var displayValue = doc[docKey + '_display'] || doc[docKey + '_text'] || value || '';
-                html += '<input type="text" id="' + fieldId + '" value="' + escapeHtml(displayValue) + '" disabled placeholder="(Select field - not editable)">';
+                // Select without pre-loaded options - use typeahead for server-side search
+                var lookupType = this.getLookupType(nsField.id);
+                var displayValue = doc[docKey + '_display'] || doc[docKey + '_text'] || '';
+
+                if (isDisabled) {
+                    // Disabled select - just show display value
+                    html += '<input type="text" id="' + fieldId + '" value="' + escapeHtml(displayValue || value) + '" disabled>';
+                } else {
+                    // Typeahead select for body fields
+                    html += '<div class="typeahead-select body-field-typeahead" data-field="' + nsField.id + '" data-lookup="' + lookupType + '">' +
+                        '<input type="hidden" id="' + fieldId + '" value="' + escapeHtml(value) + '" data-field="' + nsField.id + '"' + (isRequired ? ' required' : '') + '>' +
+                        '<input type="text" class="typeahead-input" id="' + fieldId + '-display" ' +
+                            'value="' + escapeHtml(displayValue) + '" placeholder="Search ' + escapeHtml(label) + '..." ' +
+                            'data-field="' + nsField.id + '" data-lookup="' + lookupType + '" autocomplete="off">' +
+                        '<div class="typeahead-dropdown"></div>' +
+                    '</div>';
+                }
             } else if (nsField.type === 'date') {
-                html += '<input type="date" id="' + fieldId + '" value="' + formatDateInput(value) + '"' + (isDisabled ? ' disabled' : '') + '>';
+                html += '<input type="date" id="' + fieldId + '" class="ns-field-input" data-field="' + nsField.id + '" value="' + formatDateInput(value) + '"' +
+                    (isDisabled ? ' disabled' : '') + (isRequired ? ' required' : '') + '>';
             } else if (nsField.type === 'currency' || nsField.type === 'float') {
                 html += '<div class="input-with-prefix">' +
                     '<span class="input-prefix">$</span>' +
-                    '<input type="number" step="0.01" id="' + fieldId + '" value="' + (parseFloat(value) || 0).toFixed(2) + '"' + (isDisabled ? ' disabled' : '') + '>' +
+                    '<input type="number" step="0.01" id="' + fieldId + '" class="ns-field-input" data-field="' + nsField.id + '" value="' + (parseFloat(value) || 0).toFixed(2) + '"' +
+                    (isDisabled ? ' disabled' : '') + (isRequired ? ' required' : '') + '>' +
                 '</div>';
             } else if (nsField.type === 'integer') {
-                html += '<input type="number" step="1" id="' + fieldId + '" value="' + escapeHtml(value) + '"' + (isDisabled ? ' disabled' : '') + '>';
+                html += '<input type="number" step="1" id="' + fieldId + '" class="ns-field-input" data-field="' + nsField.id + '" value="' + escapeHtml(value) + '"' +
+                    (isDisabled ? ' disabled' : '') + (isRequired ? ' required' : '') + '>';
             } else if (nsField.type === 'checkbox') {
-                html += '<input type="checkbox" id="' + fieldId + '"' + (value ? ' checked' : '') + (isDisabled ? ' disabled' : '') + '>';
+                html += '<input type="checkbox" id="' + fieldId + '" class="ns-field-input" data-field="' + nsField.id + '"' +
+                    (value ? ' checked' : '') + (isDisabled ? ' disabled' : '') + '>';
             } else if (nsField.type === 'textarea') {
-                html += '<textarea id="' + fieldId + '" rows="2"' + (isDisabled ? ' disabled' : '') + '>' + escapeHtml(value) + '</textarea>';
+                html += '<textarea id="' + fieldId + '" class="ns-field-input" data-field="' + nsField.id + '" rows="2"' +
+                    (isDisabled ? ' disabled' : '') + (isRequired ? ' required' : '') + '>' + escapeHtml(value) + '</textarea>';
             } else {
-                html += '<input type="text" id="' + fieldId + '" value="' + escapeHtml(value) + '"' + (isDisabled ? ' disabled' : '') + '>';
+                html += '<input type="text" id="' + fieldId + '" class="ns-field-input" data-field="' + nsField.id + '" value="' + escapeHtml(value) + '"' +
+                    (isDisabled ? ' disabled' : '') + (isRequired ? ' required' : '') + '>';
             }
 
             html += '</div>';
@@ -1569,6 +1596,85 @@
             this.on('#btn-shortcuts', 'click', function() {
                 self.showShortcutsHelp();
             });
+
+            // ========== BODY FIELD TYPEAHEAD HANDLERS ==========
+            this.bindBodyFieldTypeahead();
+        },
+
+        // Bind typeahead handlers for body field selects
+        bindBodyFieldTypeahead: function() {
+            var self = this;
+            var panel = el('#extraction-panel');
+            if (!panel) return;
+
+            // Typeahead input handler for body fields
+            panel.addEventListener('input', function(e) {
+                var input = e.target;
+                if (!input.classList.contains('typeahead-input')) return;
+                // Skip sublist typeaheads (handled separately)
+                if (input.closest('.line-section')) return;
+
+                var query = input.value.trim();
+                var wrapper = input.closest('.typeahead-select');
+                var lookupType = input.dataset.lookup;
+
+                clearTimeout(self.typeaheadTimeout);
+
+                if (query.length < 2) {
+                    self.hideTypeaheadDropdown(wrapper);
+                    return;
+                }
+
+                self.typeaheadTimeout = setTimeout(function() {
+                    self.searchDatasource(lookupType, query, wrapper, input);
+                }, 300);
+            });
+
+            // Typeahead option selection for body fields
+            panel.addEventListener('click', function(e) {
+                var option = e.target.closest('.typeahead-option');
+                if (!option) return;
+                // Skip sublist typeaheads
+                if (option.closest('.line-section')) return;
+
+                var wrapper = option.closest('.typeahead-select');
+                if (wrapper && wrapper.classList.contains('body-field-typeahead')) {
+                    self.selectBodyFieldTypeahead(wrapper, option);
+                }
+            });
+
+            // Hide typeahead on blur for body fields
+            panel.addEventListener('focusout', function(e) {
+                if (!e.target.classList.contains('typeahead-input')) return;
+                if (e.target.closest('.line-section')) return;
+
+                setTimeout(function() {
+                    var wrapper = e.target.closest('.typeahead-select');
+                    self.hideTypeaheadDropdown(wrapper);
+                }, 200);
+            });
+        },
+
+        // Select typeahead option for body fields
+        selectBodyFieldTypeahead: function(wrapper, option) {
+            var hiddenInput = wrapper.querySelector('input[type="hidden"]');
+            var displayInput = wrapper.querySelector('.typeahead-input');
+            var dropdown = wrapper.querySelector('.typeahead-dropdown');
+
+            var value = option.dataset.value;
+            var text = option.dataset.text;
+            var fieldId = hiddenInput ? hiddenInput.dataset.field : null;
+
+            if (hiddenInput) hiddenInput.value = value;
+            if (displayInput) displayInput.value = text;
+            if (dropdown) dropdown.style.display = 'none';
+
+            // Track the change
+            if (fieldId) {
+                this.changes[fieldId] = value;
+                this.changes[fieldId + '_display'] = text;
+                this.markUnsaved();
+            }
         },
 
         // ==========================================
@@ -1842,22 +1948,86 @@
                 });
         },
 
+        // Validate all required fields before approval
+        validateRequiredFields: function() {
+            var result = { valid: true, message: '', focusElement: null };
+
+            // Core required fields - always required
+            var vendorName = el('#field-vendor');
+            if (!vendorName || !vendorName.value.trim()) {
+                return { valid: false, message: 'Vendor name is required', focusElement: vendorName };
+            }
+
+            var totalAmount = el('#field-totalAmount');
+            if (!totalAmount || parseFloat(totalAmount.value) <= 0) {
+                return { valid: false, message: 'Total amount is required', focusElement: totalAmount };
+            }
+
+            // Check all fields marked as required
+            var requiredInputs = document.querySelectorAll('#extraction-panel input[required], #extraction-panel select[required], #extraction-panel textarea[required]');
+            for (var i = 0; i < requiredInputs.length; i++) {
+                var input = requiredInputs[i];
+                var value = input.value ? input.value.trim() : '';
+
+                // Skip hidden inputs if they have a paired display input (typeahead)
+                if (input.type === 'hidden') {
+                    var wrapper = input.closest('.typeahead-select');
+                    if (wrapper) {
+                        var displayInput = wrapper.querySelector('.typeahead-input');
+                        if (displayInput && !displayInput.value.trim()) {
+                            var label = this.getFieldLabel(input.dataset.field);
+                            return { valid: false, message: label + ' is required', focusElement: displayInput };
+                        }
+                        continue;
+                    }
+                }
+
+                if (!value) {
+                    var fieldId = input.dataset.field || input.id.replace('field-', '');
+                    var label = this.getFieldLabel(fieldId);
+                    return { valid: false, message: label + ' is required', focusElement: input };
+                }
+            }
+
+            // Validate select fields have actual selections (not empty option)
+            var selectFields = document.querySelectorAll('#extraction-panel select.ns-field-select[required]');
+            for (var j = 0; j < selectFields.length; j++) {
+                var select = selectFields[j];
+                if (!select.value) {
+                    var fieldId = select.dataset.field || select.id.replace('field-', '');
+                    var label = this.getFieldLabel(fieldId);
+                    return { valid: false, message: 'Please select a value for ' + label, focusElement: select };
+                }
+            }
+
+            return result;
+        },
+
+        // Get field label for validation messages
+        getFieldLabel: function(fieldId) {
+            var formFields = this.formFields || {};
+            var bodyFields = formFields.bodyFields || [];
+            var field = bodyFields.find(function(f) { return f.id === fieldId; });
+            if (field && field.label) return field.label;
+
+            // Fallback - humanize the field ID
+            return fieldId.replace(/([A-Z])/g, ' $1')
+                         .replace(/^./, function(str) { return str.toUpperCase(); })
+                         .replace(/[-_]/g, ' ');
+        },
+
         approveDocument: function() {
             var self = this;
 
-            // Check for required fields
-            var vendorName = el('#field-vendor');
-            var totalAmount = el('#field-totalAmount');
-
-            if (!vendorName || !vendorName.value.trim()) {
-                UI.toast('Vendor name is required', 'warning');
-                if (vendorName) vendorName.focus();
-                return;
-            }
-
-            if (!totalAmount || parseFloat(totalAmount.value) <= 0) {
-                UI.toast('Total amount is required', 'warning');
-                if (totalAmount) totalAmount.focus();
+            // Validate all required fields
+            var validation = this.validateRequiredFields();
+            if (!validation.valid) {
+                UI.toast(validation.message, 'warning');
+                if (validation.focusElement) {
+                    validation.focusElement.focus();
+                    // Scroll to make visible if needed
+                    validation.focusElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                }
                 return;
             }
 
