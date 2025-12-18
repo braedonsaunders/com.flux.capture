@@ -658,10 +658,10 @@
                 var iframeStyle = 'width:100%;height:100%;border:none;background:white;' +
                     'transform:scale(' + this.zoom + ') rotate(' + this.rotation + 'deg);' +
                     'transform-origin:center center;';
-
-                viewport.innerHTML = '<iframe src="' + this.data.fileUrl + '" id="doc-preview" style="' + iframeStyle + '"></iframe>';
+                var pdfUrl = this.data.fileUrl + '#toolbar=0';
+                viewport.innerHTML = '<iframe src="' + pdfUrl + '" id="doc-preview" style="' + iframeStyle + '"></iframe>';
             } else if (this.data.sourceFile) {
-                var fileUrl = '/core/media/media.nl?id=' + this.data.sourceFile;
+                var fileUrl = '/core/media/media.nl?id=' + this.data.sourceFile + '#toolbar=0';
                 var iframeStyle = 'width:100%;height:100%;border:none;background:white;' +
                     'transform:scale(' + this.zoom + ') rotate(' + this.rotation + 'deg);' +
                     'transform-origin:center center;';
