@@ -1475,10 +1475,17 @@
         },
 
         fetchTypeaheadOptions: function(lookupType, query, callback) {
-            API.get('typeahead', { type: lookupType, query: query }).then(function(response) {
+            API.get('datasource', { type: lookupType, query: query, limit: 20 }).then(function(response) {
                 var data = response.data || response;
-                var options = Array.isArray(data) ? data : (data.options || []);
-                callback(options.slice(0, 10));
+                var options = Array.isArray(data) ? data : (data.options || data.results || []);
+                // Normalize to { value, text } format
+                var normalized = options.map(function(opt) {
+                    return {
+                        value: opt.value || opt.id || opt.internalid,
+                        text: opt.text || opt.name || opt.label || opt.value
+                    };
+                });
+                callback(normalized.slice(0, 10));
             }).catch(function() {
                 callback([]);
             });
