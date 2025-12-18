@@ -1412,21 +1412,38 @@
                             </button>
                         </div>
 
-                        <!-- Configuration Panel -->
-                        <div class="form-config-panel" id="form-config-panel">
+                        <!-- Section Tabs: Form Source vs Form Editor -->
+                        <div class="form-section-tabs">
+                            <button class="section-tab active" data-section="source">
+                                <i class="fas fa-cloud-download-alt"></i> Form Source
+                            </button>
+                            <button class="section-tab" data-section="editor">
+                                <i class="fas fa-edit"></i> Form Editor
+                            </button>
+                        </div>
+
+                        <!-- FORM SOURCE SECTION -->
+                        <div class="form-section-panel" id="section-source">
                             <div class="config-source-section">
                                 <h4>Form Layout Source</h4>
 
-                                <!-- Automatic Capture Option -->
+                                <!-- Client Script Capture Option -->
                                 <div class="source-option selected" id="source-option-capture">
                                     <label>
                                         <i class="fas fa-magic"></i>
                                         <div>
-                                            <span class="source-title">Automatic Capture (Recommended)</span>
-                                            <span class="source-desc">Form layouts are automatically captured when users open transactions in NetSuite. This ensures your Review screen always matches your current form customizations.</span>
+                                            <span class="source-title">Automatic Capture via Client Script</span>
+                                            <span class="source-desc">Form layouts are captured when users open transactions in NetSuite. Enable the client script to start capturing.</span>
                                         </div>
                                     </label>
                                     <div class="source-controls" id="capture-controls">
+                                        <div class="capture-toggle-row">
+                                            <label class="toggle">
+                                                <input type="checkbox" id="capture-script-toggle">
+                                                <span class="toggle-track"><span class="toggle-thumb"></span></span>
+                                            </label>
+                                            <span class="toggle-label-text" id="capture-toggle-label">Client Script Disabled</span>
+                                        </div>
                                         <div class="capture-status">
                                             <span class="status-icon" id="capture-status-icon"><i class="fas fa-clock"></i></span>
                                             <span id="capture-status-text">Checking status...</span>
@@ -1448,7 +1465,7 @@
                                         <i class="fas fa-file-code"></i>
                                         <div>
                                             <span class="source-title">Upload Form XML</span>
-                                            <span class="source-desc">Manually upload a NetSuite form definition XML file. Export from Customization > Forms > Transaction Forms.</span>
+                                            <span class="source-desc">Upload a NetSuite form definition XML. Export from Customization > Forms > Transaction Forms.</span>
                                         </div>
                                     </label>
                                     <div class="source-controls" id="xml-controls" style="display:none;">
@@ -1457,25 +1474,68 @@
                                             <p>Drag & drop form XML here or <button type="button" class="btn-link" id="btn-browse-xml">browse files</button></p>
                                             <input type="file" accept=".xml" id="xml-file-input" hidden>
                                         </div>
-                                        <div class="xml-preview" id="xml-preview" style="display:none;">
-                                            <div class="xml-info" id="xml-info"></div>
-                                            <button class="btn btn-primary" id="btn-import-xml">
-                                                <i class="fas fa-upload"></i> Import Form Definition
-                                            </button>
+                                        <!-- XML Selection Panel -->
+                                        <div class="xml-selection-panel" id="xml-selection-panel" style="display:none;">
+                                            <div class="xml-selection-header">
+                                                <h5><i class="fas fa-check-square"></i> Select Items to Import</h5>
+                                                <p>Due to storage limits, select only the tabs and sublists you need.</p>
+                                            </div>
+                                            <div class="xml-selection-actions">
+                                                <button class="btn btn-ghost btn-sm" id="btn-xml-select-all">Select All</button>
+                                                <button class="btn btn-ghost btn-sm" id="btn-xml-select-none">Select None</button>
+                                            </div>
+                                            <div class="xml-selection-list" id="xml-selection-list">
+                                                <!-- Checkboxes render here -->
+                                            </div>
+                                            <div class="xml-selection-footer">
+                                                <span class="xml-size-indicator" id="xml-size-indicator">Estimated size: 0 KB</span>
+                                                <button class="btn btn-primary" id="btn-import-selected-xml">
+                                                    <i class="fas fa-upload"></i> Import Selected
+                                                </button>
+                                            </div>
                                         </div>
                                     </div>
                                 </div>
                             </div>
+                        </div>
 
-                            <!-- Form Preview -->
-                            <div class="form-preview-section">
-                                <h4>Current Form Configuration</h4>
-                                <div class="form-preview" id="form-preview">
-                                    <div class="preview-placeholder">
-                                        <i class="fas fa-file-alt"></i>
-                                        <p>Loading configuration...</p>
-                                    </div>
+                        <!-- FORM EDITOR SECTION -->
+                        <div class="form-section-panel" id="section-editor" style="display:none;">
+                            <div class="form-editor-toolbar">
+                                <div class="editor-toolbar-left">
+                                    <button class="btn btn-ghost btn-sm" id="btn-expand-all">
+                                        <i class="fas fa-expand-alt"></i> Expand All
+                                    </button>
+                                    <button class="btn btn-ghost btn-sm" id="btn-collapse-all">
+                                        <i class="fas fa-compress-alt"></i> Collapse All
+                                    </button>
                                 </div>
+                                <div class="editor-toolbar-right">
+                                    <button class="btn btn-secondary btn-sm" id="btn-reset-config">
+                                        <i class="fas fa-undo"></i> Reset to Default
+                                    </button>
+                                    <button class="btn btn-primary btn-sm" id="btn-save-form-config">
+                                        <i class="fas fa-save"></i> Save Configuration
+                                    </button>
+                                </div>
+                            </div>
+
+                            <div class="form-editor-container" id="form-editor-container">
+                                <div class="editor-placeholder">
+                                    <i class="fas fa-file-alt"></i>
+                                    <p>Loading form configuration...</p>
+                                </div>
+                            </div>
+
+                            <div class="form-editor-help">
+                                <h5><i class="fas fa-info-circle"></i> How to Edit</h5>
+                                <ul>
+                                    <li><strong>Click items</strong> to expand/collapse sections</li>
+                                    <li><strong>Drag items</strong> to reorder fields within groups</li>
+                                    <li><strong>Toggle visibility</strong> using the eye icon</li>
+                                    <li><strong>Edit labels</strong> by clicking the pencil icon</li>
+                                    <li><strong>Changes</strong> are reflected in the Review screen after saving</li>
+                                </ul>
                             </div>
                         </div>
                     </div>
