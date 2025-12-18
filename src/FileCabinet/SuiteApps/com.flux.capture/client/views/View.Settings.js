@@ -1,19 +1,24 @@
 /**
  * Flux Capture - Enhanced Settings View Controller
- * Professional SaaS-style settings with form configuration
+ * Professional SaaS-style settings with form configuration and hierarchical editor
  */
 (function() {
     'use strict';
 
     var SettingsController = {
         currentFormType: 'vendorbill',
+        currentSection: 'source',
         formConfig: null,
+        editedConfig: null,
         parsedXml: null,
+        xmlSelections: {},
+        captureScriptEnabled: false,
 
         init: function() {
             renderTemplate('tpl-settings', 'view-container');
             this.bindEvents();
             this.loadFormConfig(this.currentFormType);
+            this.loadCaptureScriptStatus();
         },
 
         bindEvents: function() {
@@ -52,7 +57,7 @@
                 });
             }
 
-            // Form config tab switching
+            // Form config tab switching (vendorbill/expensereport)
             els('.config-tab').forEach(function(tab) {
                 tab.addEventListener('click', function() {
                     els('.config-tab').forEach(function(t) { t.classList.remove('active'); });
@@ -62,19 +67,41 @@
                 });
             });
 
+            // Section tab switching (source/editor)
+            els('.section-tab').forEach(function(tab) {
+                tab.addEventListener('click', function() {
+                    els('.section-tab').forEach(function(t) { t.classList.remove('active'); });
+                    this.classList.add('active');
+                    self.currentSection = this.dataset.section;
+                    self.showSection(self.currentSection);
+                });
+            });
+
             // Source option selection
             var captureOption = el('#source-option-capture');
             var xmlOption = el('#source-option-xml');
 
             if (captureOption) {
-                captureOption.addEventListener('click', function() {
-                    self.selectSourceOption('capture');
+                captureOption.addEventListener('click', function(e) {
+                    if (!e.target.closest('.toggle') && !e.target.closest('button')) {
+                        self.selectSourceOption('capture');
+                    }
                 });
             }
 
             if (xmlOption) {
-                xmlOption.addEventListener('click', function() {
-                    self.selectSourceOption('xml');
+                xmlOption.addEventListener('click', function(e) {
+                    if (!e.target.closest('button')) {
+                        self.selectSourceOption('xml');
+                    }
+                });
+            }
+
+            // Capture script toggle
+            var captureToggle = el('#capture-script-toggle');
+            if (captureToggle) {
+                captureToggle.addEventListener('change', function() {
+                    self.toggleCaptureScript(this.checked);
                 });
             }
 
@@ -116,11 +143,24 @@
                 });
             }
 
-            // Import XML button
-            var importBtn = el('#btn-import-xml');
-            if (importBtn) {
-                importBtn.addEventListener('click', function() {
-                    self.importXmlConfig();
+            // XML selection controls
+            var selectAllBtn = el('#btn-xml-select-all');
+            var selectNoneBtn = el('#btn-xml-select-none');
+            var importSelectedBtn = el('#btn-import-selected-xml');
+
+            if (selectAllBtn) {
+                selectAllBtn.addEventListener('click', function() {
+                    self.selectAllXmlItems(true);
+                });
+            }
+            if (selectNoneBtn) {
+                selectNoneBtn.addEventListener('click', function() {
+                    self.selectAllXmlItems(false);
+                });
+            }
+            if (importSelectedBtn) {
+                importSelectedBtn.addEventListener('click', function() {
+                    self.importSelectedXmlConfig();
                 });
             }
 
@@ -140,12 +180,57 @@
                 });
             }
 
+            // Form editor controls
+            var expandAllBtn = el('#btn-expand-all');
+            var collapseAllBtn = el('#btn-collapse-all');
+            var resetConfigBtn = el('#btn-reset-config');
+            var saveConfigBtn = el('#btn-save-form-config');
+
+            if (expandAllBtn) {
+                expandAllBtn.addEventListener('click', function() {
+                    self.expandAllEditorNodes(true);
+                });
+            }
+            if (collapseAllBtn) {
+                collapseAllBtn.addEventListener('click', function() {
+                    self.expandAllEditorNodes(false);
+                });
+            }
+            if (resetConfigBtn) {
+                resetConfigBtn.addEventListener('click', function() {
+                    self.resetFormConfig();
+                });
+            }
+            if (saveConfigBtn) {
+                saveConfigBtn.addEventListener('click', function() {
+                    self.saveFormConfig();
+                });
+            }
+
             // Show shortcuts
             var shortcutsBtn = el('#btn-show-shortcuts');
             if (shortcutsBtn) {
                 shortcutsBtn.addEventListener('click', function() {
                     self.showShortcutsHelp();
                 });
+            }
+        },
+
+        // ==========================================
+        // SECTION MANAGEMENT
+        // ==========================================
+
+        showSection: function(section) {
+            var sourcePanel = el('#section-source');
+            var editorPanel = el('#section-editor');
+
+            if (section === 'source') {
+                if (sourcePanel) sourcePanel.style.display = 'block';
+                if (editorPanel) editorPanel.style.display = 'none';
+            } else {
+                if (sourcePanel) sourcePanel.style.display = 'none';
+                if (editorPanel) editorPanel.style.display = 'block';
+                this.renderFormEditor();
             }
         },
 
@@ -162,13 +247,13 @@
             if (type === 'capture') {
                 captureOption.classList.add('selected');
                 xmlOption.classList.remove('selected');
-                captureControls.style.display = 'block';
-                xmlControls.style.display = 'none';
+                if (captureControls) captureControls.style.display = 'block';
+                if (xmlControls) xmlControls.style.display = 'none';
             } else {
                 captureOption.classList.remove('selected');
                 xmlOption.classList.add('selected');
-                captureControls.style.display = 'none';
-                xmlControls.style.display = 'block';
+                if (captureControls) captureControls.style.display = 'none';
+                if (xmlControls) xmlControls.style.display = 'block';
             }
         },
 
@@ -178,13 +263,16 @@
             API.get('formschema', { transactionType: type })
                 .then(function(result) {
                     self.formConfig = result.data || result;
-                    self.renderFormPreview();
+                    self.editedConfig = JSON.parse(JSON.stringify(self.formConfig)); // Deep clone
                     self.updateCaptureStatus();
+                    if (self.currentSection === 'editor') {
+                        self.renderFormEditor();
+                    }
                 })
                 .catch(function(err) {
                     console.error('Error loading form config:', err);
                     self.formConfig = null;
-                    self.renderFormPreview();
+                    self.editedConfig = null;
                     self.updateCaptureStatus();
                 });
         },
@@ -198,14 +286,34 @@
             if (!this.formConfig) {
                 statusText.textContent = 'No form configuration found';
                 statusIcon.innerHTML = '<i class="fas fa-exclamation-triangle" style="color:var(--color-warning);"></i>';
-            } else if (this.formConfig.capturedAt || this.formConfig.lastModified) {
-                var date = new Date(this.formConfig.capturedAt || this.formConfig.lastModified);
+                return;
+            }
+
+            // Check for captured timestamp in multiple locations
+            var capturedAt = this.formConfig.capturedAt ||
+                            this.formConfig.lastModified ||
+                            (this.formConfig.layout && this.formConfig.layout.capturedAt) ||
+                            (this.formConfig.layout && this.formConfig.layout.lastModified);
+
+            // Check source for display
+            var source = this.formConfig.source ||
+                        (this.formConfig.layout && this.formConfig.layout.source) ||
+                        'unknown';
+
+            if (capturedAt) {
+                var date = new Date(capturedAt);
                 var timeAgo = this.getTimeAgo(date);
-                statusText.textContent = 'Last captured: ' + timeAgo;
+                var sourceLabel = source === 'client_capture' ? 'captured' :
+                                 source === 'xml_upload' ? 'uploaded' :
+                                 source === 'manual' ? 'configured' : 'updated';
+                statusText.textContent = 'Last ' + sourceLabel + ': ' + timeAgo;
                 statusIcon.innerHTML = '<i class="fas fa-check-circle" style="color:var(--color-success);"></i>';
             } else if (this.formConfig.tabs && this.formConfig.tabs.length > 0) {
                 statusText.textContent = 'Configuration loaded (using defaults)';
                 statusIcon.innerHTML = '<i class="fas fa-info-circle" style="color:var(--color-primary);"></i>';
+            } else if (this.formConfig.layout && this.formConfig.layout.tabs) {
+                statusText.textContent = 'Layout available (from ' + source + ')';
+                statusIcon.innerHTML = '<i class="fas fa-check-circle" style="color:var(--color-success);"></i>';
             } else {
                 statusText.textContent = 'No layout captured yet';
                 statusIcon.innerHTML = '<i class="fas fa-clock" style="color:var(--text-tertiary);"></i>';
@@ -226,69 +334,64 @@
             return date.toLocaleDateString();
         },
 
-        renderFormPreview: function() {
-            var preview = el('#form-preview');
-            if (!preview) return;
+        // ==========================================
+        // CAPTURE SCRIPT TOGGLE
+        // ==========================================
 
-            if (!this.formConfig || (!this.formConfig.tabs && !this.formConfig.bodyFields)) {
-                preview.innerHTML = '<div class="preview-placeholder">' +
-                    '<i class="fas fa-file-alt"></i>' +
-                    '<p>No form configuration found for this transaction type.<br>Open a ' + this.currentFormType + ' form in NetSuite to capture the layout.</p>' +
-                    '</div>';
-                return;
-            }
+        loadCaptureScriptStatus: function() {
+            var self = this;
+            var toggle = el('#capture-script-toggle');
+            var label = el('#capture-toggle-label');
 
-            var html = '<div class="form-preview-content">';
-
-            // Show tabs
-            var tabs = this.formConfig.tabs || [];
-            if (tabs.length > 0) {
-                html += '<div class="preview-tabs">';
-                tabs.forEach(function(tab) {
-                    html += '<span class="preview-tab">' + escapeHtml(tab.label || tab.id) + '</span>';
+            API.get('scriptstatus', { scriptId: 'customscript_fc_form_capture' })
+                .then(function(result) {
+                    self.captureScriptEnabled = result.data && result.data.enabled;
+                    if (toggle) toggle.checked = self.captureScriptEnabled;
+                    if (label) {
+                        label.textContent = self.captureScriptEnabled ?
+                            'Client Script Enabled' : 'Client Script Disabled';
+                    }
+                })
+                .catch(function() {
+                    // Script status API may not exist yet, default to disabled
+                    self.captureScriptEnabled = false;
+                    if (toggle) toggle.checked = false;
+                    if (label) label.textContent = 'Client Script Status Unknown';
                 });
-                html += '</div>';
-            }
+        },
 
-            // Count fields and sublists
-            var fieldCount = 0;
-            var sublistCount = 0;
+        toggleCaptureScript: function(enabled) {
+            var self = this;
+            var toggle = el('#capture-script-toggle');
+            var label = el('#capture-toggle-label');
 
-            if (this.formConfig.bodyFields) {
-                fieldCount = this.formConfig.bodyFields.length;
-            }
+            if (label) label.textContent = enabled ? 'Enabling...' : 'Disabling...';
 
-            tabs.forEach(function(tab) {
-                if (tab.fieldGroups) {
-                    tab.fieldGroups.forEach(function(g) {
-                        if (g.fields) fieldCount += g.fields.length;
-                    });
-                }
-                if (tab.sublists) sublistCount += tab.sublists.length;
-            });
-
-            if (this.formConfig.sublists) {
-                sublistCount = this.formConfig.sublists.length;
-            }
-
-            html += '<div class="preview-stats">' +
-                '<span><i class="fas fa-list-alt"></i> ' + fieldCount + ' fields</span>' +
-                '<span><i class="fas fa-table"></i> ' + sublistCount + ' sublists</span>' +
-                '<span><i class="fas fa-folder"></i> ' + tabs.length + ' tabs</span>' +
-                '</div>';
-
-            // Show source
-            var source = this.formConfig.source || 'automatic';
-            html += '<div style="margin-top:var(--space-sm);font-size:var(--font-size-xs);color:var(--text-tertiary);">' +
-                '<i class="fas fa-info-circle"></i> Source: ' + source +
-                '</div>';
-
-            html += '</div>';
-            preview.innerHTML = html;
+            API.put('scriptstatus', {
+                scriptId: 'customscript_fc_form_capture',
+                enabled: enabled
+            })
+                .then(function() {
+                    self.captureScriptEnabled = enabled;
+                    if (label) {
+                        label.textContent = enabled ?
+                            'Client Script Enabled' : 'Client Script Disabled';
+                    }
+                    UI.toast('Capture script ' + (enabled ? 'enabled' : 'disabled'), 'success');
+                })
+                .catch(function(err) {
+                    // Revert toggle
+                    if (toggle) toggle.checked = !enabled;
+                    if (label) {
+                        label.textContent = !enabled ?
+                            'Client Script Enabled' : 'Client Script Disabled';
+                    }
+                    UI.toast('Failed to update script: ' + err.message, 'error');
+                });
         },
 
         // ==========================================
-        // XML UPLOAD
+        // XML UPLOAD WITH SELECTION
         // ==========================================
 
         handleXmlUpload: function(file) {
@@ -303,7 +406,7 @@
             reader.onload = function(e) {
                 try {
                     self.parsedXml = self.parseFormXml(e.target.result);
-                    self.showXmlPreview();
+                    self.showXmlSelectionPanel();
                 } catch (err) {
                     UI.toast('Error parsing XML: ' + err.message, 'error');
                     console.error('XML parse error:', err);
@@ -382,8 +485,8 @@
         },
 
         getXmlText: function(parent, tagName) {
-            var el = parent.querySelector(tagName);
-            return el ? el.textContent.trim() : '';
+            var element = parent.querySelector(tagName);
+            return element ? element.textContent.trim() : '';
         },
 
         parseXmlFieldGroup: function(element, order) {
@@ -402,10 +505,6 @@
             var self = this;
             var fields = [];
 
-            // NetSuite form XML uses two formats:
-            // 1. <field id="entity">...</field> (SDF format)
-            // 2. <ENTITY><visible>T</visible></ENTITY> (field ID as element name)
-
             // Try SDF format first
             container.querySelectorAll('field').forEach(function(f) {
                 var scriptIdEl = f.querySelector('[scriptid]');
@@ -422,22 +521,16 @@
                 });
             });
 
-            // If no fields found, try alternate format (field ID as element name)
+            // If no fields found, try alternate format
             if (fields.length === 0) {
-                // Skip known non-field elements
                 var skipElements = ['id', 'label', 'visible', 'collapsed', 'help', 'displaytype',
                     'ismandatory', 'defaultchecked', 'displayOrder', 'scriptid'];
 
                 Array.prototype.forEach.call(container.children, function(child) {
                     var tagName = child.tagName.toLowerCase();
-
-                    // Skip if it's a known metadata element
                     if (skipElements.indexOf(tagName) !== -1) return;
 
-                    // This is likely a field element
                     var id = tagName;
-
-                    // Check for scriptid attribute (for custom fields)
                     if (child.hasAttribute('scriptid')) {
                         id = child.getAttribute('scriptid');
                     }
@@ -467,12 +560,10 @@
                 sublists: []
             };
 
-            // Parse field groups within tab
             element.querySelectorAll('fieldGroup').forEach(function(fg, idx) {
                 tab.fieldGroups.push(self.parseXmlFieldGroup(fg, idx));
             });
 
-            // Note which sublists are in this tab
             element.querySelectorAll('subList').forEach(function(sl) {
                 var slId = sl.getAttribute('scriptid');
                 if (slId) tab.sublists.push(slId);
@@ -500,63 +591,597 @@
             };
         },
 
-        showXmlPreview: function() {
-            var preview = el('#xml-preview');
-            var info = el('#xml-info');
+        showXmlSelectionPanel: function() {
+            var dropZone = el('#xml-drop-zone');
+            var selectionPanel = el('#xml-selection-panel');
+            var selectionList = el('#xml-selection-list');
 
-            if (!this.parsedXml || !preview || !info) return;
+            if (dropZone) dropZone.style.display = 'none';
+            if (selectionPanel) selectionPanel.style.display = 'block';
 
-            var fieldCount = 0;
-            this.parsedXml.tabs.forEach(function(tab) {
-                if (tab.fieldGroups) {
-                    tab.fieldGroups.forEach(function(g) {
-                        if (g.fields) fieldCount += g.fields.length;
-                    });
-                }
+            if (!selectionList || !this.parsedXml) return;
+
+            // Initialize selections - all selected by default
+            this.xmlSelections = {};
+            var html = '';
+
+            // Tabs
+            if (this.parsedXml.tabs && this.parsedXml.tabs.length > 0) {
+                html += '<div class="xml-selection-group">';
+                html += '<div class="selection-group-header"><i class="fas fa-folder"></i> Tabs</div>';
+
+                this.parsedXml.tabs.forEach(function(tab, idx) {
+                    var key = 'tab_' + idx;
+                    this.xmlSelections[key] = true;
+
+                    var fieldCount = 0;
+                    if (tab.fieldGroups) {
+                        tab.fieldGroups.forEach(function(g) {
+                            if (g.fields) fieldCount += g.fields.length;
+                        });
+                    }
+
+                    html += '<label class="xml-selection-item">' +
+                        '<input type="checkbox" data-key="' + key + '" checked>' +
+                        '<span class="item-label">' + escapeHtml(tab.label || tab.id) + '</span>' +
+                        '<span class="item-meta">' + fieldCount + ' fields</span>' +
+                        '</label>';
+                }, this);
+
+                html += '</div>';
+            }
+
+            // Sublists
+            if (this.parsedXml.sublists && this.parsedXml.sublists.length > 0) {
+                html += '<div class="xml-selection-group">';
+                html += '<div class="selection-group-header"><i class="fas fa-table"></i> Sublists</div>';
+
+                this.parsedXml.sublists.forEach(function(sl, idx) {
+                    var key = 'sublist_' + idx;
+                    this.xmlSelections[key] = true;
+
+                    var colCount = sl.columns ? sl.columns.length : 0;
+
+                    html += '<label class="xml-selection-item">' +
+                        '<input type="checkbox" data-key="' + key + '" checked>' +
+                        '<span class="item-label">' + escapeHtml(sl.label || sl.id) + '</span>' +
+                        '<span class="item-meta">' + colCount + ' columns</span>' +
+                        '</label>';
+                }, this);
+
+                html += '</div>';
+            }
+
+            selectionList.innerHTML = html;
+
+            // Bind checkbox events
+            var self = this;
+            selectionList.querySelectorAll('input[type="checkbox"]').forEach(function(cb) {
+                cb.addEventListener('change', function() {
+                    self.xmlSelections[this.dataset.key] = this.checked;
+                    self.updateXmlSizeEstimate();
+                });
             });
 
-            info.innerHTML = '<p><strong>Form Name:</strong> ' + escapeHtml(this.parsedXml.formInfo.name || 'Unknown') + '</p>' +
-                '<p><strong>Record Type:</strong> ' + escapeHtml(this.parsedXml.formInfo.recordType || 'Unknown') + '</p>' +
-                '<p><strong>Tabs:</strong> ' + this.parsedXml.tabs.length + '</p>' +
-                '<p><strong>Fields:</strong> ' + fieldCount + '</p>' +
-                '<p><strong>Sublists:</strong> ' + this.parsedXml.sublists.length + '</p>';
-
-            preview.style.display = 'block';
+            this.updateXmlSizeEstimate();
         },
 
-        importXmlConfig: function() {
-            var self = this;
+        selectAllXmlItems: function(selected) {
+            var selectionList = el('#xml-selection-list');
+            if (!selectionList) return;
 
-            if (!this.parsedXml) {
-                UI.toast('No XML file loaded', 'error');
+            var self = this;
+            selectionList.querySelectorAll('input[type="checkbox"]').forEach(function(cb) {
+                cb.checked = selected;
+                self.xmlSelections[cb.dataset.key] = selected;
+            });
+
+            this.updateXmlSizeEstimate();
+        },
+
+        updateXmlSizeEstimate: function() {
+            var indicator = el('#xml-size-indicator');
+            if (!indicator || !this.parsedXml) return;
+
+            // Build selected config
+            var selectedConfig = this.buildSelectedConfig();
+            var jsonSize = JSON.stringify(selectedConfig).length;
+            var sizeKb = (jsonSize / 1024).toFixed(1);
+
+            var isOverLimit = jsonSize > 3500; // Leave some buffer under 4000
+            indicator.innerHTML = isOverLimit ?
+                '<i class="fas fa-exclamation-triangle" style="color:var(--color-warning);"></i> Estimated size: ' + sizeKb + ' KB (over limit!)' :
+                '<i class="fas fa-check-circle" style="color:var(--color-success);"></i> Estimated size: ' + sizeKb + ' KB';
+        },
+
+        buildSelectedConfig: function() {
+            if (!this.parsedXml) return {};
+
+            var config = {
+                formInfo: this.parsedXml.formInfo,
+                tabs: [],
+                sublists: []
+            };
+
+            // Include selected tabs
+            this.parsedXml.tabs.forEach(function(tab, idx) {
+                if (this.xmlSelections['tab_' + idx]) {
+                    config.tabs.push(tab);
+                }
+            }, this);
+
+            // Include selected sublists
+            this.parsedXml.sublists.forEach(function(sl, idx) {
+                if (this.xmlSelections['sublist_' + idx]) {
+                    config.sublists.push(sl);
+                }
+            }, this);
+
+            return config;
+        },
+
+        importSelectedXmlConfig: function() {
+            var self = this;
+            var selectedConfig = this.buildSelectedConfig();
+
+            var jsonSize = JSON.stringify(selectedConfig).length;
+            if (jsonSize > 3800) {
+                UI.toast('Selection too large. Please deselect some items.', 'error');
                 return;
             }
 
-            var btn = el('#btn-import-xml');
+            var btn = el('#btn-import-selected-xml');
             if (btn) {
                 btn.disabled = true;
                 btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Importing...';
             }
 
+            selectedConfig.capturedAt = new Date().toISOString();
+
             API.put('formconfig', {
                 transactionType: this.currentFormType,
-                config: this.parsedXml,
+                config: selectedConfig,
                 source: 'xml_upload'
             }).then(function() {
                 if (btn) {
                     btn.disabled = false;
-                    btn.innerHTML = '<i class="fas fa-upload"></i> Import Form Definition';
+                    btn.innerHTML = '<i class="fas fa-upload"></i> Import Selected';
                 }
                 UI.toast('Form configuration imported successfully!', 'success');
                 self.loadFormConfig(self.currentFormType);
-                el('#xml-preview').style.display = 'none';
+
+                // Reset XML panel
+                var dropZone = el('#xml-drop-zone');
+                var selectionPanel = el('#xml-selection-panel');
+                if (dropZone) dropZone.style.display = 'block';
+                if (selectionPanel) selectionPanel.style.display = 'none';
                 self.parsedXml = null;
+                self.xmlSelections = {};
             }).catch(function(err) {
                 if (btn) {
                     btn.disabled = false;
-                    btn.innerHTML = '<i class="fas fa-upload"></i> Import Form Definition';
+                    btn.innerHTML = '<i class="fas fa-upload"></i> Import Selected';
                 }
                 UI.toast('Import failed: ' + err.message, 'error');
+            });
+        },
+
+        // ==========================================
+        // FORM EDITOR - HIERARCHICAL VIEW
+        // ==========================================
+
+        renderFormEditor: function() {
+            var container = el('#form-editor-container');
+            if (!container) return;
+
+            var config = this.editedConfig;
+            if (!config) {
+                container.innerHTML = '<div class="editor-placeholder">' +
+                    '<i class="fas fa-exclamation-triangle"></i>' +
+                    '<p>No form configuration loaded. Use "Form Source" to capture or upload a form first.</p>' +
+                    '</div>';
+                return;
+            }
+
+            // Get layout data - could be in layout property or directly on config
+            var layout = config.layout || config;
+            var tabs = layout.tabs || [];
+            var sublists = config.sublists || layout.sublists || [];
+            var bodyFields = config.bodyFields || [];
+
+            var html = '<div class="form-editor-tree">';
+
+            // Form info header
+            var formInfo = config.formInfo || layout.formInfo || {};
+            html += '<div class="editor-form-header">' +
+                '<i class="fas fa-file-invoice"></i>' +
+                '<span class="form-name">' + escapeHtml(formInfo.name || this.currentFormType) + '</span>' +
+                '<span class="form-type">' + escapeHtml(formInfo.recordType || this.currentFormType) + '</span>' +
+                '</div>';
+
+            // Tabs section
+            if (tabs.length > 0) {
+                html += '<div class="editor-section">';
+                html += '<div class="section-header" data-toggle="tabs-section">' +
+                    '<i class="fas fa-chevron-down toggle-icon"></i>' +
+                    '<i class="fas fa-folder"></i>' +
+                    '<span>Tabs (' + tabs.length + ')</span>' +
+                    '</div>';
+                html += '<div class="section-content" id="tabs-section">';
+
+                tabs.forEach(function(tab, tabIdx) {
+                    html += this.renderEditorTab(tab, tabIdx);
+                }, this);
+
+                html += '</div></div>';
+            }
+
+            // Body fields section (if not in tabs)
+            if (bodyFields.length > 0) {
+                html += '<div class="editor-section">';
+                html += '<div class="section-header" data-toggle="bodyfields-section">' +
+                    '<i class="fas fa-chevron-down toggle-icon"></i>' +
+                    '<i class="fas fa-list-alt"></i>' +
+                    '<span>Body Fields (' + bodyFields.length + ')</span>' +
+                    '</div>';
+                html += '<div class="section-content" id="bodyfields-section">';
+
+                bodyFields.forEach(function(field, idx) {
+                    html += this.renderEditorField(field, 'body', idx);
+                }, this);
+
+                html += '</div></div>';
+            }
+
+            // Sublists section
+            if (sublists.length > 0) {
+                html += '<div class="editor-section">';
+                html += '<div class="section-header" data-toggle="sublists-section">' +
+                    '<i class="fas fa-chevron-down toggle-icon"></i>' +
+                    '<i class="fas fa-table"></i>' +
+                    '<span>Sublists (' + sublists.length + ')</span>' +
+                    '</div>';
+                html += '<div class="section-content" id="sublists-section">';
+
+                sublists.forEach(function(sublist, idx) {
+                    html += this.renderEditorSublist(sublist, idx);
+                }, this);
+
+                html += '</div></div>';
+            }
+
+            html += '</div>';
+            container.innerHTML = html;
+
+            // Bind editor events
+            this.bindEditorEvents(container);
+        },
+
+        renderEditorTab: function(tab, tabIdx) {
+            var fieldGroups = tab.fieldGroups || [];
+            var fieldCount = 0;
+            fieldGroups.forEach(function(g) {
+                if (g.fields) fieldCount += g.fields.length;
+            });
+
+            var html = '<div class="editor-node editor-tab" data-tab-idx="' + tabIdx + '">';
+            html += '<div class="node-header" data-toggle="tab-' + tabIdx + '">' +
+                '<i class="fas fa-chevron-right toggle-icon"></i>' +
+                '<i class="fas fa-folder-open"></i>' +
+                '<span class="node-label">' + escapeHtml(tab.label || tab.id) + '</span>' +
+                '<span class="node-meta">' + fieldCount + ' fields</span>' +
+                '<div class="node-actions">' +
+                '<button class="btn-icon" data-action="edit-label" data-type="tab" data-idx="' + tabIdx + '" title="Edit label">' +
+                '<i class="fas fa-pencil"></i>' +
+                '</button>' +
+                '<button class="btn-icon" data-action="toggle-visible" data-type="tab" data-idx="' + tabIdx + '" title="Toggle visibility">' +
+                '<i class="fas ' + (tab.visible !== false ? 'fa-eye' : 'fa-eye-slash') + '"></i>' +
+                '</button>' +
+                '</div>' +
+                '</div>';
+
+            html += '<div class="node-content collapsed" id="tab-' + tabIdx + '">';
+
+            // Field groups within tab
+            fieldGroups.forEach(function(group, groupIdx) {
+                html += this.renderEditorFieldGroup(group, tabIdx, groupIdx);
+            }, this);
+
+            html += '</div></div>';
+            return html;
+        },
+
+        renderEditorFieldGroup: function(group, tabIdx, groupIdx) {
+            var fields = group.fields || [];
+
+            var html = '<div class="editor-node editor-group" data-tab-idx="' + tabIdx + '" data-group-idx="' + groupIdx + '">';
+            html += '<div class="node-header" data-toggle="group-' + tabIdx + '-' + groupIdx + '">' +
+                '<i class="fas fa-chevron-right toggle-icon"></i>' +
+                '<i class="fas fa-layer-group"></i>' +
+                '<span class="node-label">' + escapeHtml(group.label || group.id) + '</span>' +
+                '<span class="node-meta">' + fields.length + ' fields</span>' +
+                '<div class="node-actions">' +
+                '<button class="btn-icon" data-action="edit-label" data-type="group" data-tab-idx="' + tabIdx + '" data-idx="' + groupIdx + '" title="Edit label">' +
+                '<i class="fas fa-pencil"></i>' +
+                '</button>' +
+                '<button class="btn-icon" data-action="toggle-visible" data-type="group" data-tab-idx="' + tabIdx + '" data-idx="' + groupIdx + '" title="Toggle visibility">' +
+                '<i class="fas ' + (group.visible !== false ? 'fa-eye' : 'fa-eye-slash') + '"></i>' +
+                '</button>' +
+                '</div>' +
+                '</div>';
+
+            html += '<div class="node-content collapsed" id="group-' + tabIdx + '-' + groupIdx + '">';
+
+            fields.forEach(function(field, fieldIdx) {
+                html += this.renderEditorField(field, 'tab-' + tabIdx + '-group-' + groupIdx, fieldIdx);
+            }, this);
+
+            html += '</div></div>';
+            return html;
+        },
+
+        renderEditorField: function(field, parentKey, fieldIdx) {
+            var typeIcon = this.getFieldTypeIcon(field.type);
+            var visibleClass = field.visible !== false ? 'fa-eye' : 'fa-eye-slash';
+            var mandatoryBadge = field.mandatory ? '<span class="field-badge mandatory">Required</span>' : '';
+
+            var html = '<div class="editor-node editor-field" data-parent="' + parentKey + '" data-field-idx="' + fieldIdx + '">';
+            html += '<div class="node-header field-header">' +
+                '<i class="fas ' + typeIcon + ' field-type-icon"></i>' +
+                '<span class="node-label">' + escapeHtml(field.label || field.id) + '</span>' +
+                '<span class="field-id">(' + escapeHtml(field.id) + ')</span>' +
+                mandatoryBadge +
+                '<span class="node-meta">' + (field.type || 'text') + '</span>' +
+                '<div class="node-actions">' +
+                '<button class="btn-icon" data-action="edit-label" data-type="field" data-parent="' + parentKey + '" data-idx="' + fieldIdx + '" title="Edit label">' +
+                '<i class="fas fa-pencil"></i>' +
+                '</button>' +
+                '<button class="btn-icon" data-action="toggle-visible" data-type="field" data-parent="' + parentKey + '" data-idx="' + fieldIdx + '" title="Toggle visibility">' +
+                '<i class="fas ' + visibleClass + '"></i>' +
+                '</button>' +
+                '</div>' +
+                '</div>';
+            html += '</div>';
+            return html;
+        },
+
+        renderEditorSublist: function(sublist, idx) {
+            var columns = sublist.columns || [];
+
+            var html = '<div class="editor-node editor-sublist" data-sublist-idx="' + idx + '">';
+            html += '<div class="node-header" data-toggle="sublist-' + idx + '">' +
+                '<i class="fas fa-chevron-right toggle-icon"></i>' +
+                '<i class="fas fa-table"></i>' +
+                '<span class="node-label">' + escapeHtml(sublist.label || sublist.id) + '</span>' +
+                '<span class="node-meta">' + columns.length + ' columns</span>' +
+                '<div class="node-actions">' +
+                '<button class="btn-icon" data-action="edit-label" data-type="sublist" data-idx="' + idx + '" title="Edit label">' +
+                '<i class="fas fa-pencil"></i>' +
+                '</button>' +
+                '</div>' +
+                '</div>';
+
+            html += '<div class="node-content collapsed" id="sublist-' + idx + '">';
+
+            columns.forEach(function(col, colIdx) {
+                html += this.renderEditorColumn(col, idx, colIdx);
+            }, this);
+
+            html += '</div></div>';
+            return html;
+        },
+
+        renderEditorColumn: function(column, sublistIdx, colIdx) {
+            var visibleClass = column.visible !== false ? 'fa-eye' : 'fa-eye-slash';
+
+            var html = '<div class="editor-node editor-column" data-sublist-idx="' + sublistIdx + '" data-col-idx="' + colIdx + '">';
+            html += '<div class="node-header field-header">' +
+                '<i class="fas fa-columns field-type-icon"></i>' +
+                '<span class="node-label">' + escapeHtml(column.label || column.id) + '</span>' +
+                '<span class="field-id">(' + escapeHtml(column.id) + ')</span>' +
+                '<div class="node-actions">' +
+                '<button class="btn-icon" data-action="toggle-visible" data-type="column" data-sublist-idx="' + sublistIdx + '" data-idx="' + colIdx + '" title="Toggle visibility">' +
+                '<i class="fas ' + visibleClass + '"></i>' +
+                '</button>' +
+                '</div>' +
+                '</div>';
+            html += '</div>';
+            return html;
+        },
+
+        getFieldTypeIcon: function(type) {
+            var icons = {
+                'text': 'fa-font',
+                'textarea': 'fa-align-left',
+                'email': 'fa-envelope',
+                'phone': 'fa-phone',
+                'url': 'fa-link',
+                'integer': 'fa-hashtag',
+                'float': 'fa-calculator',
+                'currency': 'fa-dollar-sign',
+                'percent': 'fa-percent',
+                'date': 'fa-calendar',
+                'datetime': 'fa-calendar-alt',
+                'select': 'fa-list',
+                'multiselect': 'fa-list-check',
+                'checkbox': 'fa-square-check',
+                'radio': 'fa-circle-dot',
+                'image': 'fa-image',
+                'file': 'fa-file'
+            };
+            return icons[type] || 'fa-input-text';
+        },
+
+        bindEditorEvents: function(container) {
+            var self = this;
+
+            // Toggle expand/collapse
+            container.querySelectorAll('[data-toggle]').forEach(function(header) {
+                header.addEventListener('click', function(e) {
+                    if (e.target.closest('.node-actions')) return;
+
+                    var targetId = this.dataset.toggle;
+                    var content = el('#' + targetId);
+                    var icon = this.querySelector('.toggle-icon');
+
+                    if (content) {
+                        content.classList.toggle('collapsed');
+                        if (icon) {
+                            icon.classList.toggle('fa-chevron-right');
+                            icon.classList.toggle('fa-chevron-down');
+                        }
+                    }
+                });
+            });
+
+            // Action buttons
+            container.querySelectorAll('[data-action]').forEach(function(btn) {
+                btn.addEventListener('click', function(e) {
+                    e.stopPropagation();
+                    var action = this.dataset.action;
+                    var type = this.dataset.type;
+
+                    if (action === 'toggle-visible') {
+                        self.toggleItemVisibility(this, type);
+                    } else if (action === 'edit-label') {
+                        self.editItemLabel(this, type);
+                    }
+                });
+            });
+        },
+
+        toggleItemVisibility: function(btn, type) {
+            var icon = btn.querySelector('i');
+            var isVisible = icon.classList.contains('fa-eye');
+
+            // Toggle icon
+            icon.classList.toggle('fa-eye');
+            icon.classList.toggle('fa-eye-slash');
+
+            // Update config
+            var item = this.getConfigItem(btn.dataset, type);
+            if (item) {
+                item.visible = !isVisible;
+            }
+        },
+
+        editItemLabel: function(btn, type) {
+            var self = this;
+            var item = this.getConfigItem(btn.dataset, type);
+            if (!item) return;
+
+            var currentLabel = item.label || item.id || '';
+
+            UI.prompt('Edit Label', 'Enter new label:', currentLabel, function(newLabel) {
+                if (newLabel && newLabel !== currentLabel) {
+                    item.label = newLabel;
+                    self.renderFormEditor(); // Re-render to show changes
+                }
+            });
+        },
+
+        getConfigItem: function(dataset, type) {
+            if (!this.editedConfig) return null;
+
+            var layout = this.editedConfig.layout || this.editedConfig;
+            var tabs = layout.tabs || [];
+            var sublists = this.editedConfig.sublists || layout.sublists || [];
+            var bodyFields = this.editedConfig.bodyFields || [];
+
+            if (type === 'tab') {
+                return tabs[parseInt(dataset.idx)];
+            } else if (type === 'group') {
+                var tab = tabs[parseInt(dataset.tabIdx)];
+                return tab && tab.fieldGroups ? tab.fieldGroups[parseInt(dataset.idx)] : null;
+            } else if (type === 'field') {
+                var parent = dataset.parent;
+                if (parent === 'body') {
+                    return bodyFields[parseInt(dataset.idx)];
+                } else {
+                    var parts = parent.split('-');
+                    var tabIdx = parseInt(parts[1]);
+                    var groupIdx = parseInt(parts[3]);
+                    var tab = tabs[tabIdx];
+                    if (tab && tab.fieldGroups && tab.fieldGroups[groupIdx]) {
+                        return tab.fieldGroups[groupIdx].fields[parseInt(dataset.idx)];
+                    }
+                }
+            } else if (type === 'sublist') {
+                return sublists[parseInt(dataset.idx)];
+            } else if (type === 'column') {
+                var sublist = sublists[parseInt(dataset.sublistIdx)];
+                return sublist && sublist.columns ? sublist.columns[parseInt(dataset.idx)] : null;
+            }
+            return null;
+        },
+
+        expandAllEditorNodes: function(expand) {
+            var container = el('#form-editor-container');
+            if (!container) return;
+
+            container.querySelectorAll('.node-content').forEach(function(content) {
+                if (expand) {
+                    content.classList.remove('collapsed');
+                } else {
+                    content.classList.add('collapsed');
+                }
+            });
+
+            container.querySelectorAll('.toggle-icon').forEach(function(icon) {
+                icon.classList.remove('fa-chevron-right', 'fa-chevron-down');
+                icon.classList.add(expand ? 'fa-chevron-down' : 'fa-chevron-right');
+            });
+        },
+
+        resetFormConfig: function() {
+            var self = this;
+            UI.confirm(
+                'This will reset all changes and reload the original configuration. Continue?',
+                'Reset Configuration',
+                {
+                    confirmText: 'Reset',
+                    onConfirm: function() {
+                        self.loadFormConfig(self.currentFormType);
+                        UI.toast('Configuration reset', 'info');
+                    }
+                }
+            );
+        },
+
+        saveFormConfig: function() {
+            var self = this;
+
+            if (!this.editedConfig) {
+                UI.toast('No configuration to save', 'error');
+                return;
+            }
+
+            var btn = el('#btn-save-form-config');
+            if (btn) {
+                btn.disabled = true;
+                btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Saving...';
+            }
+
+            // Add metadata
+            this.editedConfig.capturedAt = new Date().toISOString();
+
+            API.put('formconfig', {
+                transactionType: this.currentFormType,
+                config: this.editedConfig,
+                source: 'manual'
+            }).then(function() {
+                if (btn) {
+                    btn.disabled = false;
+                    btn.innerHTML = '<i class="fas fa-save"></i> Save Configuration';
+                }
+                UI.toast('Form configuration saved successfully!', 'success');
+                self.formConfig = JSON.parse(JSON.stringify(self.editedConfig));
+            }).catch(function(err) {
+                if (btn) {
+                    btn.disabled = false;
+                    btn.innerHTML = '<i class="fas fa-save"></i> Save Configuration';
+                }
+                UI.toast('Save failed: ' + err.message, 'error');
             });
         },
 
@@ -574,7 +1199,7 @@
             var url = urls[this.currentFormType];
             if (url) {
                 window.open(url, '_blank');
-                UI.toast('Opening NetSuite form. The layout will be captured automatically when the page loads.', 'info');
+                UI.toast('Opening NetSuite form. The layout will be captured when the page loads (if script is enabled).', 'info');
             } else {
                 UI.toast('Unknown transaction type', 'error');
             }
@@ -716,7 +1341,9 @@
 
         cleanup: function() {
             this.formConfig = null;
+            this.editedConfig = null;
             this.parsedXml = null;
+            this.xmlSelections = {};
         }
     };
 
