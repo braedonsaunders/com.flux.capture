@@ -2740,6 +2740,7 @@
         },
 
         setupSplitViewDom: function() {
+            var self = this;
             var reviewContent = el('#review-content');
             var previewPanel = el('#preview-panel');
             var extractionPanel = el('#extraction-panel');
@@ -2747,7 +2748,7 @@
 
             if (!reviewContent || !previewPanel || !extractionPanel) return;
 
-            // Create top section wrapper
+            // Create top section wrapper (2/3 height)
             var topSection = document.createElement('div');
             topSection.className = 'review-top-section';
             topSection.id = 'review-top-section';
@@ -2757,25 +2758,88 @@
             if (resizer) topSection.appendChild(resizer);
             topSection.appendChild(extractionPanel);
 
-            // Create bottom section for sublists
+            // Create bottom section for sublists (1/3 height)
             var bottomSection = document.createElement('div');
             bottomSection.className = 'review-bottom-section';
             bottomSection.id = 'review-bottom-section';
 
-            // Clone sublists to bottom section
-            var sublists = extractionPanel.querySelectorAll('.sublist-section');
-            sublists.forEach(function(sublist) {
-                var clone = sublist.cloneNode(true);
-                clone.classList.add('split-view-sublist');
-                bottomSection.appendChild(clone);
-            });
+            // Move sublists to bottom section (not clone)
+            var sublistSection = extractionPanel.querySelector('.line-section');
+            if (sublistSection) {
+                bottomSection.appendChild(sublistSection);
+            }
 
             // Add sections to review content
             reviewContent.appendChild(topSection);
             reviewContent.appendChild(bottomSection);
 
-            // Rebind sublist events for cloned elements
+            // Switch main form area to first tab
+            var firstTab = extractionPanel.querySelector('.extraction-tabs .tab-btn');
+            if (firstTab && !firstTab.classList.contains('active')) {
+                firstTab.click();
+            }
+
+            // Rebind sublist events for moved elements
             this.bindSublistEvents(bottomSection);
+        },
+
+        bindSublistEvents: function(container) {
+            var self = this;
+            if (!container) return;
+
+            // Sublist tab switching
+            container.querySelectorAll('.sublist-tabs').forEach(function(tabsContainer) {
+                tabsContainer.addEventListener('click', function(e) {
+                    var tab = e.target.closest('.sublist-tab');
+                    if (!tab) return;
+
+                    var sublistId = tab.dataset.sublist;
+                    var parentTabs = tab.closest('.sublist-tabs');
+
+                    // Update active tab within this tabs container only
+                    if (parentTabs) {
+                        parentTabs.querySelectorAll('.sublist-tab').forEach(function(t) {
+                            t.classList.remove('active');
+                        });
+                    }
+                    tab.classList.add('active');
+
+                    // Show the correct sublist container
+                    container.querySelectorAll('.sublist-container').forEach(function(c) {
+                        c.classList.remove('active');
+                    });
+                    var sublistContainer = container.querySelector('#sublist-' + sublistId);
+                    if (sublistContainer) sublistContainer.classList.add('active');
+                });
+            });
+
+            // Line item add button
+            container.querySelectorAll('.btn-add-line').forEach(function(btn) {
+                btn.addEventListener('click', function() {
+                    var sublistId = this.closest('.sublist-container').id.replace('sublist-', '');
+                    self.addLineItem(sublistId);
+                });
+            });
+
+            // Line item delete buttons (delegated)
+            container.querySelectorAll('.sublist-table tbody').forEach(function(tbody) {
+                tbody.addEventListener('click', function(e) {
+                    var deleteBtn = e.target.closest('.btn-delete-line');
+                    if (deleteBtn) {
+                        var row = deleteBtn.closest('tr');
+                        var sublistId = tbody.closest('.sublist-container').id.replace('sublist-', '');
+                        var lineIdx = Array.from(tbody.querySelectorAll('tr')).indexOf(row);
+                        self.deleteLineItem(sublistId, lineIdx);
+                    }
+                });
+            });
+
+            // Line input changes
+            container.querySelectorAll('.line-input, .line-desc, .line-qty, .line-price, .line-amount').forEach(function(input) {
+                input.addEventListener('change', function() {
+                    self.handleLineItemChange(this);
+                });
+            });
         },
 
         restoreNormalViewDom: function() {
@@ -2787,6 +2851,14 @@
             var resizer = el('#panel-resizer');
 
             if (!reviewContent || !topSection) return;
+
+            // Move sublist section back to extraction panel before removing bottom section
+            if (bottomSection) {
+                var sublistSection = bottomSection.querySelector('.line-section');
+                if (sublistSection && extractionPanel) {
+                    extractionPanel.appendChild(sublistSection);
+                }
+            }
 
             // Move panels back to review content
             reviewContent.appendChild(previewPanel);

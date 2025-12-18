@@ -1043,13 +1043,20 @@
 }
 
 /* Typeahead inputs inside form-fields should not have borders - the wrapper handles the styling */
-.form-field .typeahead-select .typeahead-input {
-    border: none;
+.form-field .typeahead-select .typeahead-input,
+.form-field .typeahead-select input.typeahead-input {
+    border: none !important;
+    border-bottom: none !important;
     padding: var(--space-sm) 0;
+    background: transparent;
+    outline: none;
 }
 
-.form-field .typeahead-select .typeahead-input:focus {
-    box-shadow: none;
+.form-field .typeahead-select .typeahead-input:focus,
+.form-field .typeahead-select input.typeahead-input:focus {
+    box-shadow: none !important;
+    border: none !important;
+    outline: none;
 }
 
 /* The typeahead wrapper gets the border styling */
@@ -2081,13 +2088,21 @@
     overflow-y: auto;
 }
 
+.view-review.split-view .review-bottom-section .line-section,
 .view-review.split-view .review-bottom-section .sublist-section {
     margin: 0;
     border-radius: 0;
     border: none;
+    padding: var(--space-md);
 }
 
-/* Hide sublists from extraction panel when in split view */
+/* Style the line section in bottom area */
+.view-review.split-view .review-bottom-section .line-section h4 {
+    margin-top: 0;
+}
+
+/* Hide sublists from extraction panel when in split view - they're moved to bottom */
+.view-review.split-view .extraction-panel .line-section,
 .view-review.split-view .extraction-panel .sublist-section {
     display: none;
 }
@@ -5202,6 +5217,11 @@ tr.doc-row.approving { animation: compress-out 0.3s ease forwards; }
     z-index: 9999;
     box-shadow: var(--shadow-lg);
     margin-top: 2px;
+    display: none;
+}
+
+.typeahead-dropdown:not(:empty) {
+    /* Only show when it has content - JS controls visibility via inline styles */
 }
 
 /* Ensure dropdowns can show above card boundaries */
