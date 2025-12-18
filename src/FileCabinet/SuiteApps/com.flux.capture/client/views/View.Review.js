@@ -2994,21 +2994,37 @@
         // ==========================================
         setZoom: function(level) {
             this.zoom = Math.max(0.5, Math.min(3, level));
-            var iframe = el('#doc-preview');
-            if (iframe) {
-                iframe.style.transform = 'scale(' + this.zoom + ') rotate(' + this.rotation + 'deg)';
-            }
+
+            // Update zoom display
             var zoomDisplay = el('#zoom-level');
             if (zoomDisplay) {
                 zoomDisplay.textContent = Math.round(this.zoom * 100) + '%';
+            }
+
+            // If using PDF.js, re-render the page at new zoom
+            if (this.pdfDoc && this.pdfPage) {
+                this.renderPdfPage(this.currentPage);
+            } else {
+                // Fallback to iframe transform
+                var iframe = el('#doc-preview');
+                if (iframe) {
+                    iframe.style.transform = 'scale(' + this.zoom + ') rotate(' + this.rotation + 'deg)';
+                }
             }
         },
 
         rotate: function() {
             this.rotation = (this.rotation + 90) % 360;
-            var iframe = el('#doc-preview');
-            if (iframe) {
-                iframe.style.transform = 'scale(' + this.zoom + ') rotate(' + this.rotation + 'deg)';
+
+            // If using PDF.js, re-render the page with new rotation
+            if (this.pdfDoc && this.pdfPage) {
+                this.renderPdfPage(this.currentPage);
+            } else {
+                // Fallback to iframe transform
+                var iframe = el('#doc-preview');
+                if (iframe) {
+                    iframe.style.transform = 'scale(' + this.zoom + ') rotate(' + this.rotation + 'deg)';
+                }
             }
         },
 
@@ -3181,10 +3197,16 @@
         goToPage: function(page) {
             if (page < 1 || page > this.totalPages) return;
             this.currentPage = page;
-            // Page navigation would require PDF.js or similar
+
+            // Update page display
             var pageDisplay = el('#page-display');
             if (pageDisplay) {
                 pageDisplay.textContent = this.currentPage + ' / ' + this.totalPages;
+            }
+
+            // If using PDF.js, render the new page
+            if (this.pdfDoc) {
+                this.renderPdfPage(this.currentPage);
             }
         },
 
@@ -3287,12 +3309,19 @@
         // ==========================================
 
         /**
-         * Compute unmatched extractions from _allExtractedFields
+         * Compute unmatched extractions from _allExtractedFields or construct from extracted_data
          */
         computeUnmatchedExtractions: function() {
             var self = this;
-            var extractedData = this.data.extractedData || {};
+            var doc = this.data;
+            var extractedData = doc.extractedData || {};
             var allFields = extractedData._allExtractedFields || {};
+
+            // If _allExtractedFields is empty, try to construct from extractedData and doc fields
+            if (Object.keys(allFields).length === 0) {
+                allFields = this.buildAllExtractedFields(doc, extractedData);
+            }
+
             var matchedIds = this.getMatchedFieldIds();
 
             // Also check what's already been applied this session
@@ -3323,6 +3352,58 @@
             this.extractionPool.unmatched.sort(function(a, b) {
                 return (b.confidence || 0) - (a.confidence || 0);
             });
+
+            FCDebug.log('[ExtractionPool] Found', this.extractionPool.unmatched.length, 'unmatched extractions');
+        },
+
+        /**
+         * Build _allExtractedFields from available extracted data when not provided
+         */
+        buildAllExtractedFields: function(doc, extractedData) {
+            var allFields = {};
+
+            // Add fields from extractedData object
+            Object.keys(extractedData).forEach(function(key) {
+                if (key.startsWith('_')) return; // Skip internal fields
+                var val = extractedData[key];
+                if (val && typeof val === 'object' && val.value !== undefined) {
+                    allFields[key] = val;
+                } else if (val !== null && val !== undefined && val !== '') {
+                    allFields[key] = { label: key, value: val, confidence: 0.7 };
+                }
+            });
+
+            // Add fields from document's extracted_text if it's structured
+            if (doc.extracted_text) {
+                try {
+                    var parsed = typeof doc.extracted_text === 'string' ?
+                        JSON.parse(doc.extracted_text) : doc.extracted_text;
+                    if (parsed && typeof parsed === 'object') {
+                        Object.keys(parsed).forEach(function(key) {
+                            if (!allFields[key]) {
+                                allFields[key] = { label: key, value: parsed[key], confidence: 0.5 };
+                            }
+                        });
+                    }
+                } catch (e) {
+                    // Not JSON, ignore
+                }
+            }
+
+            // Add any direct doc fields that might have extracted values
+            var docFields = ['paymentTerms', 'bankAccount', 'bankDetails', 'contactName',
+                'contactEmail', 'notes', 'memo', 'reference', 'shipTo', 'billTo'];
+            docFields.forEach(function(field) {
+                if (doc[field] && !allFields[field]) {
+                    allFields[field] = {
+                        label: field.replace(/([A-Z])/g, ' $1').trim(),
+                        value: doc[field],
+                        confidence: 0.6
+                    };
+                }
+            });
+
+            return allFields;
         },
 
         /**
