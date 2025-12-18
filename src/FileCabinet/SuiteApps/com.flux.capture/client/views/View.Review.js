@@ -254,21 +254,24 @@
                     return Promise.all([
                         API.get('formschema', { transactionType: self.transactionType }),
                         API.get('accounts', { accountType: 'Expense' }),
+                        API.get('accounts', { accountType: 'COGS' }),
                         API.get('items', {})
                     ]);
                 })
                 .then(function(results) {
                     var formSchemaData = results[0];
-                    var accountsData = results[1] || [];
-                    var itemsData = results[2] || [];
+                    var expenseAccountsData = results[1] || [];
+                    var cogsAccountsData = results[2] || [];
+                    var itemsData = results[3] || [];
 
                     self.formFields = formSchemaData; // Now contains layout, config, etc.
-                    self.accountsData = accountsData; // Cache for document type changes
+                    self.expenseAccountsData = expenseAccountsData; // Expense accounts for expense sublist
+                    self.cogsAccountsData = cogsAccountsData; // COGS accounts for item sublist
                     self.itemsData = itemsData; // Cache for document type changes
 
                     // Inject accounts into expense sublist 'account' field
                     // Inject items into item sublist 'item' field
-                    self.injectSublistOptions(accountsData, itemsData);
+                    self.injectSublistOptions(expenseAccountsData, cogsAccountsData, itemsData);
 
                     self.isLoading = false;
                     self.render();
@@ -305,7 +308,7 @@
          * Inject accounts and items into sublist field definitions
          * This makes the account and item fields render as dropdowns
          */
-        injectSublistOptions: function(accountsData, itemsData) {
+        injectSublistOptions: function(expenseAccountsData, cogsAccountsData, itemsData) {
             if (!this.formFields || !this.formFields.sublists) return;
 
             var sublists = this.formFields.sublists;
@@ -314,10 +317,16 @@
                 if (!sublist.fields) return;
 
                 sublist.fields.forEach(function(field) {
-                    // Inject accounts into 'account' field on expense sublist
-                    if (field.id === 'account' && sublist.id === 'expense' && accountsData.length > 0) {
+                    // Inject expense accounts into 'account' field on expense sublist
+                    if (field.id === 'account' && sublist.id === 'expense' && expenseAccountsData.length > 0) {
                         field.type = 'select';
-                        field.options = accountsData;
+                        field.options = expenseAccountsData;
+                    }
+
+                    // Inject COGS accounts into 'account' field on item sublist
+                    if (field.id === 'account' && sublist.id === 'item' && cogsAccountsData.length > 0) {
+                        field.type = 'select';
+                        field.options = cogsAccountsData;
                     }
 
                     // Inject items into 'item' field on item sublist
@@ -3273,7 +3282,7 @@
                         self.formFields = formSchemaData;
 
                         // Re-inject accounts and items into the new form schema
-                        self.injectSublistOptions(self.accountsData, self.itemsData);
+                        self.injectSublistOptions(self.expenseAccountsData, self.cogsAccountsData, self.itemsData);
 
                         // Re-render the extraction form with new document type form
                         self.renderExtractionForm();
