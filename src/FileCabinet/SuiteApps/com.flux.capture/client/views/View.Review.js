@@ -57,10 +57,9 @@
         itemsData: [], // Cached items for sublist dropdowns
 
         // Document type ID to transaction type mapping
-        // 1: Invoice, 2: Receipt, 3: Credit Memo, 4: Expense Report, 5: Purchase Order
+        // 1: Invoice, 3: Credit Memo, 4: Expense Report, 5: Purchase Order
         DOC_TYPE_TO_TRANSACTION: {
             '1': 'vendorbill',
-            '2': 'vendorbill',      // Receipt - uses vendor bill form
             '3': 'vendorcredit',    // Credit Memo
             '4': 'expensereport',
             '5': 'purchaseorder'
@@ -2593,8 +2592,13 @@
             // Derive the new transaction type
             var newTransactionType = this.getTransactionType(newType);
 
+            FCDebug.log('[Review] changeDocumentType:', newType, newTypeText);
+            FCDebug.log('[Review] Current transactionType:', this.transactionType);
+            FCDebug.log('[Review] New transactionType:', newTransactionType);
+
             // If transaction type is changing, we need to reload the form schema
             if (newTransactionType !== this.transactionType) {
+                FCDebug.log('[Review] Transaction type changed, fetching new form schema...');
                 this.transactionType = newTransactionType;
 
                 // Show loading state
@@ -2602,8 +2606,10 @@
                 UI.toast('Loading ' + newTypeText + ' form...', 'info');
 
                 // Fetch the new form schema
+                FCDebug.log('[Review] Calling API.get formschema for:', newTransactionType);
                 API.get('formschema', { transactionType: newTransactionType })
                     .then(function(formSchemaData) {
+                        FCDebug.log('[Review] Form schema loaded:', formSchemaData);
                         self.formFields = formSchemaData;
 
                         // Re-inject accounts and items into the new form schema
@@ -2617,13 +2623,15 @@
                         UI.toast(newTypeText + ' form loaded', 'success');
                     })
                     .catch(function(err) {
+                        FCDebug.log('[Review] Form schema error:', err);
                         console.error('[Review] Failed to load form schema:', err);
                         UI.toast('Failed to load ' + newTypeText + ' form', 'error');
                         // Still render with existing form fields
                         self.renderExtractionForm();
                     });
             } else {
-                // Same transaction type, just re-render (e.g., Invoice and Receipt both use vendorbill)
+                FCDebug.log('[Review] Same transaction type, just re-rendering');
+                // Same transaction type, just re-render
                 this.renderExtractionForm();
                 this.updateApplyAllButton();
                 this.bindBodyFieldTypeahead();
