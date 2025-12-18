@@ -1327,11 +1327,6 @@
                 html += this.renderExtractionPoolPanel();
             }
 
-            // ========== APPLIED ITEMS TRACKING ==========
-            if (this.extractionPool.applied.length > 0) {
-                html += this.renderAppliedItemsPanel();
-            }
-
             // ========== VENDOR SECTION (entity field with search) ==========
             html += '<div class="form-section">' +
                 '<h4><i class="fas fa-building"></i> Vendor</h4>' +
@@ -2200,7 +2195,16 @@
             Object.keys(this.sublistData).forEach(function(sublistId) {
                 var countEl = el('#count-' + sublistId);
                 if (countEl) {
-                    countEl.textContent = self.sublistData[sublistId].length;
+                    // Count only rows that have actual data (not blank placeholder rows)
+                    var items = self.sublistData[sublistId] || [];
+                    var filledCount = items.filter(function(item) {
+                        // Check if row has any meaningful data
+                        return Object.keys(item).some(function(key) {
+                            var val = item[key];
+                            return val !== undefined && val !== null && val !== '' && val !== 0;
+                        });
+                    }).length;
+                    countEl.textContent = filledCount;
                 }
             });
         },
@@ -3733,38 +3737,6 @@
         },
 
         /**
-         * Render Applied Items panel
-         */
-        renderAppliedItemsPanel: function() {
-            var self = this;
-            var applied = this.extractionPool.applied;
-
-            if (applied.length === 0) return '';
-
-            var html = '<div class="applied-items-panel" id="applied-items-panel">' +
-                '<div class="applied-header">' +
-                    '<i class="fas fa-check-circle"></i>' +
-                    '<span>Recently Applied</span>' +
-                '</div>' +
-                '<div class="applied-items">';
-
-            applied.forEach(function(item, idx) {
-                html += '<div class="applied-item" data-index="' + idx + '">' +
-                    '<span class="applied-from">' + escapeHtml(item.fromLabel) + '</span>' +
-                    '<i class="fas fa-arrow-right"></i>' +
-                    '<span class="applied-to">' + escapeHtml(item.toLabel) + '</span>' +
-                    '<button class="btn btn-ghost btn-xs applied-undo" data-index="' + idx + '" title="Undo">' +
-                        '<i class="fas fa-undo"></i> Undo' +
-                    '</button>' +
-                '</div>';
-            });
-
-            html += '</div></div>';
-
-            return html;
-        },
-
-        /**
          * Apply an extraction value to a form field
          */
         applyExtractionToField: function(extractionKey, extractionData, targetFieldId) {
@@ -3890,7 +3862,6 @@
          */
         refreshExtractionPool: function() {
             var poolPanel = el('#extraction-pool-panel');
-            var appliedPanel = el('#applied-items-panel');
 
             // Re-render pool panel
             if (poolPanel) {
@@ -3898,19 +3869,6 @@
                 var tempDiv = document.createElement('div');
                 tempDiv.innerHTML = newPoolHtml;
                 poolPanel.parentNode.replaceChild(tempDiv.firstChild, poolPanel);
-            }
-
-            // Re-render or add applied panel
-            var existingApplied = el('#applied-items-panel');
-            if (this.extractionPool.applied.length > 0) {
-                var newAppliedHtml = this.renderAppliedItemsPanel();
-                if (existingApplied) {
-                    var tempDiv2 = document.createElement('div');
-                    tempDiv2.innerHTML = newAppliedHtml;
-                    existingApplied.parentNode.replaceChild(tempDiv2.firstChild, existingApplied);
-                }
-            } else if (existingApplied) {
-                existingApplied.remove();
             }
 
             // Re-bind events
@@ -4201,11 +4159,80 @@
                 };
             });
 
-            // Undo buttons
-            document.querySelectorAll('.applied-undo').forEach(function(btn) {
-                btn.onclick = function() {
-                    var index = parseInt(btn.dataset.index, 10);
-                    self.undoAppliedItem(index);
+            // Sublist cell drop targets (line-input elements)
+            document.querySelectorAll('.line-input, .line-desc, .line-qty, .line-price, .line-amount').forEach(function(input) {
+                var cell = input.closest('td');
+                if (!cell) return;
+
+                cell.ondragenter = function(e) {
+                    if (!self.extractionPool.dragActive) return;
+                    e.preventDefault();
+                    cell.classList.add('drop-target', 'drop-hover');
+                };
+
+                cell.ondragover = function(e) {
+                    if (!self.extractionPool.dragActive) return;
+                    e.preventDefault();
+                    e.dataTransfer.dropEffect = 'copy';
+                };
+
+                cell.ondragleave = function(e) {
+                    var relatedTarget = e.relatedTarget;
+                    if (!relatedTarget || !cell.contains(relatedTarget)) {
+                        cell.classList.remove('drop-target', 'drop-hover');
+                    }
+                };
+
+                cell.ondrop = function(e) {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    cell.classList.remove('drop-target', 'drop-hover');
+
+                    try {
+                        var rawData = e.dataTransfer.getData('text/plain');
+                        if (!rawData) return;
+
+                        var data = JSON.parse(rawData);
+                        var value = data.value || '';
+
+                        // Apply value directly to the input
+                        input.value = value;
+                        input.dispatchEvent(new Event('change', { bubbles: true }));
+                        input.dispatchEvent(new Event('input', { bubbles: true }));
+
+                        // Track this as applied for annotation updates
+                        if (data.key) {
+                            self.extractionPool.applied.push({
+                                extractionKey: data.key,
+                                fromLabel: data.key,
+                                fromValue: value,
+                                targetFieldId: input.id || 'sublist-cell',
+                                toLabel: 'Line Item',
+                                previousValue: '',
+                                timestamp: Date.now()
+                            });
+
+                            // Remove from unmatched
+                            self.extractionPool.unmatched = self.extractionPool.unmatched.filter(function(item) {
+                                return item.key !== data.key;
+                            });
+
+                            // Refresh to update annotations
+                            self.refreshExtractionPool();
+                            if (self.extractionPool.showAnnotations && self.pdfPage) {
+                                var cssWidth = parseFloat(self.pdfCanvas.style.width) || self.pdfCanvas.clientWidth;
+                                var viewport = self.pdfPage.getViewport({
+                                    scale: cssWidth / self.pdfPage.getViewport({ scale: 1 }).width,
+                                    rotation: self.rotation
+                                });
+                                self.renderExtractionAnnotations(viewport);
+                            }
+                        }
+
+                        UI.toast('Applied to line item', 'success');
+                    } catch (err) {
+                        console.error('[ExtractionPool] Sublist drop error:', err);
+                    }
                 };
             });
         },
