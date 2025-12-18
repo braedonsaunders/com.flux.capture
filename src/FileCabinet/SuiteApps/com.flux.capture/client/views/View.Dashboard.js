@@ -485,6 +485,6 @@
         function() { DashboardController.cleanup(); }
     );
 
-    console.log('[View.MissionControl] Loaded');
+    FCDebug.log('[View.MissionControl] Loaded');
 
 })();

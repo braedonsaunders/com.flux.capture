@@ -266,6 +266,6 @@
         function() { QueueController.cleanup(); }
     );
 
-    console.log('[View.Queue] Loaded');
+    FCDebug.log('[View.Queue] Loaded');
 
 })();

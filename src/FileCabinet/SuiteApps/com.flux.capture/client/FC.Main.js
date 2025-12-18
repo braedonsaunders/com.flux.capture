@@ -144,7 +144,7 @@
      * Start the application
      */
     function startApp() {
-        console.log('[FC.Main] Starting application...');
+        FCDebug.log('[FC.Main] Starting application...');
 
         // Initialize user info
         initUserInfo();
@@ -161,7 +161,7 @@
         // Hide loading screen
         UI.hideLoading();
 
-        console.log('[FC.Main] Application started');
+        FCDebug.log('[FC.Main] Application started');
     }
 
     // Start when DOM is ready

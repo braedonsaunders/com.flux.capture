@@ -10,9 +10,16 @@
  * on pageInit and sends to Flux Capture API for caching.
  */
 
-define(['N/currentRecord', 'N/url'],
-function(currentRecord, url) {
+define(['N/currentRecord', 'N/url', '/SuiteApps/com.flux.capture/lib/FC_Debug'],
+function(currentRecord, url, fcDebug) {
     'use strict';
+
+    // Debug logging helper - gates console.log behind debug mode
+    function debugLog() {
+        if (fcDebug && fcDebug.isDebugMode && fcDebug.isDebugMode()) {
+            console.log.apply(console, arguments);
+        }
+    }
 
     // Cache check - only extract once per form per session
     var EXTRACTED_FORMS = {};
@@ -43,19 +50,19 @@ function(currentRecord, url) {
      */
     function pageInit(context) {
         try {
-            console.log('[FC_FormLayoutCapture] === SCRIPT LOADED ===');
-            console.log('[FC_FormLayoutCapture] pageInit triggered, mode:', context.mode);
+            debugLog('[FC_FormLayoutCapture] === SCRIPT LOADED ===');
+            debugLog('[FC_FormLayoutCapture] pageInit triggered, mode:', context.mode);
 
             var rec = context.currentRecord;
             var recordType = rec.type;
             var formId = getFormId(rec);
 
-            console.log('[FC_FormLayoutCapture] Record type:', recordType, 'Form ID:', formId);
+            debugLog('[FC_FormLayoutCapture] Record type:', recordType, 'Form ID:', formId);
 
             // Skip if already extracted this session
             var cacheKey = recordType + '_' + (formId || 'default');
             if (EXTRACTED_FORMS[cacheKey]) {
-                console.log('[FC_FormLayoutCapture] Already extracted this session:', cacheKey);
+                debugLog('[FC_FormLayoutCapture] Already extracted this session:', cacheKey);
                 return;
             }
 
@@ -85,35 +92,35 @@ function(currentRecord, url) {
      */
     function extractAndSaveLayout(recordType, formId, cacheKey) {
         try {
-            console.log('[FC_FormLayoutCapture] Extracting layout...');
+            debugLog('[FC_FormLayoutCapture] Extracting layout...');
 
             var layout = extractFormLayout(recordType, formId);
 
             if (!layout || !layout.tabs || layout.tabs.length === 0) {
-                console.log('[FC_FormLayoutCapture] No layout extracted');
+                debugLog('[FC_FormLayoutCapture] No layout extracted');
                 return;
             }
 
             // Log extracted fields for debugging
-            console.log('[FC_FormLayoutCapture] === EXTRACTION SUMMARY ===');
+            debugLog('[FC_FormLayoutCapture] === EXTRACTION SUMMARY ===');
             layout.tabs.forEach(function(tab) {
-                console.log('[FC_FormLayoutCapture] Tab:', tab.label);
+                debugLog('[FC_FormLayoutCapture] Tab:', tab.label);
                 tab.fieldGroups.forEach(function(group) {
-                    console.log('[FC_FormLayoutCapture]   Group:', group.label, '(' + group.fields.length + ' fields)');
+                    debugLog('[FC_FormLayoutCapture]   Group:', group.label, '(' + group.fields.length + ' fields)');
                     group.fields.forEach(function(f) {
                         var info = f.id + ' [' + f.type + ']';
                         if (f.required) info += ' *required*';
                         if (f.mode === 'view') info += ' (readonly)';
-                        console.log('[FC_FormLayoutCapture]     -', info, ':', f.label);
+                        debugLog('[FC_FormLayoutCapture]     -', info, ':', f.label);
                     });
                 });
                 if (tab.sublists && tab.sublists.length > 0) {
-                    console.log('[FC_FormLayoutCapture]   Tab sublists:', tab.sublists.join(', '));
+                    debugLog('[FC_FormLayoutCapture]   Tab sublists:', tab.sublists.join(', '));
                 }
             });
-            console.log('[FC_FormLayoutCapture] Sublists found:', layout.sublists.length);
+            debugLog('[FC_FormLayoutCapture] Sublists found:', layout.sublists.length);
             layout.sublists.forEach(function(sl) {
-                console.log('[FC_FormLayoutCapture]   Sublist:', sl.id, '- Columns:', sl.visibleColumns.join(', '));
+                debugLog('[FC_FormLayoutCapture]   Sublist:', sl.id, '- Columns:', sl.visibleColumns.join(', '));
             });
 
             // Get RESTlet URL
@@ -122,7 +129,7 @@ function(currentRecord, url) {
                 deploymentId: 'customdeploy_fc_router'
             });
 
-            console.log('[FC_FormLayoutCapture] Saving to:', restletUrl);
+            debugLog('[FC_FormLayoutCapture] Saving to:', restletUrl);
 
             // Save to server using XHR
             var xhr = new XMLHttpRequest();
@@ -132,7 +139,7 @@ function(currentRecord, url) {
                 if (xhr.readyState === 4) {
                     if (xhr.status === 200) {
                         EXTRACTED_FORMS[cacheKey] = true;
-                        console.log('[FC_FormLayoutCapture] Layout saved successfully');
+                        debugLog('[FC_FormLayoutCapture] Layout saved successfully');
                     } else {
                         console.error('[FC_FormLayoutCapture] Save failed:', xhr.status, xhr.responseText);
                     }
@@ -270,7 +277,7 @@ function(currentRecord, url) {
         // Find field group headers
         var groupHeaders = container.querySelectorAll('[data-nsps-type="fieldgroup"]');
 
-        console.log('[FC_FormLayoutCapture] Found', groupHeaders.length, 'field groups');
+        debugLog('[FC_FormLayoutCapture] Found', groupHeaders.length, 'field groups');
 
         groupHeaders.forEach(function(header, idx) {
             var groupLabel = header.getAttribute('data-nsps-label') || 'Group ' + (idx + 1);
@@ -297,7 +304,7 @@ function(currentRecord, url) {
                 fields = extractFieldsFromContainer(contentRow);
             }
 
-            console.log('[FC_FormLayoutCapture] Group:', groupLabel, '| Fields:', fields.length, '| Collapsed:', isCollapsed);
+            debugLog('[FC_FormLayoutCapture] Group:', groupLabel, '| Fields:', fields.length, '| Collapsed:', isCollapsed);
 
             fieldGroups.push({
                 id: groupId,
@@ -336,7 +343,7 @@ function(currentRecord, url) {
         // data-mode = "edit" or "view"
         var fieldWrappers = container.querySelectorAll('div.uir-field-wrapper[data-field-name]');
 
-        console.log('[FC_FormLayoutCapture] Found', fieldWrappers.length, 'field wrappers with data-field-name');
+        debugLog('[FC_FormLayoutCapture] Found', fieldWrappers.length, 'field wrappers with data-field-name');
 
         fieldWrappers.forEach(function(wrapper) {
             var fieldId = wrapper.getAttribute('data-field-name');
@@ -360,16 +367,16 @@ function(currentRecord, url) {
                 mode: mode
             });
 
-            console.log('[FC_FormLayoutCapture] Field:', fieldId, '| Label:', fieldLabel, '| Type:', fieldType, '| Required:', isRequired);
+            debugLog('[FC_FormLayoutCapture] Field:', fieldId, '| Label:', fieldLabel, '| Type:', fieldType, '| Required:', isRequired);
         });
 
         // Fallback: if no data attributes found, try legacy extraction
         if (fields.length === 0) {
-            console.log('[FC_FormLayoutCapture] No data-field-name wrappers found, trying legacy extraction...');
+            debugLog('[FC_FormLayoutCapture] No data-field-name wrappers found, trying legacy extraction...');
             fields = extractFieldsLegacy(container);
         }
 
-        console.log('[FC_FormLayoutCapture] Extracted', fields.length, 'fields');
+        debugLog('[FC_FormLayoutCapture] Extracted', fields.length, 'fields');
         return fields;
     }
 
@@ -500,14 +507,14 @@ function(currentRecord, url) {
         var sublists = [];
         var seen = {};
 
-        console.log('[FC_FormLayoutCapture] Looking for sublists...');
+        debugLog('[FC_FormLayoutCapture] Looking for sublists...');
 
         // Search in entire document as sublists may be outside main form container
         var searchRoot = document;
 
         // Method 1: NetSuite sublists with data-nsps-type="sublist" attribute
         var sublistTables = searchRoot.querySelectorAll('table[data-nsps-type="sublist"]');
-        console.log('[FC_FormLayoutCapture] Method 1 - data-nsps-type: Found', sublistTables.length, 'tables');
+        debugLog('[FC_FormLayoutCapture] Method 1 - data-nsps-type: Found', sublistTables.length, 'tables');
 
         sublistTables.forEach(function(table) {
             var sublistId = table.getAttribute('data-nsps-id');
@@ -515,12 +522,12 @@ function(currentRecord, url) {
 
             seen[sublistId] = true;
             var columns = extractSublistColumns(table);
-            console.log('[FC_FormLayoutCapture] Sublist', sublistId, 'columns:', columns.length);
+            debugLog('[FC_FormLayoutCapture] Sublist', sublistId, 'columns:', columns.length);
 
             // Skip sublists with no valid columns (e.g., still loading)
             // Server-side schema will provide column definitions for these
             if (columns.length === 0) {
-                console.log('[FC_FormLayoutCapture] Skipping sublist', sublistId, '- no valid columns (may be loading)');
+                debugLog('[FC_FormLayoutCapture] Skipping sublist', sublistId, '- no valid columns (may be loading)');
                 return;
             }
 
@@ -535,7 +542,7 @@ function(currentRecord, url) {
         // Method 2: Tables with _splits suffix (e.g., expense_splits, item_splits)
         if (sublists.length === 0) {
             var splitsTables = searchRoot.querySelectorAll('table[id$="_splits"]');
-            console.log('[FC_FormLayoutCapture] Method 2 - _splits suffix: Found', splitsTables.length, 'tables');
+            debugLog('[FC_FormLayoutCapture] Method 2 - _splits suffix: Found', splitsTables.length, 'tables');
 
             splitsTables.forEach(function(table) {
                 var sublistId = inferSublistId(table);
@@ -543,7 +550,7 @@ function(currentRecord, url) {
 
                 seen[sublistId] = true;
                 var columns = extractSublistColumns(table);
-                console.log('[FC_FormLayoutCapture] Sublist (splits)', sublistId, 'columns:', columns.length);
+                debugLog('[FC_FormLayoutCapture] Sublist (splits)', sublistId, 'columns:', columns.length);
 
                 sublists.push({
                     id: sublistId,
@@ -557,7 +564,7 @@ function(currentRecord, url) {
         // Method 3: Look for machine tables (common NetSuite pattern)
         if (sublists.length === 0) {
             var machineTables = searchRoot.querySelectorAll('table.uir-machine-table, div.uir-machine-table-container table');
-            console.log('[FC_FormLayoutCapture] Method 3 - uir-machine-table: Found', machineTables.length, 'tables');
+            debugLog('[FC_FormLayoutCapture] Method 3 - uir-machine-table: Found', machineTables.length, 'tables');
 
             machineTables.forEach(function(table) {
                 // Check for header row to confirm it's a sublist
@@ -569,7 +576,7 @@ function(currentRecord, url) {
 
                 seen[sublistId] = true;
                 var columns = extractSublistColumns(table);
-                console.log('[FC_FormLayoutCapture] Sublist (machine)', sublistId, 'columns:', columns.length);
+                debugLog('[FC_FormLayoutCapture] Sublist (machine)', sublistId, 'columns:', columns.length);
 
                 sublists.push({
                     id: sublistId,
@@ -583,7 +590,7 @@ function(currentRecord, url) {
         // Method 4: Look for any table with header row containing data-label attributes
         if (sublists.length === 0) {
             var allTables = searchRoot.querySelectorAll('table');
-            console.log('[FC_FormLayoutCapture] Method 4 - scanning all tables:', allTables.length, 'tables');
+            debugLog('[FC_FormLayoutCapture] Method 4 - scanning all tables:', allTables.length, 'tables');
 
             allTables.forEach(function(table) {
                 // Must have data-label cells in header
@@ -595,7 +602,7 @@ function(currentRecord, url) {
 
                 seen[sublistId] = true;
                 var columns = extractSublistColumns(table);
-                console.log('[FC_FormLayoutCapture] Sublist (data-label)', sublistId, 'columns:', columns.length);
+                debugLog('[FC_FormLayoutCapture] Sublist (data-label)', sublistId, 'columns:', columns.length);
 
                 sublists.push({
                     id: sublistId,
@@ -606,7 +613,7 @@ function(currentRecord, url) {
             });
         }
 
-        console.log('[FC_FormLayoutCapture] Total sublists found:', sublists.length);
+        debugLog('[FC_FormLayoutCapture] Total sublists found:', sublists.length);
         return sublists;
     }
 
@@ -662,7 +669,7 @@ function(currentRecord, url) {
         }
         if (!headerRow) return columns;
 
-        console.log('[FC_FormLayoutCapture] Extracting columns from header row');
+        debugLog('[FC_FormLayoutCapture] Extracting columns from header row');
 
         var cells = headerRow.querySelectorAll('td, th');
         cells.forEach(function(cell, idx) {
@@ -679,7 +686,7 @@ function(currentRecord, url) {
             if (colLabel) {
                 // Convert label to column ID (e.g., "Account" -> "account")
                 colId = colLabel.toLowerCase().replace(/\s+/g, '').replace(/[^a-z0-9]/gi, '');
-                console.log('[FC_FormLayoutCapture] Column from data-label:', colLabel, '->', colId);
+                debugLog('[FC_FormLayoutCapture] Column from data-label:', colLabel, '->', colId);
             }
 
             // Fallback to other data attributes
@@ -698,7 +705,7 @@ function(currentRecord, url) {
             if (colId && !seen[colId]) {
                 // Skip NetSuite loading placeholders
                 if (colId === 'loading' || colId === 'loadingpleasewait') {
-                    console.log('[FC_FormLayoutCapture] Skipping placeholder column:', colId);
+                    debugLog('[FC_FormLayoutCapture] Skipping placeholder column:', colId);
                     return;
                 }
                 seen[colId] = true;

@@ -444,6 +444,6 @@
         function() { UploadController.cleanup(); }
     );
 
-    console.log('[View.Upload] Enhanced Upload Loaded');
+    FCDebug.log('[View.Upload] Enhanced Upload Loaded');
 
 })();

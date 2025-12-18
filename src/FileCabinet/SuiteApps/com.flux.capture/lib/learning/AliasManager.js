@@ -8,7 +8,7 @@
  * Uses Flux Configuration records for storage
  */
 
-define(['N/log', 'N/record', 'N/query', 'N/runtime', 'N/cache'], function(log, record, query, runtime, cache) {
+define(['N/log', 'N/record', 'N/query', 'N/runtime', 'N/cache', '../FC_Debug'], function(log, record, query, runtime, cache, fcDebug) {
     'use strict';
 
     /**
@@ -79,7 +79,7 @@ define(['N/log', 'N/record', 'N/query', 'N/runtime', 'N/cache'], function(log, r
                 // Invalidate cache
                 this.invalidateCache();
 
-                log.debug('AliasManager.addAlias', {
+                fcDebug.debug('AliasManager.addAlias', {
                     alias: normalizedAlias,
                     vendorId: vendorId,
                     vendorName: vendorName
@@ -303,7 +303,7 @@ define(['N/log', 'N/record', 'N/query', 'N/runtime', 'N/cache'], function(log, r
                 this.aliasCache = aliases;
                 this.cacheTime = Date.now();
 
-                log.debug('AliasManager.loadAllAliases', `Loaded ${aliases.length} alias records`);
+                fcDebug.debug('AliasManager.loadAllAliases', `Loaded ${aliases.length} alias records`);
 
                 return aliases;
             } catch (e) {
@@ -338,7 +338,7 @@ define(['N/log', 'N/record', 'N/query', 'N/runtime', 'N/cache'], function(log, r
                     };
                 }
             } catch (e) {
-                log.debug('AliasManager.getAliasRecord', e.message);
+                fcDebug.debug('AliasManager.getAliasRecord', e.message);
             }
 
             return null;
@@ -396,7 +396,7 @@ define(['N/log', 'N/record', 'N/query', 'N/runtime', 'N/cache'], function(log, r
                 }
             } catch (e) {
                 // Non-critical, just log
-                log.debug('AliasManager.incrementUsage', e.message);
+                fcDebug.debug('AliasManager.incrementUsage', e.message);
             }
         }
 
@@ -484,7 +484,7 @@ define(['N/log', 'N/record', 'N/query', 'N/runtime', 'N/cache'], function(log, r
                     return results.results[0].values[0];
                 }
             } catch (e) {
-                log.debug('AliasManager.getVendorName', e.message);
+                fcDebug.debug('AliasManager.getVendorName', e.message);
             }
             return null;
         }

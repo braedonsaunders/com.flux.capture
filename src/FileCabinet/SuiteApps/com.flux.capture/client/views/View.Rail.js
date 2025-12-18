@@ -630,6 +630,6 @@
         function() { FlowController.cleanup(); }
     );
 
-    console.log('[View.Ingest] Card-Based Ingest Loaded');
+    FCDebug.log('[View.Ingest] Card-Based Ingest Loaded');
 
 })();

@@ -20,6 +20,8 @@ define([
     'N/format',
     'N/encode',
     'N/documentCapture',
+    // Debug utility
+    './FC_Debug',
     // Extraction modules
     './extraction/FieldMatcher',
     './extraction/DateParser',
@@ -36,6 +38,7 @@ define([
     './validation/CrossFieldValidator'
 ], function(
     file, record, search, query, runtime, log, format, encode, documentCapture,
+    fcDebug,
     FieldMatcherModule, DateParserModule, AmountParserModule, LayoutAnalyzerModule, TableAnalyzerModule,
     VendorMatcherModule, TaxIdExtractorModule,
     CorrectionLearnerModule, AliasManagerModule,
@@ -247,11 +250,11 @@ define([
                     extractOptions.timeout = Math.max(30000, options.timeout);
                 }
 
-                log.debug('FluxCapture.extract', `Calling documentToStructure with type: ${captureDocType}`);
+                fcDebug.debug('FluxCapture.extract', `Calling documentToStructure with type: ${captureDocType}`);
 
                 const result = docCapture.documentToStructure(extractOptions);
 
-                log.debug('FluxCapture.extract', `Received result with ${result.pages ? result.pages.length : 0} pages`);
+                fcDebug.debug('FluxCapture.extract', `Received result with ${result.pages ? result.pages.length : 0} pages`);
 
                 return this._normalizeRawResult(result, docCapture);
 
@@ -281,9 +284,9 @@ define([
             const rawTables = [];
 
             // ============= DEBUG: Log raw result structure =============
-            log.audit('DEBUG.RawResult', '========== RAW N/documentCapture RESULT ==========');
-            log.audit('DEBUG.RawResult.Keys', `Top-level keys: ${Object.keys(result || {}).join(', ')}`);
-            log.audit('DEBUG.RawResult.PageCount', `Pages: ${result.pages ? result.pages.length : 'NO PAGES'}`);
+            fcDebug.debugAudit('DEBUG.RawResult', '========== RAW N/documentCapture RESULT ==========');
+            fcDebug.debugAudit('DEBUG.RawResult.Keys', `Top-level keys: ${Object.keys(result || {}).join(', ')}`);
+            fcDebug.debugAudit('DEBUG.RawResult.PageCount', `Pages: ${result.pages ? result.pages.length : 'NO PAGES'}`);
 
             // Log the entire raw result structure (truncated for large objects)
             try {
@@ -293,16 +296,16 @@ define([
                     mimeType: result.mimeType,
                     topLevelKeys: Object.keys(result || {})
                 };
-                log.audit('DEBUG.RawResult.Summary', JSON.stringify(resultSummary));
+                fcDebug.debugAudit('DEBUG.RawResult.Summary', JSON.stringify(resultSummary));
             } catch (e) {
-                log.debug('DEBUG.RawResult.Summary', 'Could not stringify summary: ' + e.message);
+                fcDebug.debug('DEBUG.RawResult.Summary', 'Could not stringify summary: ' + e.message);
             }
 
             if (result.pages && result.pages.length > 0) {
                 result.pages.forEach((page, pageIndex) => {
                     // ============= DEBUG: Log page structure =============
-                    log.audit(`DEBUG.Page[${pageIndex}]`, `Page ${pageIndex + 1} keys: ${Object.keys(page || {}).join(', ')}`);
-                    log.audit(`DEBUG.Page[${pageIndex}].Counts`, JSON.stringify({
+                    fcDebug.debugAudit(`DEBUG.Page[${pageIndex}]`, `Page ${pageIndex + 1} keys: ${Object.keys(page || {}).join(', ')}`);
+                    fcDebug.debugAudit(`DEBUG.Page[${pageIndex}].Counts`, JSON.stringify({
                         fields: page.fields?.length || 0,
                         tables: page.tables?.length || 0,
                         lines: page.lines?.length || 0,
@@ -321,7 +324,7 @@ define([
 
                     // Collect raw fields with DEBUG logging
                     if (page.fields && page.fields.length > 0) {
-                        log.audit(`DEBUG.Page[${pageIndex}].Fields`, `Processing ${page.fields.length} fields...`);
+                        fcDebug.debugAudit(`DEBUG.Page[${pageIndex}].Fields`, `Processing ${page.fields.length} fields...`);
 
                         page.fields.forEach((field, fieldIndex) => {
                             // ============= DEBUG: Log each field's raw structure =============
@@ -338,13 +341,13 @@ define([
                                 type: field.type,
                                 boundingBox: field.boundingBox ? 'present' : 'absent'
                             };
-                            log.debug(`DEBUG.Field[${pageIndex}][${fieldIndex}]`, JSON.stringify(fieldDebug));
+                            fcDebug.debug(`DEBUG.Field[${pageIndex}][${fieldIndex}]`, JSON.stringify(fieldDebug));
 
                             const extractedLabel = this._extractText(field.label);
                             const extractedValue = this._extractText(field.value);
 
                             // Log what we extracted
-                            log.audit(`DEBUG.Field.Extracted[${fieldIndex}]`,
+                            fcDebug.debugAudit(`DEBUG.Field.Extracted[${fieldIndex}]`,
                                 `"${extractedLabel}" = "${extractedValue}" (conf: ${field.label?.confidence || field.confidence || 'N/A'})`);
 
                             rawFields.push({
@@ -364,7 +367,7 @@ define([
 
                     // Collect raw tables with DEBUG logging
                     if (page.tables && page.tables.length > 0) {
-                        log.audit(`DEBUG.Page[${pageIndex}].Tables`, `Processing ${page.tables.length} tables...`);
+                        fcDebug.debugAudit(`DEBUG.Page[${pageIndex}].Tables`, `Processing ${page.tables.length} tables...`);
 
                         page.tables.forEach((table, tableIndex) => {
                             // ============= DEBUG: Log table structure =============
@@ -376,17 +379,17 @@ define([
                                 footerRowCount: table.footerRows?.length || 0,
                                 confidence: table.confidence
                             };
-                            log.audit(`DEBUG.Table[${pageIndex}][${tableIndex}]`, JSON.stringify(tableDebug));
+                            fcDebug.debugAudit(`DEBUG.Table[${pageIndex}][${tableIndex}]`, JSON.stringify(tableDebug));
 
                             // Log first header row structure if present
                             if (table.headerRows && table.headerRows.length > 0) {
                                 const headerRow = table.headerRows[0];
-                                log.debug(`DEBUG.Table[${tableIndex}].HeaderRow`,
+                                fcDebug.debug(`DEBUG.Table[${tableIndex}].HeaderRow`,
                                     `Type: ${typeof headerRow}, IsArray: ${Array.isArray(headerRow)}, ` +
                                     `Keys: ${typeof headerRow === 'object' ? Object.keys(headerRow).join(',') : 'N/A'}`);
                                 if (headerRow.cells || Array.isArray(headerRow)) {
                                     const cells = headerRow.cells || headerRow;
-                                    log.debug(`DEBUG.Table[${tableIndex}].HeaderCells`,
+                                    fcDebug.debug(`DEBUG.Table[${tableIndex}].HeaderCells`,
                                         `Count: ${cells.length}, Values: ${cells.slice(0, 5).map(c => this._safeStringify(c, 30)).join(' | ')}`);
                                 }
                             }
@@ -394,12 +397,12 @@ define([
                             // Log first body row structure if present
                             if (table.bodyRows && table.bodyRows.length > 0) {
                                 const bodyRow = table.bodyRows[0];
-                                log.debug(`DEBUG.Table[${tableIndex}].BodyRow[0]`,
+                                fcDebug.debug(`DEBUG.Table[${tableIndex}].BodyRow[0]`,
                                     `Type: ${typeof bodyRow}, IsArray: ${Array.isArray(bodyRow)}, ` +
                                     `Keys: ${typeof bodyRow === 'object' ? Object.keys(bodyRow).join(',') : 'N/A'}`);
                                 if (bodyRow.cells || Array.isArray(bodyRow)) {
                                     const cells = bodyRow.cells || bodyRow;
-                                    log.debug(`DEBUG.Table[${tableIndex}].BodyCells[0]`,
+                                    fcDebug.debug(`DEBUG.Table[${tableIndex}].BodyCells[0]`,
                                         `Count: ${cells.length}, Values: ${cells.slice(0, 5).map(c => this._safeStringify(c, 30)).join(' | ')}`);
                                 }
                             }
@@ -418,7 +421,7 @@ define([
             }
 
             // ============= DEBUG: Log final extracted data summary =============
-            log.audit('DEBUG.Extraction.Summary', JSON.stringify({
+            fcDebug.debugAudit('DEBUG.Extraction.Summary', JSON.stringify({
                 totalFields: rawFields.length,
                 totalTables: rawTables.length,
                 rawTextLength: rawText.length,
@@ -426,9 +429,9 @@ define([
             }));
 
             // Log all extracted field label/value pairs
-            log.audit('DEBUG.AllFields', '---------- ALL EXTRACTED FIELDS ----------');
+            fcDebug.debugAudit('DEBUG.AllFields', '---------- ALL EXTRACTED FIELDS ----------');
             rawFields.forEach((f, i) => {
-                log.audit(`DEBUG.AllFields[${i}]`, `"${f.label}" => "${f.value}"`);
+                fcDebug.debugAudit(`DEBUG.AllFields[${i}]`, `"${f.label}" => "${f.value}"`);
             });
 
             return {
@@ -568,7 +571,7 @@ define([
             // Try to infer missing amounts
             this._inferMissingAmounts(fields, lineItems);
 
-            log.debug('FluxCapture.intelligentExtraction', {
+            fcDebug.debug('FluxCapture.intelligentExtraction', {
                 fieldsExtracted: Object.keys(fields).filter(k => fields[k]).length,
                 lineItems: lineItems.length,
                 documentType: DocumentTypeLabels[documentType]
@@ -792,7 +795,7 @@ define([
                 const result = query.runSuiteQL({ query: sql, params: [vendorId, invoiceNumber] });
                 return result.results[0].values[0] > 0;
             } catch (e) {
-                log.debug('FluxCapture._checkDuplicateInvoice', e.message);
+                fcDebug.debug('FluxCapture._checkDuplicateInvoice', e.message);
                 return false;
             }
         }
@@ -1043,7 +1046,7 @@ define([
                 try {
                     return docCapture.getRemainingFreeUsage();
                 } catch (e) {
-                    log.debug('getRemainingUsage', e.message);
+                    fcDebug.debug('getRemainingUsage', e.message);
                 }
             }
             return null;

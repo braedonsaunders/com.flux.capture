@@ -280,12 +280,12 @@
          */
         navigate: function(route, params) {
             var self = this;
-            console.log('[Router] navigate called:', route, params);
+            FCDebug.log('[Router] navigate called:', route, params);
             params = params || {};
 
             // Prevent navigation during transition
             if (this.isTransitioning) {
-                console.log('[Router] Navigation blocked - transition in progress');
+                FCDebug.log('[Router] Navigation blocked - transition in progress');
                 return;
             }
 
@@ -384,16 +384,16 @@
      * @param {string} containerId - Container element ID (without #)
      */
     function renderTemplate(templateId, containerId) {
-        console.log('[renderTemplate] Called:', templateId, '->', containerId);
+        FCDebug.log('[renderTemplate] Called:', templateId, '->', containerId);
         var template = el('#' + templateId);
         var container = el('#' + containerId);
-        console.log('[renderTemplate] template:', template, 'container:', container);
+        FCDebug.log('[renderTemplate] template:', template, 'container:', container);
 
         if (template && container) {
             var content = template.innerHTML;
-            console.log('[renderTemplate] Content length:', content.length);
+            FCDebug.log('[renderTemplate] Content length:', content.length);
             container.innerHTML = content;
-            console.log('[renderTemplate] Done, container.innerHTML length:', container.innerHTML.length);
+            FCDebug.log('[renderTemplate] Done, container.innerHTML length:', container.innerHTML.length);
         } else {
             console.warn('[Template] Not found:', templateId, containerId);
         }
@@ -466,15 +466,15 @@
          * Respects minimum display time for animation to complete
          */
         hideLoading: function() {
-            console.log('[UI] hideLoading called');
+            FCDebug.log('[UI] hideLoading called');
             var loading = el('#loading-screen');
-            console.log('[UI] loading-screen element:', loading);
+            FCDebug.log('[UI] loading-screen element:', loading);
             if (!loading) return;
 
             var elapsedTime = Date.now() - LOADING_START_TIME;
             var remainingTime = Math.max(0, MINIMUM_LOADING_TIME - elapsedTime);
 
-            console.log('[UI] Loading elapsed:', elapsedTime, 'remaining:', remainingTime);
+            FCDebug.log('[UI] Loading elapsed:', elapsedTime, 'remaining:', remainingTime);
 
             function performHide() {
                 // Add hidden class to trigger CSS fade animation
@@ -485,7 +485,7 @@
                     if (loading.parentNode) {
                         loading.parentNode.removeChild(loading);
                     }
-                    console.log('[UI] Loading screen removed');
+                    FCDebug.log('[UI] Loading screen removed');
                 }, 500);
             }
 
@@ -628,6 +628,6 @@
     window.renderTemplate = renderTemplate;
     window.UI = UI;
 
-    console.log('[FC.Core] Loaded');
+    FCDebug.log('[FC.Core] Loaded');
 
 })();

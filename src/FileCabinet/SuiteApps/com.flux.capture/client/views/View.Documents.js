@@ -1136,6 +1136,6 @@
         function() { DocumentsController.cleanup(); }
     );
 
-    console.log('[View.Documents] Loaded');
+    FCDebug.log('[View.Documents] Loaded');
 
 })();

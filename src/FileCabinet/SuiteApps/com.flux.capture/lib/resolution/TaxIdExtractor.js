@@ -7,7 +7,7 @@
  * Extracts and validates tax identification numbers (EIN, VAT, ABN, etc.) from documents
  */
 
-define(['N/log'], function(log) {
+define(['N/log', '../FC_Debug'], function(log, fcDebug) {
     'use strict';
 
     /**
@@ -199,7 +199,7 @@ define(['N/log'], function(log) {
                 return a.position - b.position;
             });
 
-            log.debug('TaxIdExtractor.extract', {
+            fcDebug.debug('TaxIdExtractor.extract', {
                 found: results.length,
                 types: results.map(r => r.type)
             });
