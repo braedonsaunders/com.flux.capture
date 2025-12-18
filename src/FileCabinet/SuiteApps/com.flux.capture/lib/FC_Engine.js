@@ -208,6 +208,8 @@ define([
                         rawText: extractionResult.rawText,
                         pageCount: extractionResult.pageCount,
                         processingTime: processingTime,
+                        // CRITICAL: Include all extracted fields for extraction pool UI
+                        allExtractedFields: extractionResult.allExtractedFields || {},
                         extractionMeta: {
                             layout: {
                                 zones: Object.keys(layout.zones || {}).filter(z => (layout.zones[z] || []).length > 0),

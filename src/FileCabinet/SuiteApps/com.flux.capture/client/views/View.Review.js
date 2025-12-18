@@ -3361,6 +3361,14 @@
             FCDebug.log('[ExtractionPool] extractedData keys:', Object.keys(extractedData));
             FCDebug.log('[ExtractionPool] _allExtractedFields keys:', Object.keys(allFields));
 
+            // FALLBACK: If _allExtractedFields is empty, build it from available data
+            // This handles documents extracted before this feature was added
+            if (Object.keys(allFields).length === 0) {
+                FCDebug.log('[ExtractionPool] _allExtractedFields is empty, building from extractedData...');
+                allFields = this.buildAllExtractedFields(doc, extractedData);
+                FCDebug.log('[ExtractionPool] Built allFields with keys:', Object.keys(allFields));
+            }
+
             // Get the field IDs that are already matched to form fields
             var matchedIds = this.getMatchedFieldIds();
             FCDebug.log('[ExtractionPool] Matched field IDs:', matchedIds);
@@ -3462,6 +3470,33 @@
                 }
             });
 
+            // Add core extracted fields from document record
+            // These are the standard fields that were extracted and stored directly on the document
+            var coreFields = {
+                'vendorName': { label: 'Vendor Name', docKey: 'vendorName' },
+                'invoiceNumber': { label: 'Invoice Number', docKey: 'invoiceNumber' },
+                'invoiceDate': { label: 'Invoice Date', docKey: 'invoiceDate' },
+                'dueDate': { label: 'Due Date', docKey: 'dueDate' },
+                'poNumber': { label: 'PO Number', docKey: 'poNumber' },
+                'subtotal': { label: 'Subtotal', docKey: 'subtotal' },
+                'taxAmount': { label: 'Tax Amount', docKey: 'taxAmount' },
+                'totalAmount': { label: 'Total Amount', docKey: 'totalAmount' },
+                'memo': { label: 'Memo', docKey: 'memo' },
+                'paymentTerms': { label: 'Payment Terms', docKey: 'paymentTerms' }
+            };
+
+            Object.keys(coreFields).forEach(function(key) {
+                var fieldDef = coreFields[key];
+                var value = doc[fieldDef.docKey];
+                if (value !== null && value !== undefined && value !== '' && !allFields[key]) {
+                    allFields[key] = {
+                        label: fieldDef.label,
+                        value: value,
+                        confidence: doc.confidence ? doc.confidence.breakdown?.[key] / 100 || 0.7 : 0.7
+                    };
+                }
+            });
+
             // Add fields from document's extracted_text if it's structured
             if (doc.extracted_text) {
                 try {
@@ -3480,8 +3515,8 @@
             }
 
             // Add any direct doc fields that might have extracted values
-            var docFields = ['paymentTerms', 'bankAccount', 'bankDetails', 'contactName',
-                'contactEmail', 'notes', 'memo', 'reference', 'shipTo', 'billTo'];
+            var docFields = ['bankAccount', 'bankDetails', 'contactName',
+                'contactEmail', 'notes', 'reference', 'shipTo', 'billTo'];
             docFields.forEach(function(field) {
                 if (doc[field] && !allFields[field]) {
                     allFields[field] = {

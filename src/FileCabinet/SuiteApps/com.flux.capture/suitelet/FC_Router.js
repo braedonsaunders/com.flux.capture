@@ -2188,6 +2188,7 @@ define([
                     'custrecord_flux_tax_amount': extraction.fields && extraction.fields.taxAmount ? extraction.fields.taxAmount : 0,
                     'custrecord_flux_total_amount': extraction.fields && extraction.fields.totalAmount ? extraction.fields.totalAmount : 0,
                     'custrecord_flux_po_number': extraction.fields && extraction.fields.poNumber ? extraction.fields.poNumber : '',
+                    'custrecord_flux_payment_terms': extraction.fields && extraction.fields.paymentTerms ? extraction.fields.paymentTerms : '',
                     'custrecord_flux_line_items': JSON.stringify(extraction.lineItems || []),
                     'custrecord_flux_anomalies': JSON.stringify(extraction.anomalies || []),
                     'custrecord_flux_confidence_score': extraction.confidence.overall,
