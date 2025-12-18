@@ -1026,7 +1026,11 @@ define([
                 type: searchType,
                 filters: filters,
                 columns: columns.map(function(col) {
-                    return search.createColumn({ name: col, sort: col === 'name' || col === 'entityid' ? search.Sort.ASC : null });
+                    // Only add sort for primary display column
+                    if (col === 'name' || col === 'entityid') {
+                        return search.createColumn({ name: col, sort: search.Sort.ASC });
+                    }
+                    return search.createColumn({ name: col });
                 })
             });
 
@@ -2025,6 +2029,17 @@ define([
                 // Core fields (also stored in dedicated columns for reporting)
                 extractedDataObj.vendorName = extraction.vendorMatch ? extraction.vendorMatch.vendorName : '';
                 extractedDataObj.vendor = extraction.vendorMatch ? extraction.vendorMatch.vendorId : '';
+
+                // Include ALL raw extracted label/value pairs for flexible suggestions
+                // These can be matched to any form field by label similarity
+                if (extraction.allExtractedFields) {
+                    extractedDataObj._allExtractedFields = extraction.allExtractedFields;
+                }
+
+                // Include field confidences for showing suggestion quality
+                if (extraction.fieldConfidences) {
+                    extractedDataObj._fieldConfidences = extraction.fieldConfidences;
+                }
 
                 // Additional metadata
                 extractedDataObj._confidence = extraction.confidence;

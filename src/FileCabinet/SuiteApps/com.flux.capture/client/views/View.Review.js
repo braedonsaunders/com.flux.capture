@@ -552,6 +552,9 @@
             // Render extraction form
             this.renderExtractionForm();
 
+            // Update Apply All button visibility based on available suggestions
+            this.updateApplyAllButton();
+
             // Update navigation buttons
             this.updateNavigationButtons();
 
@@ -703,6 +706,9 @@
                         '<div class="confidence-level ' + confClass + '">' + (confClass === 'high' ? 'High' : confClass === 'medium' ? 'Medium' : 'Low') + ' Confidence</div>' +
                         '<div class="confidence-subtitle">AI extraction accuracy</div>' +
                     '</div>' +
+                    '<button class="btn btn-primary btn-sm" id="btn-apply-all-suggestions" style="display:none;" title="Apply all AI suggestions">' +
+                        '<i class="fas fa-magic"></i> Apply All' +
+                    '</button>' +
                     '<button class="btn btn-ghost btn-sm" id="btn-shortcuts" title="Keyboard Shortcuts">' +
                         '<i class="fas fa-keyboard"></i>' +
                     '</button>' +
@@ -788,7 +794,10 @@
                             (group.fields || []).forEach(function(fieldRef) {
                                 // Handle both field ID strings and field objects from DOM extraction
                                 var fieldId = typeof fieldRef === 'object' ? fieldRef.id : fieldRef;
-                                if (fieldId === 'entity') return;
+                                var normalizedFieldId = (fieldId || '').toLowerCase();
+
+                                // Skip vendor/entity field - it's rendered specially at the top
+                                if (normalizedFieldId === 'entity' || normalizedFieldId === 'vendor') return;
 
                                 // First check if DOM extraction gave us field metadata
                                 var domField = typeof fieldRef === 'object' ? fieldRef : null;
@@ -1142,6 +1151,47 @@
             return '';
         },
 
+        // Find AI-extracted suggestion for a field based on label similarity
+        getFieldSuggestion: function(nsFieldId, fieldLabel, extractedData) {
+            if (!extractedData || !extractedData._allExtractedFields) return null;
+
+            var allFields = extractedData._allExtractedFields;
+            var normalizedLabel = (fieldLabel || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+            var normalizedId = (nsFieldId || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+
+            // Direct key match
+            if (allFields[normalizedLabel]) {
+                return allFields[normalizedLabel];
+            }
+            if (allFields[normalizedId]) {
+                return allFields[normalizedId];
+            }
+
+            // Fuzzy match - find similar labels
+            var bestMatch = null;
+            var bestScore = 0;
+            Object.keys(allFields).forEach(function(key) {
+                var field = allFields[key];
+                var extractedLabel = (field.label || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+
+                // Check for partial matches
+                var score = 0;
+                if (extractedLabel.indexOf(normalizedLabel) !== -1 || normalizedLabel.indexOf(extractedLabel) !== -1) {
+                    score = 0.7;
+                }
+                if (extractedLabel.indexOf(normalizedId) !== -1 || normalizedId.indexOf(extractedLabel) !== -1) {
+                    score = Math.max(score, 0.6);
+                }
+
+                if (score > bestScore && score >= 0.6) {
+                    bestScore = score;
+                    bestMatch = field;
+                }
+            });
+
+            return bestMatch;
+        },
+
         // Render a NetSuite field directly
         renderNsField: function(nsField, doc) {
             var fieldId = 'field-' + nsField.id;
@@ -1164,9 +1214,30 @@
             var extractedData = doc.extractedData || {};
             var value = this.getExtractedFieldValue(nsField.id, docKey, doc, extractedData);
 
-            var html = '<div class="form-field">' +
+            // Check for AI suggestion if field is empty
+            var suggestion = null;
+            if (!value && extractedData._allExtractedFields) {
+                suggestion = this.getFieldSuggestion(nsField.id, label, extractedData);
+            }
+
+            var html = '<div class="form-field' + (suggestion ? ' has-suggestion' : '') + '">' +
                 '<label>' + escapeHtml(label) + ' ' + this.renderConfidenceBadge(docKey) +
                 (isRequired ? ' <span class="required">*</span>' : '') + '</label>';
+
+            // Build suggestion button HTML if we have a suggestion
+            var suggestionHtml = '';
+            if (suggestion && suggestion.value) {
+                var displayVal = String(suggestion.value).length > 30 ?
+                    String(suggestion.value).substring(0, 30) + '...' :
+                    String(suggestion.value);
+                var confidence = suggestion.confidence ? Math.round(suggestion.confidence * 100) : 0;
+                suggestionHtml = '<button type="button" class="btn-suggestion" ' +
+                    'data-field="' + nsField.id + '" ' +
+                    'data-value="' + escapeHtml(suggestion.value) + '" ' +
+                    'title="AI extracted: ' + escapeHtml(suggestion.label || '') + ' (' + confidence + '% confidence)">' +
+                    '<i class="fas fa-magic"></i> Use: "' + escapeHtml(displayVal) + '"' +
+                '</button>';
+            }
 
             // Check if field should be disabled (readonly or inline mode)
             var isDisabled = nsField.isDisabled || nsField.isReadonly || nsField.mode === 'inline' ||
@@ -1223,6 +1294,11 @@
             } else {
                 html += '<input type="text" id="' + fieldId + '" class="ns-field-input" data-field="' + nsField.id + '" value="' + escapeHtml(value) + '"' +
                     (isDisabled ? ' disabled' : '') + (isRequired ? ' required' : '') + '>';
+            }
+
+            // Add suggestion button if available (only for text inputs, not checkboxes or selects with options)
+            if (suggestionHtml && nsField.type !== 'checkbox' && !isDisabled) {
+                html += suggestionHtml;
             }
 
             html += '</div>';
@@ -1707,6 +1783,22 @@
 
             // Typeahead option selection for body fields
             panel.addEventListener('click', function(e) {
+                // Handle "Apply All" button click
+                var applyAllBtn = e.target.closest('#btn-apply-all-suggestions');
+                if (applyAllBtn) {
+                    e.preventDefault();
+                    self.applyAllSuggestions();
+                    return;
+                }
+
+                // Handle suggestion button clicks
+                var suggestionBtn = e.target.closest('.btn-suggestion');
+                if (suggestionBtn) {
+                    e.preventDefault();
+                    self.applySuggestion(suggestionBtn);
+                    return;
+                }
+
                 var option = e.target.closest('.typeahead-option');
                 if (!option) return;
                 // Skip sublist typeaheads
@@ -1749,6 +1841,105 @@
                 this.changes[fieldId] = value;
                 this.changes[fieldId + '_display'] = text;
                 this.markUnsaved();
+            }
+        },
+
+        // Apply AI suggestion to a field
+        applySuggestion: function(btn) {
+            var fieldId = btn.dataset.field;
+            var value = btn.dataset.value;
+            if (!fieldId || value === undefined) return;
+
+            // Find the input field to update
+            var input = el('#field-' + fieldId);
+            if (!input) {
+                // Try typeahead hidden input
+                input = el('input[data-field="' + fieldId + '"]');
+            }
+
+            if (input) {
+                input.value = value;
+
+                // Also update display input for typeahead fields
+                var displayInput = el('#field-' + fieldId + '-display');
+                if (displayInput) {
+                    displayInput.value = value;
+                }
+
+                // Track the change
+                this.changes[fieldId] = value;
+                this.markUnsaved();
+
+                // Remove the suggestion button and highlight
+                var formField = btn.closest('.form-field');
+                if (formField) {
+                    formField.classList.remove('has-suggestion');
+                }
+                btn.remove();
+
+                // Update Apply All button visibility
+                this.updateApplyAllButton();
+
+                // Show brief success feedback
+                UI.toast('Applied: ' + (value.length > 20 ? value.substring(0, 20) + '...' : value), 'success');
+            }
+        },
+
+        // Apply all AI suggestions at once
+        applyAllSuggestions: function() {
+            var self = this;
+            var buttons = document.querySelectorAll('.btn-suggestion');
+            var count = buttons.length;
+
+            if (count === 0) {
+                UI.toast('No suggestions to apply', 'info');
+                return;
+            }
+
+            buttons.forEach(function(btn) {
+                var fieldId = btn.dataset.field;
+                var value = btn.dataset.value;
+                if (!fieldId || value === undefined) return;
+
+                var input = el('#field-' + fieldId);
+                if (!input) {
+                    input = el('input[data-field="' + fieldId + '"]');
+                }
+
+                if (input) {
+                    input.value = value;
+
+                    var displayInput = el('#field-' + fieldId + '-display');
+                    if (displayInput) {
+                        displayInput.value = value;
+                    }
+
+                    self.changes[fieldId] = value;
+
+                    var formField = btn.closest('.form-field');
+                    if (formField) {
+                        formField.classList.remove('has-suggestion');
+                    }
+                    btn.remove();
+                }
+            });
+
+            this.markUnsaved();
+            this.updateApplyAllButton();
+            UI.toast('Applied ' + count + ' suggestion' + (count === 1 ? '' : 's'), 'success');
+        },
+
+        // Show/hide the Apply All button based on available suggestions
+        updateApplyAllButton: function() {
+            var applyAllBtn = el('#btn-apply-all-suggestions');
+            if (!applyAllBtn) return;
+
+            var buttons = document.querySelectorAll('.btn-suggestion');
+            if (buttons.length > 0) {
+                applyAllBtn.style.display = 'inline-flex';
+                applyAllBtn.innerHTML = '<i class="fas fa-magic"></i> Apply All (' + buttons.length + ')';
+            } else {
+                applyAllBtn.style.display = 'none';
             }
         },
 
