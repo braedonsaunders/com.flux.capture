@@ -1139,7 +1139,35 @@
             var item = this.getConfigItem(btn.dataset, type);
             if (item) {
                 item.visible = item.visible === false ? true : false;
-                this.renderFormEditor(); // Re-render to show changes
+
+                // Update the icon without re-rendering
+                var icon = btn.querySelector('i');
+                if (icon) {
+                    icon.classList.toggle('fa-eye');
+                    icon.classList.toggle('fa-eye-slash');
+                }
+
+                // Update parent node styling for visibility
+                var node = btn.closest('.editor-node');
+                if (node) {
+                    node.classList.toggle('is-hidden', item.visible === false);
+                }
+
+                // Update visibility badge for fields
+                if (type === 'field') {
+                    var header = btn.closest('.node-header');
+                    if (header) {
+                        var badge = header.querySelector('.hidden-badge');
+                        if (item.visible === false && !badge) {
+                            var labelSpan = header.querySelector('.node-label');
+                            if (labelSpan) {
+                                labelSpan.insertAdjacentHTML('afterend', '<span class="field-badge hidden-badge">HIDDEN</span>');
+                            }
+                        } else if (item.visible !== false && badge) {
+                            badge.remove();
+                        }
+                    }
+                }
             }
         },
 
