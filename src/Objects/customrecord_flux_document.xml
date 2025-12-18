@@ -298,6 +298,15 @@
             <showinlist>F</showinlist>
         </customrecordcustomfield>
 
+        <customrecordcustomfield scriptid="custrecord_flux_extracted_data">
+            <fieldtype>CLOBTEXT</fieldtype>
+            <label>Extracted Data</label>
+            <description>Complete extraction data as JSON - maps to any NetSuite field configured in form layout</description>
+            <ismandatory>F</ismandatory>
+            <displaytype>HIDDEN</displaytype>
+            <showinlist>F</showinlist>
+        </customrecordcustomfield>
+
         <customrecordcustomfield scriptid="custrecord_flux_processing_time">
             <fieldtype>INTEGER</fieldtype>
             <label>Processing Time (ms)</label>
