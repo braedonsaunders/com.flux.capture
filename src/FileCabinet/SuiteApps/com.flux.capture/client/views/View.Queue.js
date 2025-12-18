@@ -242,14 +242,19 @@
             this.stopAutoRefresh(); // Clear any existing interval
             if (this.autoRefreshEnabled) {
                 this.autoRefreshInterval = setInterval(function() {
-                    self.loadData();
+                    if (!API.sessionExpired) {
+                        self.loadData();
+                    }
                 }, this.REFRESH_INTERVAL);
+                // Register with API for centralized session management
+                API.registerInterval('queue', this.autoRefreshInterval);
             }
         },
 
         stopAutoRefresh: function() {
             if (this.autoRefreshInterval) {
                 clearInterval(this.autoRefreshInterval);
+                API.clearInterval('queue');
                 this.autoRefreshInterval = null;
             }
         },

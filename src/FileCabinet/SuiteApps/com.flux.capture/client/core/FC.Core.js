@@ -101,6 +101,113 @@
     // ==========================================
 
     var API = {
+        // Session state
+        sessionExpired: false,
+
+        // Interval registry for polling management
+        _intervals: {},
+
+        /**
+         * Register an interval for centralized management
+         * @param {string} id - Unique identifier for the interval
+         * @param {number} intervalId - The interval ID from setInterval
+         */
+        registerInterval: function(id, intervalId) {
+            this._intervals[id] = intervalId;
+        },
+
+        /**
+         * Clear a specific registered interval
+         * @param {string} id - Unique identifier for the interval
+         */
+        clearInterval: function(id) {
+            if (this._intervals[id]) {
+                clearInterval(this._intervals[id]);
+                delete this._intervals[id];
+            }
+        },
+
+        /**
+         * Stop all registered polling intervals
+         */
+        stopAllPolling: function() {
+            var self = this;
+            Object.keys(this._intervals).forEach(function(id) {
+                clearInterval(self._intervals[id]);
+            });
+            this._intervals = {};
+            FCDebug.log('[API] All polling stopped');
+        },
+
+        /**
+         * Handle API response and detect auth errors
+         * @param {Response} response - Fetch response object
+         * @returns {Promise} - Resolves with parsed data or rejects with error
+         */
+        _handleResponse: function(response) {
+            var self = this;
+
+            // Check for auth error status codes
+            if (response.status === 401 || response.status === 403) {
+                return self._handleSessionExpired('Authentication required');
+            }
+
+            return response.text().then(function(text) {
+                // Check if response is HTML (login redirect)
+                if (text.trim().startsWith('<!DOCTYPE') || text.trim().startsWith('<html')) {
+                    return self._handleSessionExpired('Session expired');
+                }
+
+                try {
+                    return JSON.parse(text);
+                } catch (e) {
+                    // JSON parse error might indicate login page redirect
+                    if (text.indexOf('login') !== -1 || text.indexOf('Login') !== -1) {
+                        return self._handleSessionExpired('Session expired');
+                    }
+                    throw new Error('Invalid JSON response: ' + text.substring(0, 100));
+                }
+            }).then(function(data) {
+                // Check for auth error in response data
+                if (data.error && (data.error.code === 'SESSION_EXPIRED' ||
+                    data.error.code === 'INVALID_LOGIN' ||
+                    data.error.code === 'SSS_AUTHORIZATION_REQUIRED')) {
+                    return self._handleSessionExpired(data.error.message || 'Session expired');
+                }
+
+                if (data.success === false) {
+                    throw new Error(data.error ? data.error.message : 'API Error');
+                }
+                return data.data;
+            });
+        },
+
+        /**
+         * Handle session expiration
+         * @param {string} message - Error message
+         * @returns {Promise} - Rejected promise
+         */
+        _handleSessionExpired: function(message) {
+            if (!this.sessionExpired) {
+                this.sessionExpired = true;
+                this.stopAllPolling();
+                UI.toast('Session expired. Please refresh and log in again.', 'error');
+                FCDebug.log('[API] Session expired:', message);
+            }
+            return Promise.reject(new Error(message));
+        },
+
+        /**
+         * Check if session is expired before making request
+         * @returns {Promise|null} - Rejected promise if expired, null otherwise
+         */
+        _checkSession: function() {
+            if (this.sessionExpired) {
+                return Promise.reject(new Error('Session expired'));
+            }
+            return null;
+        },
+
         /**
          * Make GET request to Router
          * @param {string} action - Action name
@@ -108,6 +215,10 @@
          * @returns {Promise}
          */
         get: function(action, params) {
+            var sessionCheck = this._checkSession();
+            if (sessionCheck) return sessionCheck;
+
+            var self = this;
             params = params || {};
             var url = new URL(window.FC_CONFIG.apiUrl, window.location.origin);
             url.searchParams.append('action', action);
@@ -123,20 +234,7 @@
                 headers: { 'Content-Type': 'application/json' }
             })
             .then(function(response) {
-                return response.text();
-            })
-            .then(function(text) {
-                try {
-                    return JSON.parse(text);
-                } catch (e) {
-                    throw new Error('Invalid JSON response: ' + text.substring(0, 100));
-                }
-            })
-            .then(function(data) {
-                if (data.success === false) {
-                    throw new Error(data.error ? data.error.message : 'API Error');
-                }
-                return data.data;
+                return self._handleResponse(response);
             });
         },
 
@@ -147,6 +245,10 @@
          * @returns {Promise}
          */
         post: function(action, body) {
+            var sessionCheck = this._checkSession();
+            if (sessionCheck) return sessionCheck;
+
+            var self = this;
             body = body || {};
             body.action = action;
 
@@ -156,20 +258,7 @@
                 body: JSON.stringify(body)
             })
             .then(function(response) {
-                return response.text();
-            })
-            .then(function(text) {
-                try {
-                    return JSON.parse(text);
-                } catch (e) {
-                    throw new Error('Invalid JSON response: ' + text.substring(0, 100));
-                }
-            })
-            .then(function(data) {
-                if (data.success === false) {
-                    throw new Error(data.error ? data.error.message : 'API Error');
-                }
-                return data.data;
+                return self._handleResponse(response);
             });
         },
 
@@ -180,6 +269,10 @@
          * @returns {Promise}
          */
         put: function(action, body) {
+            var sessionCheck = this._checkSession();
+            if (sessionCheck) return sessionCheck;
+
+            var self = this;
             body = body || {};
             body.action = action;
 
@@ -189,20 +282,7 @@
                 body: JSON.stringify(body)
             })
             .then(function(response) {
-                return response.text();
-            })
-            .then(function(text) {
-                try {
-                    return JSON.parse(text);
-                } catch (e) {
-                    throw new Error('Invalid JSON response: ' + text.substring(0, 100));
-                }
-            })
-            .then(function(data) {
-                if (data.success === false) {
-                    throw new Error(data.error ? data.error.message : 'API Error');
-                }
-                return data.data;
+                return self._handleResponse(response);
             });
         },
 
@@ -214,6 +294,10 @@
          * @returns {Promise}
          */
         delete: function(action, params) {
+            var sessionCheck = this._checkSession();
+            if (sessionCheck) return sessionCheck;
+
+            var self = this;
             params = params || {};
             params.action = action;
 
@@ -229,20 +313,7 @@
                 headers: { 'Content-Type': 'application/json' }
             })
             .then(function(response) {
-                return response.text();
-            })
-            .then(function(text) {
-                try {
-                    return JSON.parse(text);
-                } catch (e) {
-                    throw new Error('Invalid JSON response: ' + text.substring(0, 100));
-                }
-            })
-            .then(function(data) {
-                if (data.success === false) {
-                    throw new Error(data.error ? data.error.message : 'API Error');
-                }
-                return data.data;
+                return self._handleResponse(response);
             });
         }
     };

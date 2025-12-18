@@ -278,13 +278,18 @@
             var self = this;
             this.stopRefresh();
             this.refreshInterval = setInterval(function() {
-                self.checkProcessingStatus();
+                if (!API.sessionExpired) {
+                    self.checkProcessingStatus();
+                }
             }, this.REFRESH_MS);
+            // Register with API for centralized session management
+            API.registerInterval('rail', this.refreshInterval);
         },
 
         stopRefresh: function() {
             if (this.refreshInterval) {
                 clearInterval(this.refreshInterval);
+                API.clearInterval('rail');
                 this.refreshInterval = null;
             }
         },
