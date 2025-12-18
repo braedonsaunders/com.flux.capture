@@ -136,6 +136,26 @@ define(['N/log', '../FC_Debug'], function(log, fcDebug) {
                     { pattern: /^discount\s*(amount)?$/i, score: 1.0, zone: 'TOTALS' },
                     { pattern: /^less\s*discount$/i, score: 0.95, zone: 'TOTALS' },
                     { pattern: /^early\s*pay(ment)?\s*discount$/i, score: 0.93, zone: 'TOTALS' }
+                ],
+
+                // Memo/Notes - document-level notes or comments
+                memo: [
+                    { pattern: /^memo$/i, score: 1.0, zone: 'HEADER' },
+                    { pattern: /^notes?$/i, score: 0.95, zone: 'HEADER' },
+                    { pattern: /^remarks?$/i, score: 0.90, zone: 'HEADER' },
+                    { pattern: /^comments?$/i, score: 0.88, zone: 'HEADER' },
+                    { pattern: /^description$/i, score: 0.60, zone: 'HEADER' }, // Lower score - often line item
+                    { pattern: /^message$/i, score: 0.85, zone: 'HEADER' },
+                    { pattern: /^special\s*instructions?$/i, score: 0.92, zone: 'HEADER' },
+                    { pattern: /^additional\s*(info|information|notes?)$/i, score: 0.90, zone: 'HEADER' },
+                    { pattern: /^internal\s*(memo|notes?)$/i, score: 0.95, zone: 'HEADER' }
+                ],
+
+                // Payment Terms
+                paymentTerms: [
+                    { pattern: /^(payment\s*)?terms?$/i, score: 1.0, zone: 'HEADER' },
+                    { pattern: /^pay(ment)?\s*conditions?$/i, score: 0.95, zone: 'HEADER' },
+                    { pattern: /^net\s*\d+$/i, score: 0.90, zone: 'HEADER' }
                 ]
             };
 

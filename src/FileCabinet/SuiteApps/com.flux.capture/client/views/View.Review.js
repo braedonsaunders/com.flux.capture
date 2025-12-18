@@ -1052,12 +1052,14 @@
                 }
             });
 
-            // Also add any top-level extractedData fields that aren't internal (_prefixed)
-            // These are fields that were matched and stored at the top level
-            Object.keys(extractedData).forEach(function(key) {
-                if (!key.startsWith('_') && extractedData[key] !== undefined &&
-                    extractedData[key] !== '' && extractedData[key] !== null) {
-                    matched.push(key.toLowerCase());
+            // Only mark additional fields as matched if they were explicitly mapped to form fields
+            // Do NOT mark all extractedData keys as matched - that would hide everything in extraction pool
+            // Instead, only mark fields that have corresponding form field inputs on the page
+            var formFieldInputs = document.querySelectorAll('#extraction-panel [id^="field-"]');
+            formFieldInputs.forEach(function(input) {
+                var fieldId = input.id.replace('field-', '').toLowerCase();
+                if (matched.indexOf(fieldId) === -1) {
+                    matched.push(fieldId);
                 }
             });
 
@@ -3113,11 +3115,12 @@
             bottomSection.className = 'review-bottom-section';
             bottomSection.id = 'review-bottom-section';
 
-            // Move sublists to bottom section (not clone)
-            var sublistSection = extractionPanel.querySelector('.line-section');
-            if (sublistSection) {
+            // Move ALL sublists to bottom section (not clone)
+            // Use querySelectorAll because there may be multiple .line-section elements across tabs
+            var sublistSections = extractionPanel.querySelectorAll('.line-section');
+            sublistSections.forEach(function(sublistSection) {
                 bottomSection.appendChild(sublistSection);
-            }
+            });
 
             // Add sections to review content
             reviewContent.appendChild(topSection);
@@ -3202,11 +3205,13 @@
 
             if (!reviewContent || !topSection) return;
 
-            // Move sublist section back to extraction panel before the amounts section
+            // Move ALL sublist sections back to extraction panel before the amounts section
+            // Use querySelectorAll because there may be multiple .line-section elements
             if (bottomSection && extractionPanel) {
-                var sublistSection = bottomSection.querySelector('.line-section');
+                var sublistSections = bottomSection.querySelectorAll('.line-section');
                 var amountsSection = extractionPanel.querySelector('.amounts-section');
-                if (sublistSection) {
+
+                sublistSections.forEach(function(sublistSection) {
                     if (amountsSection) {
                         // Insert before the amounts section (original position)
                         extractionPanel.insertBefore(sublistSection, amountsSection);
@@ -3219,7 +3224,7 @@
                             extractionPanel.appendChild(sublistSection);
                         }
                     }
-                }
+                });
             }
 
             // Move panels back to review content

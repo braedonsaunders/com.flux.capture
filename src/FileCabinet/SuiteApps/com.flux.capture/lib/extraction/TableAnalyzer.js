@@ -16,6 +16,7 @@ define(['N/log', '../FC_Debug'], function(log, fcDebug) {
     const ColumnType = Object.freeze({
         ITEM_CODE: 'ITEM_CODE',
         DESCRIPTION: 'DESCRIPTION',
+        MEMO: 'MEMO',
         QUANTITY: 'QUANTITY',
         UNIT: 'UNIT',
         UNIT_PRICE: 'UNIT_PRICE',
@@ -45,8 +46,13 @@ define(['N/log', '../FC_Debug'], function(log, fcDebug) {
                 ],
                 [ColumnType.DESCRIPTION]: [
                     /^desc(ription)?$/i, /^item$/i, /^product$/i, /^service$/i,
-                    /^particulars$/i, /^details$/i, /^name$/i, /^memo$/i,
+                    /^particulars$/i, /^details$/i, /^name$/i,
                     /^goods$/i, /^materials?$/i
+                ],
+                [ColumnType.MEMO]: [
+                    /^memo$/i, /^notes?$/i, /^remarks?$/i, /^comments?$/i,
+                    /^line\s*(memo|note)s?$/i, /^item\s*(memo|note)s?$/i,
+                    /^additional\s*(info|notes?)$/i, /^instructions?$/i
                 ],
                 [ColumnType.QUANTITY]: [
                     /^qty$/i, /^quantity$/i, /^units?$/i, /^count$/i,
@@ -506,6 +512,7 @@ define(['N/log', '../FC_Debug'], function(log, fcDebug) {
             const item = {
                 itemCode: null,
                 description: '',
+                memo: null,
                 quantity: null,
                 unit: null,
                 unitPrice: null,
@@ -530,6 +537,9 @@ define(['N/log', '../FC_Debug'], function(log, fcDebug) {
                         break;
                     case ColumnType.DESCRIPTION:
                         item.description = text;
+                        break;
+                    case ColumnType.MEMO:
+                        item.memo = text;
                         break;
                     case ColumnType.QUANTITY:
                         item.quantity = this.parseQuantity(text);
@@ -589,6 +599,15 @@ define(['N/log', '../FC_Debug'], function(log, fcDebug) {
                 const addText = row[descCol.index]?.text || '';
                 if (addText) {
                     item.description += ' ' + addText;
+                }
+            }
+
+            // Also append memo text if present
+            const memoCol = columns.find(c => c.type === ColumnType.MEMO);
+            if (memoCol) {
+                const addMemo = row[memoCol.index]?.text || '';
+                if (addMemo) {
+                    item.memo = item.memo ? (item.memo + ' ' + addMemo) : addMemo;
                 }
             }
         }
