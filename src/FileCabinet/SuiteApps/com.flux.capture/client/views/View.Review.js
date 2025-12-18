@@ -2831,17 +2831,22 @@
 
             if (!reviewContent || !topSection) return;
 
-            // Move sublist section back to extraction panel before the action buttons
+            // Move sublist section back to extraction panel before the amounts section
             if (bottomSection && extractionPanel) {
                 var sublistSection = bottomSection.querySelector('.line-section');
-                var actionSection = extractionPanel.querySelector('.action-section');
+                var amountsSection = extractionPanel.querySelector('.amounts-section');
                 if (sublistSection) {
-                    if (actionSection) {
-                        // Insert before the save button section
-                        extractionPanel.insertBefore(sublistSection, actionSection);
+                    if (amountsSection) {
+                        // Insert before the amounts section (original position)
+                        extractionPanel.insertBefore(sublistSection, amountsSection);
                     } else {
-                        // Fallback: append to end
-                        extractionPanel.appendChild(sublistSection);
+                        // Fallback: try action section
+                        var actionSection = extractionPanel.querySelector('.action-section');
+                        if (actionSection) {
+                            extractionPanel.insertBefore(sublistSection, actionSection);
+                        } else {
+                            extractionPanel.appendChild(sublistSection);
+                        }
                     }
                 }
             }
