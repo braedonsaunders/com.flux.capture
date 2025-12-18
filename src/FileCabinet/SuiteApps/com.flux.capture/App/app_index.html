@@ -1104,20 +1104,31 @@
         </div>
     </script>
 
-    <!-- REVIEW TEMPLATE -->
+    <!-- REVIEW TEMPLATE - Enhanced Queue Navigation -->
     <script type="text/template" id="tpl-review">
         <div class="view-review">
+            <!-- Queue Progress Bar -->
+            <div class="review-progress-bar" id="review-progress-bar">
+                <div class="progress-fill" id="review-progress-fill"></div>
+            </div>
+
             <div class="review-toolbar">
                 <div class="toolbar-left">
                     <button class="btn btn-ghost" id="btn-back">
-                        <i class="fas fa-arrow-left"></i> Back
+                        <i class="fas fa-arrow-left"></i>
+                        <span class="btn-text">Documents</span>
                     </button>
                     <div class="toolbar-nav">
-                        <button class="btn btn-ghost btn-icon" id="btn-doc-prev" title="Previous Document (Ctrl+←)" disabled>
+                        <button class="btn btn-ghost btn-icon" id="btn-doc-prev" title="Previous (←)" disabled>
                             <i class="fas fa-chevron-left"></i>
                         </button>
-                        <span class="doc-counter" id="doc-counter" style="display:none;">1 of 1</span>
-                        <button class="btn btn-ghost btn-icon" id="btn-doc-next" title="Next Document (Ctrl+→)" disabled>
+                        <div class="queue-position" id="queue-position">
+                            <span class="position-current" id="position-current">1</span>
+                            <span class="position-separator">of</span>
+                            <span class="position-total" id="position-total">1</span>
+                            <span class="position-label">to review</span>
+                        </div>
+                        <button class="btn btn-ghost btn-icon" id="btn-doc-next" title="Next (→)" disabled>
                             <i class="fas fa-chevron-right"></i>
                         </button>
                     </div>
@@ -1127,13 +1138,30 @@
                     <span id="doc-title">Document Review</span>
                 </div>
                 <div class="toolbar-actions">
-                    <button class="btn btn-danger" id="btn-reject" title="Reject (Ctrl+R)">
-                        <i class="fas fa-xmark"></i> Reject
+                    <button class="btn btn-ghost" id="btn-skip" title="Skip for now (S)">
+                        <i class="fas fa-forward-step"></i>
+                        <span class="btn-text">Skip</span>
                     </button>
-                    <button class="btn btn-success" id="btn-approve" title="Approve (Enter)">
-                        <i class="fas fa-check"></i> Approve & Create
+                    <button class="btn btn-danger" id="btn-reject" title="Reject (R)">
+                        <i class="fas fa-xmark"></i>
+                        <span class="btn-text">Reject</span>
+                    </button>
+                    <button class="btn btn-success btn-approve-next" id="btn-approve" title="Approve & Next (A)">
+                        <i class="fas fa-check"></i>
+                        <span class="btn-text">Approve & Next</span>
+                        <kbd class="btn-kbd">A</kbd>
                     </button>
                 </div>
+            </div>
+
+            <!-- Keyboard HUD -->
+            <div class="review-keyboard-hud" id="review-keyboard-hud">
+                <div class="kbd-group"><kbd>A</kbd> Approve</div>
+                <div class="kbd-group"><kbd>R</kbd> Reject</div>
+                <div class="kbd-group"><kbd>S</kbd> Skip</div>
+                <div class="kbd-group"><kbd>←</kbd><kbd>→</kbd> Nav</div>
+                <div class="kbd-group"><kbd>Esc</kbd> Back</div>
+                <div class="kbd-group"><kbd>?</kbd> Help</div>
             </div>
 
             <div class="review-content" id="review-content">

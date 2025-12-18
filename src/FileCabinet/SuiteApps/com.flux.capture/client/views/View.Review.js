@@ -12,12 +12,13 @@
     var SHORTCUTS = {
         'Tab': { action: 'nextField', description: 'Next field' },
         'Shift+Tab': { action: 'prevField', description: 'Previous field' },
-        'Enter': { action: 'approve', description: 'Approve & next' },
-        'Escape': { action: 'back', description: 'Back to queue' },
-        'ArrowRight': { action: 'nextDoc', description: 'Next document', ctrl: true },
-        'ArrowLeft': { action: 'prevDoc', description: 'Previous document', ctrl: true },
-        'KeyS': { action: 'save', description: 'Save changes', ctrl: true },
-        'KeyR': { action: 'reject', description: 'Reject document', ctrl: true },
+        'KeyA': { action: 'approve', description: 'Approve & next' },
+        'KeyR': { action: 'reject', description: 'Reject document' },
+        'KeyS': { action: 'skip', description: 'Skip to next' },
+        'Escape': { action: 'back', description: 'Back to documents' },
+        'ArrowRight': { action: 'nextDoc', description: 'Next document' },
+        'ArrowLeft': { action: 'prevDoc', description: 'Previous document' },
+        'Slash': { action: 'help', description: 'Show shortcuts' },
         'Equal': { action: 'zoomIn', description: 'Zoom in' },
         'Minus': { action: 'zoomOut', description: 'Zoom out' },
         'Digit0': { action: 'zoomReset', description: 'Reset zoom', ctrl: true }
@@ -180,6 +181,11 @@
             // Reject button
             this.on('#btn-reject', 'click', function() {
                 self.rejectDocument();
+            });
+
+            // Skip button
+            this.on('#btn-skip', 'click', function() {
+                self.skipDocument();
             });
 
             // Save button
@@ -373,7 +379,8 @@
                         e.target.blur();
                         return;
                     }
-                    if (e.ctrlKey && e.key === 's') {
+                    // Ctrl+S to save even in inputs
+                    if ((e.ctrlKey || e.metaKey) && e.key === 's') {
                         e.preventDefault();
                         self.saveChanges();
                         return;
@@ -382,19 +389,23 @@
                 }
 
                 var key = e.code || e.key;
-                var shortcut = SHORTCUTS[key];
 
+                // Handle ? for help (Shift+/)
+                if ((e.key === '?' || (e.shiftKey && key === 'Slash'))) {
+                    e.preventDefault();
+                    self.showShortcutsHelp();
+                    return;
+                }
+
+                var shortcut = SHORTCUTS[key];
                 if (!shortcut) return;
 
                 // Check modifier requirements
                 if (shortcut.ctrl && !e.ctrlKey && !e.metaKey) return;
-                if (e.ctrlKey && !shortcut.ctrl) {
-                    // Some shortcuts need ctrl, some don't
-                    if (key === 'ArrowRight' || key === 'ArrowLeft' || key === 'KeyS' || key === 'KeyR' || key === 'Digit0') {
-                        // These need ctrl
-                    } else {
-                        return;
-                    }
+
+                // Don't trigger action shortcuts if ctrl is pressed (except for zoom reset)
+                if (e.ctrlKey && !shortcut.ctrl && key !== 'Digit0') {
+                    return;
                 }
 
                 e.preventDefault();
@@ -403,11 +414,12 @@
                     case 'nextField': self.focusNextField(1); break;
                     case 'prevField': self.focusNextField(-1); break;
                     case 'approve': self.approveDocument(); break;
+                    case 'reject': self.rejectDocument(); break;
+                    case 'skip': self.skipDocument(); break;
                     case 'back': self.navigateBack(); break;
                     case 'nextDoc': self.goToNextDocument(); break;
                     case 'prevDoc': self.goToPrevDocument(); break;
-                    case 'save': self.saveChanges(); break;
-                    case 'reject': self.rejectDocument(); break;
+                    case 'help': self.showShortcutsHelp(); break;
                     case 'zoomIn': self.setZoom(self.zoom + 0.25); break;
                     case 'zoomOut': self.setZoom(self.zoom - 0.25); break;
                     case 'zoomReset': self.setZoom(1); break;
@@ -458,11 +470,35 @@
             if (titleEl) titleEl.textContent = doc.invoiceNumber || doc.name || 'Document Review';
             if (badgeEl) badgeEl.textContent = doc.documentTypeText || 'Invoice';
 
-            // Update document counter
-            var counterEl = el('#doc-counter');
-            if (counterEl && this.queueIndex >= 0) {
-                counterEl.textContent = (this.queueIndex + 1) + ' of ' + this.queueIds.length;
-                counterEl.style.display = 'inline';
+            // Update queue position indicator
+            var positionEl = el('#queue-position');
+            var currentEl = el('#position-current');
+            var totalEl = el('#position-total');
+
+            if (positionEl && this.queueIndex >= 0 && this.queueIds.length > 0) {
+                if (currentEl) currentEl.textContent = this.queueIndex + 1;
+                if (totalEl) totalEl.textContent = this.queueIds.length;
+                positionEl.style.display = 'flex';
+            } else if (positionEl) {
+                positionEl.style.display = 'none';
+            }
+
+            // Update progress bar
+            this.updateProgressBar();
+        },
+
+        updateProgressBar: function() {
+            var progressBar = el('#review-progress-bar');
+            var progressFill = el('#review-progress-fill');
+
+            if (!progressBar || !progressFill) return;
+
+            if (this.queueIds.length > 0 && this.queueIndex >= 0) {
+                var progress = ((this.queueIndex + 1) / this.queueIds.length) * 100;
+                progressFill.style.width = progress + '%';
+                progressBar.style.display = 'block';
+            } else {
+                progressBar.style.display = 'none';
             }
         },
 
@@ -1605,13 +1641,19 @@
                     return API.put('approve', { documentId: self.docId, createTransaction: true });
                 })
                 .then(function(result) {
+                    // Trigger confetti celebration
+                    self.triggerConfetti();
                     UI.toast('Document approved! Transaction created.', 'success');
 
-                    // Go to next document or back to queue
+                    // Go to next document or back to documents list
                     if (self.queueIndex >= 0 && self.queueIndex < self.queueIds.length - 1) {
                         self.goToNextDocument();
                     } else {
-                        Router.navigate('queue');
+                        // Last document - celebrate and go back
+                        UI.toast('Queue complete! Great work!', 'success');
+                        setTimeout(function() {
+                            Router.navigate('documents');
+                        }, 800);
                     }
                 })
                 .catch(function(err) {
@@ -1630,16 +1672,38 @@
                 .then(function() {
                     UI.toast('Document rejected', 'success');
 
-                    // Go to next document or back to queue
+                    // Go to next document or back to documents list
                     if (self.queueIndex >= 0 && self.queueIndex < self.queueIds.length - 1) {
                         self.goToNextDocument();
                     } else {
-                        Router.navigate('queue');
+                        Router.navigate('documents');
                     }
                 })
                 .catch(function(err) {
                     UI.toast('Error: ' + err.message, 'error');
                 });
+        },
+
+        triggerConfetti: function() {
+            // Create confetti burst animation
+            var colors = ['#10B981', '#34D399', '#6EE7B7', '#A7F3D0', '#FBBF24'];
+            var container = document.body;
+
+            for (var i = 0; i < 30; i++) {
+                var confetti = document.createElement('div');
+                confetti.className = 'confetti-piece';
+                confetti.style.cssText = 'position:fixed;width:10px;height:10px;background:' + colors[i % colors.length] + ';' +
+                    'left:' + (Math.random() * 100) + '%;top:-10px;opacity:1;z-index:9999;' +
+                    'animation:confetti-fall ' + (1.5 + Math.random()) + 's ease-out forwards;' +
+                    'animation-delay:' + (Math.random() * 0.3) + 's;border-radius:2px;' +
+                    'transform:rotate(' + (Math.random() * 360) + 'deg);';
+                container.appendChild(confetti);
+
+                // Clean up after animation
+                setTimeout(function(el) {
+                    if (el.parentNode) el.parentNode.removeChild(el);
+                }, 2500, confetti);
+            }
         },
 
         // ==========================================
@@ -1651,7 +1715,17 @@
                     return;
                 }
             }
-            Router.navigate('queue');
+            Router.navigate('documents');
+        },
+
+        skipDocument: function() {
+            // Skip moves to next document without any action
+            if (this.queueIndex >= 0 && this.queueIndex < this.queueIds.length - 1) {
+                this.goToNextDocument();
+            } else {
+                // Last document - go back to documents list
+                Router.navigate('documents');
+            }
         },
 
         goToNextDocument: function() {
@@ -1671,6 +1745,7 @@
         updateNavigationButtons: function() {
             var prevBtn = el('#btn-doc-prev');
             var nextBtn = el('#btn-doc-next');
+            var skipBtn = el('#btn-skip');
 
             if (prevBtn) {
                 prevBtn.disabled = this.queueIndex <= 0;
@@ -1678,6 +1753,13 @@
             if (nextBtn) {
                 nextBtn.disabled = this.queueIndex < 0 || this.queueIndex >= this.queueIds.length - 1;
             }
+            // Skip is always enabled - goes to next or back to list
+            if (skipBtn) {
+                skipBtn.disabled = false;
+            }
+
+            // Update progress bar when navigation state changes
+            this.updateProgressBar();
         },
 
         // ==========================================
@@ -1755,16 +1837,31 @@
                 '<div class="shortcuts-content">' +
                     '<h3><i class="fas fa-keyboard"></i> Keyboard Shortcuts</h3>' +
                     '<div class="shortcuts-grid">' +
-                        '<div class="shortcut-item"><kbd>Tab</kbd> <span>Next field</span></div>' +
-                        '<div class="shortcut-item"><kbd>Shift+Tab</kbd> <span>Previous field</span></div>' +
-                        '<div class="shortcut-item"><kbd>Enter</kbd> <span>Approve & next</span></div>' +
-                        '<div class="shortcut-item"><kbd>Esc</kbd> <span>Back to queue</span></div>' +
-                        '<div class="shortcut-item"><kbd>Ctrl+S</kbd> <span>Save changes</span></div>' +
-                        '<div class="shortcut-item"><kbd>Ctrl+R</kbd> <span>Reject</span></div>' +
-                        '<div class="shortcut-item"><kbd>Ctrl+←</kbd> <span>Previous doc</span></div>' +
-                        '<div class="shortcut-item"><kbd>Ctrl+→</kbd> <span>Next doc</span></div>' +
-                        '<div class="shortcut-item"><kbd>+/-</kbd> <span>Zoom in/out</span></div>' +
-                        '<div class="shortcut-item"><kbd>Ctrl+0</kbd> <span>Reset zoom</span></div>' +
+                        '<div class="shortcut-section">' +
+                            '<div class="shortcut-section-title">Actions</div>' +
+                            '<div class="shortcut-item"><kbd>A</kbd> <span>Approve & next</span></div>' +
+                            '<div class="shortcut-item"><kbd>R</kbd> <span>Reject document</span></div>' +
+                            '<div class="shortcut-item"><kbd>S</kbd> <span>Skip to next</span></div>' +
+                            '<div class="shortcut-item"><kbd>Esc</kbd> <span>Back to documents</span></div>' +
+                        '</div>' +
+                        '<div class="shortcut-section">' +
+                            '<div class="shortcut-section-title">Navigation</div>' +
+                            '<div class="shortcut-item"><kbd>←</kbd> <span>Previous document</span></div>' +
+                            '<div class="shortcut-item"><kbd>→</kbd> <span>Next document</span></div>' +
+                            '<div class="shortcut-item"><kbd>Tab</kbd> <span>Next field</span></div>' +
+                            '<div class="shortcut-item"><kbd>Shift+Tab</kbd> <span>Previous field</span></div>' +
+                        '</div>' +
+                        '<div class="shortcut-section">' +
+                            '<div class="shortcut-section-title">Preview</div>' +
+                            '<div class="shortcut-item"><kbd>+</kbd> <span>Zoom in</span></div>' +
+                            '<div class="shortcut-item"><kbd>-</kbd> <span>Zoom out</span></div>' +
+                            '<div class="shortcut-item"><kbd>Ctrl+0</kbd> <span>Reset zoom</span></div>' +
+                        '</div>' +
+                        '<div class="shortcut-section">' +
+                            '<div class="shortcut-section-title">Other</div>' +
+                            '<div class="shortcut-item"><kbd>Ctrl+S</kbd> <span>Save changes</span></div>' +
+                            '<div class="shortcut-item"><kbd>?</kbd> <span>Show this help</span></div>' +
+                        '</div>' +
                     '</div>' +
                     '<button class="btn btn-primary btn-block" onclick="this.closest(\'.shortcuts-modal\').remove()">Got it!</button>' +
                 '</div>' +
