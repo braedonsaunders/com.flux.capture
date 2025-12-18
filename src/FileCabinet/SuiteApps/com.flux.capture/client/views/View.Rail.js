@@ -262,13 +262,27 @@
                 return self.uploadSingleFile(file);
             });
 
-            Promise.all(uploadPromises).then(function(results) {
+            Promise.allSettled(uploadPromises).then(function(results) {
                 self.uploadInProgress = false;
-                UI.toast(results.length + ' file(s) uploaded successfully!', 'success');
-                self.loadData(); // Refresh to get processing status
-            }).catch(function(err) {
-                self.uploadInProgress = false;
-                UI.toast('Upload failed: ' + err.message, 'error');
+
+                var succeeded = results.filter(function(r) { return r.status === 'fulfilled'; });
+                var failed = results.filter(function(r) { return r.status === 'rejected'; });
+
+                if (succeeded.length > 0) {
+                    UI.toast(succeeded.length + ' file(s) uploaded successfully!', 'success');
+                    self.uploadSuccessCount = (self.uploadSuccessCount || 0) + succeeded.length;
+                    self.loadData(); // Refresh to get processing status
+                }
+
+                if (failed.length > 0) {
+                    UI.toast(failed.length + ' file(s) failed to upload', 'error');
+                }
+
+                // Only transition to processing if we had successful uploads
+                if (succeeded.length === 0) {
+                    // All failed - stay on upload stage
+                    self.resetToUpload();
+                }
             });
         },
 
@@ -276,28 +290,55 @@
             var self = this;
 
             return new Promise(function(resolve, reject) {
-                var formData = new FormData();
-                formData.append('file', file);
-                formData.append('documentType', self.selectedDocType);
+                var reader = new FileReader();
 
-                API.upload('upload', formData, function(progress) {
+                reader.onload = function() {
+                    var base64 = reader.result.split(',')[1];
+
                     self.updateQueueItem(file.name, {
                         status: 'uploading',
-                        progress: progress
+                        progress: 50
                     });
-                }).then(function(result) {
-                    self.updateQueueItem(file.name, {
-                        status: 'processing',
-                        docId: result.documentId
+
+                    API.post('upload', {
+                        fileName: file.name,
+                        fileContent: base64,
+                        documentType: self.selectedDocType
+                    }).then(function(result) {
+                        self.updateQueueItem(file.name, {
+                            status: 'processing',
+                            progress: 100,
+                            docId: result ? result.documentId : null
+                        });
+                        resolve(result);
+                    }).catch(function(err) {
+                        self.updateQueueItem(file.name, {
+                            status: 'error',
+                            error: err.message
+                        });
+                        reject(err);
                     });
-                    resolve(result);
-                }).catch(function(err) {
+                };
+
+                reader.onerror = function() {
                     self.updateQueueItem(file.name, {
                         status: 'error',
-                        error: err.message
+                        error: 'Failed to read file'
                     });
-                    reject(err);
-                });
+                    reject(new Error('Failed to read file'));
+                };
+
+                reader.onprogress = function(e) {
+                    if (e.lengthComputable) {
+                        var progress = Math.round((e.loaded / e.total) * 30);
+                        self.updateQueueItem(file.name, {
+                            status: 'uploading',
+                            progress: progress
+                        });
+                    }
+                };
+
+                reader.readAsDataURL(file);
             });
         },
 
