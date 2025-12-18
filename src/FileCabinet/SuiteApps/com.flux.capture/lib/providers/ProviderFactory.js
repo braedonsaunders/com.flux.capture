@@ -188,7 +188,13 @@ define([
                     delete testConfig._useSavedApiKey;
                 }
 
-                const provider = this.getProviderByType(providerType, testConfig);
+                // Wrap flat config in provider-specific structure
+                // _createAzureProvider expects { azure: {...} }, not flat config
+                const wrappedConfig = providerType === ProviderType.AZURE
+                    ? { azure: testConfig }
+                    : { oci: testConfig };
+
+                const provider = this.getProviderByType(providerType, wrappedConfig);
 
                 // Validate config first
                 const validation = provider.validateConfig();
