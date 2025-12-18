@@ -187,7 +187,7 @@ define([
                 extractedDataObj._extractedAt = new Date().toISOString();
 
                 updateValues['custrecord_flux_extracted_data'] = JSON.stringify(extractedDataObj);
-                updateValues['custrecord_flux_extracted_text'] = extraction.rawText ? extraction.rawText.substring(0, 100000) : '';
+                // Note: custrecord_flux_form_data is NOT set here - it's only populated when user saves form edits
 
                 // Only set currency if it's a numeric ID
                 if (extraction.fields && extraction.fields.currency) {

@@ -289,10 +289,10 @@
             <showinlist>F</showinlist>
         </customrecordcustomfield>
 
-        <customrecordcustomfield scriptid="custrecord_flux_extracted_text">
+        <customrecordcustomfield scriptid="custrecord_flux_form_data">
             <fieldtype>CLOBTEXT</fieldtype>
-            <label>Extracted Text</label>
-            <description>Full text extracted from document</description>
+            <label>Form Data</label>
+            <description>User-edited form values from review UI - source of truth for transaction creation. JSON containing bodyFields and sublists.</description>
             <ismandatory>F</ismandatory>
             <displaytype>HIDDEN</displaytype>
             <showinlist>F</showinlist>
