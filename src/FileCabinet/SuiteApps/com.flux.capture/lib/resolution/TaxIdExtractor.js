@@ -70,8 +70,9 @@ define(['N/log'], function(log) {
                 },
 
                 [TaxIdType.EU_VAT]: {
-                    // EU VAT: 2 letter country code + 8-12 alphanumeric
-                    pattern: /\b([A-Z]{2})(\d{8,12}|[A-Z0-9]{8,12})\b/g,
+                    // EU VAT: 2 letter country code + 8-12 chars that MUST contain digits
+                    // The pattern requires at least one digit to avoid matching words like DESCRIPTION
+                    pattern: /\b([A-Z]{2})([A-Z0-9]*\d[A-Z0-9]*)\b/g,
                     contextKeywords: ['vat', 'vat no', 'vat number', 'tax number', 'mwst', 'iva', 'tva', 'btw'],
                     validate: (match) => this.validateEUVAT(match),
                     format: (match) => match.toUpperCase()
@@ -307,10 +308,19 @@ define(['N/log'], function(log) {
          */
         validateEUVAT(vat) {
             // Basic format check - country code + 8-12 alphanumeric
-            const match = vat.match(/^([A-Z]{2})(.{8,12})$/i);
+            const match = vat.match(/^([A-Z]{2})(.+)$/i);
             if (!match) return false;
 
             const countryCode = match[1].toUpperCase();
+            const body = match[2];
+
+            // Body must be 8-12 characters
+            if (body.length < 8 || body.length > 12) return false;
+
+            // Body must contain at least one digit (to avoid words like DESCRIPTION)
+            if (!/\d/.test(body)) return false;
+
+            // Validate country code
             const validCountries = [
                 'AT', 'BE', 'BG', 'CY', 'CZ', 'DE', 'DK', 'EE', 'EL', 'ES',
                 'FI', 'FR', 'HR', 'HU', 'IE', 'IT', 'LT', 'LU', 'LV', 'MT',
