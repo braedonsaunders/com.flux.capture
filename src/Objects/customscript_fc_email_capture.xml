@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<emailcaptureplugin scriptid="customscript_fc_email_capture">
+    <name>Flux Capture Email Inbox</name>
+    <description>Receives inbound emails with invoice attachments and automatically creates Flux Document records for AI-powered extraction and processing. Forward invoices to the generated email address to have them automatically ingested.</description>
+    <status>RELEASED</status>
+    <loglevel>AUDIT</loglevel>
+    <isinactive>F</isinactive>
+    <notifyadmins>F</notifyadmins>
+    <notifyemails></notifyemails>
+    <notifyowner>T</notifyowner>
+    <notifyuser>F</notifyuser>
+    <runasrole>ADMINISTRATOR</runasrole>
+    <scriptfile>[/SuiteApps/com.flux.capture/scripts/FC_EmailCapture_Plugin.js]</scriptfile>
+</emailcaptureplugin>

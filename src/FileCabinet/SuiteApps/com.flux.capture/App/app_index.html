@@ -1330,6 +1330,10 @@
                     <i class="fas fa-file-invoice"></i>
                     <span>Forms</span>
                 </button>
+                <button class="settings-nav-tab" data-settings-tab="email">
+                    <i class="fas fa-envelope"></i>
+                    <span>Email Inbox</span>
+                </button>
                 <button class="settings-nav-tab" data-settings-tab="system">
                     <i class="fas fa-cog"></i>
                     <span>System</span>
@@ -1687,6 +1691,140 @@
                         </div>
                     </div>
                 </div>
+                </div>
+            </div>
+
+            <!-- TAB: Email Inbox -->
+            <div class="settings-tab-panel" id="settings-panel-email" style="display:none;">
+                <div class="settings-layout">
+                    <!-- Email Inbox Status -->
+                    <div class="settings-card settings-card-large">
+                        <div class="settings-card-header">
+                            <i class="fas fa-envelope-open-text"></i>
+                            <div>
+                                <h3>Email Inbox for Invoice Ingestion</h3>
+                                <p>Receive invoices directly via email for automatic processing</p>
+                            </div>
+                        </div>
+                        <div class="settings-card-body">
+                            <div class="email-inbox-status" id="email-inbox-status">
+                                <div class="email-status-loading">
+                                    <i class="fas fa-spinner fa-spin"></i>
+                                    <span>Loading email inbox status...</span>
+                                </div>
+                            </div>
+
+                            <!-- Email Address Display (shown when active) -->
+                            <div class="email-address-panel" id="email-address-panel" style="display:none;">
+                                <div class="email-address-header">
+                                    <i class="fas fa-check-circle" style="color: var(--color-success);"></i>
+                                    <span>Email Inbox Active</span>
+                                </div>
+                                <div class="email-address-box">
+                                    <label>Forward invoices to this address:</label>
+                                    <div class="email-address-display">
+                                        <input type="text" id="email-capture-address" readonly class="email-address-input">
+                                        <button class="btn btn-secondary btn-sm" id="btn-copy-email" title="Copy to clipboard">
+                                            <i class="fas fa-copy"></i>
+                                        </button>
+                                    </div>
+                                    <small class="email-address-help">
+                                        Share this address with vendors or set up email forwarding rules to automatically route invoice emails here.
+                                    </small>
+                                </div>
+
+                                <div class="email-stats" id="email-stats">
+                                    <div class="stat-item">
+                                        <span class="stat-label">Documents received today</span>
+                                        <span class="stat-value" id="email-docs-today">-</span>
+                                    </div>
+                                    <div class="stat-item">
+                                        <span class="stat-label">Total via email</span>
+                                        <span class="stat-value" id="email-docs-total">-</span>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Setup Instructions (shown when not configured) -->
+                            <div class="email-setup-panel" id="email-setup-panel" style="display:none;">
+                                <div class="email-setup-header">
+                                    <i class="fas fa-info-circle" style="color: var(--color-warning);"></i>
+                                    <span>Email Inbox Setup Required</span>
+                                </div>
+                                <div class="email-setup-instructions">
+                                    <p>The Email Capture feature needs to be enabled in your NetSuite account:</p>
+                                    <ol>
+                                        <li>Go to <strong>Setup &gt; Company &gt; Enable Features</strong></li>
+                                        <li>On the <strong>SuiteCloud</strong> subtab, enable <strong>Server SuiteScript</strong></li>
+                                        <li>Go to <strong>Customization &gt; Plug-ins &gt; Manage Plug-ins</strong></li>
+                                        <li>Find <strong>Flux Capture Email Inbox</strong> and ensure it's enabled</li>
+                                        <li>Note the generated email address shown next to the plug-in</li>
+                                    </ol>
+                                    <button class="btn btn-primary" id="btn-refresh-email-status">
+                                        <i class="fas fa-sync"></i> Check Status
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Email Processing Settings -->
+                    <div class="settings-card">
+                        <div class="settings-card-header">
+                            <i class="fas fa-sliders"></i>
+                            <div>
+                                <h3>Email Processing Options</h3>
+                                <p>Configure how email attachments are handled</p>
+                            </div>
+                        </div>
+                        <div class="settings-card-body">
+                            <div class="setting-row">
+                                <div class="setting-label">
+                                    <span>Auto-process attachments</span>
+                                    <small>Automatically start AI extraction when documents arrive via email</small>
+                                </div>
+                                <div class="setting-control">
+                                    <label class="toggle">
+                                        <input type="checkbox" id="email-auto-process" checked>
+                                        <span class="toggle-track"><span class="toggle-thumb"></span></span>
+                                    </label>
+                                </div>
+                            </div>
+                            <div class="setting-row">
+                                <div class="setting-label">
+                                    <span>Supported file types</span>
+                                    <small>File types that will be processed from email attachments</small>
+                                </div>
+                                <div class="setting-control setting-control-static">
+                                    <span class="file-type-badges">
+                                        <span class="badge">PDF</span>
+                                        <span class="badge">PNG</span>
+                                        <span class="badge">JPG</span>
+                                        <span class="badge">TIFF</span>
+                                    </span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Recent Email Imports -->
+                    <div class="settings-card">
+                        <div class="settings-card-header">
+                            <i class="fas fa-history"></i>
+                            <div>
+                                <h3>Recent Email Imports</h3>
+                                <p>Documents recently received via email</p>
+                            </div>
+                        </div>
+                        <div class="settings-card-body">
+                            <div id="recent-email-imports">
+                                <div class="empty-state-small">
+                                    <i class="fas fa-inbox"></i>
+                                    <span>No recent email imports</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
                 </div>
             </div>
 

@@ -217,6 +217,12 @@ define([
                 case 'providers':
                     result = getAvailableProviders();
                     break;
+                case 'emailInboxStatus':
+                    result = getEmailInboxStatus();
+                    break;
+                case 'recentEmailImports':
+                    result = getRecentEmailImports();
+                    break;
                 default:
                     result = Response.error('INVALID_ACTION', 'Unknown action: ' + action);
             }
@@ -2377,6 +2383,144 @@ define([
 
     function checkEmailInbox(context) {
         return Response.success({ message: 'Email check endpoint ready' });
+    }
+
+    /**
+     * Get Email Inbox Status
+     * Returns the email capture plugin status and email address
+     */
+    function getEmailInboxStatus() {
+        try {
+            var accountId = runtime.accountId;
+
+            // Search for the email capture plugin deployment to check if it's active
+            var pluginSearch = search.create({
+                type: 'scriptdeployment',
+                filters: [
+                    ['scriptid', 'is', 'customdeploy_fc_email_capture']
+                ],
+                columns: ['status', 'scriptid']
+            });
+
+            var isEnabled = false;
+            var pluginResults = pluginSearch.run().getRange({ start: 0, end: 1 });
+
+            if (pluginResults && pluginResults.length > 0) {
+                var status = pluginResults[0].getValue('status');
+                isEnabled = (status === 'RELEASED' || status === 'TESTING');
+            }
+
+            // Construct the email address based on NetSuite's convention
+            // Email capture plugins get addresses like: customscript_fc_email_capture@{accountid}.netsuite.com
+            var emailAddress = 'customscript_fc_email_capture@' + accountId.toLowerCase().replace('_', '-') + '.netsuite.com';
+
+            // Get document stats for email source
+            var todayStart = new Date();
+            todayStart.setHours(0, 0, 0, 0);
+
+            var statsQuery = query.runSuiteQL({
+                query: "SELECT " +
+                    "COUNT(CASE WHEN custrecord_flux_email_received >= TO_DATE('" + format.format({ value: todayStart, type: format.Type.DATE }) + "', 'MM/DD/YYYY') THEN 1 END) as today, " +
+                    "COUNT(*) as total " +
+                    "FROM customrecord_flux_document " +
+                    "WHERE custrecord_flux_source = 2"
+            });
+
+            var documentsToday = 0;
+            var documentsTotal = 0;
+
+            if (statsQuery && statsQuery.results && statsQuery.results.length > 0) {
+                documentsToday = parseInt(statsQuery.results[0].values[0]) || 0;
+                documentsTotal = parseInt(statsQuery.results[0].values[1]) || 0;
+            }
+
+            return Response.success({
+                enabled: isEnabled,
+                emailAddress: emailAddress,
+                accountId: accountId,
+                documentsToday: documentsToday,
+                documentsTotal: documentsTotal
+            });
+        } catch (e) {
+            log.error('getEmailInboxStatus Error', e);
+            // Return a fallback with constructed email address
+            var fallbackAccountId = runtime.accountId;
+            return Response.success({
+                enabled: false,
+                emailAddress: 'customscript_fc_email_capture@' + fallbackAccountId.toLowerCase().replace('_', '-') + '.netsuite.com',
+                accountId: fallbackAccountId,
+                documentsToday: 0,
+                documentsTotal: 0,
+                error: e.message
+            });
+        }
+    }
+
+    /**
+     * Get Recent Email Imports
+     * Returns the most recent documents imported via email
+     */
+    function getRecentEmailImports() {
+        try {
+            var docSearch = search.create({
+                type: 'customrecord_flux_document',
+                filters: [
+                    ['custrecord_flux_source', 'is', '2'] // Source.EMAIL = 2
+                ],
+                columns: [
+                    search.createColumn({ name: 'custrecord_flux_original_filename' }),
+                    search.createColumn({ name: 'custrecord_flux_email_sender' }),
+                    search.createColumn({ name: 'custrecord_flux_email_subject' }),
+                    search.createColumn({ name: 'custrecord_flux_email_received', sort: search.Sort.DESC }),
+                    search.createColumn({ name: 'custrecord_flux_status' }),
+                    search.createColumn({ name: 'created' })
+                ]
+            });
+
+            var results = [];
+            var searchResults = docSearch.run().getRange({ start: 0, end: 10 });
+
+            searchResults.forEach(function(result) {
+                var received = result.getValue('custrecord_flux_email_received') ||
+                               result.getValue('created');
+                var timeAgo = received ? getTimeAgo(new Date(received)) : '';
+
+                results.push({
+                    id: result.id,
+                    filename: result.getValue('custrecord_flux_original_filename') || 'Unknown',
+                    sender: result.getValue('custrecord_flux_email_sender') || '',
+                    subject: result.getValue('custrecord_flux_email_subject') || '',
+                    status: result.getValue('custrecord_flux_status'),
+                    received: received,
+                    timeAgo: timeAgo
+                });
+            });
+
+            return Response.success(results);
+        } catch (e) {
+            log.error('getRecentEmailImports Error', e);
+            return Response.success([]);
+        }
+    }
+
+    /**
+     * Helper function to format relative time
+     */
+    function getTimeAgo(date) {
+        if (!date) return '';
+
+        var now = new Date();
+        var diffMs = now - date;
+        var diffMins = Math.floor(diffMs / 60000);
+        var diffHours = Math.floor(diffMs / 3600000);
+        var diffDays = Math.floor(diffMs / 86400000);
+
+        if (diffMins < 1) return 'just now';
+        if (diffMins < 60) return diffMins + 'm ago';
+        if (diffHours < 24) return diffHours + 'h ago';
+        if (diffDays < 7) return diffDays + 'd ago';
+
+        return format.format({ value: date, type: format.Type.DATE });
     }
 
     /**
