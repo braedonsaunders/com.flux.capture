@@ -44,6 +44,13 @@
         REFRESH_MS: 10000,
         _clickHandler: null,
         _keydownHandler: null,
+        // Sorting state
+        sortBy: 'created',
+        sortDir: 'desc',
+        // Pagination state
+        currentPage: 1,
+        pageSize: 25,
+        totalItems: 0,
 
         // ==========================================
         // INITIALIZATION
@@ -59,6 +66,12 @@
             this.streak = 0;
             this.commandPaletteOpen = false;
             this.previewExpanded = -1;
+            // Reset sort and pagination
+            this.sortBy = 'created';
+            this.sortDir = 'desc';
+            this.currentPage = 1;
+            this.pageSize = 25;
+            this.totalItems = 0;
 
             // Load streak from localStorage
             this.bestStreak = parseInt(localStorage.getItem('fc_best_streak') || '0');
@@ -100,8 +113,17 @@
         loadData: function() {
             var self = this;
 
-            API.get('queue', { pageSize: 200 }).then(function(data) {
+            // Build API params with sort and pagination
+            var params = {
+                page: this.currentPage,
+                pageSize: this.pageSize,
+                sortBy: this.sortBy,
+                sortDir: this.sortDir
+            };
+
+            API.get('queue', params).then(function(data) {
                 self.documents = (data && data.queue) || [];
+                self.totalItems = (data && data.total) || self.documents.length;
                 self.applyFilters();
                 self.render();
                 self.updateBadges();
@@ -171,9 +193,47 @@
                 });
             }
 
-            // Sort by confidence (high first for quick processing)
+            // Sort based on current sort settings
+            var sortBy = this.sortBy;
+            var sortDir = this.sortDir;
             docs.sort(function(a, b) {
-                return (parseInt(b.confidence) || 0) - (parseInt(a.confidence) || 0);
+                var aVal, bVal;
+                switch (sortBy) {
+                    case 'confidence':
+                        aVal = parseInt(a.confidence) || 0;
+                        bVal = parseInt(b.confidence) || 0;
+                        break;
+                    case 'vendor':
+                        aVal = (a.vendorName || '').toLowerCase();
+                        bVal = (b.vendorName || '').toLowerCase();
+                        break;
+                    case 'amount':
+                        aVal = parseFloat(a.totalAmount) || 0;
+                        bVal = parseFloat(b.totalAmount) || 0;
+                        break;
+                    case 'status':
+                        aVal = parseInt(a.status) || 0;
+                        bVal = parseInt(b.status) || 0;
+                        break;
+                    case 'invoice':
+                        aVal = (a.invoiceNumber || '').toLowerCase();
+                        bVal = (b.invoiceNumber || '').toLowerCase();
+                        break;
+                    case 'date':
+                    case 'created':
+                    default:
+                        aVal = new Date(a.createdDate || 0).getTime();
+                        bVal = new Date(b.createdDate || 0).getTime();
+                        break;
+                }
+
+                var result;
+                if (typeof aVal === 'string') {
+                    result = aVal.localeCompare(bVal);
+                } else {
+                    result = aVal - bVal;
+                }
+                return sortDir === 'desc' ? -result : result;
             });
 
             this.filteredDocuments = docs;
@@ -246,6 +306,33 @@
                     return;
                 }
 
+                // Sortable column headers
+                var sortableHeader = e.target.closest('th.sortable');
+                if (sortableHeader) {
+                    var sortColumn = sortableHeader.dataset.sort;
+                    self.handleSort(sortColumn);
+                    return;
+                }
+
+                // Pagination buttons
+                if (e.target.closest('#page-first')) {
+                    self.goToPage(1);
+                    return;
+                }
+                if (e.target.closest('#page-prev')) {
+                    self.goToPage(self.currentPage - 1);
+                    return;
+                }
+                if (e.target.closest('#page-next')) {
+                    self.goToPage(self.currentPage + 1);
+                    return;
+                }
+                if (e.target.closest('#page-last')) {
+                    var totalPages = Math.ceil(self.totalItems / self.pageSize);
+                    self.goToPage(totalPages);
+                    return;
+                }
+
                 // Document row double-click opens review (no single-click focus)
                 var row = e.target.closest('.doc-row');
                 if (row && !e.target.closest('.row-action') && !e.target.closest('.checkbox-wrapper')) {
@@ -292,6 +379,7 @@
             if (searchInput) {
                 searchInput.addEventListener('input', function() {
                     self.searchQuery = this.value;
+                    self.currentPage = 1; // Reset to first page on search
                     self.applyFilters();
                     self.render();
                 });
@@ -300,6 +388,15 @@
                     // Hide keyboard HUD when searching
                 });
             }
+
+            // Page size select (using event delegation since it's rendered dynamically)
+            document.addEventListener('change', function(e) {
+                if (e.target.id === 'page-size-select') {
+                    self.pageSize = parseInt(e.target.value);
+                    self.currentPage = 1; // Reset to first page
+                    self.loadData();
+                }
+            });
 
             // Navigation buttons
             this.on('#btn-refresh', 'click', function() {
@@ -528,17 +625,28 @@
             var allSelected = this.filteredDocuments.length > 0 &&
                 this.filteredDocuments.every(function(d) { return self.selectedIds.indexOf(String(d.id)) !== -1; });
 
+            // Helper to render sortable header
+            function sortHeader(column, label, className) {
+                var isActive = self.sortBy === column;
+                var icon = isActive ? (self.sortDir === 'asc' ? 'fa-sort-up' : 'fa-sort-down') : 'fa-sort';
+                var activeClass = isActive ? ' sort-active' : '';
+                return '<th class="' + className + ' sortable' + activeClass + '" data-sort="' + column + '">' +
+                    '<span class="sort-label">' + label + '</span>' +
+                    '<i class="fas ' + icon + ' sort-icon"></i>' +
+                '</th>';
+            }
+
             var html = '<div class="docs-table-wrapper">' +
                 '<table class="docs-table">' +
                 '<thead>' +
                     '<tr>' +
                         '<th class="col-checkbox"><label class="checkbox-wrapper"><input type="checkbox" id="select-all" ' + (allSelected ? 'checked' : '') + '><span class="checkmark"></span></label></th>' +
-                        '<th class="col-confidence">Conf</th>' +
-                        '<th class="col-status">Status</th>' +
-                        '<th class="col-vendor">Vendor</th>' +
-                        '<th class="col-invoice">Invoice #</th>' +
-                        '<th class="col-amount">Amount</th>' +
-                        '<th class="col-date">Date</th>' +
+                        sortHeader('confidence', 'Conf', 'col-confidence') +
+                        sortHeader('status', 'Status', 'col-status') +
+                        sortHeader('vendor', 'Vendor', 'col-vendor') +
+                        sortHeader('invoice', 'Invoice #', 'col-invoice') +
+                        sortHeader('amount', 'Amount', 'col-amount') +
+                        sortHeader('date', 'Date', 'col-date') +
                         '<th class="col-type">Type</th>' +
                         '<th class="col-actions">Actions</th>' +
                     '</tr>' +
@@ -560,7 +668,55 @@
                 '</div>' +
             '</div>';
 
+            // Pagination controls
+            html += this.renderPagination();
+
             container.innerHTML = html;
+        },
+
+        renderPagination: function() {
+            var totalPages = Math.ceil(this.totalItems / this.pageSize);
+            if (totalPages <= 1) return '';
+
+            var currentPage = this.currentPage;
+            var startItem = ((currentPage - 1) * this.pageSize) + 1;
+            var endItem = Math.min(currentPage * this.pageSize, this.totalItems);
+
+            var html = '<div class="pagination-bar">' +
+                '<div class="pagination-info">' +
+                    'Showing <strong>' + startItem + '-' + endItem + '</strong> of <strong>' + this.totalItems + '</strong> documents' +
+                '</div>' +
+                '<div class="pagination-controls">' +
+                    '<div class="pagination-size">' +
+                        '<label>Per page:</label>' +
+                        '<select id="page-size-select">' +
+                            '<option value="10"' + (this.pageSize === 10 ? ' selected' : '') + '>10</option>' +
+                            '<option value="25"' + (this.pageSize === 25 ? ' selected' : '') + '>25</option>' +
+                            '<option value="50"' + (this.pageSize === 50 ? ' selected' : '') + '>50</option>' +
+                            '<option value="100"' + (this.pageSize === 100 ? ' selected' : '') + '>100</option>' +
+                        '</select>' +
+                    '</div>' +
+                    '<div class="pagination-nav">' +
+                        '<button class="pagination-btn" id="page-first" ' + (currentPage === 1 ? 'disabled' : '') + ' title="First page">' +
+                            '<i class="fas fa-angles-left"></i>' +
+                        '</button>' +
+                        '<button class="pagination-btn" id="page-prev" ' + (currentPage === 1 ? 'disabled' : '') + ' title="Previous page">' +
+                            '<i class="fas fa-angle-left"></i>' +
+                        '</button>' +
+                        '<span class="pagination-current">' +
+                            'Page <strong>' + currentPage + '</strong> of <strong>' + totalPages + '</strong>' +
+                        '</span>' +
+                        '<button class="pagination-btn" id="page-next" ' + (currentPage === totalPages ? 'disabled' : '') + ' title="Next page">' +
+                            '<i class="fas fa-angle-right"></i>' +
+                        '</button>' +
+                        '<button class="pagination-btn" id="page-last" ' + (currentPage === totalPages ? 'disabled' : '') + ' title="Last page">' +
+                            '<i class="fas fa-angles-right"></i>' +
+                        '</button>' +
+                    '</div>' +
+                '</div>' +
+            '</div>';
+
+            return html;
         },
 
         renderDocumentRow: function(doc, index) {
@@ -705,8 +861,30 @@
         setFilter: function(filter) {
             this.currentFilter = filter;
             this.focusedIndex = 0;
+            this.currentPage = 1; // Reset to first page when changing filter
             this.applyFilters();
             this.render();
+        },
+
+        handleSort: function(column) {
+            // Toggle direction if same column, otherwise set to desc
+            if (this.sortBy === column) {
+                this.sortDir = this.sortDir === 'asc' ? 'desc' : 'asc';
+            } else {
+                this.sortBy = column;
+                this.sortDir = 'desc';
+            }
+            this.currentPage = 1; // Reset to first page when sorting
+            this.applyFilters();
+            this.render();
+        },
+
+        goToPage: function(page) {
+            var totalPages = Math.ceil(this.totalItems / this.pageSize);
+            if (page < 1 || page > totalPages) return;
+            this.currentPage = page;
+            this.focusedIndex = 0;
+            this.loadData();
         },
 
         moveFocus: function(delta) {

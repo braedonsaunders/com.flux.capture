@@ -4755,6 +4755,30 @@ tr.doc-row:hover .row-action.btn-delete:hover { background: var(--color-danger);
 .bulk-buttons .btn-danger { background: var(--color-danger); border: none; }
 .bulk-buttons .btn-danger:hover { background: #dc2626; }
 
+/* Sortable Headers */
+.docs-table th.sortable { cursor: pointer; user-select: none; transition: all var(--transition); }
+.docs-table th.sortable:hover { background: var(--gray-100); color: var(--text-primary); }
+.docs-table th.sortable .sort-label { margin-right: var(--space-xs); }
+.docs-table th.sortable .sort-icon { font-size: 0.7em; opacity: 0.4; transition: opacity var(--transition); }
+.docs-table th.sortable:hover .sort-icon { opacity: 0.7; }
+.docs-table th.sortable.sort-active { color: var(--color-primary); }
+.docs-table th.sortable.sort-active .sort-icon { opacity: 1; color: var(--color-primary); }
+
+/* Pagination Bar */
+.pagination-bar { display: flex; align-items: center; justify-content: space-between; padding: var(--space-md); background: var(--gray-50); border-top: 1px solid var(--border-color); border-radius: 0 0 var(--radius-lg) var(--radius-lg); }
+.pagination-info { font-size: var(--font-size-sm); color: var(--text-secondary); }
+.pagination-info strong { color: var(--text-primary); }
+.pagination-controls { display: flex; align-items: center; gap: var(--space-lg); }
+.pagination-size { display: flex; align-items: center; gap: var(--space-sm); font-size: var(--font-size-sm); color: var(--text-secondary); }
+.pagination-size select { padding: var(--space-xs) var(--space-sm); border: 1px solid var(--border-color); border-radius: var(--radius-sm); background: var(--surface-card); font-size: var(--font-size-sm); cursor: pointer; outline: none; }
+.pagination-size select:focus { border-color: var(--color-primary); box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.1); }
+.pagination-nav { display: flex; align-items: center; gap: var(--space-xs); }
+.pagination-btn { width: 32px; height: 32px; display: flex; align-items: center; justify-content: center; background: var(--surface-card); border: 1px solid var(--border-color); border-radius: var(--radius-sm); cursor: pointer; color: var(--text-secondary); transition: all var(--transition); }
+.pagination-btn:hover:not(:disabled) { background: var(--color-primary); border-color: var(--color-primary); color: white; }
+.pagination-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+.pagination-current { font-size: var(--font-size-sm); color: var(--text-secondary); padding: 0 var(--space-sm); }
+.pagination-current strong { color: var(--text-primary); }
+
 /* Text helpers */
 .text-warning { color: var(--color-warning); }
 

@@ -551,6 +551,20 @@ define([
     function getProcessingQueue(context) {
         var page = parseInt(context.page) || 1;
         var pageSize = Math.min(parseInt(context.pageSize) || 50, 100);
+        var sortBy = context.sortBy || 'created';
+        var sortDir = (context.sortDir || 'desc').toUpperCase() === 'ASC' ? 'ASC' : 'DESC';
+
+        // Map sort columns to database fields
+        var sortColumns = {
+            'created': 'custrecord_flux_created_date',
+            'date': 'custrecord_flux_created_date',
+            'confidence': 'custrecord_flux_confidence_score',
+            'vendor': 'vendorName',
+            'status': 'custrecord_flux_status',
+            'amount': 'custrecord_flux_total_amount',
+            'invoice': 'custrecord_flux_invoice_number'
+        };
+        var sortColumn = sortColumns[sortBy] || 'custrecord_flux_created_date';
 
         try {
             // Use COALESCE to handle cases where custrecord_flux_original_filename might not exist
@@ -561,10 +575,7 @@ define([
                 'custrecord_flux_anomalies as anomalies, custrecord_flux_error_message as errorMessage FROM customrecord_flux_document ' +
                 'WHERE custrecord_flux_status IN (' + DocStatus.PENDING + ', ' + DocStatus.PROCESSING + ', ' +
                 DocStatus.EXTRACTED + ', ' + DocStatus.NEEDS_REVIEW + ', ' + DocStatus.ERROR + ') ' +
-                'ORDER BY CASE custrecord_flux_status WHEN ' + DocStatus.ERROR + ' THEN 0 ' +
-                'WHEN ' + DocStatus.NEEDS_REVIEW + ' THEN 1 ' +
-                'WHEN ' + DocStatus.EXTRACTED + ' THEN 2 WHEN ' + DocStatus.PROCESSING + ' THEN 3 ' +
-                'WHEN ' + DocStatus.PENDING + ' THEN 4 END, custrecord_flux_created_date ASC';
+                'ORDER BY ' + sortColumn + ' ' + sortDir;
 
             fcDebug.debug('getProcessingQueue', 'SQL: ' + sql);
             var results = query.runSuiteQL({ query: sql });
