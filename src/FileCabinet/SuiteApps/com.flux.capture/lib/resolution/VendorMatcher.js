@@ -338,8 +338,9 @@ define(['N/log', 'N/query', 'N/search'], function(log, query, search) {
 
             const likeConditions = variations.map(() => 'LOWER(v.companyname) LIKE ?').join(' OR ');
 
+            // Use only core vendor fields that are guaranteed to exist
             const sql = `
-                SELECT v.id, v.companyname, v.entityid, v.email, v.address1, v.city, v.phone
+                SELECT v.id, v.companyname, v.entityid, v.email, v.phone
                 FROM vendor v
                 WHERE v.isinactive = 'F'
                 AND (${likeConditions})
@@ -366,9 +367,9 @@ define(['N/log', 'N/query', 'N/search'], function(log, query, search) {
                     companyName: r.values[1],
                     entityId: r.values[2],
                     email: r.values[3],
-                    address: r.values[4],
-                    city: r.values[5],
-                    phone: r.values[6]
+                    address: null, // Address requires sublist join - omit for now
+                    city: null,
+                    phone: r.values[4]
                 }));
             } catch (e) {
                 log.error('VendorMatcher.searchByName', e.message);
@@ -384,8 +385,9 @@ define(['N/log', 'N/query', 'N/search'], function(log, query, search) {
             const domain = this.extractEmailDomain(email);
             if (!domain) return [];
 
+            // Use only core vendor fields that are guaranteed to exist
             const sql = `
-                SELECT v.id, v.companyname, v.entityid, v.email, v.address1, v.city, v.phone
+                SELECT v.id, v.companyname, v.entityid, v.email, v.phone
                 FROM vendor v
                 WHERE v.isinactive = 'F'
                 AND LOWER(v.email) LIKE ?
@@ -405,9 +407,9 @@ define(['N/log', 'N/query', 'N/search'], function(log, query, search) {
                     companyName: r.values[1],
                     entityId: r.values[2],
                     email: r.values[3],
-                    address: r.values[4],
-                    city: r.values[5],
-                    phone: r.values[6]
+                    address: null,
+                    city: null,
+                    phone: r.values[4]
                 }));
             } catch (e) {
                 log.debug('VendorMatcher.searchByEmailDomain', e.message);
