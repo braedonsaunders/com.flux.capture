@@ -1475,8 +1475,7 @@
         },
 
         fetchTypeaheadOptions: function(lookupType, query, callback) {
-            var url = API.buildUrl('typeahead', { type: lookupType, query: query });
-            API.get(url).then(function(response) {
+            API.get('typeahead', { type: lookupType, query: query }).then(function(response) {
                 var data = response.data || response;
                 var options = Array.isArray(data) ? data : (data.options || []);
                 callback(options.slice(0, 10));
