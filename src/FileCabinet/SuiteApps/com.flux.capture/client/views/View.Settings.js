@@ -549,6 +549,20 @@
             };
         },
 
+        // Known native NetSuite checkbox fields (XML export doesn't include checkBoxDefault for these)
+        NATIVE_CHECKBOX_FIELDS: [
+            'PAYMENTHOLD', 'TOBEPAID', 'TOBEEMAILED', 'TOBEPRINTED', 'TOBEFAXED',
+            'ISBASECURRENCY', 'EXCLUDEFROMGLNUMBERING', 'ISMULTISHIPTO', 'ISTAXABLE',
+            'LANDEDCOSTPERLINE', 'TAXABLE', 'BILLADDRESSLIST', 'SHIPADDRESSLIST'
+        ],
+
+        isCheckboxField: function(fieldId, checkBoxDefault) {
+            if (checkBoxDefault) return true;
+            // Check native checkbox fields (case-insensitive, strip scriptid brackets)
+            var cleanId = (fieldId || '').replace(/^\[.*?scriptid=|\]$/g, '').toUpperCase();
+            return this.NATIVE_CHECKBOX_FIELDS.indexOf(cleanId) !== -1;
+        },
+
         parseXmlFields: function(container) {
             var self = this;
             var fields = [];
@@ -560,9 +574,9 @@
 
                 if (!id) return;
 
-                // Detect checkbox type from checkBoxDefault element
+                // Detect checkbox type from checkBoxDefault element or known native fields
                 var checkBoxDefault = self.getXmlText(f, 'checkBoxDefault');
-                var fieldType = checkBoxDefault ? 'checkbox' : 'text';
+                var fieldType = self.isCheckboxField(id, checkBoxDefault) ? 'checkbox' : 'text';
 
                 var fieldObj = {
                     id: id,
@@ -660,9 +674,9 @@
             element.querySelectorAll('columns > column').forEach(function(col) {
                 var colId = self.getXmlText(col, 'id') || col.getAttribute('scriptid');
                 if (colId) {
-                    // Detect checkbox type from checkBoxDefault element
+                    // Detect checkbox type from checkBoxDefault element or known native fields
                     var checkBoxDefault = self.getXmlText(col, 'checkBoxDefault');
-                    var colType = checkBoxDefault ? 'checkbox' : 'text';
+                    var colType = self.isCheckboxField(colId, checkBoxDefault) ? 'checkbox' : 'text';
 
                     var colObj = {
                         id: colId,
