@@ -622,11 +622,43 @@
             // Update navigation buttons
             this.updateNavigationButtons();
 
+            // Auto-select subsidiary if only one exists
+            this.autoSelectSingleOptions();
+
             // Focus first field
             setTimeout(function() {
                 var firstInput = document.querySelector('.extraction-panel input:not([type="hidden"])');
                 if (firstInput) firstInput.focus();
             }, 100);
+        },
+
+        // Auto-select fields that only have one option (like subsidiary in single-sub accounts)
+        autoSelectSingleOptions: function() {
+            var self = this;
+
+            // Check for subsidiary field that needs auto-select
+            var subsidiaryField = el('#field-subsidiary');
+            var subsidiaryDisplay = el('#field-subsidiary-display');
+
+            // Only auto-select if field exists and is empty
+            if (subsidiaryField && !subsidiaryField.value && subsidiaryDisplay) {
+                API.get('datasource', { type: 'subsidiaries' }).then(function(response) {
+                    var data = response.data || response;
+                    var options = data.options || data;
+                    var defaultValue = data.defaultValue;
+
+                    // If defaultValue is set (means only one subsidiary), auto-select it
+                    if (defaultValue && options && options.length === 1) {
+                        var option = options[0];
+                        subsidiaryField.value = option.value;
+                        subsidiaryDisplay.value = option.text;
+                        // Track the change
+                        self.changes['subsidiary'] = option.value;
+                    }
+                }).catch(function() {
+                    // Ignore errors - not critical
+                });
+            }
         },
 
         showLoadingState: function() {
@@ -1238,9 +1270,17 @@
             var docKey = fieldMapping[nsField.id.toLowerCase()] || nsField.id;
 
             // Get value - check extractedData first (contains all AI-extracted fields)
-            // then fall back to fixed document fields
+            // then fall back to fixed document fields, then default value from field schema
             var extractedData = doc.extractedData || {};
             var value = this.getExtractedFieldValue(nsField.id, docKey, doc, extractedData);
+
+            // If no value found, use default value from field schema
+            if (!value && nsField.defaultValue) {
+                value = nsField.defaultValue;
+            }
+
+            // Track default value text for select fields (to show display name)
+            var defaultValueText = nsField.defaultValueText || '';
 
             // Check for AI suggestion if field is empty
             var suggestion = null;
@@ -1286,7 +1326,8 @@
             } else if (inferredType === 'select') {
                 // Select without pre-loaded options - use typeahead for server-side search
                 var lookupType = this.getLookupType(nsField.id);
-                var displayValue = doc[docKey + '_display'] || doc[docKey + '_text'] || '';
+                // Use display value from doc, or defaultValueText from schema if using default
+                var displayValue = doc[docKey + '_display'] || doc[docKey + '_text'] || defaultValueText || '';
 
                 if (isDisabled) {
                     // Disabled select - just show display value
