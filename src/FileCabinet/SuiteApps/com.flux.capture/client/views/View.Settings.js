@@ -27,6 +27,14 @@
         bindEvents: function() {
             var self = this;
 
+            // Settings main tabs
+            els('.settings-nav-tab').forEach(function(tab) {
+                tab.addEventListener('click', function() {
+                    var targetTab = this.dataset.settingsTab;
+                    self.switchSettingsTab(targetTab);
+                });
+            });
+
             // Threshold slider
             var thresholdEl = el('#auto-threshold');
             var thresholdValue = el('#threshold-value');
@@ -272,6 +280,36 @@
                 saveProviderBtn.addEventListener('click', function() {
                     self.saveProviderSettings();
                 });
+            }
+        },
+
+        // ==========================================
+        // SETTINGS TAB MANAGEMENT
+        // ==========================================
+
+        switchSettingsTab: function(tabId) {
+            // Update tab buttons
+            els('.settings-nav-tab').forEach(function(tab) {
+                tab.classList.toggle('active', tab.dataset.settingsTab === tabId);
+            });
+
+            // Update tab panels
+            els('.settings-tab-panel').forEach(function(panel) {
+                var panelId = panel.id.replace('settings-panel-', '');
+                if (panelId === tabId) {
+                    panel.classList.add('active');
+                    panel.style.display = 'block';
+                } else {
+                    panel.classList.remove('active');
+                    panel.style.display = 'none';
+                }
+            });
+
+            // Load data for specific tabs on first activation
+            if (tabId === 'extraction' && !this.providerConfig) {
+                this.loadProviderConfig();
+            } else if (tabId === 'forms' && !this.formConfig) {
+                this.loadFormConfig(this.currentFormType);
             }
         },
 
@@ -2074,31 +2112,28 @@
             }
 
             API.put('providerconfig', config)
-                .then(function(result) {
+                .then(function() {
+                    // API.put resolves on success (returns data.data which may be null)
                     if (btn) {
                         btn.disabled = false;
                         btn.innerHTML = '<i class="fas fa-save"></i> Save Provider Settings';
                     }
 
-                    if (result.success) {
-                        UI.toast('Provider settings saved successfully!', 'success');
+                    UI.toast('Provider settings saved successfully!', 'success');
 
-                        // Update local config
-                        self.providerConfig = config;
-                        if (config.azure && config.azure.apiKey) {
-                            self.providerConfig.azure._hasApiKey = true;
-                            // Clear password field
-                            var apiKeyInput = el('#azure-api-key');
-                            if (apiKeyInput) {
-                                apiKeyInput.value = '';
-                                apiKeyInput.placeholder = 'API key configured (enter new to replace)';
-                            }
+                    // Update local config
+                    self.providerConfig = config;
+                    if (config.azure && config.azure.apiKey) {
+                        self.providerConfig.azure._hasApiKey = true;
+                        // Clear password field
+                        var apiKeyInput = el('#azure-api-key');
+                        if (apiKeyInput) {
+                            apiKeyInput.value = '';
+                            apiKeyInput.placeholder = 'API key configured (enter new to replace)';
                         }
-
-                        self.updateAzureStatus(self.providerConfig.azure);
-                    } else {
-                        UI.toast('Failed to save: ' + (result.message || 'Unknown error'), 'error');
                     }
+
+                    self.updateAzureStatus(self.providerConfig.azure);
                 })
                 .catch(function(err) {
                     if (btn) {
