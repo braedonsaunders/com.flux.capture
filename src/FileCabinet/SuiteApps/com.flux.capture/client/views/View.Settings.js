@@ -549,18 +549,32 @@
             };
         },
 
-        // Known native NetSuite checkbox fields (XML export doesn't include checkBoxDefault for these)
-        NATIVE_CHECKBOX_FIELDS: [
-            'PAYMENTHOLD', 'TOBEPAID', 'TOBEEMAILED', 'TOBEPRINTED', 'TOBEFAXED',
-            'ISBASECURRENCY', 'EXCLUDEFROMGLNUMBERING', 'ISMULTISHIPTO', 'ISTAXABLE',
-            'LANDEDCOSTPERLINE', 'TAXABLE', 'BILLADDRESSLIST', 'SHIPADDRESSLIST'
-        ],
-
+        // Detect checkbox fields using checkBoxDefault element or naming heuristics
+        // NetSuite's form XML doesn't include field type metadata for native fields
         isCheckboxField: function(fieldId, checkBoxDefault) {
+            // Explicit checkbox indicator from XML
             if (checkBoxDefault) return true;
-            // Check native checkbox fields (case-insensitive, strip scriptid brackets)
-            var cleanId = (fieldId || '').replace(/^\[.*?scriptid=|\]$/g, '').toUpperCase();
-            return this.NATIVE_CHECKBOX_FIELDS.indexOf(cleanId) !== -1;
+
+            // Normalize field ID (strip scriptid brackets, lowercase)
+            var cleanId = (fieldId || '').replace(/^\[.*?scriptid=([^\]]+)\]$/, '$1')
+                                         .replace(/^\[.*?\]$/, '')
+                                         .toLowerCase();
+
+            // Common checkbox field patterns (exact matches)
+            var checkboxPatterns = [
+                'paymenthold', 'tobepaid', 'tobeemailed', 'tobeprinted', 'tobefaxed',
+                'taxable', 'billable', 'closed', 'complete', 'approved', 'isbasecurrency',
+                'landedcostperline', 'excludefromglnumbering', 'ismultishipto'
+            ];
+            if (checkboxPatterns.indexOf(cleanId) !== -1) return true;
+
+            // Heuristic: fields starting with 'is', 'has', or 'tobe' are typically booleans
+            if (/^(is|has|tobe|include|exclude)/.test(cleanId)) return true;
+
+            // Heuristic: fields ending with common boolean suffixes
+            if (/(_flag|_yn|_bool|_checkbox)$/.test(cleanId)) return true;
+
+            return false;
         },
 
         parseXmlFields: function(container) {
