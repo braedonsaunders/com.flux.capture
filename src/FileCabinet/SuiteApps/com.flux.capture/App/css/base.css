@@ -323,6 +323,12 @@ body {
     overflow: hidden; /* Prevent any overflow from causing layout issues */
     max-width: 100%;
     min-width: 0; /* Allow flex container to shrink properly */
+    position: relative; /* Support absolute positioned children like fullpage ingest */
+}
+
+/* Remove padding when containing fullpage views */
+#view-container:has(.view-flow.fullpage-mode) {
+    padding: 0;
 }
 
 /* ==========================================

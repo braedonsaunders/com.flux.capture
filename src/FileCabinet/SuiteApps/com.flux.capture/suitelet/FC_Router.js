@@ -198,8 +198,14 @@ define([
                 case 'health':
                     result = Response.success({ status: 'healthy', version: API_VERSION });
                     break;
-                case 'scriptstatus':
-                    result = getScriptDeploymentStatus(context.scriptId);
+                case 'vendorSuggestions':
+                    result = getVendorSuggestions(context.vendorName);
+                    break;
+                case 'learningStats':
+                    result = getLearningStats();
+                    break;
+                case 'suggestedAccount':
+                    result = getSuggestedAccount(context.vendorId, context.description);
                     break;
                 default:
                     result = Response.error('INVALID_ACTION', 'Unknown action: ' + action);
@@ -386,7 +392,6 @@ define([
             documentTypeText: getDocTypeDisplayText(docRecord.getValue('custrecord_flux_document_type')),
             sourceFile: docRecord.getValue('custrecord_flux_source_file'),
             documentId: docRecord.getValue('custrecord_flux_document_id'),
-            batchId: docRecord.getValue('custrecord_flux_batch_id'),
             uploadedBy: docRecord.getValue('custrecord_flux_uploaded_by'),
             uploadedByName: docRecord.getText('custrecord_flux_uploaded_by'),
             createdDate: docRecord.getValue('custrecord_flux_created_date'),
@@ -441,7 +446,6 @@ define([
         var dateFrom = context.dateFrom;
         var dateTo = context.dateTo;
         var vendorId = context.vendorId;
-        var batchId = context.batchId;
         var sortBy = context.sortBy || 'created';
         var sortDir = context.sortDir === 'asc' ? 'ASC' : 'DESC';
 
@@ -467,10 +471,6 @@ define([
             sql += ' AND custrecord_flux_vendor = ?';
             params.push(vendorId);
         }
-        if (batchId) {
-            sql += ' AND custrecord_flux_batch_id = ?';
-            params.push(batchId);
-        }
         if (dateFrom) {
             sql += " AND custrecord_flux_created_date >= TO_DATE(?, 'YYYY-MM-DD')";
             params.push(dateFrom);
@@ -494,11 +494,15 @@ define([
         var sortColumn = sortColumns[sortBy] || 'custrecord_flux_created_date';
 
         sql += ' ORDER BY ' + sortColumn + ' ' + sortDir;
-        sql += ' OFFSET ' + ((page - 1) * pageSize) + ' ROWS FETCH NEXT ' + pageSize + ' ROWS ONLY';
 
         var results = query.runSuiteQL({ query: sql, params: params });
 
-        var documents = results.results.map(function(row) {
+        // Manual pagination since SuiteQL doesn't support OFFSET/FETCH
+        var startIndex = (page - 1) * pageSize;
+        var endIndex = startIndex + pageSize;
+        var paginatedResults = results.results.slice(startIndex, endIndex);
+
+        var documents = paginatedResults.map(function(row) {
             var v = row.values;
             var docAnomalies = v[9] ? JSON.parse(v[9]) : [];
             return {
@@ -532,23 +536,27 @@ define([
             var sql = 'SELECT id, custrecord_flux_document_id as name, custrecord_flux_status as status, custrecord_flux_document_type as documentType, ' +
                 'custrecord_flux_confidence_score as confidence, BUILTIN.DF(custrecord_flux_vendor) as vendorName, ' +
                 'custrecord_flux_invoice_number as invoiceNumber, custrecord_flux_total_amount as totalAmount, ' +
-                'custrecord_flux_created_date as createdDate, custrecord_flux_batch_id as batchId, ' +
+                'custrecord_flux_created_date as createdDate, ' +
                 'custrecord_flux_anomalies as anomalies, custrecord_flux_error_message as errorMessage FROM customrecord_flux_document ' +
                 'WHERE custrecord_flux_status IN (' + DocStatus.PENDING + ', ' + DocStatus.PROCESSING + ', ' +
                 DocStatus.EXTRACTED + ', ' + DocStatus.NEEDS_REVIEW + ', ' + DocStatus.ERROR + ') ' +
                 'ORDER BY CASE custrecord_flux_status WHEN ' + DocStatus.ERROR + ' THEN 0 ' +
                 'WHEN ' + DocStatus.NEEDS_REVIEW + ' THEN 1 ' +
                 'WHEN ' + DocStatus.EXTRACTED + ' THEN 2 WHEN ' + DocStatus.PROCESSING + ' THEN 3 ' +
-                'WHEN ' + DocStatus.PENDING + ' THEN 4 END, custrecord_flux_created_date ASC ' +
-                'OFFSET ' + ((page - 1) * pageSize) + ' ROWS FETCH NEXT ' + pageSize + ' ROWS ONLY';
+                'WHEN ' + DocStatus.PENDING + ' THEN 4 END, custrecord_flux_created_date ASC';
 
             log.debug('getProcessingQueue', 'SQL: ' + sql);
             var results = query.runSuiteQL({ query: sql });
             log.debug('getProcessingQueue', 'Results count: ' + (results.results ? results.results.length : 0));
 
-            var queue = results.results.map(function(row) {
+            // Manual pagination since SuiteQL doesn't support OFFSET/FETCH
+            var startIndex = (page - 1) * pageSize;
+            var endIndex = startIndex + pageSize;
+            var paginatedResults = results.results.slice(startIndex, endIndex);
+
+            var queue = paginatedResults.map(function(row) {
                 var v = row.values;
-                var docAnomalies = v[10] ? JSON.parse(v[10]) : [];
+                var docAnomalies = v[9] ? JSON.parse(v[9]) : [];
                 return {
                     id: v[0],
                     name: v[1] || ('Document ' + v[0]),
@@ -559,9 +567,8 @@ define([
                     invoiceNumber: v[6],
                     totalAmount: v[7],
                     createdDate: v[8],
-                    batchId: v[9],
                     hasAnomalies: docAnomalies.length > 0,
-                    errorMessage: v[11] || ''
+                    errorMessage: v[10] || ''
                 };
             });
 
@@ -2108,11 +2115,101 @@ define([
         return Response.success({ message: 'Email check endpoint ready' });
     }
 
+    /**
+     * Get vendor suggestions based on extracted vendor name
+     * Uses learned aliases and fuzzy matching
+     */
+    function getVendorSuggestions(vendorName) {
+        if (!vendorName) {
+            return Response.error('MISSING_PARAM', 'Vendor name required');
+        }
+
+        try {
+            var engine = new FC_Engine.FluxCaptureEngine({ enableLearning: true });
+            var suggestions = engine.getVendorSuggestions(vendorName);
+
+            return Response.success({
+                vendorName: vendorName,
+                suggestions: suggestions
+            });
+        } catch (e) {
+            return Response.error('SUGGESTION_FAILED', e.message);
+        }
+    }
+
+    /**
+     * Get learning system statistics
+     * Shows alias counts, correction history, etc.
+     */
+    function getLearningStats() {
+        try {
+            var engine = new FC_Engine.FluxCaptureEngine({ enableLearning: true });
+            var aliasStats = engine.getAliasStats();
+
+            // Query additional stats from config records
+            var sql = "SELECT custrecord_flux_cfg_type, COUNT(*) as cnt " +
+                      "FROM customrecord_flux_config " +
+                      "WHERE custrecord_flux_cfg_active = 'T' " +
+                      "AND custrecord_flux_cfg_source = 'learning' " +
+                      "GROUP BY custrecord_flux_cfg_type";
+
+            var configStats = {};
+            try {
+                var results = query.runSuiteQL({ query: sql });
+                if (results.results) {
+                    results.results.forEach(function(row) {
+                        configStats[row.values[0]] = row.values[1];
+                    });
+                }
+            } catch (queryErr) {
+                log.debug('getLearningStats', 'Config query failed: ' + queryErr.message);
+            }
+
+            return Response.success({
+                aliases: aliasStats,
+                learnedPatterns: {
+                    vendorAliases: configStats['vendor_alias'] || 0,
+                    dateFormats: configStats['date_format'] || 0,
+                    amountFormats: configStats['amount_format'] || 0,
+                    accountMappings: configStats['account_mapping'] || 0,
+                    fieldPatterns: configStats['field_pattern'] || 0
+                },
+                lastUpdated: new Date().toISOString()
+            });
+        } catch (e) {
+            return Response.error('STATS_FAILED', e.message);
+        }
+    }
+
+    /**
+     * Get suggested GL account for a line item description
+     * Uses learned account mappings from past corrections
+     */
+    function getSuggestedAccount(vendorId, description) {
+        if (!description) {
+            return Response.success({ suggestion: null });
+        }
+
+        try {
+            var engine = new FC_Engine.FluxCaptureEngine({ enableLearning: true });
+            var suggestion = engine.getSuggestedAccount(vendorId ? parseInt(vendorId) : null, description);
+
+            return Response.success({
+                description: description,
+                vendorId: vendorId,
+                suggestion: suggestion
+            });
+        } catch (e) {
+            return Response.error('SUGGESTION_FAILED', e.message);
+        }
+    }
+
     function submitCorrection(context) {
         var documentId = context.documentId;
         var fieldName = context.fieldName;
         var originalValue = context.originalValue;
         var correctedValue = context.correctedValue;
+        var lineItemDescription = context.lineItemDescription; // For account mapping
 
         if (!documentId || !fieldName) {
             return Response.error('MISSING_PARAM', 'Document ID and field name required');
@@ -2123,6 +2220,9 @@ define([
                 type: 'customrecord_flux_document',
                 id: documentId
             });
+
+            // Get vendor ID for learning context
+            var vendorId = docRecord.getValue('custrecord_flux_vendor');
 
             var existingCorrections = JSON.parse(docRecord.getValue('custrecord_flux_user_corrections') || '[]');
 
@@ -2157,7 +2257,34 @@ define([
                 }
             });
 
-            return Response.success({ documentId: documentId, corrections: existingCorrections }, 'Correction recorded');
+            // ACTIVE LEARNING: Learn from this correction for future extractions
+            var learningResult = null;
+            try {
+                var engine = new FC_Engine.FluxCaptureEngine({ enableLearning: true });
+                learningResult = engine.learnFromCorrection({
+                    field: fieldName,
+                    original: originalValue,
+                    corrected: correctedValue,
+                    documentId: documentId,
+                    vendorId: vendorId,
+                    lineItemDescription: lineItemDescription
+                });
+                log.audit('FluxCapture.Learning', {
+                    field: fieldName,
+                    success: learningResult.success,
+                    type: learningResult.type
+                });
+            } catch (learnErr) {
+                log.error('FluxCapture.Learning', learnErr.message);
+                // Don't fail the correction just because learning failed
+            }
+
+            return Response.success({
+                documentId: documentId,
+                corrections: existingCorrections,
+                learned: learningResult ? learningResult.success : false,
+                learningType: learningResult ? learningResult.type : null
+            }, 'Correction recorded and learned');
         } catch (e) {
             return Response.error('CORRECTION_FAILED', e.message);
         }
