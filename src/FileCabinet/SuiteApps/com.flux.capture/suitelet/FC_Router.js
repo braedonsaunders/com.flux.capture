@@ -198,6 +198,15 @@ define([
                 case 'health':
                     result = Response.success({ status: 'healthy', version: API_VERSION });
                     break;
+                case 'vendorSuggestions':
+                    result = getVendorSuggestions(context.vendorName);
+                    break;
+                case 'learningStats':
+                    result = getLearningStats();
+                    break;
+                case 'suggestedAccount':
+                    result = getSuggestedAccount(context.vendorId, context.description);
+                    break;
                 default:
                     result = Response.error('INVALID_ACTION', 'Unknown action: ' + action);
             }
@@ -1937,11 +1946,101 @@ define([
         return Response.success({ message: 'Email check endpoint ready' });
     }
 
+    /**
+     * Get vendor suggestions based on extracted vendor name
+     * Uses learned aliases and fuzzy matching
+     */
+    function getVendorSuggestions(vendorName) {
+        if (!vendorName) {
+            return Response.error('MISSING_PARAM', 'Vendor name required');
+        }
+
+        try {
+            var engine = new FC_Engine.FluxCaptureEngine({ enableLearning: true });
+            var suggestions = engine.getVendorSuggestions(vendorName);
+
+            return Response.success({
+                vendorName: vendorName,
+                suggestions: suggestions
+            });
+        } catch (e) {
+            return Response.error('SUGGESTION_FAILED', e.message);
+        }
+    }
+
+    /**
+     * Get learning system statistics
+     * Shows alias counts, correction history, etc.
+     */
+    function getLearningStats() {
+        try {
+            var engine = new FC_Engine.FluxCaptureEngine({ enableLearning: true });
+            var aliasStats = engine.getAliasStats();
+
+            // Query additional stats from config records
+            var sql = "SELECT custrecord_flux_cfg_type, COUNT(*) as cnt " +
+                      "FROM customrecord_flux_config " +
+                      "WHERE custrecord_flux_cfg_active = 'T' " +
+                      "AND custrecord_flux_cfg_source = 'learning' " +
+                      "GROUP BY custrecord_flux_cfg_type";
+
+            var configStats = {};
+            try {
+                var results = query.runSuiteQL({ query: sql });
+                if (results.results) {
+                    results.results.forEach(function(row) {
+                        configStats[row.values[0]] = row.values[1];
+                    });
+                }
+            } catch (queryErr) {
+                log.debug('getLearningStats', 'Config query failed: ' + queryErr.message);
+            }
+
+            return Response.success({
+                aliases: aliasStats,
+                learnedPatterns: {
+                    vendorAliases: configStats['vendor_alias'] || 0,
+                    dateFormats: configStats['date_format'] || 0,
+                    amountFormats: configStats['amount_format'] || 0,
+                    accountMappings: configStats['account_mapping'] || 0,
+                    fieldPatterns: configStats['field_pattern'] || 0
+                },
+                lastUpdated: new Date().toISOString()
+            });
+        } catch (e) {
+            return Response.error('STATS_FAILED', e.message);
+        }
+    }
+
+    /**
+     * Get suggested GL account for a line item description
+     * Uses learned account mappings from past corrections
+     */
+    function getSuggestedAccount(vendorId, description) {
+        if (!description) {
+            return Response.success({ suggestion: null });
+        }
+
+        try {
+            var engine = new FC_Engine.FluxCaptureEngine({ enableLearning: true });
+            var suggestion = engine.getSuggestedAccount(vendorId ? parseInt(vendorId) : null, description);
+
+            return Response.success({
+                description: description,
+                vendorId: vendorId,
+                suggestion: suggestion
+            });
+        } catch (e) {
+            return Response.error('SUGGESTION_FAILED', e.message);
+        }
+    }
+
     function submitCorrection(context) {
         var documentId = context.documentId;
         var fieldName = context.fieldName;
         var originalValue = context.originalValue;
         var correctedValue = context.correctedValue;
+        var lineItemDescription = context.lineItemDescription; // For account mapping
 
         if (!documentId || !fieldName) {
             return Response.error('MISSING_PARAM', 'Document ID and field name required');
@@ -1952,6 +2051,9 @@ define([
                 type: 'customrecord_flux_document',
                 id: documentId
             });
+
+            // Get vendor ID for learning context
+            var vendorId = docRecord.getValue('custrecord_flux_vendor');
 
             var existingCorrections = JSON.parse(docRecord.getValue('custrecord_flux_user_corrections') || '[]');
 
@@ -1986,7 +2088,34 @@ define([
                 }
             });
 
-            return Response.success({ documentId: documentId, corrections: existingCorrections }, 'Correction recorded');
+            // ACTIVE LEARNING: Learn from this correction for future extractions
+            var learningResult = null;
+            try {
+                var engine = new FC_Engine.FluxCaptureEngine({ enableLearning: true });
+                learningResult = engine.learnFromCorrection({
+                    field: fieldName,
+                    original: originalValue,
+                    corrected: correctedValue,
+                    documentId: documentId,
+                    vendorId: vendorId,
+                    lineItemDescription: lineItemDescription
+                });
+                log.audit('FluxCapture.Learning', {
+                    field: fieldName,
+                    success: learningResult.success,
+                    type: learningResult.type
+                });
+            } catch (learnErr) {
+                log.error('FluxCapture.Learning', learnErr.message);
+                // Don't fail the correction just because learning failed
+            }
+
+            return Response.success({
+                documentId: documentId,
+                corrections: existingCorrections,
+                learned: learningResult ? learningResult.success : false,
+                learningType: learningResult ? learningResult.type : null
+            }, 'Correction recorded and learned');
         } catch (e) {
             return Response.error('CORRECTION_FAILED', e.message);
         }
