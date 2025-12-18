@@ -324,17 +324,16 @@
                 if (!sublist.fields) return;
 
                 sublist.fields.forEach(function(field) {
-                    // Inject expense accounts into 'account' field on expense sublist
-                    if (field.id === 'account' && sublist.id === 'expense' && expenseAccountsData.length > 0) {
+                    // 'account' field (vendor bill sublists) → COGS + Expense accounts
+                    if (field.id === 'account') {
                         field.type = 'select';
-                        field.options = expenseAccountsData;
+                        field.options = [].concat(cogsAccountsData || [], expenseAccountsData || []);
                     }
 
-                    // Inject COGS + Expense accounts into 'account' field on item sublist
-                    if (field.id === 'account' && sublist.id === 'item') {
+                    // 'expenseaccount' field (expense report) → Expense accounts only
+                    if (field.id === 'expenseaccount' && expenseAccountsData.length > 0) {
                         field.type = 'select';
-                        // Combine COGS and Expense accounts for item sublist
-                        field.options = [].concat(cogsAccountsData || [], expenseAccountsData || []);
+                        field.options = expenseAccountsData;
                     }
 
                     // Inject items into 'item' field on item sublist
@@ -2637,15 +2636,15 @@
                         return;
                     }
 
-                    // Determine account type based on sublist
+                    // Determine account type based on field
                     var options = {};
-                    if (lookupType === 'accounts' && fieldId === 'account') {
-                        // Expense sublist = Expense accounts only
-                        // Item sublist = COGS + Expense accounts (don't filter)
-                        if (sublistId === 'expense') {
+                    if (lookupType === 'accounts') {
+                        // 'account' field (vendor bill) → COGS + Expense (no filter)
+                        // 'expenseaccount' field (expense report) → Expense only
+                        if (fieldId === 'expenseaccount') {
                             options.accountType = 'Expense';
                         }
-                        // For item sublist, don't set accountType - backend will return all accounts
+                        // For 'account' field, don't set accountType - returns all accounts
                     }
 
                     self.typeaheadTimeout = setTimeout(function() {
