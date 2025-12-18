@@ -2058,23 +2058,17 @@
             };
 
             API.post('testprovider', { providerType: 'azure', config: testConfig })
-                .then(function(result) {
+                .then(function() {
+                    // API.post resolves on success (returns data.data)
                     if (btn) {
                         btn.disabled = false;
                         btn.innerHTML = '<i class="fas fa-plug"></i> Test Connection';
                     }
 
-                    if (result.success) {
-                        if (resultEl) {
-                            resultEl.innerHTML = '<i class="fas fa-check-circle" style="color:var(--color-success);"></i> Connection successful!';
-                        }
-                        UI.toast('Azure connection test successful!', 'success');
-                    } else {
-                        if (resultEl) {
-                            resultEl.innerHTML = '<i class="fas fa-times-circle" style="color:var(--color-danger);"></i> ' + (result.message || 'Connection failed');
-                        }
-                        UI.toast('Connection test failed: ' + (result.message || 'Unknown error'), 'error');
+                    if (resultEl) {
+                        resultEl.innerHTML = '<i class="fas fa-check-circle" style="color:var(--color-success);"></i> Connection successful!';
                     }
+                    UI.toast('Azure connection test successful!', 'success');
                 })
                 .catch(function(err) {
                     if (btn) {
