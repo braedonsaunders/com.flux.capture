@@ -671,6 +671,7 @@
         },
 
         // Auto-select fields that only have one option (like subsidiary in single-sub accounts)
+        // Also resolves posting period to current period when configured
         autoSelectSingleOptions: function() {
             var self = this;
 
@@ -697,6 +698,42 @@
                     // Ignore errors - not critical
                 });
             }
+
+            // Auto-select current period for posting period field
+            this.resolveCurrentPeriodDefault();
+        },
+
+        // Resolve posting period to current period when configured with __CURRENT_PERIOD__ or no default
+        resolveCurrentPeriodDefault: function() {
+            var self = this;
+
+            // Find posting period field that needs current period resolution
+            var periodWrapper = document.querySelector('.typeahead-select[data-needs-current-period="true"]');
+            if (!periodWrapper) return;
+
+            var periodField = periodWrapper.querySelector('input[type="hidden"]');
+            var periodDisplay = periodWrapper.querySelector('.typeahead-input');
+
+            // Only resolve if field exists and is empty
+            if (!periodField || periodField.value || !periodDisplay) return;
+
+            // Fetch current period from API
+            API.get('datasource', { type: 'accountingperiods' }).then(function(response) {
+                var data = response.data || response;
+                var currentPeriod = data.currentPeriod;
+
+                // If we have a current period, auto-select it
+                if (currentPeriod && currentPeriod.value) {
+                    periodField.value = currentPeriod.value;
+                    periodDisplay.value = currentPeriod.text;
+                    // Track the change
+                    self.changes['postingperiod'] = currentPeriod.value;
+                    // Remove the data attribute since we've resolved it
+                    periodWrapper.removeAttribute('data-needs-current-period');
+                }
+            }).catch(function() {
+                // Ignore errors - not critical
+            });
         },
 
         showLoadingState: function() {
@@ -1779,14 +1816,22 @@
             // Track if we're using default value (for display text handling)
             var usingDefaultValue = false;
 
+            // Check if this is posting period with dynamic current period default
+            var isPostingPeriod = nsField.id.toLowerCase() === 'postingperiod';
+            var useCurrentPeriod = isPostingPeriod && nsField.defaultValue === '__CURRENT_PERIOD__';
+
             // If no value found, use default value from field schema
-            if (!value && nsField.defaultValue) {
+            // (skip __CURRENT_PERIOD__ special value - it will be resolved asynchronously)
+            if (!value && nsField.defaultValue && !useCurrentPeriod) {
                 value = nsField.defaultValue;
                 usingDefaultValue = true;
             }
 
             // Track default value text for select fields (to show display name)
             var defaultValueText = nsField.defaultValueText || '';
+
+            // Mark posting period for async resolution if using current period default
+            var needsCurrentPeriodResolution = isPostingPeriod && !value && (useCurrentPeriod || !nsField.defaultValue);
 
             // Check for AI suggestion if field is empty
             var suggestion = null;
@@ -1840,7 +1885,9 @@
                     html += '<input type="text" id="' + fieldId + '" value="' + escapeHtml(displayValue || value) + '" disabled>';
                 } else {
                     // Typeahead select for body fields
-                    html += '<div class="typeahead-select body-field-typeahead" data-field="' + nsField.id + '" data-lookup="' + lookupType + '">' +
+                    // Add data-needs-current-period for posting period fields that need async resolution
+                    var currentPeriodAttr = needsCurrentPeriodResolution ? ' data-needs-current-period="true"' : '';
+                    html += '<div class="typeahead-select body-field-typeahead" data-field="' + nsField.id + '" data-lookup="' + lookupType + '"' + currentPeriodAttr + '>' +
                         '<input type="hidden" id="' + fieldId + '" value="' + escapeHtml(value) + '" data-field="' + nsField.id + '"' + (isRequired ? ' required' : '') + '>' +
                         '<input type="text" class="typeahead-input" id="' + fieldId + '-display" ' +
                             'value="' + escapeHtml(displayValue) + '" placeholder="Search ' + escapeHtml(label) + '..." ' +
