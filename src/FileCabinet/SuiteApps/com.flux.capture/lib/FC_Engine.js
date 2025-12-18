@@ -1217,10 +1217,10 @@ define([
             try {
                 const sql = `
                     SELECT COUNT(*) as cnt
-                    FROM customrecord_dm_captured_document
-                    WHERE custrecord_dm_vendor = ?
-                    AND LOWER(custrecord_dm_invoice_number) = LOWER(?)
-                    AND custrecord_dm_status IN (${DocStatus.EXTRACTED}, ${DocStatus.NEEDS_REVIEW}, ${DocStatus.COMPLETED})
+                    FROM customrecord_flux_document
+                    WHERE custrecord_flux_vendor = ?
+                    AND LOWER(custrecord_flux_invoice_number) = LOWER(?)
+                    AND custrecord_flux_status IN (${DocStatus.EXTRACTED}, ${DocStatus.NEEDS_REVIEW}, ${DocStatus.COMPLETED})
                 `;
                 const result = query.runSuiteQL({ query: sql, params: [vendorId, invoiceNumber] });
                 return result.results[0].values[0] > 0;

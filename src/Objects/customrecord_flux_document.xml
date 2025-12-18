@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<customrecordtype scriptid="customrecord_dm_captured_document">
-    <recordname>DM Captured Document</recordname>
+<customrecordtype scriptid="customrecord_flux_document">
+    <recordname>Flux Document</recordname>
     <includename>F</includename>
     <showid>T</showid>
     <shownotes>T</shownotes>
@@ -15,7 +15,7 @@
     <description>Flux Capture Document - Stores captured documents with extraction data</description>
 
     <customrecordcustomfields>
-        <customrecordcustomfield scriptid="custrecord_dm_source_file">
+        <customrecordcustomfield scriptid="custrecord_flux_source_file">
             <fieldtype>DOCUMENT</fieldtype>
             <label>Source File</label>
             <description>The original uploaded document file</description>
@@ -24,7 +24,7 @@
             <showinlist>F</showinlist>
         </customrecordcustomfield>
 
-        <customrecordcustomfield scriptid="custrecord_dm_document_id">
+        <customrecordcustomfield scriptid="custrecord_flux_document_id">
             <fieldtype>TEXT</fieldtype>
             <label>Document ID</label>
             <description>Unique identifier for this document</description>
@@ -33,7 +33,7 @@
             <showinlist>T</showinlist>
         </customrecordcustomfield>
 
-        <customrecordcustomfield scriptid="custrecord_dm_original_filename">
+        <customrecordcustomfield scriptid="custrecord_flux_original_filename">
             <fieldtype>TEXT</fieldtype>
             <label>Original Filename</label>
             <description>Original name of the uploaded file</description>
@@ -42,7 +42,7 @@
             <showinlist>T</showinlist>
         </customrecordcustomfield>
 
-        <customrecordcustomfield scriptid="custrecord_dm_document_type">
+        <customrecordcustomfield scriptid="custrecord_flux_document_type">
             <fieldtype>INTEGER</fieldtype>
             <label>Document Type</label>
             <description>Type of document: 1=Invoice, 2=Receipt, 3=Credit Memo, 4=Expense Report, 5=Purchase Order, 6=Unknown</description>
@@ -51,7 +51,7 @@
             <showinlist>T</showinlist>
         </customrecordcustomfield>
 
-        <customrecordcustomfield scriptid="custrecord_dm_status">
+        <customrecordcustomfield scriptid="custrecord_flux_status">
             <fieldtype>INTEGER</fieldtype>
             <label>Status</label>
             <description>Processing status: 1=Pending, 2=Processing, 3=Extracted, 4=Needs Review, 5=Rejected, 6=Completed, 7=Error</description>
@@ -60,7 +60,7 @@
             <showinlist>T</showinlist>
         </customrecordcustomfield>
 
-        <customrecordcustomfield scriptid="custrecord_dm_vendor">
+        <customrecordcustomfield scriptid="custrecord_flux_vendor">
             <fieldtype>SELECT</fieldtype>
             <label>Vendor</label>
             <description>Matched vendor</description>
@@ -70,7 +70,7 @@
             <selectrecordtype>-3</selectrecordtype>
         </customrecordcustomfield>
 
-        <customrecordcustomfield scriptid="custrecord_dm_vendor_match_confidence">
+        <customrecordcustomfield scriptid="custrecord_flux_vendor_match_conf">
             <fieldtype>PERCENT</fieldtype>
             <label>Vendor Match Confidence</label>
             <description>Confidence level of vendor match</description>
@@ -79,7 +79,7 @@
             <showinlist>F</showinlist>
         </customrecordcustomfield>
 
-        <customrecordcustomfield scriptid="custrecord_dm_invoice_number">
+        <customrecordcustomfield scriptid="custrecord_flux_invoice_number">
             <fieldtype>TEXT</fieldtype>
             <label>Invoice Number</label>
             <description>Extracted invoice/reference number</description>
@@ -88,7 +88,7 @@
             <showinlist>T</showinlist>
         </customrecordcustomfield>
 
-        <customrecordcustomfield scriptid="custrecord_dm_invoice_date">
+        <customrecordcustomfield scriptid="custrecord_flux_invoice_date">
             <fieldtype>DATE</fieldtype>
             <label>Invoice Date</label>
             <description>Extracted invoice date</description>
@@ -97,7 +97,7 @@
             <showinlist>T</showinlist>
         </customrecordcustomfield>
 
-        <customrecordcustomfield scriptid="custrecord_dm_due_date">
+        <customrecordcustomfield scriptid="custrecord_flux_due_date">
             <fieldtype>DATE</fieldtype>
             <label>Due Date</label>
             <description>Extracted payment due date</description>
@@ -106,7 +106,7 @@
             <showinlist>F</showinlist>
         </customrecordcustomfield>
 
-        <customrecordcustomfield scriptid="custrecord_dm_subtotal">
+        <customrecordcustomfield scriptid="custrecord_flux_subtotal">
             <fieldtype>CURRENCY</fieldtype>
             <label>Subtotal</label>
             <description>Extracted subtotal amount</description>
@@ -115,7 +115,7 @@
             <showinlist>F</showinlist>
         </customrecordcustomfield>
 
-        <customrecordcustomfield scriptid="custrecord_dm_tax_amount">
+        <customrecordcustomfield scriptid="custrecord_flux_tax_amount">
             <fieldtype>CURRENCY</fieldtype>
             <label>Tax Amount</label>
             <description>Extracted tax amount</description>
@@ -124,7 +124,7 @@
             <showinlist>F</showinlist>
         </customrecordcustomfield>
 
-        <customrecordcustomfield scriptid="custrecord_dm_total_amount">
+        <customrecordcustomfield scriptid="custrecord_flux_total_amount">
             <fieldtype>CURRENCY</fieldtype>
             <label>Total Amount</label>
             <description>Extracted total amount</description>
@@ -133,7 +133,7 @@
             <showinlist>T</showinlist>
         </customrecordcustomfield>
 
-        <customrecordcustomfield scriptid="custrecord_dm_currency">
+        <customrecordcustomfield scriptid="custrecord_flux_currency">
             <fieldtype>SELECT</fieldtype>
             <label>Currency</label>
             <description>Document currency</description>
@@ -143,7 +143,7 @@
             <selectrecordtype>-122</selectrecordtype>
         </customrecordcustomfield>
 
-        <customrecordcustomfield scriptid="custrecord_dm_po_number">
+        <customrecordcustomfield scriptid="custrecord_flux_po_number">
             <fieldtype>TEXT</fieldtype>
             <label>PO Number</label>
             <description>Extracted purchase order number</description>
@@ -152,7 +152,7 @@
             <showinlist>F</showinlist>
         </customrecordcustomfield>
 
-        <customrecordcustomfield scriptid="custrecord_dm_payment_terms">
+        <customrecordcustomfield scriptid="custrecord_flux_payment_terms">
             <fieldtype>TEXT</fieldtype>
             <label>Payment Terms</label>
             <description>Payment terms</description>
@@ -161,7 +161,7 @@
             <showinlist>F</showinlist>
         </customrecordcustomfield>
 
-        <customrecordcustomfield scriptid="custrecord_dm_line_items">
+        <customrecordcustomfield scriptid="custrecord_flux_line_items">
             <fieldtype>TEXTAREA</fieldtype>
             <label>Line Items</label>
             <description>Extracted line items as JSON</description>
@@ -170,7 +170,7 @@
             <showinlist>F</showinlist>
         </customrecordcustomfield>
 
-        <customrecordcustomfield scriptid="custrecord_dm_confidence_score">
+        <customrecordcustomfield scriptid="custrecord_flux_confidence_score">
             <fieldtype>PERCENT</fieldtype>
             <label>Confidence Score</label>
             <description>Overall extraction confidence</description>
@@ -179,7 +179,7 @@
             <showinlist>T</showinlist>
         </customrecordcustomfield>
 
-        <customrecordcustomfield scriptid="custrecord_dm_anomalies">
+        <customrecordcustomfield scriptid="custrecord_flux_anomalies">
             <fieldtype>TEXTAREA</fieldtype>
             <label>Anomalies</label>
             <description>Detected anomalies as JSON</description>
@@ -188,7 +188,7 @@
             <showinlist>F</showinlist>
         </customrecordcustomfield>
 
-        <customrecordcustomfield scriptid="custrecord_dm_amount_validated">
+        <customrecordcustomfield scriptid="custrecord_flux_amount_validated">
             <fieldtype>CHECKBOX</fieldtype>
             <label>Amount Validated</label>
             <description>Whether line items match total</description>
@@ -197,17 +197,7 @@
             <showinlist>F</showinlist>
         </customrecordcustomfield>
 
-        <customrecordcustomfield scriptid="custrecord_dm_batch_id">
-            <fieldtype>SELECT</fieldtype>
-            <label>Batch</label>
-            <description>Parent batch if uploaded in batch</description>
-            <ismandatory>F</ismandatory>
-            <displaytype>NORMAL</displaytype>
-            <showinlist>F</showinlist>
-            <selectrecordtype>[scriptid=customrecord_dm_batch]</selectrecordtype>
-        </customrecordcustomfield>
-
-        <customrecordcustomfield scriptid="custrecord_dm_source">
+        <customrecordcustomfield scriptid="custrecord_flux_source">
             <fieldtype>INTEGER</fieldtype>
             <label>Source</label>
             <description>How document was uploaded: 1=Upload, 2=Email, 3=Drag/Drop, 4=API, 5=Scanner, 6=Mobile</description>
@@ -216,7 +206,7 @@
             <showinlist>T</showinlist>
         </customrecordcustomfield>
 
-        <customrecordcustomfield scriptid="custrecord_dm_created_transaction">
+        <customrecordcustomfield scriptid="custrecord_flux_created_transaction">
             <fieldtype>TEXT</fieldtype>
             <label>Created Transaction</label>
             <description>Internal ID of created transaction</description>
@@ -225,7 +215,7 @@
             <showinlist>F</showinlist>
         </customrecordcustomfield>
 
-        <customrecordcustomfield scriptid="custrecord_dm_create_transaction">
+        <customrecordcustomfield scriptid="custrecord_flux_create_transaction">
             <fieldtype>CHECKBOX</fieldtype>
             <label>Create Transaction</label>
             <description>Whether to create transaction on approval</description>
@@ -235,7 +225,7 @@
             <defaultchecked>T</defaultchecked>
         </customrecordcustomfield>
 
-        <customrecordcustomfield scriptid="custrecord_dm_rejection_reason">
+        <customrecordcustomfield scriptid="custrecord_flux_rejection_reason">
             <fieldtype>TEXTAREA</fieldtype>
             <label>Rejection Reason</label>
             <description>Reason for rejection</description>
@@ -244,7 +234,7 @@
             <showinlist>F</showinlist>
         </customrecordcustomfield>
 
-        <customrecordcustomfield scriptid="custrecord_dm_error_message">
+        <customrecordcustomfield scriptid="custrecord_flux_error_message">
             <fieldtype>TEXTAREA</fieldtype>
             <label>Error Message</label>
             <description>Processing error message</description>
@@ -253,7 +243,7 @@
             <showinlist>F</showinlist>
         </customrecordcustomfield>
 
-        <customrecordcustomfield scriptid="custrecord_dm_uploaded_by">
+        <customrecordcustomfield scriptid="custrecord_flux_uploaded_by">
             <fieldtype>SELECT</fieldtype>
             <label>Uploaded By</label>
             <description>User who uploaded the document</description>
@@ -263,7 +253,7 @@
             <selectrecordtype>-4</selectrecordtype>
         </customrecordcustomfield>
 
-        <customrecordcustomfield scriptid="custrecord_dm_created_date">
+        <customrecordcustomfield scriptid="custrecord_flux_created_date">
             <fieldtype>DATETIMETZ</fieldtype>
             <label>Created Date</label>
             <description>Date document was uploaded</description>
@@ -272,7 +262,7 @@
             <showinlist>T</showinlist>
         </customrecordcustomfield>
 
-        <customrecordcustomfield scriptid="custrecord_dm_modified_date">
+        <customrecordcustomfield scriptid="custrecord_flux_modified_date">
             <fieldtype>DATETIMETZ</fieldtype>
             <label>Modified Date</label>
             <description>Date document was last modified</description>
@@ -281,7 +271,7 @@
             <showinlist>F</showinlist>
         </customrecordcustomfield>
 
-        <customrecordcustomfield scriptid="custrecord_dm_status_history">
+        <customrecordcustomfield scriptid="custrecord_flux_status_history">
             <fieldtype>TEXTAREA</fieldtype>
             <label>Status History</label>
             <description>Status change history as JSON</description>
@@ -290,16 +280,16 @@
             <showinlist>F</showinlist>
         </customrecordcustomfield>
 
-        <customrecordcustomfield scriptid="custrecord_dm_user_corrections">
+        <customrecordcustomfield scriptid="custrecord_flux_user_corrections">
             <fieldtype>TEXTAREA</fieldtype>
             <label>User Corrections</label>
-            <description>Manual corrections made by user as JSON (includes field, original, corrected, pattern, count, date, user)</description>
+            <description>Manual corrections made by user as JSON</description>
             <ismandatory>F</ismandatory>
             <displaytype>HIDDEN</displaytype>
             <showinlist>F</showinlist>
         </customrecordcustomfield>
 
-        <customrecordcustomfield scriptid="custrecord_dm_extracted_text">
+        <customrecordcustomfield scriptid="custrecord_flux_extracted_text">
             <fieldtype>TEXTAREA</fieldtype>
             <label>Extracted Text</label>
             <description>Full text extracted from document</description>
@@ -308,7 +298,7 @@
             <showinlist>F</showinlist>
         </customrecordcustomfield>
 
-        <customrecordcustomfield scriptid="custrecord_dm_processing_time">
+        <customrecordcustomfield scriptid="custrecord_flux_processing_time">
             <fieldtype>INTEGER</fieldtype>
             <label>Processing Time (ms)</label>
             <description>Time taken to process document</description>
@@ -317,7 +307,7 @@
             <showinlist>F</showinlist>
         </customrecordcustomfield>
 
-        <customrecordcustomfield scriptid="custrecord_dm_email_sender">
+        <customrecordcustomfield scriptid="custrecord_flux_email_sender">
             <fieldtype>EMAIL</fieldtype>
             <label>Email Sender</label>
             <description>Email address of sender</description>
@@ -326,7 +316,7 @@
             <showinlist>F</showinlist>
         </customrecordcustomfield>
 
-        <customrecordcustomfield scriptid="custrecord_dm_email_subject">
+        <customrecordcustomfield scriptid="custrecord_flux_email_subject">
             <fieldtype>TEXT</fieldtype>
             <label>Email Subject</label>
             <description>Subject of source email</description>
@@ -335,7 +325,7 @@
             <showinlist>F</showinlist>
         </customrecordcustomfield>
 
-        <customrecordcustomfield scriptid="custrecord_dm_email_received">
+        <customrecordcustomfield scriptid="custrecord_flux_email_received">
             <fieldtype>DATETIMETZ</fieldtype>
             <label>Email Received</label>
             <description>Date email was received</description>
