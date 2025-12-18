@@ -473,23 +473,40 @@
             var mainTab = { id: 'main', label: 'Main', order: 0, fieldGroups: [] };
             var self = this;
 
+            // Parse named field groups in mainFields
             var fieldGroups = doc.querySelectorAll('mainFields > fieldGroup');
             fieldGroups.forEach(function(fg, idx) {
-                mainTab.fieldGroups.push(self.parseXmlFieldGroup(fg, idx));
+                // Fields are inside <fields position="..."> wrapper
+                var fieldsContainer = fg.querySelector('fields');
+                if (fieldsContainer) {
+                    var fields = self.parseXmlFields(fieldsContainer);
+                    if (fields.length > 0) {
+                        mainTab.fieldGroups.push({
+                            id: fg.getAttribute('scriptid') || 'group_' + idx,
+                            label: self.getXmlText(fg, 'label') || 'Field Group ' + (idx + 1),
+                            order: idx,
+                            visible: self.getXmlText(fg, 'visible') !== 'F',
+                            fields: fields
+                        });
+                    }
+                }
             });
 
-            // Parse default field group
+            // Parse default field group in mainFields
             var defaultGroup = doc.querySelector('mainFields > defaultFieldGroup');
             if (defaultGroup) {
-                var defaultFields = self.parseXmlFields(defaultGroup);
-                if (defaultFields.length > 0) {
-                    mainTab.fieldGroups.push({
-                        id: 'default',
-                        label: 'Other Fields',
-                        order: 999,
-                        visible: true,
-                        fields: defaultFields
-                    });
+                var fieldsContainer = defaultGroup.querySelector('fields');
+                if (fieldsContainer) {
+                    var defaultFields = self.parseXmlFields(fieldsContainer);
+                    if (defaultFields.length > 0) {
+                        mainTab.fieldGroups.push({
+                            id: 'default',
+                            label: 'Other Fields',
+                            order: 999,
+                            visible: true,
+                            fields: defaultFields
+                        });
+                    }
                 }
             }
 
@@ -518,7 +535,9 @@
         },
 
         parseXmlFieldGroup: function(element, order) {
-            var fields = this.parseXmlFields(element);
+            // Fields are inside <fields position="..."> wrapper
+            var fieldsContainer = element.querySelector('fields');
+            var fields = fieldsContainer ? this.parseXmlFields(fieldsContainer) : [];
 
             return {
                 id: element.getAttribute('scriptid') || 'group_' + order,
@@ -533,10 +552,10 @@
             var self = this;
             var fields = [];
 
-            // Try SDF format first
+            // Parse <field> elements - ID is a child element <id>FIELDID</id>
             container.querySelectorAll('field').forEach(function(f) {
-                var scriptIdEl = f.querySelector('[scriptid]');
-                var id = scriptIdEl ? scriptIdEl.getAttribute('scriptid') : f.getAttribute('id');
+                // Get ID from <id> child element first, then try scriptid attribute
+                var id = self.getXmlText(f, 'id') || f.getAttribute('scriptid') || f.getAttribute('id');
 
                 if (!id) return;
 
@@ -549,85 +568,72 @@
                 });
             });
 
-            // If no fields found, try alternate format
-            if (fields.length === 0) {
-                var skipElements = ['id', 'label', 'visible', 'collapsed', 'help', 'displaytype',
-                    'ismandatory', 'defaultchecked', 'displayOrder', 'scriptid'];
-
-                Array.prototype.forEach.call(container.children, function(child) {
-                    var tagName = child.tagName.toLowerCase();
-                    if (skipElements.indexOf(tagName) !== -1) return;
-
-                    var id = tagName;
-                    if (child.hasAttribute('scriptid')) {
-                        id = child.getAttribute('scriptid');
-                    }
-
-                    fields.push({
-                        id: id,
-                        label: self.getXmlText(child, 'label') || id,
-                        visible: self.getXmlText(child, 'visible') !== 'F',
-                        mandatory: self.getXmlText(child, 'mandatory') === 'T' ||
-                            self.getXmlText(child, 'ismandatory') === 'T',
-                        displayType: self.getXmlText(child, 'displayType') ||
-                            self.getXmlText(child, 'displaytype') || 'NORMAL'
-                    });
-                });
-            }
-
             return fields;
         },
 
         parseXmlTab: function(element, order) {
             var self = this;
+
+            // Tab ID is a child element <id>TABID</id>, not an attribute
+            var tabId = this.getXmlText(element, 'id') || element.getAttribute('scriptid') || 'tab_' + order;
+
             var tab = {
-                id: element.getAttribute('scriptid') || 'tab_' + order,
+                id: tabId,
                 label: this.getXmlText(element, 'label') || 'Tab ' + order,
                 order: order,
                 fieldGroups: [],
                 sublists: []
             };
 
-            // Try multiple paths for field groups (NetSuite XML varies)
-            // 1. Direct fieldGroup children
-            // 2. Inside tabFieldGroups wrapper
-            // 3. Inside fieldGroups wrapper
-            var fieldGroupSelectors = [
-                'fieldGroup',
-                'tabFieldGroups > fieldGroup',
-                'fieldGroups > fieldGroup'
-            ];
-
-            fieldGroupSelectors.forEach(function(selector) {
-                element.querySelectorAll(selector).forEach(function(fg, idx) {
-                    var parsed = self.parseXmlFieldGroup(fg, tab.fieldGroups.length);
-                    // Only add if it has fields and isn't a duplicate
-                    if (parsed.fields && parsed.fields.length > 0) {
-                        var isDupe = tab.fieldGroups.some(function(existing) {
-                            return existing.id === parsed.id;
-                        });
-                        if (!isDupe) {
-                            tab.fieldGroups.push(parsed);
-                        }
-                    }
-                });
+            // Parse named fieldGroups (may have fields inside or be empty containers)
+            element.querySelectorAll('fieldGroups > fieldGroup[scriptid]').forEach(function(fg, idx) {
+                var parsed = self.parseXmlFieldGroup(fg, tab.fieldGroups.length);
+                if (parsed.fields && parsed.fields.length > 0) {
+                    tab.fieldGroups.push(parsed);
+                }
             });
 
-            // Also check for loose fields directly in tab (create default group)
-            var looseFields = self.parseXmlFields(element);
-            if (looseFields.length > 0) {
-                tab.fieldGroups.push({
-                    id: 'tab_' + order + '_fields',
-                    label: 'Fields',
-                    order: tab.fieldGroups.length,
-                    visible: true,
-                    fields: looseFields
-                });
+            // Parse defaultFieldGroup which contains actual fields in <fields position="...">
+            var defaultFieldGroup = element.querySelector('fieldGroups > defaultFieldGroup');
+            if (defaultFieldGroup) {
+                var fieldsContainer = defaultFieldGroup.querySelector('fields');
+                if (fieldsContainer) {
+                    var fields = self.parseXmlFields(fieldsContainer);
+                    if (fields.length > 0) {
+                        tab.fieldGroups.push({
+                            id: tabId + '_default',
+                            label: 'Fields',
+                            order: tab.fieldGroups.length,
+                            visible: true,
+                            fields: fields
+                        });
+                    }
+                }
             }
 
-            element.querySelectorAll('subList').forEach(function(sl) {
-                var slId = sl.getAttribute('scriptid');
-                if (slId) tab.sublists.push(slId);
+            // Also check for fieldGroup elements that directly contain fields
+            element.querySelectorAll('fieldGroups > fieldGroup:not([scriptid])').forEach(function(fg) {
+                var fieldsContainer = fg.querySelector('fields');
+                if (fieldsContainer) {
+                    var fields = self.parseXmlFields(fieldsContainer);
+                    if (fields.length > 0) {
+                        tab.fieldGroups.push({
+                            id: tabId + '_group_' + tab.fieldGroups.length,
+                            label: self.getXmlText(fg, 'label') || 'Fields',
+                            order: tab.fieldGroups.length,
+                            visible: self.getXmlText(fg, 'visible') !== 'F',
+                            fields: fields
+                        });
+                    }
+                }
+            });
+
+            // Parse sublists from <subItems><subList> structure
+            element.querySelectorAll('subItems > subList').forEach(function(sl) {
+                var slId = self.getXmlText(sl, 'id') || sl.getAttribute('scriptid');
+                if (slId) {
+                    tab.sublists.push(slId);
+                }
             });
 
             return tab;
@@ -637,17 +643,24 @@
             var self = this;
             var columns = [];
 
-            element.querySelectorAll('column').forEach(function(col) {
-                columns.push({
-                    id: col.getAttribute('scriptid') || self.getXmlText(col, 'id'),
-                    label: self.getXmlText(col, 'label'),
-                    visible: self.getXmlText(col, 'visible') !== 'F'
-                });
+            // Parse columns - look inside <columns> wrapper
+            element.querySelectorAll('columns > column').forEach(function(col) {
+                var colId = self.getXmlText(col, 'id') || col.getAttribute('scriptid');
+                if (colId) {
+                    columns.push({
+                        id: colId,
+                        label: self.getXmlText(col, 'label') || colId,
+                        visible: self.getXmlText(col, 'visible') !== 'F'
+                    });
+                }
             });
 
+            // Sublist ID is a child element <id>SUBLISTID</id>
+            var sublistId = this.getXmlText(element, 'id') || element.getAttribute('scriptid');
+
             return {
-                id: element.getAttribute('scriptid'),
-                label: this.getXmlText(element, 'label'),
+                id: sublistId,
+                label: this.getXmlText(element, 'label') || sublistId,
                 columns: columns
             };
         },
