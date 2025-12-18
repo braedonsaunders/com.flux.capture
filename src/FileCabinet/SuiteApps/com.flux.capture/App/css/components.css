@@ -1881,7 +1881,7 @@
 /* Table wrapper for horizontal scroll when needed */
 .sublist-table-wrapper {
     overflow-x: auto;
-    overflow-y: visible;
+    overflow-y: visible; /* Allow dropdowns to overflow vertically */
     max-width: 100%;
 }
 
@@ -1913,6 +1913,21 @@
     vertical-align: middle;
     overflow: hidden;
     text-overflow: ellipsis;
+}
+
+/* Allow select/typeahead cells to overflow so dropdowns are visible */
+.sublist-table td.select-cell {
+    overflow: visible;
+    position: relative;
+}
+
+.sublist-table td.select-cell .typeahead-select {
+    position: relative;
+}
+
+.sublist-table td.select-cell .typeahead-dropdown {
+    z-index: 10000;
+    min-width: 200px;
 }
 
 .sublist-table .line-input {
@@ -6286,6 +6301,38 @@ tr.doc-row.approving { animation: compress-out 0.3s ease forwards; }
     align-items: center;
     gap: var(--space-sm);
     cursor: pointer;
+}
+
+.radio-label {
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
+    cursor: pointer;
+    padding: var(--space-xs) 0;
+}
+
+.radio-label input[type="radio"] {
+    margin: 0;
+    cursor: pointer;
+}
+
+.posting-period-options {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-xs);
+    margin-bottom: var(--space-sm);
+}
+
+.hint-badge {
+    display: inline-block;
+    background: var(--primary-100);
+    color: var(--primary-600);
+    font-size: 10px;
+    font-weight: 600;
+    padding: 2px 6px;
+    border-radius: var(--radius-sm);
+    margin-left: var(--space-xs);
+    text-transform: uppercase;
 }
 
 .input-disabled {
