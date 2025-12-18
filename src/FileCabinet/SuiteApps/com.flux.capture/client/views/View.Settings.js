@@ -64,6 +64,7 @@
                     this.classList.add('active');
                     self.currentFormType = this.dataset.type;
                     self.loadFormConfig(self.currentFormType);
+                    self.loadCaptureScriptStatus(); // Reload script status for this transaction type
                 });
             });
 
@@ -338,25 +339,36 @@
         // CAPTURE SCRIPT TOGGLE
         // ==========================================
 
+        // Deployment IDs per transaction type
+        DEPLOYMENT_IDS: {
+            'vendorbill': 'customdeploy_fc_formlayout_vendorbill',
+            'expensereport': 'customdeploy_fc_formlayout_expense',
+            'purchaseorder': 'customdeploy_fc_formlayout_po'
+        },
+
+        getDeploymentId: function() {
+            return this.DEPLOYMENT_IDS[this.currentFormType] || this.DEPLOYMENT_IDS['vendorbill'];
+        },
+
         loadCaptureScriptStatus: function() {
             var self = this;
             var toggle = el('#capture-script-toggle');
             var label = el('#capture-toggle-label');
+            var deploymentId = this.getDeploymentId();
 
-            API.get('scriptstatus', { scriptId: 'customscript_fc_form_capture' })
+            API.get('scriptstatus', { deploymentId: deploymentId })
                 .then(function(result) {
                     self.captureScriptEnabled = result.data && result.data.enabled;
                     if (toggle) toggle.checked = self.captureScriptEnabled;
                     if (label) {
                         label.textContent = self.captureScriptEnabled ?
-                            'Client Script Enabled' : 'Client Script Disabled';
+                            'Capture Enabled for ' + self.currentFormType : 'Capture Disabled';
                     }
                 })
                 .catch(function() {
-                    // Script status API may not exist yet, default to disabled
                     self.captureScriptEnabled = false;
                     if (toggle) toggle.checked = false;
-                    if (label) label.textContent = 'Client Script Status Unknown';
+                    if (label) label.textContent = 'Script Status Unknown';
                 });
         },
 
@@ -364,27 +376,27 @@
             var self = this;
             var toggle = el('#capture-script-toggle');
             var label = el('#capture-toggle-label');
+            var deploymentId = this.getDeploymentId();
 
             if (label) label.textContent = enabled ? 'Enabling...' : 'Disabling...';
 
             API.put('scriptstatus', {
-                scriptId: 'customscript_fc_form_capture',
+                deploymentId: deploymentId,
                 enabled: enabled
             })
                 .then(function() {
                     self.captureScriptEnabled = enabled;
                     if (label) {
                         label.textContent = enabled ?
-                            'Client Script Enabled' : 'Client Script Disabled';
+                            'Capture Enabled for ' + self.currentFormType : 'Capture Disabled';
                     }
-                    UI.toast('Capture script ' + (enabled ? 'enabled' : 'disabled'), 'success');
+                    UI.toast('Capture script ' + (enabled ? 'enabled' : 'disabled') + ' for ' + self.currentFormType, 'success');
                 })
                 .catch(function(err) {
-                    // Revert toggle
                     if (toggle) toggle.checked = !enabled;
                     if (label) {
                         label.textContent = !enabled ?
-                            'Client Script Enabled' : 'Client Script Disabled';
+                            'Capture Enabled for ' + self.currentFormType : 'Capture Disabled';
                     }
                     UI.toast('Failed to update script: ' + err.message, 'error');
                 });
@@ -922,22 +934,29 @@
 
         renderEditorField: function(field, parentKey, fieldIdx) {
             var typeIcon = this.getFieldTypeIcon(field.type);
-            var visibleClass = field.visible !== false ? 'fa-eye' : 'fa-eye-slash';
+            var isHidden = field.visible === false;
+            var visibleClass = isHidden ? 'fa-eye-slash' : 'fa-eye';
+            var hiddenClass = isHidden ? ' is-hidden' : '';
             var mandatoryBadge = field.mandatory ? '<span class="field-badge mandatory">Required</span>' : '';
+            var visibilityBadge = isHidden ? '<span class="field-badge hidden-badge">HIDDEN</span>' : '';
 
-            var html = '<div class="editor-node editor-field" data-parent="' + parentKey + '" data-field-idx="' + fieldIdx + '">';
+            var html = '<div class="editor-node editor-field' + hiddenClass + '" data-parent="' + parentKey + '" data-field-idx="' + fieldIdx + '">';
             html += '<div class="node-header field-header">' +
                 '<i class="fas ' + typeIcon + ' field-type-icon"></i>' +
                 '<span class="node-label">' + escapeHtml(field.label || field.id) + '</span>' +
                 '<span class="field-id">(' + escapeHtml(field.id) + ')</span>' +
                 mandatoryBadge +
+                visibilityBadge +
                 '<span class="node-meta">' + (field.type || 'text') + '</span>' +
                 '<div class="node-actions">' +
                 '<button class="btn-icon" data-action="edit-label" data-type="field" data-parent="' + parentKey + '" data-idx="' + fieldIdx + '" title="Edit label">' +
                 '<i class="fas fa-pencil"></i>' +
                 '</button>' +
-                '<button class="btn-icon" data-action="toggle-visible" data-type="field" data-parent="' + parentKey + '" data-idx="' + fieldIdx + '" title="Toggle visibility">' +
+                '<button class="btn-icon' + (isHidden ? '' : ' btn-icon-active') + '" data-action="toggle-visible" data-type="field" data-parent="' + parentKey + '" data-idx="' + fieldIdx + '" title="' + (isHidden ? 'Show field' : 'Hide field') + '">' +
                 '<i class="fas ' + visibleClass + '"></i>' +
+                '</button>' +
+                '<button class="btn-icon btn-icon-danger" data-action="delete" data-type="field" data-parent="' + parentKey + '" data-idx="' + fieldIdx + '" title="Delete field">' +
+                '<i class="fas fa-trash"></i>' +
                 '</button>' +
                 '</div>' +
                 '</div>';
@@ -972,16 +991,23 @@
         },
 
         renderEditorColumn: function(column, sublistIdx, colIdx) {
-            var visibleClass = column.visible !== false ? 'fa-eye' : 'fa-eye-slash';
+            var isHidden = column.visible === false;
+            var visibleClass = isHidden ? 'fa-eye-slash' : 'fa-eye';
+            var hiddenClass = isHidden ? ' is-hidden' : '';
+            var visibilityBadge = isHidden ? '<span class="field-badge hidden-badge">HIDDEN</span>' : '';
 
-            var html = '<div class="editor-node editor-column" data-sublist-idx="' + sublistIdx + '" data-col-idx="' + colIdx + '">';
+            var html = '<div class="editor-node editor-column' + hiddenClass + '" data-sublist-idx="' + sublistIdx + '" data-col-idx="' + colIdx + '">';
             html += '<div class="node-header field-header">' +
                 '<i class="fas fa-columns field-type-icon"></i>' +
                 '<span class="node-label">' + escapeHtml(column.label || column.id) + '</span>' +
                 '<span class="field-id">(' + escapeHtml(column.id) + ')</span>' +
+                visibilityBadge +
                 '<div class="node-actions">' +
-                '<button class="btn-icon" data-action="toggle-visible" data-type="column" data-sublist-idx="' + sublistIdx + '" data-idx="' + colIdx + '" title="Toggle visibility">' +
+                '<button class="btn-icon' + (isHidden ? '' : ' btn-icon-active') + '" data-action="toggle-visible" data-type="column" data-sublist-idx="' + sublistIdx + '" data-idx="' + colIdx + '" title="' + (isHidden ? 'Show column' : 'Hide column') + '">' +
                 '<i class="fas ' + visibleClass + '"></i>' +
+                '</button>' +
+                '<button class="btn-icon btn-icon-danger" data-action="delete" data-type="column" data-sublist-idx="' + sublistIdx + '" data-idx="' + colIdx + '" title="Delete column">' +
+                '<i class="fas fa-trash"></i>' +
                 '</button>' +
                 '</div>' +
                 '</div>';
@@ -1045,23 +1071,81 @@
                         self.toggleItemVisibility(this, type);
                     } else if (action === 'edit-label') {
                         self.editItemLabel(this, type);
+                    } else if (action === 'delete') {
+                        self.deleteItem(this, type);
                     }
                 });
             });
         },
 
         toggleItemVisibility: function(btn, type) {
-            var icon = btn.querySelector('i');
-            var isVisible = icon.classList.contains('fa-eye');
-
-            // Toggle icon
-            icon.classList.toggle('fa-eye');
-            icon.classList.toggle('fa-eye-slash');
-
-            // Update config
             var item = this.getConfigItem(btn.dataset, type);
             if (item) {
-                item.visible = !isVisible;
+                item.visible = item.visible === false ? true : false;
+                this.renderFormEditor(); // Re-render to show changes
+            }
+        },
+
+        deleteItem: function(btn, type) {
+            var self = this;
+            var dataset = btn.dataset;
+
+            UI.confirm(
+                'Are you sure you want to delete this ' + type + '? This cannot be undone.',
+                'Delete ' + type.charAt(0).toUpperCase() + type.slice(1),
+                {
+                    confirmText: 'Delete',
+                    danger: true,
+                    onConfirm: function() {
+                        self.removeConfigItem(dataset, type);
+                        self.renderFormEditor();
+                        UI.toast(type.charAt(0).toUpperCase() + type.slice(1) + ' deleted', 'success');
+                    }
+                }
+            );
+        },
+
+        removeConfigItem: function(dataset, type) {
+            if (!this.editedConfig) return;
+
+            var layout = this.editedConfig.layout || this.editedConfig;
+            var tabs = layout.tabs || [];
+            var sublists = this.editedConfig.sublists || layout.sublists || [];
+            var bodyFields = this.editedConfig.bodyFields || [];
+
+            if (type === 'field') {
+                var parent = dataset.parent;
+                var idx = parseInt(dataset.idx);
+
+                if (parent === 'body') {
+                    bodyFields.splice(idx, 1);
+                } else {
+                    var parts = parent.split('-');
+                    var tabIdx = parseInt(parts[1]);
+                    var groupIdx = parseInt(parts[3]);
+                    var tab = tabs[tabIdx];
+                    if (tab && tab.fieldGroups && tab.fieldGroups[groupIdx] && tab.fieldGroups[groupIdx].fields) {
+                        tab.fieldGroups[groupIdx].fields.splice(idx, 1);
+                    }
+                }
+            } else if (type === 'column') {
+                var sublistIdx = parseInt(dataset.sublistIdx);
+                var colIdx = parseInt(dataset.idx);
+                var sublist = sublists[sublistIdx];
+                if (sublist && sublist.columns) {
+                    sublist.columns.splice(colIdx, 1);
+                }
+            } else if (type === 'group') {
+                var tabIdx = parseInt(dataset.tabIdx);
+                var groupIdx = parseInt(dataset.idx);
+                var tab = tabs[tabIdx];
+                if (tab && tab.fieldGroups) {
+                    tab.fieldGroups.splice(groupIdx, 1);
+                }
+            } else if (type === 'sublist') {
+                sublists.splice(parseInt(dataset.idx), 1);
+            } else if (type === 'tab') {
+                tabs.splice(parseInt(dataset.idx), 1);
             }
         },
 
@@ -1119,6 +1203,16 @@
             var container = el('#form-editor-container');
             if (!container) return;
 
+            // Expand/collapse section content (Tabs, Body Fields, Sublists sections)
+            container.querySelectorAll('.section-content').forEach(function(content) {
+                if (expand) {
+                    content.classList.remove('collapsed');
+                } else {
+                    content.classList.add('collapsed');
+                }
+            });
+
+            // Expand/collapse node content (individual tabs, groups, sublists)
             container.querySelectorAll('.node-content').forEach(function(content) {
                 if (expand) {
                     content.classList.remove('collapsed');
@@ -1127,6 +1221,7 @@
                 }
             });
 
+            // Update all toggle icons
             container.querySelectorAll('.toggle-icon').forEach(function(icon) {
                 icon.classList.remove('fa-chevron-right', 'fa-chevron-down');
                 icon.classList.add(expand ? 'fa-chevron-down' : 'fa-chevron-right');
