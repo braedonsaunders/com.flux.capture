@@ -3771,12 +3771,60 @@ body.fullscreen-mode .sidebar-expand-btn {
    FLOW PAGE - Card-Based Upload Experience
    ========================================== */
 .view-flow {
-    min-height: 100%;
+    position: absolute;
+    inset: 0;
     display: flex;
     flex-direction: column;
-    background: var(--surface-bg);
+    background: transparent;
+    padding: 0;
+    gap: 0;
+    overflow: hidden;
+}
+
+/* Full-page mode (no cards yet) */
+.view-flow.fullpage-mode .flow-header-compact {
+    display: none;
+}
+
+.view-flow.fullpage-mode .flow-drop-container {
+    flex: 1;
+    justify-content: center;
+    padding: 0;
+}
+
+.view-flow.fullpage-mode .flow-dropzone {
+    max-width: none;
+    width: 100%;
+    height: 100%;
+    min-height: 100%;
+    border-radius: 0;
+    border: none;
+    background: linear-gradient(135deg, var(--surface-body) 0%, rgba(37, 99, 235, 0.03) 50%, var(--surface-body) 100%);
+    box-shadow: none;
+}
+
+.view-flow.fullpage-mode .flow-dropzone::before {
+    display: none;
+}
+
+.view-flow.fullpage-mode .flow-dropzone:hover {
+    transform: none;
+    box-shadow: none;
+}
+
+.view-flow.fullpage-mode .flow-dropzone.dragover {
+    transform: none;
+    background: linear-gradient(135deg, rgba(37, 99, 235, 0.08) 0%, rgba(37, 99, 235, 0.15) 50%, rgba(37, 99, 235, 0.08) 100%);
+}
+
+/* Cards mode (has cards) */
+.view-flow.cards-mode {
     padding: var(--space-lg);
     gap: var(--space-lg);
+}
+
+.view-flow.cards-mode .flow-drop-container {
+    flex: 0;
 }
 
 /* Flow Compact Header */
@@ -3788,7 +3836,18 @@ body.fullscreen-mode .sidebar-expand-btn {
     background: var(--surface-card);
     border: 1px solid var(--border-color);
     border-radius: var(--radius-lg);
+    opacity: 0;
+    transform: translateY(-20px);
+    animation: headerSlideIn 0.5s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
 }
+
+@keyframes headerSlideIn {
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
 .flow-title {
     display: flex;
     align-items: center;
@@ -3819,7 +3878,7 @@ body.fullscreen-mode .sidebar-expand-btn {
     flex-direction: column;
     align-items: center;
     gap: var(--space-md);
-    transition: all 0.3s ease;
+    transition: all 0.5s cubic-bezier(0.34, 1.56, 0.64, 1);
 }
 .flow-drop-container.compact {
     flex-direction: row;
@@ -3828,12 +3887,26 @@ body.fullscreen-mode .sidebar-expand-btn {
 .flow-drop-container.compact .flow-dropzone {
     width: auto;
     min-height: auto;
+    max-width: 560px;
     padding: var(--space-md) var(--space-xl);
+    border-radius: 24px;
+    border: 2px solid transparent;
+    background: linear-gradient(135deg, var(--surface-card) 0%, rgba(37, 99, 235, 0.03) 100%);
+    box-shadow:
+        0 4px 24px rgba(0, 0, 0, 0.06),
+        inset 0 0 0 1px rgba(37, 99, 235, 0.1);
+}
+.flow-drop-container.compact .flow-dropzone::before {
+    display: block;
 }
 .flow-drop-container.compact .dropzone-icon { font-size: 1.5rem; }
 .flow-drop-container.compact .dropzone-text { flex-direction: row; gap: var(--space-sm); }
 .flow-drop-container.compact .dropzone-secondary { display: none; }
 .flow-drop-container.compact .dropzone-formats { display: none; }
+.flow-drop-container.compact .dropzone-rings,
+.flow-drop-container.compact .dropzone-particles,
+.flow-drop-container.compact .dropzone-glow,
+.flow-drop-container.compact .dropzone-icon-bg { display: none; }
 
 /* Flow Dropzone - Theatrical */
 .flow-dropzone {
@@ -4107,13 +4180,55 @@ body.fullscreen-mode .sidebar-expand-btn {
     position: relative;
     overflow: hidden;
 }
+/* Stunning card entrance animation */
 .flow-card.animate-in {
-    animation: card-in 0.3s ease forwards;
+    animation: cardRiseIn 0.6s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
 }
-@keyframes card-in {
-    from { opacity: 0; transform: translateY(20px) scale(0.95); }
-    to { opacity: 1; transform: translateY(0) scale(1); }
+
+/* Staggered delays for multiple cards */
+.flow-card.animate-in:nth-child(1) { animation-delay: 0s; }
+.flow-card.animate-in:nth-child(2) { animation-delay: 0.08s; }
+.flow-card.animate-in:nth-child(3) { animation-delay: 0.16s; }
+.flow-card.animate-in:nth-child(4) { animation-delay: 0.24s; }
+.flow-card.animate-in:nth-child(5) { animation-delay: 0.32s; }
+.flow-card.animate-in:nth-child(6) { animation-delay: 0.4s; }
+.flow-card.animate-in:nth-child(7) { animation-delay: 0.48s; }
+.flow-card.animate-in:nth-child(8) { animation-delay: 0.56s; }
+.flow-card.animate-in:nth-child(n+9) { animation-delay: 0.64s; }
+
+@keyframes cardRiseIn {
+    0% {
+        opacity: 0;
+        transform: translateY(80px) scale(0.8) rotateX(15deg);
+        filter: blur(4px);
+    }
+    50% {
+        opacity: 0.8;
+        filter: blur(1px);
+    }
+    100% {
+        opacity: 1;
+        transform: translateY(0) scale(1) rotateX(0deg);
+        filter: blur(0);
+    }
 }
+
+/* Cards container entrance */
+.flow-cards-container.animate-container {
+    animation: containerReveal 0.4s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+}
+
+@keyframes containerReveal {
+    from {
+        opacity: 0;
+        transform: translateY(40px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
 .flow-card.animate-out {
     animation: card-out 0.3s ease forwards;
 }
