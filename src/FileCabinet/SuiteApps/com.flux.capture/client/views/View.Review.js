@@ -40,6 +40,8 @@
         data: null,
         docId: null,
         changes: {},
+        formData: null, // User-edited form state - source of truth for saving
+        hasUnsavedChanges: false,
         zoom: 1,
         rotation: 0,
         currentPage: 1,
@@ -108,6 +110,8 @@
             var self = this;
             this.docId = params && params.docId ? params.docId : null;
             this.changes = {};
+            this.formData = null;
+            this.hasUnsavedChanges = false;
             this.zoom = 1;
             this.rotation = 0;
             this.currentPage = 1;
@@ -270,6 +274,9 @@
                     // Inject items into item sublist 'item' field
                     self.injectSublistOptions(accountsData, itemsData);
 
+                    // Initialize formData from server or create from extractedData
+                    self.initializeFormData();
+
                     self.isLoading = false;
                     self.render();
                 })
@@ -327,6 +334,159 @@
                     }
                 });
             });
+        },
+
+        /**
+         * Initialize formData from server-saved data or create from extractedData
+         * formData is the source of truth for form values and transaction creation
+         */
+        initializeFormData: function() {
+            var doc = this.data;
+
+            // If formData exists from server, use it
+            if (doc.formData && typeof doc.formData === 'object') {
+                this.formData = doc.formData;
+                FCDebug.log('[FormData] Loaded from server:', this.formData);
+                return;
+            }
+
+            // Otherwise, initialize from extractedData and document fields
+            var extractedData = doc.extractedData || {};
+            var bodyFields = {};
+
+            // Map extracted/document fields to NS field IDs
+            // These are the common mappings between our extraction and NS fields
+            var fieldMappings = {
+                'entity': ['vendor', 'vendorId'],
+                'tranid': ['invoiceNumber', 'tranid'],
+                'trandate': ['invoiceDate', 'trandate'],
+                'duedate': ['dueDate', 'duedate'],
+                'currency': ['currency'],
+                'memo': ['memo', 'description'],
+                'terms': ['paymentTerms', 'terms']
+            };
+
+            // Populate bodyFields from extractedData using mappings
+            Object.keys(fieldMappings).forEach(function(nsFieldId) {
+                var sourceKeys = fieldMappings[nsFieldId];
+                for (var i = 0; i < sourceKeys.length; i++) {
+                    var key = sourceKeys[i];
+                    var value = extractedData[key] || doc[key];
+                    if (value !== undefined && value !== null && value !== '') {
+                        bodyFields[nsFieldId] = value;
+                        // Also store display text if available
+                        var displayKey = key + '_display';
+                        if (extractedData[displayKey] || doc[displayKey]) {
+                            bodyFields[nsFieldId + '_display'] = extractedData[displayKey] || doc[displayKey];
+                        }
+                        break;
+                    }
+                }
+            });
+
+            // Handle vendor specially - need both ID and display name
+            if (doc.vendor) {
+                bodyFields.entity = doc.vendor;
+                bodyFields.entity_display = doc.vendorName || '';
+            }
+
+            // Initialize sublists from lineItems
+            var sublists = {
+                expense: [],
+                item: []
+            };
+
+            // Parse existing line items into sublists
+            var lineItems = doc.lineItems || [];
+            if (Array.isArray(lineItems) && lineItems.length > 0) {
+                lineItems.forEach(function(line) {
+                    // Determine which sublist based on line content
+                    if (line.item) {
+                        sublists.item.push(line);
+                    } else {
+                        sublists.expense.push(line);
+                    }
+                });
+            }
+
+            // Build formData structure
+            this.formData = {
+                bodyFields: bodyFields,
+                sublists: sublists,
+                _meta: {
+                    transactionType: this.transactionType,
+                    initializedFrom: 'extractedData',
+                    initializedAt: new Date().toISOString()
+                }
+            };
+
+            FCDebug.log('[FormData] Initialized from extractedData:', this.formData);
+        },
+
+        /**
+         * Collect current form state from DOM into formData structure
+         * Call this before saving to ensure formData reflects current UI state
+         */
+        collectFormData: function() {
+            var self = this;
+            var bodyFields = {};
+            var sublists = {};
+
+            // Collect body fields
+            var panel = el('#extraction-panel');
+            if (panel) {
+                // Regular inputs and selects
+                panel.querySelectorAll('input[data-field], select[data-field], textarea[data-field]').forEach(function(input) {
+                    var fieldId = input.dataset.field;
+                    if (!fieldId) return;
+
+                    // Skip sublist inputs (they have different data attributes)
+                    if (input.closest('.sublist-table')) return;
+
+                    var value = input.value;
+
+                    // Handle checkboxes
+                    if (input.type === 'checkbox') {
+                        value = input.checked ? 'T' : 'F';
+                    }
+
+                    // Store the value
+                    bodyFields[fieldId] = value;
+                });
+
+                // Collect typeahead display values
+                panel.querySelectorAll('.typeahead-select[data-field]').forEach(function(wrapper) {
+                    var fieldId = wrapper.dataset.field;
+                    var hiddenInput = wrapper.querySelector('input[type="hidden"]');
+                    var displayInput = wrapper.querySelector('.typeahead-input');
+
+                    if (hiddenInput && hiddenInput.value) {
+                        bodyFields[fieldId] = hiddenInput.value;
+                    }
+                    if (displayInput && displayInput.value) {
+                        bodyFields[fieldId + '_display'] = displayInput.value;
+                    }
+                });
+            }
+
+            // Collect sublist data from sublistData (already tracked)
+            if (this.sublistData) {
+                Object.keys(this.sublistData).forEach(function(sublistId) {
+                    var normalizedId = sublistId.toLowerCase();
+                    sublists[normalizedId] = self.sublistData[sublistId] || [];
+                });
+            }
+
+            // Update formData
+            this.formData = this.formData || {};
+            this.formData.bodyFields = bodyFields;
+            this.formData.sublists = sublists;
+            this.formData._meta = this.formData._meta || {};
+            this.formData._meta.transactionType = this.transactionType;
+            this.formData._meta.collectedAt = new Date().toISOString();
+
+            FCDebug.log('[FormData] Collected from DOM:', this.formData);
+            return this.formData;
         },
 
         // ==========================================
@@ -1623,12 +1783,22 @@
             });
         },
 
-        // Get field value from extractedData or document fields
+        // Get field value - checks formData first (user edits), then extractedData (AI), then doc fields
         // Handles field mapping, case-insensitive matching, and custom field syntax
         getExtractedFieldValue: function(nsFieldId, docKey, doc, extractedData) {
             var normalizedId = (nsFieldId || '').toLowerCase();
+            var lowerDocKey = (docKey || '').toLowerCase();
 
-            // First check extractedData (contains all AI-extracted fields)
+            // FIRST: Check formData.bodyFields (user-edited values - highest priority)
+            if (this.formData && this.formData.bodyFields) {
+                var bodyFields = this.formData.bodyFields;
+                if (bodyFields[nsFieldId] !== undefined && bodyFields[nsFieldId] !== '') return bodyFields[nsFieldId];
+                if (bodyFields[normalizedId] !== undefined && bodyFields[normalizedId] !== '') return bodyFields[normalizedId];
+                if (bodyFields[docKey] !== undefined && bodyFields[docKey] !== '') return bodyFields[docKey];
+                if (bodyFields[lowerDocKey] !== undefined && bodyFields[lowerDocKey] !== '') return bodyFields[lowerDocKey];
+            }
+
+            // SECOND: Check extractedData (AI-extracted fields)
             if (extractedData) {
                 // Direct match
                 if (extractedData[nsFieldId] !== undefined) return extractedData[nsFieldId];
@@ -1636,7 +1806,6 @@
                 if (extractedData[docKey] !== undefined) return extractedData[docKey];
 
                 // Try lowercase docKey
-                var lowerDocKey = (docKey || '').toLowerCase();
                 if (extractedData[lowerDocKey] !== undefined) return extractedData[lowerDocKey];
 
                 // Handle custom field syntax [scriptid=custbody_xxx]
@@ -1649,7 +1818,7 @@
                 }
             }
 
-            // Fall back to document's fixed fields
+            // THIRD: Fall back to document's fixed fields
             if (doc[docKey] !== undefined) return doc[docKey];
             if (doc[normalizedId] !== undefined) return doc[normalizedId];
             if (doc[nsFieldId] !== undefined) return doc[nsFieldId];
@@ -1777,8 +1946,14 @@
             } else if (inferredType === 'select') {
                 // Select without pre-loaded options - use typeahead for server-side search
                 var lookupType = this.getLookupType(nsField.id);
-                // Use defaultValueText if using default value, otherwise use display value from doc
-                var displayValue = usingDefaultValue ? defaultValueText : (doc[docKey + '_display'] || doc[docKey + '_text'] || '');
+                // Get display value: formData first (user edits), then default, then doc
+                var displayValue = '';
+                if (this.formData && this.formData.bodyFields) {
+                    displayValue = this.formData.bodyFields[nsField.id + '_display'] || '';
+                }
+                if (!displayValue) {
+                    displayValue = usingDefaultValue ? defaultValueText : (doc[docKey + '_display'] || doc[docKey + '_text'] || '');
+                }
 
                 if (isDisabled) {
                     // Disabled select - just show display value
@@ -1835,7 +2010,13 @@
             // Get line items for this sublist type (case-insensitive comparison)
             var slType = (sublistId || '').toLowerCase();
             var items = [];
-            if (slType === 'expense') {
+
+            // FIRST: Check formData.sublists (saved user edits - highest priority)
+            if (this.formData && this.formData.sublists && this.formData.sublists[slType]) {
+                items = this.formData.sublists[slType];
+            }
+            // SECOND: Fall back to document data
+            else if (slType === 'expense') {
                 items = doc.expenseLines || doc.lineItems || [];
             } else if (slType === 'item') {
                 items = doc.itemLines || [];
@@ -2835,7 +3016,16 @@
         // ==========================================
         saveChanges: function() {
             var self = this;
-            if (this.isSaving || Object.keys(this.changes).length === 0) return;
+            if (this.isSaving) return;
+
+            // Collect current form state from DOM
+            var formData = this.collectFormData();
+
+            // Check if there's anything to save
+            if (!formData || (!formData.bodyFields && !formData.sublists)) {
+                UI.toast('No changes to save', 'info');
+                return;
+            }
 
             this.isSaving = true;
             var saveBtn = el('#btn-save');
@@ -2844,9 +3034,10 @@
                 saveBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Saving...';
             }
 
-            API.put('update', { documentId: this.docId, updates: this.changes })
+            API.put('update', { documentId: this.docId, formData: formData })
                 .then(function() {
                     self.changes = {};
+                    self.hasUnsavedChanges = false;
                     self.isSaving = false;
                     self.markSaved();
                     UI.toast('Changes saved', 'success');

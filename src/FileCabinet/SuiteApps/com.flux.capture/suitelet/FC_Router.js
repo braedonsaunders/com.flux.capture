@@ -398,6 +398,7 @@ define([
         var lineItems = JSON.parse(docRecord.getValue('custrecord_flux_line_items') || '[]');
         var anomalies = JSON.parse(docRecord.getValue('custrecord_flux_anomalies') || '[]');
         var extractedData = JSON.parse(docRecord.getValue('custrecord_flux_extracted_data') || '{}');
+        var formData = JSON.parse(docRecord.getValue('custrecord_flux_form_data') || 'null');
         var status = docRecord.getValue('custrecord_flux_status');
 
         var document = {
@@ -430,7 +431,7 @@ define([
             lineItems: lineItems,
             anomalies: anomalies,
             extractedData: extractedData,
-            extractedText: docRecord.getValue('custrecord_flux_extracted_text'),
+            formData: formData,
             amountValidated: docRecord.getValue('custrecord_flux_amount_validated'),
             createdTransaction: docRecord.getValue('custrecord_flux_created_transaction'),
             source: docRecord.getValue('custrecord_flux_source'),
@@ -2238,8 +2239,7 @@ define([
                 extractedDataObj._extractedAt = new Date().toISOString();
 
                 updateValues['custrecord_flux_extracted_data'] = JSON.stringify(extractedDataObj);
-                // Store raw text in dedicated field (separate from JSON data)
-                updateValues['custrecord_flux_extracted_text'] = extraction.rawText ? extraction.rawText.substring(0, 100000) : '';
+                // Note: custrecord_flux_form_data is NOT set here - it's only populated when user saves form edits
 
                 record.submitFields({
                     type: 'customrecord_flux_document',
@@ -2533,65 +2533,48 @@ define([
 
     function updateDocument(context) {
         var documentId = context.documentId;
-        var updates = context.updates;
+        var formData = context.formData;
 
-        if (!documentId || !updates) {
-            return Response.error('MISSING_PARAM', 'Document ID and updates required');
+        if (!documentId) {
+            return Response.error('MISSING_PARAM', 'Document ID is required');
+        }
+
+        if (!formData) {
+            return Response.error('MISSING_PARAM', 'Form data is required');
         }
 
         try {
-            var fieldMap = {
-                'vendor': 'custrecord_flux_vendor',
-                'invoiceNumber': 'custrecord_flux_invoice_number',
-                'invoiceDate': 'custrecord_flux_invoice_date',
-                'dueDate': 'custrecord_flux_due_date',
-                'subtotal': 'custrecord_flux_subtotal',
-                'taxAmount': 'custrecord_flux_tax_amount',
-                'totalAmount': 'custrecord_flux_total_amount',
-                'currency': 'custrecord_flux_currency',
-                'poNumber': 'custrecord_flux_po_number',
-                'documentType': 'custrecord_flux_document_type',
-                'lineItems': 'custrecord_flux_line_items',
-                'extractedData': 'custrecord_flux_extracted_data'
+            // Add metadata to formData
+            formData._meta = formData._meta || {};
+            formData._meta.lastSaved = new Date().toISOString();
+            formData._meta.savedBy = runtime.getCurrentUser().id;
+
+            var values = {
+                'custrecord_flux_modified_date': new Date(),
+                'custrecord_flux_form_data': JSON.stringify(formData)
             };
 
-            // Fields that should be JSON stringified
-            var jsonFields = ['lineItems', 'extractedData'];
+            // Also update key indexed fields for search/filtering purposes
+            // These are derived from formData but stored separately for queries
+            var bodyFields = formData.bodyFields || {};
 
-            var values = { 'custrecord_flux_modified_date': new Date() };
-
-            Object.keys(updates).forEach(function(key) {
-                if (fieldMap[key]) {
-                    var value = updates[key];
-                    if (jsonFields.indexOf(key) !== -1 && typeof value === 'object') {
-                        value = JSON.stringify(value);
-                    }
-                    values[fieldMap[key]] = value;
-                }
-            });
-
-            // Also merge any updates into extractedData if we're updating known fields
-            // This keeps extractedData in sync with fixed fields
-            if (!updates.extractedData) {
-                var extractedDataUpdates = {};
-                Object.keys(updates).forEach(function(key) {
-                    if (key !== 'lineItems' && key !== 'extractedData') {
-                        extractedDataUpdates[key] = updates[key];
-                    }
-                });
-                if (Object.keys(extractedDataUpdates).length > 0) {
-                    // Load current extractedData and merge
-                    try {
-                        var docRec = record.load({ type: 'customrecord_flux_document', id: documentId });
-                        var currentExtracted = JSON.parse(docRec.getValue('custrecord_flux_extracted_data') || '{}');
-                        Object.keys(extractedDataUpdates).forEach(function(k) {
-                            currentExtracted[k] = extractedDataUpdates[k];
-                        });
-                        values['custrecord_flux_extracted_data'] = JSON.stringify(currentExtracted);
-                    } catch (mergeErr) {
-                        log.debug('updateDocument.mergeExtracted', mergeErr.message);
-                    }
-                }
+            if (bodyFields.entity) {
+                values['custrecord_flux_vendor'] = bodyFields.entity;
+            }
+            if (bodyFields.tranid) {
+                values['custrecord_flux_invoice_number'] = bodyFields.tranid;
+            }
+            if (bodyFields.trandate) {
+                values['custrecord_flux_invoice_date'] = bodyFields.trandate;
+            }
+            if (bodyFields.duedate) {
+                values['custrecord_flux_due_date'] = bodyFields.duedate;
+            }
+            if (bodyFields.total !== undefined) {
+                values['custrecord_flux_total_amount'] = bodyFields.total;
+            }
+            if (bodyFields.currency) {
+                values['custrecord_flux_currency'] = bodyFields.currency;
             }
 
             record.submitFields({
@@ -2837,62 +2820,154 @@ define([
     }
 
     function createTransactionFromDocument(docRecord, transactionType) {
-        var vendorId = docRecord.getValue('custrecord_flux_vendor');
-        var invoiceNumber = docRecord.getValue('custrecord_flux_invoice_number');
-        var invoiceDate = docRecord.getValue('custrecord_flux_invoice_date');
-        var dueDate = docRecord.getValue('custrecord_flux_due_date');
-        var totalAmount = docRecord.getValue('custrecord_flux_total_amount');
-        var currency = docRecord.getValue('custrecord_flux_currency');
-        var lineItems = JSON.parse(docRecord.getValue('custrecord_flux_line_items') || '[]');
+        // Load form data - this is the source of truth for transaction creation
+        var formData = JSON.parse(docRecord.getValue('custrecord_flux_form_data') || 'null');
 
+        // Fallback to legacy fixed fields if formData doesn't exist (for backwards compatibility)
+        if (!formData) {
+            formData = {
+                bodyFields: {
+                    entity: docRecord.getValue('custrecord_flux_vendor'),
+                    tranid: docRecord.getValue('custrecord_flux_invoice_number'),
+                    trandate: docRecord.getValue('custrecord_flux_invoice_date'),
+                    duedate: docRecord.getValue('custrecord_flux_due_date'),
+                    currency: docRecord.getValue('custrecord_flux_currency')
+                },
+                sublists: {
+                    expense: JSON.parse(docRecord.getValue('custrecord_flux_line_items') || '[]')
+                }
+            };
+        }
+
+        var bodyFields = formData.bodyFields || {};
+        var sublists = formData.sublists || {};
         var txnRecord;
+
+        // Fields to skip when setting body fields (handled specially or not applicable)
+        var skipFields = ['_display', 'customform'];
+
+        // Helper to check if a field should be skipped
+        function shouldSkipField(fieldId) {
+            if (!fieldId) return true;
+            var lowerFieldId = fieldId.toLowerCase();
+            return skipFields.some(function(skip) {
+                return lowerFieldId.indexOf(skip) !== -1;
+            });
+        }
+
+        // Helper to set body field value safely
+        function setBodyField(txn, fieldId, value) {
+            if (!fieldId || value === undefined || value === null || value === '') return;
+            if (shouldSkipField(fieldId)) return;
+
+            try {
+                txn.setValue({ fieldId: fieldId, value: value });
+            } catch (e) {
+                log.debug('setBodyField', 'Could not set ' + fieldId + ': ' + e.message);
+            }
+        }
+
+        // Helper to set sublist field value safely
+        function setSublistField(txn, sublistId, fieldId, value) {
+            if (!fieldId || value === undefined || value === null || value === '') return;
+            if (shouldSkipField(fieldId)) return;
+
+            try {
+                txn.setCurrentSublistValue({ sublistId: sublistId, fieldId: fieldId, value: value });
+            } catch (e) {
+                log.debug('setSublistField', 'Could not set ' + sublistId + '.' + fieldId + ': ' + e.message);
+            }
+        }
+
+        // Helper to add sublist lines
+        function addSublistLines(txn, sublistId, lines) {
+            if (!lines || !Array.isArray(lines) || lines.length === 0) return;
+
+            lines.forEach(function(line) {
+                txn.selectNewLine({ sublistId: sublistId });
+
+                Object.keys(line).forEach(function(fieldId) {
+                    // Skip display fields (e.g., account_display)
+                    if (fieldId.indexOf('_display') !== -1) return;
+                    setSublistField(txn, sublistId, fieldId, line[fieldId]);
+                });
+
+                txn.commitLine({ sublistId: sublistId });
+            });
+        }
 
         if (transactionType === 'vendorbill') {
             txnRecord = record.create({ type: record.Type.VENDOR_BILL, isDynamic: true });
-            txnRecord.setValue('entity', vendorId);
-            if (invoiceNumber) txnRecord.setValue('tranid', invoiceNumber);
-            if (invoiceDate) txnRecord.setValue('trandate', invoiceDate);
-            if (dueDate) txnRecord.setValue('duedate', dueDate);
-            if (currency) txnRecord.setValue('currency', currency);
 
-            lineItems.forEach(function(line) {
-                txnRecord.selectNewLine({ sublistId: 'expense' });
-                if (line.account) txnRecord.setCurrentSublistValue({ sublistId: 'expense', fieldId: 'account', value: line.account });
-                txnRecord.setCurrentSublistValue({ sublistId: 'expense', fieldId: 'amount', value: line.amount || 0 });
-                if (line.description) txnRecord.setCurrentSublistValue({ sublistId: 'expense', fieldId: 'memo', value: line.description });
-                txnRecord.commitLine({ sublistId: 'expense' });
+            // Set all body fields from formData
+            Object.keys(bodyFields).forEach(function(fieldId) {
+                setBodyField(txnRecord, fieldId, bodyFields[fieldId]);
             });
 
-            if (lineItems.length === 0 && totalAmount) {
+            // Add expense lines
+            if (sublists.expense && sublists.expense.length > 0) {
+                addSublistLines(txnRecord, 'expense', sublists.expense);
+            }
+            // Add item lines
+            if (sublists.item && sublists.item.length > 0) {
+                addSublistLines(txnRecord, 'item', sublists.item);
+            }
+
+            // Fallback: if no lines, create single expense line with total
+            var totalAmount = bodyFields.total || bodyFields.usertotal;
+            if ((!sublists.expense || sublists.expense.length === 0) &&
+                (!sublists.item || sublists.item.length === 0) &&
+                totalAmount) {
                 txnRecord.selectNewLine({ sublistId: 'expense' });
                 txnRecord.setCurrentSublistValue({ sublistId: 'expense', fieldId: 'amount', value: totalAmount });
                 txnRecord.setCurrentSublistValue({ sublistId: 'expense', fieldId: 'memo', value: 'Flux Capture Import' });
                 txnRecord.commitLine({ sublistId: 'expense' });
             }
+
         } else if (transactionType === 'vendorcredit') {
             txnRecord = record.create({ type: record.Type.VENDOR_CREDIT, isDynamic: true });
-            txnRecord.setValue('entity', vendorId);
-            if (invoiceDate) txnRecord.setValue('trandate', invoiceDate);
-            if (currency) txnRecord.setValue('currency', currency);
 
-            lineItems.forEach(function(line) {
-                txnRecord.selectNewLine({ sublistId: 'expense' });
-                if (line.account) txnRecord.setCurrentSublistValue({ sublistId: 'expense', fieldId: 'account', value: line.account });
-                txnRecord.setCurrentSublistValue({ sublistId: 'expense', fieldId: 'amount', value: line.amount || 0 });
-                txnRecord.commitLine({ sublistId: 'expense' });
+            Object.keys(bodyFields).forEach(function(fieldId) {
+                setBodyField(txnRecord, fieldId, bodyFields[fieldId]);
             });
+
+            if (sublists.expense && sublists.expense.length > 0) {
+                addSublistLines(txnRecord, 'expense', sublists.expense);
+            }
+            if (sublists.item && sublists.item.length > 0) {
+                addSublistLines(txnRecord, 'item', sublists.item);
+            }
+
         } else if (transactionType === 'expensereport') {
             txnRecord = record.create({ type: record.Type.EXPENSE_REPORT, isDynamic: true });
-            txnRecord.setValue('entity', runtime.getCurrentUser().id);
-            if (invoiceDate) txnRecord.setValue('trandate', invoiceDate);
 
-            lineItems.forEach(function(line) {
-                txnRecord.selectNewLine({ sublistId: 'expense' });
-                if (invoiceDate) txnRecord.setCurrentSublistValue({ sublistId: 'expense', fieldId: 'expensedate', value: invoiceDate });
-                if (line.category) txnRecord.setCurrentSublistValue({ sublistId: 'expense', fieldId: 'category', value: line.category });
-                txnRecord.setCurrentSublistValue({ sublistId: 'expense', fieldId: 'amount', value: line.amount || 0 });
-                txnRecord.commitLine({ sublistId: 'expense' });
+            // Expense reports use current user as entity
+            txnRecord.setValue('entity', runtime.getCurrentUser().id);
+
+            // Set other body fields
+            Object.keys(bodyFields).forEach(function(fieldId) {
+                if (fieldId !== 'entity') { // Don't override entity
+                    setBodyField(txnRecord, fieldId, bodyFields[fieldId]);
+                }
             });
+
+            if (sublists.expense && sublists.expense.length > 0) {
+                addSublistLines(txnRecord, 'expense', sublists.expense);
+            }
+
+        } else if (transactionType === 'purchaseorder') {
+            txnRecord = record.create({ type: record.Type.PURCHASE_ORDER, isDynamic: true });
+
+            Object.keys(bodyFields).forEach(function(fieldId) {
+                setBodyField(txnRecord, fieldId, bodyFields[fieldId]);
+            });
+
+            if (sublists.item && sublists.item.length > 0) {
+                addSublistLines(txnRecord, 'item', sublists.item);
+            }
+            if (sublists.expense && sublists.expense.length > 0) {
+                addSublistLines(txnRecord, 'expense', sublists.expense);
+            }
         }
 
         return txnRecord ? txnRecord.save() : null;
