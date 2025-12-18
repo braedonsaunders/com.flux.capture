@@ -388,6 +388,10 @@
                         var search = el('#doc-search');
                         if (search) search.focus();
                         break;
+                    case '?':
+                        e.preventDefault();
+                        self.showShortcutsHelp();
+                        break;
                     case 'Escape':
                         self.previewExpanded = -1;
                         self.render();
@@ -1087,6 +1091,50 @@
                     Router.navigate('ingest');
                     break;
             }
+        },
+
+        // ==========================================
+        // KEYBOARD SHORTCUTS HELP
+        // ==========================================
+        showShortcutsHelp: function() {
+            var html = '<div class="shortcuts-modal">' +
+                '<div class="shortcuts-content">' +
+                    '<h3><i class="fas fa-keyboard"></i> Keyboard Shortcuts</h3>' +
+                    '<div class="shortcuts-grid">' +
+                        '<div class="shortcut-section">' +
+                            '<div class="shortcut-section-title">Navigation</div>' +
+                            '<div class="shortcut-item"><kbd>J</kbd> <span>Next document</span></div>' +
+                            '<div class="shortcut-item"><kbd>K</kbd> <span>Previous document</span></div>' +
+                            '<div class="shortcut-item"><kbd>↓</kbd> <span>Next document</span></div>' +
+                            '<div class="shortcut-item"><kbd>↑</kbd> <span>Previous document</span></div>' +
+                            '<div class="shortcut-item"><kbd>⏎</kbd> <span>Open document</span></div>' +
+                        '</div>' +
+                        '<div class="shortcut-section">' +
+                            '<div class="shortcut-section-title">Actions</div>' +
+                            '<div class="shortcut-item"><kbd>A</kbd> <span>Approve document</span></div>' +
+                            '<div class="shortcut-item"><kbd>D</kbd> <span>Delete document</span></div>' +
+                            '<div class="shortcut-item"><kbd>Space</kbd> <span>Toggle selection</span></div>' +
+                            '<div class="shortcut-item"><kbd>⌘⇧A</kbd> <span>Approve all high confidence</span></div>' +
+                        '</div>' +
+                        '<div class="shortcut-section">' +
+                            '<div class="shortcut-section-title">Search & Commands</div>' +
+                            '<div class="shortcut-item"><kbd>/</kbd> <span>Focus search</span></div>' +
+                            '<div class="shortcut-item"><kbd>⌘K</kbd> <span>Command palette</span></div>' +
+                            '<div class="shortcut-item"><kbd>⌘R</kbd> <span>Refresh list</span></div>' +
+                        '</div>' +
+                        '<div class="shortcut-section">' +
+                            '<div class="shortcut-section-title">Other</div>' +
+                            '<div class="shortcut-item"><kbd>Esc</kbd> <span>Close preview/modal</span></div>' +
+                            '<div class="shortcut-item"><kbd>?</kbd> <span>Show this help</span></div>' +
+                        '</div>' +
+                    '</div>' +
+                    '<button class="btn btn-primary btn-block" onclick="this.closest(\'.shortcuts-modal\').remove()">Got it!</button>' +
+                '</div>' +
+            '</div>';
+
+            var modal = document.createElement('div');
+            modal.innerHTML = html;
+            document.body.appendChild(modal.firstChild);
         },
 
         // ==========================================
