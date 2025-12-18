@@ -1428,15 +1428,15 @@
                                 <h4>Form Layout Source</h4>
 
                                 <!-- Client Script Capture Option -->
-                                <div class="source-option selected" id="source-option-capture">
+                                <div class="source-option" id="source-option-capture">
                                     <label>
                                         <i class="fas fa-magic"></i>
                                         <div>
                                             <span class="source-title">Automatic Capture via Client Script</span>
-                                            <span class="source-desc">Form layouts are captured when users open transactions in NetSuite. Enable the client script to start capturing.</span>
+                                            <span class="source-desc">Captures visible fields when forms are opened. May miss hidden fields.</span>
                                         </div>
                                     </label>
-                                    <div class="source-controls" id="capture-controls">
+                                    <div class="source-controls" id="capture-controls" style="display:none;">
                                         <div class="capture-toggle-row">
                                             <label class="toggle">
                                                 <input type="checkbox" id="capture-script-toggle">
@@ -1460,15 +1460,15 @@
                                 </div>
 
                                 <!-- XML Upload Option -->
-                                <div class="source-option" id="source-option-xml">
+                                <div class="source-option selected" id="source-option-xml">
                                     <label>
                                         <i class="fas fa-file-code"></i>
                                         <div>
-                                            <span class="source-title">Upload Form XML</span>
-                                            <span class="source-desc">Upload a NetSuite form definition XML. Export from Customization > Forms > Transaction Forms.</span>
+                                            <span class="source-title">Upload Form XML <span class="badge badge-success">Recommended</span></span>
+                                            <span class="source-desc">Most accurate. Export from Customization > Forms > Transaction Forms.</span>
                                         </div>
                                     </label>
-                                    <div class="source-controls" id="xml-controls" style="display:none;">
+                                    <div class="source-controls" id="xml-controls">
                                         <div class="file-upload-zone" id="xml-drop-zone">
                                             <i class="fas fa-cloud-upload-alt"></i>
                                             <p>Drag & drop form XML here or <button type="button" class="btn-link" id="btn-browse-xml">browse files</button></p>
@@ -1478,7 +1478,7 @@
                                         <div class="xml-selection-panel" id="xml-selection-panel" style="display:none;">
                                             <div class="xml-selection-header">
                                                 <h5><i class="fas fa-check-square"></i> Select Items to Import</h5>
-                                                <p>Due to storage limits, select only the tabs and sublists you need.</p>
+                                                <p>Choose which tabs and sublists to include in your form configuration.</p>
                                             </div>
                                             <div class="xml-selection-actions">
                                                 <button class="btn btn-ghost btn-sm" id="btn-xml-select-all">Select All</button>

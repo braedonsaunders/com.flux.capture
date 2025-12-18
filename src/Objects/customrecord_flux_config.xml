@@ -43,7 +43,7 @@
         </customrecordcustomfield>
 
         <customrecordcustomfield scriptid="custrecord_flux_cfg_data">
-            <fieldtype>LONGTEXT</fieldtype>
+            <fieldtype>CLOBTEXT</fieldtype>
             <label>Config Data</label>
             <description>Configuration data as JSON (form definition, settings, etc.)</description>
             <ismandatory>F</ismandatory>

@@ -322,7 +322,7 @@
                 statusText.textContent = 'Layout available (from ' + source + ')';
                 statusIcon.innerHTML = '<i class="fas fa-check-circle" style="color:var(--color-success);"></i>';
             } else {
-                statusText.textContent = 'No layout captured yet';
+                statusText.textContent = 'No form configuration yet. Upload XML or enable capture.';
                 statusIcon.innerHTML = '<i class="fas fa-clock" style="color:var(--text-tertiary);"></i>';
             }
         },
@@ -588,9 +588,42 @@
                 sublists: []
             };
 
-            element.querySelectorAll('fieldGroup').forEach(function(fg, idx) {
-                tab.fieldGroups.push(self.parseXmlFieldGroup(fg, idx));
+            // Try multiple paths for field groups (NetSuite XML varies)
+            // 1. Direct fieldGroup children
+            // 2. Inside tabFieldGroups wrapper
+            // 3. Inside fieldGroups wrapper
+            var fieldGroupSelectors = [
+                'fieldGroup',
+                'tabFieldGroups > fieldGroup',
+                'fieldGroups > fieldGroup'
+            ];
+
+            fieldGroupSelectors.forEach(function(selector) {
+                element.querySelectorAll(selector).forEach(function(fg, idx) {
+                    var parsed = self.parseXmlFieldGroup(fg, tab.fieldGroups.length);
+                    // Only add if it has fields and isn't a duplicate
+                    if (parsed.fields && parsed.fields.length > 0) {
+                        var isDupe = tab.fieldGroups.some(function(existing) {
+                            return existing.id === parsed.id;
+                        });
+                        if (!isDupe) {
+                            tab.fieldGroups.push(parsed);
+                        }
+                    }
+                });
             });
+
+            // Also check for loose fields directly in tab (create default group)
+            var looseFields = self.parseXmlFields(element);
+            if (looseFields.length > 0) {
+                tab.fieldGroups.push({
+                    id: 'tab_' + order + '_fields',
+                    label: 'Fields',
+                    order: tab.fieldGroups.length,
+                    visible: true,
+                    fields: looseFields
+                });
+            }
 
             element.querySelectorAll('subList').forEach(function(sl) {
                 var slId = sl.getAttribute('scriptid');
@@ -716,10 +749,7 @@
             var jsonSize = JSON.stringify(selectedConfig).length;
             var sizeKb = (jsonSize / 1024).toFixed(1);
 
-            var isOverLimit = jsonSize > 3500; // Leave some buffer under 4000
-            indicator.innerHTML = isOverLimit ?
-                '<i class="fas fa-exclamation-triangle" style="color:var(--color-warning);"></i> Estimated size: ' + sizeKb + ' KB (may need to split)' :
-                '<i class="fas fa-check-circle" style="color:var(--color-success);"></i> Estimated size: ' + sizeKb + ' KB';
+            indicator.innerHTML = '<i class="fas fa-check-circle" style="color:var(--color-success);"></i> Estimated size: ' + sizeKb + ' KB';
         },
 
         buildSelectedConfig: function() {
@@ -749,29 +779,7 @@
         },
 
         importSelectedXmlConfig: function() {
-            var self = this;
             var selectedConfig = this.buildSelectedConfig();
-
-            var jsonSize = JSON.stringify(selectedConfig).length;
-            var sizeKb = (jsonSize / 1024).toFixed(1);
-
-            // If over limit, warn but allow proceeding
-            if (jsonSize > 3800) {
-                UI.confirm({
-                    title: 'Large Configuration Warning',
-                    message: 'The configuration size (' + sizeKb + ' KB) is large and may exceed storage limits. ' +
-                        'You can still save it, but consider deselecting some items if you encounter issues.',
-                    confirmText: 'Import Anyway',
-                    cancelText: 'Cancel',
-                    type: 'warning'
-                }).then(function(confirmed) {
-                    if (confirmed) {
-                        self.doImportXmlConfig(selectedConfig);
-                    }
-                });
-                return;
-            }
-
             this.doImportXmlConfig(selectedConfig);
         },
 
