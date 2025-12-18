@@ -290,7 +290,7 @@
         </customrecordcustomfield>
 
         <customrecordcustomfield scriptid="custrecord_flux_extracted_text">
-            <fieldtype>TEXTAREA</fieldtype>
+            <fieldtype>CLOBTEXT</fieldtype>
             <label>Extracted Text</label>
             <description>Full text extracted from document</description>
             <ismandatory>F</ismandatory>
