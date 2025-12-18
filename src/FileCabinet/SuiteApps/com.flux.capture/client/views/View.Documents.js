@@ -235,11 +235,13 @@
 
                 // Bulk action buttons
                 if (e.target.closest('#bulk-clear')) {
+                    e.stopPropagation();
                     self.clearSelection();
                     return;
                 }
 
                 if (e.target.closest('#bulk-delete')) {
+                    e.stopPropagation();
                     self.deleteSelected();
                     return;
                 }
@@ -257,6 +259,7 @@
                 // Quick action buttons
                 var action = e.target.closest('.row-action');
                 if (action) {
+                    e.stopPropagation();
                     var docId = action.closest('.doc-row').dataset.docId;
                     self.handleRowAction(action.dataset.action, docId);
                     return;
