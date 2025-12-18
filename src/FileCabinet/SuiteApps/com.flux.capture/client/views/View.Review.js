@@ -3124,8 +3124,13 @@
 
             // Move ALL sublists to bottom section (not clone)
             // Use querySelectorAll because there may be multiple .line-section elements across tabs
+            // Store original parent tab ID so we can restore to correct location later
             var sublistSections = extractionPanel.querySelectorAll('.line-section');
             sublistSections.forEach(function(sublistSection) {
+                var parentTabContent = sublistSection.closest('.form-tab-content');
+                if (parentTabContent) {
+                    sublistSection.dataset.originalTabContent = parentTabContent.getAttribute('data-tab-content');
+                }
                 bottomSection.appendChild(sublistSection);
             });
 
@@ -3212,25 +3217,40 @@
 
             if (!reviewContent || !topSection) return;
 
-            // Move ALL sublist sections back to extraction panel before the amounts section
-            // Use querySelectorAll because there may be multiple .line-section elements
+            // Move ALL sublist sections back to their original parent tab content
+            // Use the stored data-original-tab-content attribute to find correct parent
             if (bottomSection && extractionPanel) {
                 var sublistSections = bottomSection.querySelectorAll('.line-section');
-                var amountsSection = extractionPanel.querySelector('.amounts-section');
 
                 sublistSections.forEach(function(sublistSection) {
-                    if (amountsSection) {
-                        // Insert before the amounts section (original position)
-                        extractionPanel.insertBefore(sublistSection, amountsSection);
+                    var originalTabId = sublistSection.dataset.originalTabContent;
+                    var originalParent = null;
+
+                    // Try to find the original parent tab content
+                    if (originalTabId) {
+                        originalParent = extractionPanel.querySelector('.form-tab-content[data-tab-content="' + originalTabId + '"]');
+                    }
+
+                    if (originalParent) {
+                        // Restore to original tab content - append at the end of the tab
+                        originalParent.appendChild(sublistSection);
                     } else {
-                        // Fallback: try action section
-                        var actionSection = extractionPanel.querySelector('.action-section');
-                        if (actionSection) {
-                            extractionPanel.insertBefore(sublistSection, actionSection);
+                        // Fallback: insert before amounts section
+                        var amountsSection = extractionPanel.querySelector('.amounts-section');
+                        if (amountsSection) {
+                            extractionPanel.insertBefore(sublistSection, amountsSection);
                         } else {
-                            extractionPanel.appendChild(sublistSection);
+                            var actionSection = extractionPanel.querySelector('.action-section');
+                            if (actionSection) {
+                                extractionPanel.insertBefore(sublistSection, actionSection);
+                            } else {
+                                extractionPanel.appendChild(sublistSection);
+                            }
                         }
                     }
+
+                    // Clean up the data attribute
+                    delete sublistSection.dataset.originalTabContent;
                 });
             }
 
