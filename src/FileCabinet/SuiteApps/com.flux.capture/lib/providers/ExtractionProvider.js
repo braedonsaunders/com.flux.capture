@@ -50,6 +50,7 @@ define(['N/log'], function(log) {
     const ProviderType = Object.freeze({
         OCI: 'oci',
         AZURE: 'azure',
+        MINDEE: 'mindee'
         // Future providers can be added here
         // GOOGLE: 'google',
         // AWS_TEXTRACT: 'aws_textract'
