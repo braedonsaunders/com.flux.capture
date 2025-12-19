@@ -2598,6 +2598,7 @@ define([
                 type: 'customrecord_flux_config',
                 filters: [
                     ['custrecord_flux_cfg_type', 'is', 'email_capture'],
+                    'AND',
                     ['custrecord_flux_cfg_key', 'is', 'inbox_address']
                 ],
                 columns: ['internalid']
