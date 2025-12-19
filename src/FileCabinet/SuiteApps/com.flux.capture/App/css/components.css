@@ -2463,11 +2463,11 @@
 }
 
 .view-review.split-view .preview-panel {
-    flex: 0 0 40% !important;
+    flex: 0 0 40%;
 }
 
 .view-review.split-view .panel-resizer {
-    display: none;
+    display: flex;
 }
 
 .view-review.split-view .extraction-panel {
@@ -2475,12 +2475,59 @@
     overflow-y: auto;
 }
 
+/* Vertical resizer between top and bottom sections */
+.split-view-v-resizer {
+    height: 12px;
+    cursor: row-resize;
+    background: transparent;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    z-index: 40;
+    position: relative;
+}
+
+/* Larger invisible hit area for vertical resizer */
+.split-view-v-resizer::before {
+    content: '';
+    position: absolute;
+    left: 0;
+    right: 0;
+    top: -6px;
+    bottom: -6px;
+    cursor: row-resize;
+}
+
+.split-view-v-resizer:hover,
+.split-view-v-resizer.dragging {
+    background: rgba(59, 130, 246, 0.2);
+}
+
+.split-view-v-resizer .resizer-handle {
+    width: 48px;
+    height: 4px;
+    background: var(--gray-400);
+    border-radius: 2px;
+    transition: background 0.15s, transform 0.15s;
+    pointer-events: none;
+}
+
+.split-view-v-resizer:hover .resizer-handle {
+    background: var(--color-primary);
+    transform: scaleX(1.2);
+}
+
+.split-view-v-resizer.dragging .resizer-handle {
+    background: var(--color-primary);
+    transform: scaleX(1.5);
+}
+
 /* Bottom section: Sublists full width (1/3 height) */
 .view-review.split-view .review-bottom-section {
-    flex: 1;
     min-height: 200px;
     max-height: 40%;
-    border-top: 1px solid var(--border-color);
+    border-top: none;
     background: var(--surface-card);
     overflow-y: auto;
 }
