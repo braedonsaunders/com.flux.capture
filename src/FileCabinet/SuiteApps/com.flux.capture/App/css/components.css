@@ -4394,9 +4394,9 @@ body.dark-mode #btn-dark-mode i::before {
     background-clip: text;
     font-weight: 600;
 }
-.flow-drop-container.compact .dropzone-secondary { display: none; }
-.flow-drop-container.compact .dropzone-formats { display: none; }
-.flow-drop-container.compact .dropzone-email-hint { display: none; }
+.flow-drop-container.compact .dropzone-secondary { display: none !important; }
+.flow-drop-container.compact .dropzone-formats { display: none !important; }
+.flow-drop-container.compact .dropzone-email-hint { display: none !important; }
 .flow-drop-container.compact .dropzone-rings,
 .flow-drop-container.compact .dropzone-particles,
 .flow-drop-container.compact .dropzone-glow,
