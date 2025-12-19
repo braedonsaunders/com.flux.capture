@@ -2618,6 +2618,7 @@ define([
                 configRecord = record.create({
                     type: 'customrecord_flux_config'
                 });
+                configRecord.setValue('name', 'Email Inbox Address');
                 configRecord.setValue('custrecord_flux_cfg_type', 'email_capture');
                 configRecord.setValue('custrecord_flux_cfg_key', 'inbox_address');
             }
