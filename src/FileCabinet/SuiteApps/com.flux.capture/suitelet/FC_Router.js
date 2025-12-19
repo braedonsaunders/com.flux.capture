@@ -611,11 +611,11 @@ define([
             var sql = 'SELECT id, custrecord_flux_document_id as name, custrecord_flux_status as status, custrecord_flux_document_type as documentType, ' +
                 'custrecord_flux_confidence_score as confidence, BUILTIN.DF(custrecord_flux_vendor) as vendorName, ' +
                 'custrecord_flux_invoice_number as invoiceNumber, custrecord_flux_total_amount as totalAmount, ' +
-                'custrecord_flux_created_date as createdDate, ' +
-                'custrecord_flux_anomalies as anomalies, custrecord_flux_error_message as errorMessage FROM customrecord_flux_document ' +
+                'COALESCE(custrecord_flux_created_date, custrecord_flux_email_received, created) as createdDate, ' +
+                'custrecord_flux_anomalies as anomalies, custrecord_flux_error_message as errorMessage, custrecord_flux_original_filename as originalFilename FROM customrecord_flux_document ' +
                 'WHERE custrecord_flux_status IN (' + DocStatus.PENDING + ', ' + DocStatus.PROCESSING + ', ' +
                 DocStatus.EXTRACTED + ', ' + DocStatus.NEEDS_REVIEW + ', ' + DocStatus.ERROR + ') ' +
-                'ORDER BY ' + sortColumn + ' ' + sortDir;
+                'ORDER BY ' + sortColumn + ' ' + sortDir + ' NULLS LAST';
 
             fcDebug.debug('getProcessingQueue', 'SQL: ' + sql);
             var results = query.runSuiteQL({ query: sql });
@@ -632,9 +632,11 @@ define([
                 // PERCENT fields return decimals (0.85 for 85%), convert to integer percentage
                 var confidenceRaw = v[4];
                 var confidence = confidenceRaw != null ? Math.round(confidenceRaw * 100) : 0;
+                // Use originalFilename as fallback for name
+                var docName = v[1] || v[11] || ('Document ' + v[0]);
                 return {
                     id: v[0],
-                    name: v[1] || ('Document ' + v[0]),
+                    name: docName,
                     status: v[2],
                     documentType: v[3],
                     confidence: confidence,
@@ -643,7 +645,8 @@ define([
                     totalAmount: v[7],
                     createdDate: v[8],
                     hasAnomalies: docAnomalies.length > 0,
-                    errorMessage: v[10] || ''
+                    errorMessage: v[10] || '',
+                    originalFilename: v[11]
                 };
             });
 
@@ -2400,24 +2403,41 @@ define([
             var pluginExists = false;
             var scriptInternalId = null;
 
-            // Method 1: Try to query the script table for email capture plugin with emailaddress
+            // Method 1: Try to load script record directly and check for email address field
             try {
-                var scriptQuery = query.runSuiteQL({
-                    query: "SELECT id, scriptid, name, scripttype, emailaddress, isinactive " +
-                           "FROM script " +
-                           "WHERE scriptid = 'customscript_fc_email_capture'"
+                var scriptSearch = search.create({
+                    type: search.Type.SCRIPT,
+                    filters: [
+                        ['scriptid', 'is', 'customscript_fc_email_capture']
+                    ],
+                    columns: [
+                        'internalid',
+                        'name',
+                        'scripttype',
+                        'isinactive'
+                    ]
                 });
-
-                if (scriptQuery && scriptQuery.results && scriptQuery.results.length > 0) {
-                    var row = scriptQuery.results[0];
+                var scriptResults = scriptSearch.run().getRange({ start: 0, end: 1 });
+                if (scriptResults && scriptResults.length > 0) {
                     pluginExists = true;
-                    scriptInternalId = row.values[0];
-                    emailAddress = row.values[4]; // emailaddress column
-                    pluginEnabled = row.values[5] === 'F'; // isinactive = F means active
-                    log.debug('Plugin found via script table', JSON.stringify(row.values));
+                    scriptInternalId = scriptResults[0].id;
+                    pluginEnabled = scriptResults[0].getValue('isinactive') === 'F';
+                    log.debug('Plugin found via search', 'ID: ' + scriptInternalId);
+
+                    // Try to load the record and get email address field
+                    try {
+                        var scriptRec = record.load({
+                            type: record.Type.EMAIL_CAPTURE_PLUGIN,
+                            id: scriptInternalId
+                        });
+                        emailAddress = scriptRec.getValue({ fieldId: 'emailaddress' });
+                        log.debug('Email address from record', emailAddress);
+                    } catch (loadErr) {
+                        log.debug('Could not load EMAIL_CAPTURE_PLUGIN record', loadErr.message);
+                    }
                 }
             } catch (scriptErr) {
-                log.debug('script table query failed', scriptErr.message);
+                log.debug('script search failed', scriptErr.message);
             }
 
             // Method 2: Try pluginimplementation table
