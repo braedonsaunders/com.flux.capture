@@ -23,7 +23,6 @@ define(['N/file', 'N/runtime', 'N/url', 'N/ui/serverWidget', 'N/search', 'N/task
         'js_core': 'client/core/FC.Core.js',
         'js_main': 'client/FC.Main.js',
         'js_view_dashboard': 'client/views/View.Dashboard.js',
-        'js_view_upload': 'client/views/View.Upload.js',
         'js_view_queue': 'client/views/View.Queue.js',
         'js_view_review': 'client/views/View.Review.js',
         'js_view_rail': 'client/views/View.Rail.js',
@@ -337,7 +336,6 @@ define(['N/file', 'N/runtime', 'N/url', 'N/ui/serverWidget', 'N/search', 'N/task
         htmlContent = htmlContent.replace(/\{\{JS_CORE_URL\}\}/g, fileUrls['js_core'] || '');
         htmlContent = htmlContent.replace(/\{\{JS_MAIN_URL\}\}/g, fileUrls['js_main'] || '');
         htmlContent = htmlContent.replace(/\{\{JS_VIEW_DASHBOARD_URL\}\}/g, fileUrls['js_view_dashboard'] || '');
-        htmlContent = htmlContent.replace(/\{\{JS_VIEW_UPLOAD_URL\}\}/g, fileUrls['js_view_upload'] || '');
         htmlContent = htmlContent.replace(/\{\{JS_VIEW_QUEUE_URL\}\}/g, fileUrls['js_view_queue'] || '');
         htmlContent = htmlContent.replace(/\{\{JS_VIEW_REVIEW_URL\}\}/g, fileUrls['js_view_review'] || '');
         htmlContent = htmlContent.replace(/\{\{JS_VIEW_RAIL_URL\}\}/g, fileUrls['js_view_rail'] || '');
