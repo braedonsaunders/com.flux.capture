@@ -216,9 +216,18 @@ function createFluxDocument(fileObj, originalFileName, senderEmail, subject) {
  */
 function triggerProcessingViaRestlet() {
     try {
-        // Get the Suitelet URL with action parameter
-        var suiteletUrl = nlapiResolveURL('SUITELET', 'customscript_fc_suitelet', 'customdeploy_fc_suitelet');
-        suiteletUrl += '&action=triggerProcessing';
+        // Get the Suitelet URL - nlapiResolveURL returns relative, need to make it absolute
+        var relativePath = nlapiResolveURL('SUITELET', 'customscript_fc_suitelet', 'customdeploy_fc_suitelet');
+
+        // Build full URL using account domain
+        var domain = nlapiGetContext().getSetting('SCRIPT', 'custscript_domain');
+        if (!domain) {
+            // Fallback: construct from account ID
+            var accountId = nlapiGetContext().getCompany();
+            domain = 'https://' + accountId + '.app.netsuite.com';
+        }
+
+        var suiteletUrl = domain + relativePath + '&action=triggerProcessing';
 
         nlapiLogExecution('DEBUG', 'Flux Capture: Triggering processing', 'URL: ' + suiteletUrl);
 
