@@ -1036,6 +1036,95 @@ define([
     }
 
     /**
+     * Get customers AND jobs/projects for customer field dropdowns
+     * In NetSuite, jobs are children of customers and often selected in the same field
+     */
+    function getCustomersAndProjects(context) {
+        try {
+            var searchQuery = context.query || '';
+            var limit = Math.min(parseInt(context.limit) || 200, 500);
+            var halfLimit = Math.floor(limit / 2);
+
+            var options = [];
+
+            // Search customers
+            var customerFilters = [['isinactive', 'is', 'F']];
+            if (searchQuery && searchQuery.length >= 1) {
+                customerFilters.push('AND');
+                customerFilters.push([
+                    ['entityid', 'contains', searchQuery],
+                    'OR',
+                    ['companyname', 'contains', searchQuery]
+                ]);
+            }
+
+            var customerSearch = search.create({
+                type: search.Type.CUSTOMER,
+                filters: customerFilters,
+                columns: [
+                    search.createColumn({ name: 'internalid' }),
+                    search.createColumn({ name: 'entityid', sort: search.Sort.ASC }),
+                    search.createColumn({ name: 'companyname' })
+                ]
+            });
+
+            var customerResults = customerSearch.run().getRange({ start: 0, end: halfLimit });
+            customerResults.forEach(function(result) {
+                var entityId = result.getValue('entityid') || '';
+                var companyName = result.getValue('companyname') || '';
+                options.push({
+                    value: result.getValue('internalid'),
+                    text: entityId ? entityId + ' - ' + companyName : companyName,
+                    type: 'customer'
+                });
+            });
+
+            // Search jobs/projects
+            var jobFilters = [['isinactive', 'is', 'F']];
+            if (searchQuery && searchQuery.length >= 1) {
+                jobFilters.push('AND');
+                jobFilters.push([
+                    ['entityid', 'contains', searchQuery],
+                    'OR',
+                    ['companyname', 'contains', searchQuery]
+                ]);
+            }
+
+            var jobSearch = search.create({
+                type: search.Type.JOB,
+                filters: jobFilters,
+                columns: [
+                    search.createColumn({ name: 'internalid' }),
+                    search.createColumn({ name: 'entityid', sort: search.Sort.ASC }),
+                    search.createColumn({ name: 'companyname' }),
+                    search.createColumn({ name: 'customer' })
+                ]
+            });
+
+            var jobResults = jobSearch.run().getRange({ start: 0, end: halfLimit });
+            jobResults.forEach(function(result) {
+                var entityId = result.getValue('entityid') || '';
+                var companyName = result.getValue('companyname') || '';
+                options.push({
+                    value: result.getValue('internalid'),
+                    text: entityId ? entityId + ' - ' + companyName : companyName,
+                    type: 'project'
+                });
+            });
+
+            // Sort combined results by text
+            options.sort(function(a, b) {
+                return (a.text || '').localeCompare(b.text || '');
+            });
+
+            return Response.success(options);
+        } catch (e) {
+            log.error('getCustomersAndProjects Error', e);
+            return Response.error('CUSTOMERS_ERROR', e.message);
+        }
+    }
+
+    /**
      * Get items for line item dropdowns
      * Returns inventory/non-inventory items for vendor bills
      */
@@ -1211,9 +1300,8 @@ define([
                     break;
                 case 'customers':
                 case 'customer':
-                    searchType = search.Type.CUSTOMER;
-                    columns = ['internalid', 'entityid', 'companyname'];
-                    displayFormat = 'id-name';
+                    // Search both customers and jobs/projects (combined result)
+                    return getCustomersAndProjects(context);
                     break;
                 case 'employees':
                 case 'employee':

@@ -1820,10 +1820,14 @@
             if (id === 'terms') return 'terms';
             if (id === 'currency') return 'currencies';
             if (id === 'postingperiod') return 'accountingperiods';
-            if (id === 'employee') return 'employees';
+            if (id === 'employee' || id === 'nextapprover') return 'employees';
             if (id === 'approvalstatus') return 'approvalstatuses';
             if (id === 'item') return 'items';
             if (id === 'customer') return 'customers';
+            if (id === 'job' || id === 'project') return 'projects';
+            if (id === 'taxcode') return 'taxcodes';
+            if (id === 'category' || id === 'expensecategory') return 'expensecategories';
+            if (id === 'projecttask') return 'projecttasks';
             return 'generic';
         },
 
