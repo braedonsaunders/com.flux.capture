@@ -3235,9 +3235,16 @@
                 return;
             }
 
-            this.sublistData[sublistId] = this.transformUndoState.lines;
+            var restoredLines = this.transformUndoState.lines;
+            this.sublistData[sublistId] = restoredLines;
             var slType = (sublistId || '').toLowerCase();
-            this.changes[slType + 'Lines'] = this.transformUndoState.lines;
+            this.changes[slType + 'Lines'] = restoredLines;
+
+            // Also update formData.sublists so renderSublistTable picks up the changes
+            if (this.formData && this.formData.sublists) {
+                this.formData.sublists[slType] = restoredLines;
+            }
+
             this.transformUndoState = null;
 
             // Hide undo button
@@ -3318,6 +3325,12 @@
             this.sublistData[sublistId] = newLines;
             var slType = (sublistId || '').toLowerCase();
             this.changes[slType + 'Lines'] = newLines;
+
+            // Also update formData.sublists so renderSublistTable picks up the changes
+            if (this.formData && this.formData.sublists) {
+                this.formData.sublists[slType] = newLines;
+            }
+
             this.markUnsaved();
             this.refreshSublist(sublistId);
             this.updateTabCounts();
@@ -3443,6 +3456,12 @@
 
             var slType = (sublistId || '').toLowerCase();
             this.changes[slType + 'Lines'] = lines;
+
+            // Also update formData.sublists so renderSublistTable picks up the changes
+            if (this.formData && this.formData.sublists) {
+                this.formData.sublists[slType] = lines;
+            }
+
             this.markUnsaved();
             this.refreshSublist(sublistId);
         },
@@ -3587,6 +3606,12 @@
             this.sublistData[sublistId] = newLines;
             var slType = (sublistId || '').toLowerCase();
             this.changes[slType + 'Lines'] = newLines;
+
+            // Also update formData.sublists so renderSublistTable picks up the changes
+            if (this.formData && this.formData.sublists) {
+                this.formData.sublists[slType] = newLines;
+            }
+
             this.markUnsaved();
             this.refreshSublist(sublistId);
             this.updateTabCounts();

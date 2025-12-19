@@ -1885,12 +1885,12 @@
     display: inline-block;
 }
 
-.btn-transform {
+.sublist-footer .btn-transform {
     display: inline-flex;
     align-items: center;
-    gap: 6px;
+    gap: 4px;
     padding: var(--space-xs) var(--space-sm);
-    font-size: var(--font-size-xs);
+    font-size: var(--font-size-xs) !important;
 }
 
 .transform-arrow {
