@@ -15,6 +15,7 @@
         captureScriptEnabled: false,
         providerConfig: null,
         currentProvider: 'oci',
+        emailInboxConfig: null,
 
         init: function() {
             renderTemplate('tpl-settings', 'view-container');
@@ -281,6 +282,21 @@
                     self.saveProviderSettings();
                 });
             }
+
+            // Email inbox buttons
+            var copyEmailBtn = el('#btn-copy-email');
+            if (copyEmailBtn) {
+                copyEmailBtn.addEventListener('click', function() {
+                    self.copyEmailAddress();
+                });
+            }
+
+            var refreshEmailBtn = el('#btn-refresh-email-status');
+            if (refreshEmailBtn) {
+                refreshEmailBtn.addEventListener('click', function() {
+                    self.loadEmailInboxStatus();
+                });
+            }
         },
 
         // ==========================================
@@ -310,6 +326,8 @@
                 this.loadProviderConfig();
             } else if (tabId === 'forms' && !this.formConfig) {
                 this.loadFormConfig(this.currentFormType);
+            } else if (tabId === 'email' && !this.emailInboxConfig) {
+                this.loadEmailInboxStatus();
             }
         },
 
@@ -2295,11 +2313,160 @@
                 });
         },
 
+        // ==========================================
+        // EMAIL INBOX MANAGEMENT
+        // ==========================================
+
+        loadEmailInboxStatus: function() {
+            var self = this;
+            var statusEl = el('#email-inbox-status');
+            var addressPanel = el('#email-address-panel');
+            var setupPanel = el('#email-setup-panel');
+
+            // Show loading state
+            if (statusEl) {
+                statusEl.innerHTML = '<div class="email-status-loading">' +
+                    '<i class="fas fa-spinner fa-spin"></i>' +
+                    '<span>Loading email inbox status...</span>' +
+                    '</div>';
+                statusEl.style.display = 'block';
+            }
+            if (addressPanel) addressPanel.style.display = 'none';
+            if (setupPanel) setupPanel.style.display = 'none';
+
+            API.get('emailInboxStatus')
+                .then(function(result) {
+                    self.emailInboxConfig = result.data || result || {};
+
+                    if (statusEl) statusEl.style.display = 'none';
+
+                    if (self.emailInboxConfig.enabled && self.emailInboxConfig.emailAddress) {
+                        // Show the email address panel
+                        self.showEmailAddressPanel(self.emailInboxConfig);
+                    } else {
+                        // Show setup instructions
+                        self.showEmailSetupPanel();
+                    }
+                })
+                .catch(function(err) {
+                    console.error('Error loading email inbox status:', err);
+                    // On error, show the setup panel with the email address construction
+                    self.showEmailSetupPanel();
+                });
+        },
+
+        showEmailAddressPanel: function(config) {
+            var addressPanel = el('#email-address-panel');
+            var setupPanel = el('#email-setup-panel');
+            var statusEl = el('#email-inbox-status');
+
+            if (statusEl) statusEl.style.display = 'none';
+            if (setupPanel) setupPanel.style.display = 'none';
+            if (addressPanel) addressPanel.style.display = 'block';
+
+            // Set the email address
+            var addressInput = el('#email-capture-address');
+            if (addressInput && config.emailAddress) {
+                addressInput.value = config.emailAddress;
+            }
+
+            // Update stats if available
+            var docsToday = el('#email-docs-today');
+            var docsTotal = el('#email-docs-total');
+
+            if (docsToday) {
+                docsToday.textContent = config.documentsToday !== undefined ? config.documentsToday : '-';
+            }
+            if (docsTotal) {
+                docsTotal.textContent = config.documentsTotal !== undefined ? config.documentsTotal : '-';
+            }
+
+            // Load recent email imports
+            this.loadRecentEmailImports();
+        },
+
+        showEmailSetupPanel: function() {
+            var addressPanel = el('#email-address-panel');
+            var setupPanel = el('#email-setup-panel');
+            var statusEl = el('#email-inbox-status');
+
+            if (statusEl) statusEl.style.display = 'none';
+            if (addressPanel) addressPanel.style.display = 'none';
+            if (setupPanel) setupPanel.style.display = 'block';
+        },
+
+        copyEmailAddress: function() {
+            var addressInput = el('#email-capture-address');
+            if (!addressInput || !addressInput.value) {
+                UI.toast('No email address to copy', 'warning');
+                return;
+            }
+
+            // Try to use the Clipboard API
+            if (navigator.clipboard && navigator.clipboard.writeText) {
+                navigator.clipboard.writeText(addressInput.value)
+                    .then(function() {
+                        UI.toast('Email address copied to clipboard', 'success');
+                    })
+                    .catch(function() {
+                        // Fallback to select and copy
+                        addressInput.select();
+                        document.execCommand('copy');
+                        UI.toast('Email address copied to clipboard', 'success');
+                    });
+            } else {
+                // Fallback for older browsers
+                addressInput.select();
+                document.execCommand('copy');
+                UI.toast('Email address copied to clipboard', 'success');
+            }
+        },
+
+        loadRecentEmailImports: function() {
+            var container = el('#recent-email-imports');
+            if (!container) return;
+
+            API.get('recentEmailImports')
+                .then(function(result) {
+                    var imports = result.data || result || [];
+
+                    if (!imports.length) {
+                        container.innerHTML = '<div class="empty-state-small">' +
+                            '<i class="fas fa-inbox"></i>' +
+                            '<span>No recent email imports</span>' +
+                            '</div>';
+                        return;
+                    }
+
+                    var html = '<div class="recent-email-list">';
+                    imports.forEach(function(item) {
+                        html += '<div class="recent-email-item">' +
+                            '<div class="email-icon"><i class="fas fa-file-pdf"></i></div>' +
+                            '<div class="email-info">' +
+                            '<div class="email-filename">' + (item.filename || 'Unknown file') + '</div>' +
+                            '<div class="email-sender">' + (item.sender || 'Unknown sender') + '</div>' +
+                            '</div>' +
+                            '<div class="email-time">' + (item.timeAgo || '') + '</div>' +
+                            '</div>';
+                    });
+                    html += '</div>';
+                    container.innerHTML = html;
+                })
+                .catch(function(err) {
+                    console.error('Error loading recent email imports:', err);
+                    container.innerHTML = '<div class="empty-state-small">' +
+                        '<i class="fas fa-inbox"></i>' +
+                        '<span>No recent email imports</span>' +
+                        '</div>';
+                });
+        },
+
         cleanup: function() {
             this.formConfig = null;
             this.editedConfig = null;
             this.parsedXml = null;
             this.xmlSelections = {};
+            this.emailInboxConfig = null;
         }
     };
 

@@ -26,6 +26,8 @@
             <file>/SuiteApps/com.flux.capture/client/views/View.Settings.js</file>
             <!-- Libraries -->
             <file>/SuiteApps/com.flux.capture/lib/FC_Engine.js</file>
+            <!-- Email Capture Plugin -->
+            <file>/SuiteApps/com.flux.capture/scripts/FC_EmailCapture_Plugin.js</file>
         </files>
     </dependencies>
 </manifest>
