@@ -18,7 +18,6 @@
 
     var COMMANDS = [
         { id: 'approve', label: 'Approve current document', icon: 'fa-check', shortcut: 'A' },
-        { id: 'approve-all-high', label: 'Approve all high confidence', icon: 'fa-check-double', shortcut: '⌘⇧A' },
         { id: 'delete', label: 'Delete current document', icon: 'fa-trash-can', shortcut: 'D' },
         { id: 'open', label: 'Open full review', icon: 'fa-expand', shortcut: '⏎' },
         { id: 'search', label: 'Search documents', icon: 'fa-search', shortcut: '/' },
@@ -356,12 +355,6 @@
                     return;
                 }
 
-                // Quick actions panel
-                if (e.target.closest('#qa-approve-high')) {
-                    self.approveAllHighConfidence();
-                    return;
-                }
-
                 // Command palette overlay
                 if (e.target.closest('.palette-overlay')) {
                     self.closeCommandPalette();
@@ -460,12 +453,6 @@
                         if (!e.metaKey && !e.ctrlKey) {
                             e.preventDefault();
                             self.approveCurrentDocument();
-                        }
-                        break;
-                    case 'A':
-                        if (e.shiftKey && (e.metaKey || e.ctrlKey)) {
-                            e.preventDefault();
-                            self.approveAllHighConfidence();
                         }
                         break;
                     case 'd':
@@ -591,30 +578,9 @@
         },
 
         renderQuickActions: function() {
+            // Quick actions panel removed - all documents require manual review
             var panel = el('#quick-actions-panel');
-            if (!panel) return;
-
-            var highConfDocs = this.documents.filter(function(d) {
-                var s = String(d.status);
-                var isReview = s === DocStatus.NEEDS_REVIEW || s === DocStatus.EXTRACTED;
-                return isReview && parseInt(d.confidence) >= 85;
-            });
-
-            if (highConfDocs.length > 0) {
-                panel.style.display = 'flex';
-
-                var total = highConfDocs.reduce(function(sum, d) {
-                    return sum + (parseFloat(d.totalAmount) || 0);
-                }, 0);
-
-                var countEl = el('#qa-high-count');
-                var totalEl = el('#qa-high-total');
-
-                if (countEl) countEl.textContent = highConfDocs.length;
-                if (totalEl) totalEl.textContent = formatNumber(total);
-            } else {
-                panel.style.display = 'none';
-            }
+            if (panel) panel.style.display = 'none';
         },
 
         renderDocumentList: function() {
@@ -1133,59 +1099,6 @@
             });
         },
 
-        approveAllHighConfidence: function() {
-            var self = this;
-            var highConfDocs = this.documents.filter(function(d) {
-                var s = String(d.status);
-                var isReview = s === DocStatus.NEEDS_REVIEW || s === DocStatus.EXTRACTED;
-                return isReview && parseInt(d.confidence) >= 85;
-            });
-
-            if (highConfDocs.length === 0) {
-                UI.toast('No high confidence documents to approve', 'info');
-                return;
-            }
-
-            UI.confirm({
-                title: 'Batch Approve',
-                message: 'Approve ' + highConfDocs.length + ' high confidence documents?',
-                confirmText: 'Approve All',
-                type: 'success'
-            }).then(function(confirmed) {
-                if (!confirmed) return;
-
-                var approved = 0;
-                var errors = 0;
-
-                function approveNext(index) {
-                    if (index >= highConfDocs.length) {
-                        self.streak += approved;
-                        self.processedToday += approved;
-                        self.bestStreak = Math.max(self.bestStreak, self.streak);
-                        localStorage.setItem('fc_best_streak', String(self.bestStreak));
-                        localStorage.setItem('fc_processed_today', String(self.processedToday));
-
-                        UI.toast('Approved ' + approved + ' documents!', 'success');
-                        self.triggerConfetti();
-                        self.loadData();
-                        return;
-                    }
-
-                    API.put('approve', { documentId: highConfDocs[index].id, createTransaction: true })
-                        .then(function() {
-                            approved++;
-                            approveNext(index + 1);
-                        })
-                        .catch(function() {
-                            errors++;
-                            approveNext(index + 1);
-                        });
-                }
-
-                approveNext(0);
-            });
-        },
-
         // ==========================================
         // COMMAND PALETTE
         // ==========================================
@@ -1256,9 +1169,6 @@
                 case 'approve':
                     this.approveCurrentDocument();
                     break;
-                case 'approve-all-high':
-                    this.approveAllHighConfidence();
-                    break;
                 case 'delete':
                     this.deleteCurrentDocument();
                     break;
@@ -1303,7 +1213,6 @@
                             '<div class="shortcut-item"><kbd>A</kbd> <span>Approve document</span></div>' +
                             '<div class="shortcut-item"><kbd>D</kbd> <span>Delete document</span></div>' +
                             '<div class="shortcut-item"><kbd>Space</kbd> <span>Toggle selection</span></div>' +
-                            '<div class="shortcut-item"><kbd>⌘⇧A</kbd> <span>Approve all high confidence</span></div>' +
                         '</div>' +
                         '<div class="shortcut-section">' +
                             '<div class="shortcut-section-title">Search & Commands</div>' +
