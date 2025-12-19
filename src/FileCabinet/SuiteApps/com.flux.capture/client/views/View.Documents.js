@@ -576,7 +576,8 @@
                 medium: medCount,
                 low: lowCount,
                 flagged: flaggedCount,
-                completed: completedCount
+                completed: completedCount,
+                all: this.documents.length
             };
 
             Object.keys(counts).forEach(function(key) {

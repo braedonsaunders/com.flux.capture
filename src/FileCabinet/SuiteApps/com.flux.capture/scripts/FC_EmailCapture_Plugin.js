@@ -211,36 +211,28 @@ function createFluxDocument(fileObj, originalFileName, senderEmail, subject) {
 }
 
 /**
- * Trigger document processing by calling the FC_Router RESTlet
- * Uses nlapiRequestURL to make an internal authenticated request
+ * Trigger document processing by calling the FC_Suitelet
+ * Suitelets can be called internally without authentication issues
  */
 function triggerProcessingViaRestlet() {
     try {
-        // Get the RESTlet URL
-        var restletUrl = nlapiResolveURL('RESTLET', 'customscript_fc_router', 'customdeploy_fc_router');
+        // Get the Suitelet URL with action parameter
+        var suiteletUrl = nlapiResolveURL('SUITELET', 'customscript_fc_app', 'customdeploy_fc_app');
+        suiteletUrl += '&action=triggerProcessing';
 
-        // Make POST request with triggerProcessing action
-        var headers = {
-            'Content-Type': 'application/json'
-        };
-        var body = JSON.stringify({
-            action: 'triggerProcessing'
-        });
+        nlapiLogExecution('DEBUG', 'Flux Capture: Triggering processing', 'URL: ' + suiteletUrl);
 
-        var response = nlapiRequestURL(restletUrl, body, headers, 'POST');
+        // Make POST request to Suitelet
+        var response = nlapiRequestURL(suiteletUrl, null, null, 'POST');
         var responseCode = response.getCode();
         var responseBody = response.getBody();
 
-        if (responseCode === 200) {
-            nlapiLogExecution('AUDIT', 'Flux Capture: Processing Triggered',
-                'Successfully triggered document processing via RESTlet');
-        } else {
-            nlapiLogExecution('DEBUG', 'Flux Capture: Trigger Response',
-                'Code: ' + responseCode + ', Body: ' + responseBody);
-        }
+        nlapiLogExecution('AUDIT', 'Flux Capture: Processing Triggered',
+            'Response code: ' + responseCode + ', Body: ' + responseBody);
+
     } catch (e) {
         // Log but don't fail - worst case documents will be picked up on next manual trigger
-        nlapiLogExecution('DEBUG', 'Flux Capture: Could not trigger processing',
-            e.toString() + ' - documents will need manual processing');
+        nlapiLogExecution('ERROR', 'Flux Capture: Could not trigger processing',
+            e.toString());
     }
 }
