@@ -2403,24 +2403,41 @@ define([
             var pluginExists = false;
             var scriptInternalId = null;
 
-            // Method 1: Try to query the script table for email capture plugin with emailaddress
+            // Method 1: Try to load script record directly and check for email address field
             try {
-                var scriptQuery = query.runSuiteQL({
-                    query: "SELECT id, scriptid, name, scripttype, emailaddress, isinactive " +
-                           "FROM script " +
-                           "WHERE scriptid = 'customscript_fc_email_capture'"
+                var scriptSearch = search.create({
+                    type: search.Type.SCRIPT,
+                    filters: [
+                        ['scriptid', 'is', 'customscript_fc_email_capture']
+                    ],
+                    columns: [
+                        'internalid',
+                        'name',
+                        'scripttype',
+                        'isinactive'
+                    ]
                 });
-
-                if (scriptQuery && scriptQuery.results && scriptQuery.results.length > 0) {
-                    var row = scriptQuery.results[0];
+                var scriptResults = scriptSearch.run().getRange({ start: 0, end: 1 });
+                if (scriptResults && scriptResults.length > 0) {
                     pluginExists = true;
-                    scriptInternalId = row.values[0];
-                    emailAddress = row.values[4]; // emailaddress column
-                    pluginEnabled = row.values[5] === 'F'; // isinactive = F means active
-                    log.debug('Plugin found via script table', JSON.stringify(row.values));
+                    scriptInternalId = scriptResults[0].id;
+                    pluginEnabled = scriptResults[0].getValue('isinactive') === 'F';
+                    log.debug('Plugin found via search', 'ID: ' + scriptInternalId);
+
+                    // Try to load the record and get email address field
+                    try {
+                        var scriptRec = record.load({
+                            type: record.Type.EMAIL_CAPTURE_PLUGIN,
+                            id: scriptInternalId
+                        });
+                        emailAddress = scriptRec.getValue({ fieldId: 'emailaddress' });
+                        log.debug('Email address from record', emailAddress);
+                    } catch (loadErr) {
+                        log.debug('Could not load EMAIL_CAPTURE_PLUGIN record', loadErr.message);
+                    }
                 }
             } catch (scriptErr) {
-                log.debug('script table query failed', scriptErr.message);
+                log.debug('script search failed', scriptErr.message);
             }
 
             // Method 2: Try pluginimplementation table
