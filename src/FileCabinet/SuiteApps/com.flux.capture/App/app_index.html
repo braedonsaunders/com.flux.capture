@@ -1403,6 +1403,24 @@
                                         </div>
                                     </div>
                                 </div>
+
+                                <!-- Mindee Provider Option -->
+                                <div class="provider-option" data-provider="mindee" id="provider-mindee">
+                                    <div class="provider-radio">
+                                        <input type="radio" name="provider" value="mindee" id="provider-radio-mindee">
+                                    </div>
+                                    <div class="provider-info">
+                                        <div class="provider-header">
+                                            <span class="provider-name">Mindee</span>
+                                            <span class="provider-badge badge-pro">Premium</span>
+                                        </div>
+                                        <p class="provider-desc">Mindee Document Parsing API. High accuracy invoice and receipt parsing.</p>
+                                        <div class="provider-status" id="mindee-status">
+                                            <i class="fas fa-exclamation-circle" style="color:var(--color-warning);"></i>
+                                            <span>Configuration required</span>
+                                        </div>
+                                    </div>
+                                </div>
                             </div>
 
                             <!-- Azure Configuration Panel -->
@@ -1442,6 +1460,39 @@
                                             <i class="fas fa-plug"></i> Test Connection
                                         </button>
                                         <span class="test-result" id="azure-test-result"></span>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Mindee Configuration Panel -->
+                            <div class="provider-config-panel" id="mindee-config-panel" style="display:none;">
+                                <h4><i class="fas fa-cog"></i> Mindee Configuration</h4>
+                                <div class="provider-config-form">
+                                    <div class="form-field">
+                                        <label for="mindee-api-key">
+                                            API Key <span class="required">*</span>
+                                        </label>
+                                        <div class="input-with-icon">
+                                            <input type="password" id="mindee-api-key" placeholder="Enter your Mindee API key" autocomplete="new-password">
+                                            <button type="button" class="btn-icon btn-toggle-password" id="btn-toggle-mindee-api-key" title="Show/Hide">
+                                                <i class="fas fa-eye"></i>
+                                            </button>
+                                        </div>
+                                        <small>Your API key will be encrypted before storage. Get your key at <a href="https://platform.mindee.com" target="_blank">platform.mindee.com</a></small>
+                                    </div>
+                                    <div class="form-field">
+                                        <label for="mindee-doc-type">Default Document Type</label>
+                                        <select id="mindee-doc-type">
+                                            <option value="invoice">Invoice (Recommended)</option>
+                                            <option value="receipt">Receipt</option>
+                                        </select>
+                                        <small>The default document type for parsing</small>
+                                    </div>
+                                    <div class="provider-config-actions">
+                                        <button class="btn btn-secondary" id="btn-test-mindee">
+                                            <i class="fas fa-plug"></i> Test Connection
+                                        </button>
+                                        <span class="test-result" id="mindee-test-result"></span>
                                     </div>
                                 </div>
                             </div>

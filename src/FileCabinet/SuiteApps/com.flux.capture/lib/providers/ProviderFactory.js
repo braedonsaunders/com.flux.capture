@@ -15,13 +15,15 @@ define([
     'N/crypto',
     './ExtractionProvider',
     './OCIProvider',
-    './AzureFormRecognizerProvider'
-], function(log, record, search, encode, crypto, ExtractionProviderModule, OCIProviderModule, AzureProviderModule) {
+    './AzureFormRecognizerProvider',
+    './MindeeProvider'
+], function(log, record, search, encode, crypto, ExtractionProviderModule, OCIProviderModule, AzureProviderModule, MindeeProviderModule) {
     'use strict';
 
     const { ProviderType } = ExtractionProviderModule;
     const { OCIProvider } = OCIProviderModule;
     const { AzureFormRecognizerProvider } = AzureProviderModule;
+    const { MindeeProvider } = MindeeProviderModule;
 
     // Configuration record type and fields
     const CONFIG_RECORD_TYPE = 'customrecord_flux_config';
@@ -66,6 +68,9 @@ define([
                 case ProviderType.AZURE:
                     return this._createAzureProvider(config);
 
+                case ProviderType.MINDEE:
+                    return this._createMindeeProvider(config);
+
                 case ProviderType.OCI:
                 default:
                     return this._createOCIProvider(config);
@@ -82,6 +87,9 @@ define([
             switch (providerType) {
                 case ProviderType.AZURE:
                     return this._createAzureProvider(config);
+
+                case ProviderType.MINDEE:
+                    return this._createMindeeProvider(config);
 
                 case ProviderType.OCI:
                 default:
@@ -139,6 +147,35 @@ define([
                             helpText: 'Default document model to use'
                         }
                     ]
+                },
+                {
+                    type: ProviderType.MINDEE,
+                    name: 'Mindee',
+                    description: 'Mindee Document Parsing API - High accuracy invoice and receipt parsing',
+                    requiresConfig: true,
+                    configFields: [
+                        {
+                            id: 'apiKey',
+                            label: 'API Key',
+                            type: 'password',
+                            required: true,
+                            placeholder: 'Enter your Mindee API key',
+                            helpText: 'Your Mindee API key (will be encrypted)',
+                            encrypted: true
+                        },
+                        {
+                            id: 'defaultDocumentType',
+                            label: 'Default Document Type',
+                            type: 'select',
+                            required: false,
+                            options: [
+                                { value: 'invoice', label: 'Invoice' },
+                                { value: 'receipt', label: 'Receipt' }
+                            ],
+                            defaultValue: 'invoice',
+                            helpText: 'Default document type for parsing'
+                        }
+                    ]
                 }
             ];
 
@@ -181,18 +218,24 @@ define([
                 let testConfig = { ...config };
                 if (config && config._useSavedApiKey) {
                     const savedConfig = this._loadProviderConfig();
-                    if (savedConfig && savedConfig.azure && savedConfig.azure.apiKey) {
+                    if (providerType === ProviderType.AZURE && savedConfig && savedConfig.azure && savedConfig.azure.apiKey) {
                         // _loadProviderConfig already decrypts the API key
                         testConfig.apiKey = savedConfig.azure.apiKey;
+                    } else if (providerType === ProviderType.MINDEE && savedConfig && savedConfig.mindee && savedConfig.mindee.apiKey) {
+                        testConfig.apiKey = savedConfig.mindee.apiKey;
                     }
                     delete testConfig._useSavedApiKey;
                 }
 
                 // Wrap flat config in provider-specific structure
-                // _createAzureProvider expects { azure: {...} }, not flat config
-                const wrappedConfig = providerType === ProviderType.AZURE
-                    ? { azure: testConfig }
-                    : { oci: testConfig };
+                let wrappedConfig;
+                if (providerType === ProviderType.AZURE) {
+                    wrappedConfig = { azure: testConfig };
+                } else if (providerType === ProviderType.MINDEE) {
+                    wrappedConfig = { mindee: testConfig };
+                } else {
+                    wrappedConfig = { oci: testConfig };
+                }
 
                 const provider = this.getProviderByType(providerType, wrappedConfig);
 
@@ -258,6 +301,22 @@ define([
                     // Clean up internal flags
                     delete configToSave.azure._preserveExistingApiKey;
                     delete configToSave.azure._hasApiKey;
+                }
+
+                // Handle Mindee API key encryption
+                if (configToSave.mindee) {
+                    if (configToSave.mindee.apiKey) {
+                        // New API key provided - encrypt it
+                        configToSave.mindee.apiKey = this._encryptValue(configToSave.mindee.apiKey);
+                        configToSave.mindee._apiKeyEncrypted = true;
+                    } else if (configToSave.mindee._preserveExistingApiKey && existingConfig && existingConfig.mindee && existingConfig.mindee.apiKey) {
+                        // Preserve existing API key - re-encrypt since _loadProviderConfig decrypted it
+                        configToSave.mindee.apiKey = this._encryptValue(existingConfig.mindee.apiKey);
+                        configToSave.mindee._apiKeyEncrypted = true;
+                    }
+                    // Clean up internal flags
+                    delete configToSave.mindee._preserveExistingApiKey;
+                    delete configToSave.mindee._hasApiKey;
                 }
 
                 // Find existing config record
@@ -335,6 +394,11 @@ define([
                     config.azure.apiKey = this._decryptValue(config.azure.apiKey);
                 }
 
+                // Decrypt Mindee API key
+                if (config.mindee && config.mindee._apiKeyEncrypted && config.mindee.apiKey) {
+                    config.mindee.apiKey = this._decryptValue(config.mindee.apiKey);
+                }
+
                 // Cache the config
                 this._configCache = config;
                 this._configCacheTime = now;
@@ -366,6 +430,15 @@ define([
                 uiConfig.azure._hasApiKey = true;
             }
 
+            // Mask Mindee API key for UI
+            if (uiConfig.mindee && uiConfig.mindee.apiKey) {
+                const key = uiConfig.mindee.apiKey;
+                uiConfig.mindee.apiKey = key.length > 4 ?
+                    '••••••••' + key.substring(key.length - 4) :
+                    '••••••••';
+                uiConfig.mindee._hasApiKey = true;
+            }
+
             return uiConfig;
         }
 
@@ -381,6 +454,10 @@ define([
                     endpoint: '',
                     apiKey: '',
                     defaultModel: 'prebuilt-invoice'
+                },
+                mindee: {
+                    apiKey: '',
+                    defaultDocumentType: 'invoice'
                 }
             };
         }
@@ -405,6 +482,19 @@ define([
                 endpoint: azureConfig.endpoint,
                 apiKey: azureConfig.apiKey,
                 defaultModel: azureConfig.defaultModel
+            });
+        }
+
+        /**
+         * Create Mindee provider instance
+         * @param {Object} config
+         * @returns {MindeeProvider}
+         */
+        _createMindeeProvider(config) {
+            const mindeeConfig = config.mindee || {};
+            return new MindeeProvider({
+                apiKey: mindeeConfig.apiKey,
+                defaultDocumentType: mindeeConfig.defaultDocumentType
             });
         }
 

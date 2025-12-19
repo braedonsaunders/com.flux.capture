@@ -275,6 +275,32 @@
                 });
             }
 
+            // Toggle Mindee API key visibility
+            var toggleMindeeApiKeyBtn = el('#btn-toggle-mindee-api-key');
+            if (toggleMindeeApiKeyBtn) {
+                toggleMindeeApiKeyBtn.addEventListener('click', function() {
+                    var input = el('#mindee-api-key');
+                    var icon = this.querySelector('i');
+                    if (input.type === 'password') {
+                        input.type = 'text';
+                        icon.classList.remove('fa-eye');
+                        icon.classList.add('fa-eye-slash');
+                    } else {
+                        input.type = 'password';
+                        icon.classList.remove('fa-eye-slash');
+                        icon.classList.add('fa-eye');
+                    }
+                });
+            }
+
+            // Test Mindee connection
+            var testMindeeBtn = el('#btn-test-mindee');
+            if (testMindeeBtn) {
+                testMindeeBtn.addEventListener('click', function() {
+                    self.testMindeeConnection();
+                });
+            }
+
             // Save provider settings
             var saveProviderBtn = el('#btn-save-provider');
             if (saveProviderBtn) {
@@ -2071,22 +2097,36 @@
             // Update radio buttons and selection state
             var ociRadio = el('#provider-radio-oci');
             var azureRadio = el('#provider-radio-azure');
+            var mindeeRadio = el('#provider-radio-mindee');
             var ociOption = el('#provider-oci');
             var azureOption = el('#provider-azure');
+            var mindeeOption = el('#provider-mindee');
             var azurePanel = el('#azure-config-panel');
+            var mindeePanel = el('#mindee-config-panel');
 
+            // Reset all selections first
+            if (ociRadio) ociRadio.checked = false;
+            if (azureRadio) azureRadio.checked = false;
+            if (mindeeRadio) mindeeRadio.checked = false;
+            if (ociOption) ociOption.classList.remove('selected');
+            if (azureOption) azureOption.classList.remove('selected');
+            if (mindeeOption) mindeeOption.classList.remove('selected');
+            if (azurePanel) azurePanel.style.display = 'none';
+            if (mindeePanel) mindeePanel.style.display = 'none';
+
+            // Set the current provider
             if (this.currentProvider === 'azure') {
                 if (azureRadio) azureRadio.checked = true;
-                if (ociRadio) ociRadio.checked = false;
-                if (ociOption) ociOption.classList.remove('selected');
                 if (azureOption) azureOption.classList.add('selected');
                 if (azurePanel) azurePanel.style.display = 'block';
+            } else if (this.currentProvider === 'mindee') {
+                if (mindeeRadio) mindeeRadio.checked = true;
+                if (mindeeOption) mindeeOption.classList.add('selected');
+                if (mindeePanel) mindeePanel.style.display = 'block';
             } else {
+                // Default to OCI
                 if (ociRadio) ociRadio.checked = true;
-                if (azureRadio) azureRadio.checked = false;
                 if (ociOption) ociOption.classList.add('selected');
-                if (azureOption) azureOption.classList.remove('selected');
-                if (azurePanel) azurePanel.style.display = 'none';
             }
 
             // Populate Azure config if present
@@ -2109,6 +2149,23 @@
                 // Update Azure status
                 this.updateAzureStatus(config.azure);
             }
+
+            // Populate Mindee config if present
+            if (config.mindee) {
+                var mindeeApiKeyInput = el('#mindee-api-key');
+                var mindeeDocTypeSelect = el('#mindee-doc-type');
+
+                if (mindeeApiKeyInput && config.mindee._hasApiKey) {
+                    // Show masked placeholder for existing key
+                    mindeeApiKeyInput.placeholder = 'API key configured (enter new to replace)';
+                }
+                if (mindeeDocTypeSelect && config.mindee.defaultDocumentType) {
+                    mindeeDocTypeSelect.value = config.mindee.defaultDocumentType;
+                }
+
+                // Update Mindee status
+                this.updateMindeeStatus(config.mindee);
+            }
         },
 
         updateAzureStatus: function(azureConfig) {
@@ -2124,6 +2181,17 @@
             }
         },
 
+        updateMindeeStatus: function(mindeeConfig) {
+            var statusEl = el('#mindee-status');
+            if (!statusEl) return;
+
+            if (mindeeConfig && mindeeConfig._hasApiKey) {
+                statusEl.innerHTML = '<i class="fas fa-check-circle" style="color:var(--color-success);"></i> <span>Configured</span>';
+            } else {
+                statusEl.innerHTML = '<i class="fas fa-exclamation-circle" style="color:var(--color-warning);"></i> <span>Configuration required</span>';
+            }
+        },
+
         selectProvider: function(provider) {
             var self = this;
             this.currentProvider = provider;
@@ -2131,51 +2199,82 @@
             // Update UI
             var ociOption = el('#provider-oci');
             var azureOption = el('#provider-azure');
+            var mindeeOption = el('#provider-mindee');
             var ociRadio = el('#provider-radio-oci');
             var azureRadio = el('#provider-radio-azure');
+            var mindeeRadio = el('#provider-radio-mindee');
             var azurePanel = el('#azure-config-panel');
+            var mindeePanel = el('#mindee-config-panel');
+
+            // Helper to animate panel in
+            function showPanel(panel) {
+                if (!panel) return;
+                panel.style.display = 'block';
+                panel.style.opacity = '0';
+                panel.style.transform = 'translateY(-10px)';
+                requestAnimationFrame(function() {
+                    panel.style.transition = 'opacity 0.3s ease, transform 0.3s ease';
+                    panel.style.opacity = '1';
+                    panel.style.transform = 'translateY(0)';
+                });
+            }
+
+            // Reset all selections
+            if (ociRadio) ociRadio.checked = false;
+            if (azureRadio) azureRadio.checked = false;
+            if (mindeeRadio) mindeeRadio.checked = false;
+            if (ociOption) ociOption.classList.remove('selected');
+            if (azureOption) azureOption.classList.remove('selected');
+            if (mindeeOption) mindeeOption.classList.remove('selected');
+            if (azurePanel) azurePanel.style.display = 'none';
+            if (mindeePanel) mindeePanel.style.display = 'none';
 
             if (provider === 'azure') {
                 if (azureRadio) azureRadio.checked = true;
-                if (ociRadio) ociRadio.checked = false;
-                if (ociOption) ociOption.classList.remove('selected');
                 if (azureOption) azureOption.classList.add('selected');
-                if (azurePanel) {
-                    azurePanel.style.display = 'block';
-                    // Animate in
-                    azurePanel.style.opacity = '0';
-                    azurePanel.style.transform = 'translateY(-10px)';
-                    requestAnimationFrame(function() {
-                        azurePanel.style.transition = 'opacity 0.3s ease, transform 0.3s ease';
-                        azurePanel.style.opacity = '1';
-                        azurePanel.style.transform = 'translateY(0)';
-                    });
+                showPanel(azurePanel);
 
-                    // Populate Azure fields from saved config if available
-                    if (self.providerConfig && self.providerConfig.azure) {
-                        var config = self.providerConfig.azure;
-                        var endpointInput = el('#azure-endpoint');
-                        var apiKeyInput = el('#azure-api-key');
-                        var modelSelect = el('#azure-model');
+                // Populate Azure fields from saved config if available
+                if (self.providerConfig && self.providerConfig.azure) {
+                    var config = self.providerConfig.azure;
+                    var endpointInput = el('#azure-endpoint');
+                    var apiKeyInput = el('#azure-api-key');
+                    var modelSelect = el('#azure-model');
 
-                        if (endpointInput && config.endpoint) {
-                            endpointInput.value = config.endpoint;
-                        }
-                        if (apiKeyInput && config._hasApiKey) {
-                            apiKeyInput.placeholder = 'API key configured (enter new to replace)';
-                        }
-                        if (modelSelect && config.defaultModel) {
-                            modelSelect.value = config.defaultModel;
-                        }
-                        self.updateAzureStatus(config);
+                    if (endpointInput && config.endpoint) {
+                        endpointInput.value = config.endpoint;
                     }
+                    if (apiKeyInput && config._hasApiKey) {
+                        apiKeyInput.placeholder = 'API key configured (enter new to replace)';
+                    }
+                    if (modelSelect && config.defaultModel) {
+                        modelSelect.value = config.defaultModel;
+                    }
+                    self.updateAzureStatus(config);
+                }
+            } else if (provider === 'mindee') {
+                if (mindeeRadio) mindeeRadio.checked = true;
+                if (mindeeOption) mindeeOption.classList.add('selected');
+                showPanel(mindeePanel);
+
+                // Populate Mindee fields from saved config if available
+                if (self.providerConfig && self.providerConfig.mindee) {
+                    var mindeeConfig = self.providerConfig.mindee;
+                    var mindeeApiKeyInput = el('#mindee-api-key');
+                    var mindeeDocTypeSelect = el('#mindee-doc-type');
+
+                    if (mindeeApiKeyInput && mindeeConfig._hasApiKey) {
+                        mindeeApiKeyInput.placeholder = 'API key configured (enter new to replace)';
+                    }
+                    if (mindeeDocTypeSelect && mindeeConfig.defaultDocumentType) {
+                        mindeeDocTypeSelect.value = mindeeConfig.defaultDocumentType;
+                    }
+                    self.updateMindeeStatus(mindeeConfig);
                 }
             } else {
+                // Default to OCI
                 if (ociRadio) ociRadio.checked = true;
-                if (azureRadio) azureRadio.checked = false;
                 if (ociOption) ociOption.classList.add('selected');
-                if (azureOption) azureOption.classList.remove('selected');
-                if (azurePanel) azurePanel.style.display = 'none';
             }
         },
 
@@ -2244,6 +2343,63 @@
                 });
         },
 
+        testMindeeConnection: function() {
+            var self = this;
+            var btn = el('#btn-test-mindee');
+            var resultEl = el('#mindee-test-result');
+
+            var apiKey = (el('#mindee-api-key').value || '').trim();
+
+            // If no new API key entered, check if we have existing
+            if (!apiKey && !(this.providerConfig && this.providerConfig.mindee && this.providerConfig.mindee._hasApiKey)) {
+                if (resultEl) {
+                    resultEl.innerHTML = '<i class="fas fa-times-circle" style="color:var(--color-danger);"></i> Please enter API key';
+                }
+                return;
+            }
+
+            // Show loading
+            if (btn) {
+                btn.disabled = true;
+                btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Testing...';
+            }
+            if (resultEl) {
+                resultEl.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Testing connection...';
+            }
+
+            // Build test config - use new key if provided, otherwise test with existing
+            var testConfig = {
+                apiKey: apiKey || null, // null means use existing encrypted key
+                defaultDocumentType: el('#mindee-doc-type').value || 'invoice',
+                _useSavedApiKey: !apiKey && this.providerConfig && this.providerConfig.mindee && this.providerConfig.mindee._hasApiKey
+            };
+
+            API.post('testprovider', { providerType: 'mindee', config: testConfig })
+                .then(function() {
+                    // API.post resolves on success (returns data.data)
+                    if (btn) {
+                        btn.disabled = false;
+                        btn.innerHTML = '<i class="fas fa-plug"></i> Test Connection';
+                    }
+
+                    if (resultEl) {
+                        resultEl.innerHTML = '<i class="fas fa-check-circle" style="color:var(--color-success);"></i> Connection successful!';
+                    }
+                    UI.toast('Mindee connection test successful!', 'success');
+                })
+                .catch(function(err) {
+                    if (btn) {
+                        btn.disabled = false;
+                        btn.innerHTML = '<i class="fas fa-plug"></i> Test Connection';
+                    }
+
+                    if (resultEl) {
+                        resultEl.innerHTML = '<i class="fas fa-times-circle" style="color:var(--color-danger);"></i> ' + (err.message || 'Connection failed');
+                    }
+                    UI.toast('Connection test failed: ' + err.message, 'error');
+                });
+        },
+
         saveProviderSettings: function() {
             var self = this;
             var btn = el('#btn-save-provider');
@@ -2278,6 +2434,33 @@
                 // Only include API key if a new one was entered
                 if (apiKey) {
                     config.azure.apiKey = apiKey;
+                } else if (this.providerConfig && this.providerConfig.azure && this.providerConfig.azure._hasApiKey) {
+                    // Preserve existing API key
+                    config.azure._preserveExistingApiKey = true;
+                }
+            }
+
+            // Add Mindee config if selected
+            if (this.currentProvider === 'mindee') {
+                var mindeeApiKey = (el('#mindee-api-key').value || '').trim();
+                var docType = el('#mindee-doc-type').value || 'invoice';
+
+                // Only require API key if not already configured
+                if (!mindeeApiKey && !(this.providerConfig && this.providerConfig.mindee && this.providerConfig.mindee._hasApiKey)) {
+                    UI.toast('Please enter Mindee API key', 'error');
+                    return;
+                }
+
+                config.mindee = {
+                    defaultDocumentType: docType
+                };
+
+                // Only include API key if a new one was entered
+                if (mindeeApiKey) {
+                    config.mindee.apiKey = mindeeApiKey;
+                } else if (this.providerConfig && this.providerConfig.mindee && this.providerConfig.mindee._hasApiKey) {
+                    // Preserve existing API key
+                    config.mindee._preserveExistingApiKey = true;
                 }
             }
 
@@ -2299,17 +2482,36 @@
 
                     // Update local config
                     self.providerConfig = config;
+
+                    // Handle Azure API key field update
                     if (config.azure && config.azure.apiKey) {
                         self.providerConfig.azure._hasApiKey = true;
                         // Clear password field
-                        var apiKeyInput = el('#azure-api-key');
-                        if (apiKeyInput) {
-                            apiKeyInput.value = '';
-                            apiKeyInput.placeholder = 'API key configured (enter new to replace)';
+                        var azureApiKeyInput = el('#azure-api-key');
+                        if (azureApiKeyInput) {
+                            azureApiKeyInput.value = '';
+                            azureApiKeyInput.placeholder = 'API key configured (enter new to replace)';
                         }
                     }
 
-                    self.updateAzureStatus(self.providerConfig.azure);
+                    // Handle Mindee API key field update
+                    if (config.mindee && config.mindee.apiKey) {
+                        self.providerConfig.mindee._hasApiKey = true;
+                        // Clear password field
+                        var mindeeApiKeyInput = el('#mindee-api-key');
+                        if (mindeeApiKeyInput) {
+                            mindeeApiKeyInput.value = '';
+                            mindeeApiKeyInput.placeholder = 'API key configured (enter new to replace)';
+                        }
+                    }
+
+                    // Update status displays
+                    if (self.providerConfig.azure) {
+                        self.updateAzureStatus(self.providerConfig.azure);
+                    }
+                    if (self.providerConfig.mindee) {
+                        self.updateMindeeStatus(self.providerConfig.mindee);
+                    }
                 })
                 .catch(function(err) {
                     if (btn) {
