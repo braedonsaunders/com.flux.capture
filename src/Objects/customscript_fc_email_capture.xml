@@ -9,6 +9,5 @@
     <notifyemails></notifyemails>
     <notifyowner>T</notifyowner>
     <notifyuser>F</notifyuser>
-    <runasrole>ADMINISTRATOR</runasrole>
     <scriptfile>[/SuiteApps/com.flux.capture/scripts/FC_EmailCapture_Plugin.js]</scriptfile>
 </emailcaptureplugin>
