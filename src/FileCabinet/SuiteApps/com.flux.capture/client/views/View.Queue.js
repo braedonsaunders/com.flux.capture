@@ -26,7 +26,7 @@
             var uploadBtn = el('#btn-upload-new');
             if (uploadBtn) {
                 uploadBtn.addEventListener('click', function() {
-                    Router.navigate('upload');
+                    Router.navigate('ingest');
                 });
             }
 

@@ -965,99 +965,6 @@
         </div>
     </script>
 
-    <!-- UPLOAD TEMPLATE -->
-    <script type="text/template" id="tpl-upload">
-        <div class="view-upload">
-            <header class="view-header">
-                <div class="header-content">
-                    <h1>Upload Documents</h1>
-                    <p class="header-subtitle">Drag and drop or select files to process</p>
-                </div>
-            </header>
-
-            <div class="upload-wrapper">
-                <div class="upload-type-selector" id="type-selector">
-                    <label class="type-card active">
-                        <input type="radio" name="docType" value="auto" checked>
-                        <div class="type-icon"><i class="fas fa-wand-magic-sparkles"></i></div>
-                        <span>Auto-Detect</span>
-                    </label>
-                    <label class="type-card">
-                        <input type="radio" name="docType" value="vendorbill">
-                        <div class="type-icon"><i class="fas fa-file-invoice-dollar"></i></div>
-                        <span>Bill</span>
-                    </label>
-                    <label class="type-card">
-                        <input type="radio" name="docType" value="expensereport">
-                        <div class="type-icon"><i class="fas fa-receipt"></i></div>
-                        <span>Expense</span>
-                    </label>
-                    <label class="type-card">
-                        <input type="radio" name="docType" value="purchaseorder">
-                        <div class="type-icon"><i class="fas fa-cart-shopping"></i></div>
-                        <span>Purchase Order</span>
-                    </label>
-                </div>
-
-                <div class="upload-dropzone" id="upload-zone">
-                    <div class="dropzone-content">
-                        <div class="dropzone-icon"><i class="fas fa-cloud-arrow-up"></i></div>
-                        <h3>Drop files here</h3>
-                        <p>or click to browse</p>
-                        <div class="dropzone-formats">
-                            <span class="format-tag">PDF</span>
-                            <span class="format-tag">PNG</span>
-                            <span class="format-tag">JPG</span>
-                            <span class="format-tag">TIFF</span>
-                        </div>
-                    </div>
-                    <input type="file" id="file-input" multiple accept=".pdf,.png,.jpg,.jpeg,.tiff,.tif" hidden>
-                </div>
-
-                <!-- Email Inbox Info -->
-                <div class="email-inbox-info" id="email-inbox-info" style="display:none;">
-                    <div class="email-inbox-banner">
-                        <i class="fas fa-envelope"></i>
-                        <div class="email-inbox-text">
-                            <span>Or email documents to:</span>
-                            <strong id="upload-email-address"></strong>
-                        </div>
-                        <button class="btn btn-ghost btn-sm" id="btn-copy-upload-email" title="Copy">
-                            <i class="fas fa-copy"></i>
-                        </button>
-                    </div>
-                </div>
-
-                <div class="upload-queue" id="upload-queue" style="display:none;">
-                    <div class="queue-header">
-                        <h3><i class="fas fa-list-check"></i> Ready to Upload</h3>
-                        <button class="btn btn-ghost btn-sm" id="btn-clear-queue">Clear All</button>
-                    </div>
-                    <div class="queue-list" id="queue-list"></div>
-                    <div class="queue-footer">
-                        <button class="btn btn-secondary" id="btn-add-more"><i class="fas fa-plus"></i> Add More</button>
-                        <button class="btn btn-primary btn-lg" id="btn-process">
-                            <i class="fas fa-bolt"></i> Process <span id="file-count">0</span> Files
-                        </button>
-                    </div>
-                </div>
-
-                <div class="upload-progress" id="upload-progress" style="display:none;">
-                    <div class="progress-visual">
-                        <div class="progress-spinner" id="progress-spinner"></div>
-                        <div id="progress-complete"></div>
-                        <h3 id="progress-title">Processing...</h3>
-                        <p id="progress-text">Preparing files...</p>
-                        <div class="progress-track">
-                            <div class="progress-bar" id="progress-bar"></div>
-                        </div>
-                        <div id="progress-details"></div>
-                    </div>
-                </div>
-            </div>
-        </div>
-    </script>
-
     <!-- QUEUE TEMPLATE -->
     <script type="text/template" id="tpl-queue">
         <div class="view-queue">
@@ -1302,6 +1209,19 @@
                     <input type="file" id="flow-file-input" multiple accept=".pdf,.png,.jpg,.jpeg,.tiff,.tif" hidden>
                 </div>
 
+                <!-- Email Inbox Info -->
+                <div class="email-inbox-info" id="flow-email-inbox-info" style="display:none;">
+                    <div class="email-inbox-banner">
+                        <i class="fas fa-envelope"></i>
+                        <div class="email-inbox-text">
+                            <span>Or email documents to:</span>
+                            <strong id="flow-email-address"></strong>
+                        </div>
+                        <button class="btn btn-ghost btn-sm" id="btn-copy-flow-email" title="Copy email address">
+                            <i class="fas fa-copy"></i>
+                        </button>
+                    </div>
+                </div>
             </div>
 
             <!-- Upload Cards Grid -->
@@ -2104,7 +2024,6 @@
     <script src="{{JS_MAIN_URL}}"></script>
     <!-- 3. View controllers -->
     <script src="{{JS_VIEW_DASHBOARD_URL}}"></script>
-    <script src="{{JS_VIEW_UPLOAD_URL}}"></script>
     <script src="{{JS_VIEW_QUEUE_URL}}"></script>
     <script src="{{JS_VIEW_REVIEW_URL}}"></script>
     <script src="{{JS_VIEW_RAIL_URL}}"></script>

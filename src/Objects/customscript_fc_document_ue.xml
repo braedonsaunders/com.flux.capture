@@ -12,6 +12,9 @@
             <status>RELEASED</status>
             <isdeployed>T</isdeployed>
             <loglevel>DEBUG</loglevel>
+            <allroles>T</allroles>
+            <allemployees>T</allemployees>
+            <runasrole>ADMINISTRATOR</runasrole>
             <recordtype>[scriptid=customrecord_flux_document]</recordtype>
         </scriptdeployment>
     </scriptdeployments>

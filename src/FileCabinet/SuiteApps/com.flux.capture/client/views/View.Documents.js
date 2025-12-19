@@ -22,10 +22,9 @@
         { id: 'delete', label: 'Delete current document', icon: 'fa-trash-can', shortcut: 'D' },
         { id: 'open', label: 'Open full review', icon: 'fa-expand', shortcut: '⏎' },
         { id: 'search', label: 'Search documents', icon: 'fa-search', shortcut: '/' },
-        { id: 'upload', label: 'Upload new documents', icon: 'fa-cloud-arrow-up', shortcut: 'U' },
+        { id: 'ingest', label: 'Upload new documents', icon: 'fa-cloud-arrow-up', shortcut: 'U' },
         { id: 'refresh', label: 'Refresh document list', icon: 'fa-sync-alt', shortcut: '⌘R' },
-        { id: 'dashboard', label: 'Go to Mission Control', icon: 'fa-gauge-high', shortcut: 'G M' },
-        { id: 'ingest', label: 'Go to Ingest', icon: 'fa-upload', shortcut: 'G I' }
+        { id: 'dashboard', label: 'Go to Mission Control', icon: 'fa-gauge-high', shortcut: 'G M' }
     ];
 
     var DocumentsController = {
@@ -1270,7 +1269,7 @@
                     var search = el('#doc-search');
                     if (search) search.focus();
                     break;
-                case 'upload':
+                case 'ingest':
                     Router.navigate('ingest');
                     break;
                 case 'refresh':
@@ -1279,9 +1278,6 @@
                     break;
                 case 'dashboard':
                     Router.navigate('dashboard');
-                    break;
-                case 'ingest':
-                    Router.navigate('ingest');
                     break;
             }
         },

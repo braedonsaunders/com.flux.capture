@@ -40,6 +40,7 @@
             renderTemplate('tpl-rail', 'view-container');
             this.bindEvents();
             this.startRefresh();
+            this.loadEmailInboxInfo();
 
             // Restore UI state based on existing cards
             this.restoreUIState();
@@ -624,6 +625,58 @@
                 self.updateSummary();
                 self.checkAllComplete();
             }, 350);
+        },
+
+        // ==========================================
+        // EMAIL INBOX INFO
+        // ==========================================
+        loadEmailInboxInfo: function() {
+            var self = this;
+
+            API.get('emailInboxStatus')
+                .then(function(result) {
+                    var data = result.data || result || {};
+                    var emailAddress = data.emailAddress;
+
+                    if (emailAddress) {
+                        var infoEl = el('#flow-email-inbox-info');
+                        var addressEl = el('#flow-email-address');
+                        var copyBtn = el('#btn-copy-flow-email');
+
+                        if (infoEl) infoEl.style.display = 'block';
+                        if (addressEl) addressEl.textContent = emailAddress;
+
+                        if (copyBtn) {
+                            copyBtn.addEventListener('click', function(e) {
+                                e.stopPropagation();
+                                self.copyEmailToClipboard(emailAddress);
+                            });
+                        }
+                    }
+                })
+                .catch(function(err) {
+                    console.debug('Email inbox info not available:', err);
+                });
+        },
+
+        copyEmailToClipboard: function(emailAddress) {
+            if (navigator.clipboard && navigator.clipboard.writeText) {
+                navigator.clipboard.writeText(emailAddress)
+                    .then(function() {
+                        UI.toast('Email address copied', 'success');
+                    })
+                    .catch(function() {
+                        UI.toast('Failed to copy', 'error');
+                    });
+            } else {
+                var temp = document.createElement('input');
+                temp.value = emailAddress;
+                document.body.appendChild(temp);
+                temp.select();
+                document.execCommand('copy');
+                document.body.removeChild(temp);
+                UI.toast('Email address copied', 'success');
+            }
         }
     };
 
