@@ -5,11 +5,8 @@
  * When vendors send invoices to the designated email address, this plugin automatically
  * extracts attachments and creates Flux Document records for AI processing.
  *
- * IMPORTANT: Email Capture Plug-ins MUST use SuiteScript 1.0 syntax.
+ * IMPORTANT: Email Capture Plug-ins use SuiteScript 1.0 syntax.
  * This is a NetSuite platform requirement - SuiteScript 2.x is not supported.
- *
- * @NApiVersion 1.0
- * @NScriptType emailcaptureplugin
  */
 
 /**
