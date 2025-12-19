@@ -217,7 +217,7 @@ function createFluxDocument(fileObj, originalFileName, senderEmail, subject) {
 function triggerProcessingViaRestlet() {
     try {
         // Get the Suitelet URL with action parameter
-        var suiteletUrl = nlapiResolveURL('SUITELET', 'customscript_fc_app', 'customdeploy_fc_app');
+        var suiteletUrl = nlapiResolveURL('SUITELET', 'customscript_fc_suitelet', 'customdeploy_fc_suitelet');
         suiteletUrl += '&action=triggerProcessing';
 
         nlapiLogExecution('DEBUG', 'Flux Capture: Triggering processing', 'URL: ' + suiteletUrl);
