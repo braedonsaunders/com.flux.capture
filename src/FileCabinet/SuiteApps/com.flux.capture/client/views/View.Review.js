@@ -476,6 +476,16 @@
                         bodyFields[fieldId + '_display'] = displayInput.value;
                     }
                 });
+
+                // Collect vendor field (special handling - no data-field attribute)
+                var vendorInput = el('#field-vendor');
+                var vendorIdInput = el('#field-vendorId');
+                if (vendorInput) {
+                    bodyFields.entity_display = vendorInput.value || '';
+                }
+                if (vendorIdInput) {
+                    bodyFields.entity = vendorIdInput.value || '';
+                }
             }
 
             // Collect sublist data from sublistData (already tracked)
@@ -483,6 +493,22 @@
                 Object.keys(this.sublistData).forEach(function(sublistId) {
                     var normalizedId = sublistId.toLowerCase();
                     sublists[normalizedId] = self.sublistData[sublistId] || [];
+                });
+            }
+
+            // Merge tracked changes into bodyFields
+            // This ensures any programmatically tracked changes are included
+            if (this.changes) {
+                Object.keys(this.changes).forEach(function(key) {
+                    // Map change keys to bodyField keys
+                    if (key === 'vendorName') {
+                        bodyFields.entity_display = self.changes[key];
+                    } else if (key === 'vendorId') {
+                        bodyFields.entity = self.changes[key];
+                    } else {
+                        // For other changes, use as-is
+                        bodyFields[key] = self.changes[key];
+                    }
                 });
             }
 
@@ -551,10 +577,8 @@
                 self.skipDocument();
             });
 
-            // Save button
-            this.on('#btn-save', 'click', function() {
-                self.saveChanges();
-            });
+            // Note: Save button (#btn-save) is bound in bindFormEvents()
+            // because it's rendered dynamically in renderExtractionForm()
 
             // Zoom controls
             this.on('#btn-zoom-in', 'click', function() {
@@ -610,10 +634,8 @@
                 }
             });
 
-            // Show shortcuts help
-            this.on('#btn-shortcuts', 'click', function() {
-                self.showShortcutsHelp();
-            });
+            // Note: Shortcuts button (#btn-shortcuts) is bound in bindFormEvents()
+            // because it's rendered dynamically in renderExtractionForm()
 
             // Panel resizer
             this.initPanelResizer();
@@ -2466,6 +2488,14 @@
 
         bindFormEvents: function() {
             var self = this;
+
+            // Save button - must be bound here because it's rendered in renderExtractionForm()
+            var saveBtn = el('#btn-save');
+            if (saveBtn) {
+                saveBtn.addEventListener('click', function() {
+                    self.saveChanges();
+                });
+            }
 
             // Toggle alert details
             var alertToggle = el('#alert-status-toggle');
