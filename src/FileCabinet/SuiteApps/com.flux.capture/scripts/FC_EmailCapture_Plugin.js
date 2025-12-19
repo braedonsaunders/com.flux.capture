@@ -187,6 +187,9 @@ function createFluxDocument(fileObj, originalFileName, senderEmail, subject) {
     doc.setFieldValue('custrecord_flux_source', '2'); // 2 = Email
     doc.setFieldValue('custrecord_flux_document_type', '6'); // 6 = Unknown (auto-detect)
 
+    // Set created date for proper sorting in queue
+    doc.setFieldValue('custrecord_flux_created_date', nlapiDateToString(new Date(), 'datetimetz'));
+
     // Email metadata
     doc.setFieldValue('custrecord_flux_email_sender', senderEmail);
     doc.setFieldValue('custrecord_flux_email_subject', subject);
