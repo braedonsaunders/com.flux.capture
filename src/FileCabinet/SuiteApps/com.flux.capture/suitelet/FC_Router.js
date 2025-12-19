@@ -260,6 +260,9 @@ define([
                 case 'testprovider':
                     result = testProviderConnection(context.providerType, context.config);
                     break;
+                case 'triggerProcessing':
+                    result = triggerDocumentProcessing();
+                    break;
                 default:
                     result = Response.error('INVALID_ACTION', 'Unknown action: ' + action);
             }
@@ -2124,6 +2127,31 @@ define([
         }, 'Document uploaded - processing queued');
     }
 
+    /**
+     * Trigger document processing MapReduce task
+     * Called by email capture plugin to process newly imported documents
+     */
+    function triggerDocumentProcessing() {
+        try {
+            var mrTask = task.create({
+                taskType: task.TaskType.MAP_REDUCE,
+                scriptId: SCRIPT_IDS.PROCESS_DOCUMENTS_MR,
+                deploymentId: SCRIPT_IDS.PROCESS_DOCUMENTS_DEPLOY
+            });
+            var taskId = mrTask.submit();
+
+            log.audit('triggerDocumentProcessing', 'MapReduce task submitted: ' + taskId);
+
+            return Response.success({
+                taskId: taskId,
+                message: 'Document processing triggered'
+            });
+        } catch (e) {
+            log.error('triggerDocumentProcessing', e.message);
+            return Response.error('TRIGGER_FAILED', 'Failed to trigger processing: ' + e.message);
+        }
+    }
+
     function processDocument(documentId) {
         if (!documentId) {
             return Response.error('MISSING_PARAM', 'Document ID is required');
@@ -2412,120 +2440,78 @@ define([
             var pluginExists = false;
             var scriptInternalId = null;
 
-            // Method 1: Try to load script record directly and check for email address field
+            // Method 1: Query script table and try to get email address from various sources
             try {
-                var scriptSearch = search.create({
-                    type: search.Type.SCRIPT,
-                    filters: [
-                        ['scriptid', 'is', 'customscript_fc_email_capture']
-                    ],
-                    columns: [
-                        'internalid',
-                        'name',
-                        'scripttype',
-                        'isinactive'
-                    ]
+                var scriptQuery = query.runSuiteQL({
+                    query: "SELECT id, name, isinactive FROM script WHERE scriptid = 'customscript_fc_email_capture'"
                 });
-                var scriptResults = scriptSearch.run().getRange({ start: 0, end: 1 });
-                if (scriptResults && scriptResults.length > 0) {
-                    pluginExists = true;
-                    scriptInternalId = scriptResults[0].id;
-                    pluginEnabled = scriptResults[0].getValue('isinactive') === 'F';
-                    log.debug('Plugin found via search', 'ID: ' + scriptInternalId);
 
-                    // Try to load the record and get email address field
+                if (scriptQuery && scriptQuery.results && scriptQuery.results.length > 0) {
+                    pluginExists = true;
+                    scriptInternalId = scriptQuery.results[0].values[0];
+                    pluginEnabled = scriptQuery.results[0].values[2] === 'F';
+                    log.audit('Email plugin found', 'ID: ' + scriptInternalId + ', enabled: ' + pluginEnabled);
+
+                    // Try to load the email capture plugin record to get email address
                     try {
-                        var scriptRec = record.load({
-                            type: record.Type.EMAIL_CAPTURE_PLUGIN,
+                        var pluginRec = record.load({
+                            type: 'emailcaptureplugin',
                             id: scriptInternalId
                         });
-                        emailAddress = scriptRec.getValue({ fieldId: 'emailaddress' });
-                        log.debug('Email address from record', emailAddress);
+                        // Try various field names that might contain the email
+                        var possibleFields = ['emailaddress', 'email', 'custscript_email', 'address'];
+                        for (var i = 0; i < possibleFields.length; i++) {
+                            try {
+                                var val = pluginRec.getValue({ fieldId: possibleFields[i] });
+                                if (val && val.indexOf('@') > -1) {
+                                    emailAddress = val;
+                                    log.audit('Email found on record', 'Field: ' + possibleFields[i] + ', Value: ' + val);
+                                    break;
+                                }
+                            } catch (fieldErr) {
+                                // Field doesn't exist, try next
+                            }
+                        }
+
+                        // Also try getting all fields to find email
+                        if (!emailAddress) {
+                            var fields = pluginRec.getFields();
+                            log.debug('emailcaptureplugin fields', JSON.stringify(fields));
+                        }
                     } catch (loadErr) {
-                        log.debug('Could not load EMAIL_CAPTURE_PLUGIN record', loadErr.message);
+                        log.debug('Could not load emailcaptureplugin record', loadErr.message);
                     }
                 }
             } catch (scriptErr) {
-                log.debug('script search failed', scriptErr.message);
+                log.debug('Script query failed', scriptErr.message);
             }
 
-            // Method 2: Try pluginimplementation table
-            if (!emailAddress) {
+            // Method 2: Try querying script deployment for email-related info
+            if (!emailAddress && scriptInternalId) {
                 try {
-                    var pluginQuery = query.runSuiteQL({
-                        query: "SELECT id, name, emailaddress, isinactive, script " +
-                               "FROM pluginimplementation " +
-                               "WHERE script.scriptid = 'customscript_fc_email_capture'"
+                    var deployQuery = query.runSuiteQL({
+                        query: "SELECT * FROM scriptdeployment WHERE script = " + scriptInternalId
                     });
-
-                    if (pluginQuery && pluginQuery.results && pluginQuery.results.length > 0) {
-                        var row = pluginQuery.results[0];
-                        pluginExists = true;
-                        emailAddress = row.values[2]; // emailaddress column
-                        pluginEnabled = row.values[3] === 'F';
-                        log.debug('Plugin found via pluginimplementation', JSON.stringify(row.values));
+                    if (deployQuery && deployQuery.results && deployQuery.results.length > 0) {
+                        log.debug('Script deployment data', JSON.stringify(deployQuery.results[0].values));
                     }
-                } catch (pluginErr) {
-                    log.debug('pluginimplementation query failed', pluginErr.message);
+                } catch (deployErr) {
+                    log.debug('Deployment query failed', deployErr.message);
                 }
             }
 
-            // Method 3: Try emailcaptureplugin table
+            // Method 3: Check saved config for email address
             if (!emailAddress) {
                 try {
-                    var ecpQuery = query.runSuiteQL({
-                        query: "SELECT id, scriptid, name, emailaddress " +
-                               "FROM emailcaptureplugin " +
-                               "WHERE scriptid = 'customscript_fc_email_capture'"
+                    var configQuery = query.runSuiteQL({
+                        query: "SELECT custrecord_flux_cfg_data FROM customrecord_flux_config " +
+                               "WHERE custrecord_flux_cfg_type = 'email_capture' " +
+                               "AND custrecord_flux_cfg_key = 'inbox_address' " +
+                               "AND custrecord_flux_cfg_active = 'T'"
                     });
 
-                    if (ecpQuery && ecpQuery.results && ecpQuery.results.length > 0) {
-                        pluginExists = true;
-                        scriptInternalId = ecpQuery.results[0].values[0];
-                        emailAddress = ecpQuery.results[0].values[3];
-                        log.debug('Plugin found in emailcaptureplugin', JSON.stringify(ecpQuery.results[0].values));
-                    }
-                } catch (ecpErr) {
-                    log.debug('emailcaptureplugin query failed', ecpErr.message);
-                }
-            }
-
-            // Method 4: Try script search with N/search
-            if (!pluginExists) {
-                try {
-                    var scriptSearch = search.create({
-                        type: 'script',
-                        filters: [
-                            ['scriptid', 'is', 'customscript_fc_email_capture']
-                        ],
-                        columns: ['name', 'scriptid', 'internalid']
-                    });
-                    var scriptResults = scriptSearch.run().getRange({ start: 0, end: 1 });
-                    if (scriptResults && scriptResults.length > 0) {
-                        pluginExists = true;
-                        scriptInternalId = scriptResults[0].id;
-                    }
-                } catch (scriptErr) {
-                    log.debug('Script search error', scriptErr);
-                }
-            }
-
-            // Method 4: Check saved config as fallback
-            if (!emailAddress) {
-                try {
-                    var configSearch = search.create({
-                        type: 'customrecord_flux_config',
-                        filters: [
-                            ['custrecord_flux_cfg_type', 'is', 'email_capture'],
-                            ['custrecord_flux_cfg_key', 'is', 'inbox_address'],
-                            ['custrecord_flux_cfg_active', 'is', 'T']
-                        ],
-                        columns: ['custrecord_flux_cfg_data']
-                    });
-
-                    var configResults = configSearch.run().getRange({ start: 0, end: 1 });
-                    if (configResults && configResults.length > 0) {
-                        var configData = configResults[0].getValue('custrecord_flux_cfg_data');
+                    if (configQuery && configQuery.results && configQuery.results.length > 0) {
+                        var configData = configQuery.results[0].values[0];
                         if (configData) {
                             try {
                                 var parsed = JSON.parse(configData);
@@ -2536,7 +2522,7 @@ define([
                         }
                     }
                 } catch (configErr) {
-                    log.debug('Config search error', configErr);
+                    log.debug('Config query error', configErr.message);
                 }
             }
 
