@@ -2,24 +2,23 @@
  * @NApiVersion 2.1
  * @NScriptType UserEventScript
  * @NModuleScope SameAccount
- *
- * Flux Capture - Document User Event
- * Triggers MapReduce processing when new documents are created
  */
 define(['N/task', 'N/log'], function(task, log) {
-
-    'use strict';
 
     const SCRIPT_IDS = {
         PROCESS_DOCUMENTS_MR: 'customscript_fc_process_docs_mr',
         PROCESS_DOCUMENTS_DEPLOY: 'customdeploy_fc_process_docs_mr'
     };
 
-    /**
-     * After a new document is created, trigger the MapReduce to process it
-     */
+    function beforeLoad(context) {
+        log.debug('FC_Document_UE.beforeLoad', 'Type: ' + context.type);
+    }
+
     function afterSubmit(context) {
+        log.audit('FC_Document_UE.afterSubmit', 'Triggered - Type: ' + context.type);
+
         if (context.type !== context.UserEventType.CREATE) {
+            log.debug('FC_Document_UE.afterSubmit', 'Skipping - not CREATE');
             return;
         }
 
@@ -27,10 +26,10 @@ define(['N/task', 'N/log'], function(task, log) {
             var documentId = context.newRecord.id;
             var status = context.newRecord.getValue({ fieldId: 'custrecord_flux_status' });
 
-            log.audit('FC_Document_UE', 'New document created: ' + documentId + ', status: ' + status);
+            log.audit('FC_Document_UE.afterSubmit', 'Document: ' + documentId + ', Status: ' + status);
 
-            // Only trigger for PENDING status (1)
             if (String(status) !== '1') {
+                log.debug('FC_Document_UE.afterSubmit', 'Skipping - status not PENDING');
                 return;
             }
 
@@ -41,12 +40,15 @@ define(['N/task', 'N/log'], function(task, log) {
             });
 
             var taskId = mrTask.submit();
-            log.audit('FC_Document_UE', 'MapReduce triggered: ' + taskId);
+            log.audit('FC_Document_UE.afterSubmit', 'MapReduce triggered: ' + taskId);
 
         } catch (e) {
-            log.error('FC_Document_UE', 'Failed to trigger processing: ' + e.message);
+            log.error('FC_Document_UE.afterSubmit', 'Error: ' + e.message);
         }
     }
 
-    return { afterSubmit: afterSubmit };
+    return {
+        beforeLoad: beforeLoad,
+        afterSubmit: afterSubmit
+    };
 });
