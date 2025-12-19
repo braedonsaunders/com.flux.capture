@@ -4167,6 +4167,15 @@
             if (resizer) topSection.appendChild(resizer);
             topSection.appendChild(extractionPanel);
 
+            // Create vertical resizer between top and bottom sections
+            var vResizer = document.createElement('div');
+            vResizer.className = 'split-view-v-resizer';
+            vResizer.id = 'split-view-v-resizer';
+            vResizer.title = 'Drag to resize';
+            var vHandle = document.createElement('div');
+            vHandle.className = 'resizer-handle';
+            vResizer.appendChild(vHandle);
+
             // Create bottom section for sublists (1/3 height)
             var bottomSection = document.createElement('div');
             bottomSection.className = 'review-bottom-section';
@@ -4186,6 +4195,7 @@
 
             // Add sections to review content
             reviewContent.appendChild(topSection);
+            reviewContent.appendChild(vResizer);
             reviewContent.appendChild(bottomSection);
 
             // Switch main form area to first tab
@@ -4196,6 +4206,213 @@
 
             // Rebind sublist events for moved elements
             this.bindSublistEvents(bottomSection);
+
+            // Initialize split view resizers
+            this.initSplitViewResizers();
+        },
+
+        initSplitViewResizers: function() {
+            var self = this;
+
+            // Horizontal resizer (left/right between preview and extraction in top section)
+            var hResizer = el('#panel-resizer');
+            var previewPanel = el('#preview-panel');
+            var topSection = el('#review-top-section');
+            var previewViewport = el('#preview-viewport');
+
+            // Vertical resizer (top/bottom between top section and bottom section)
+            var vResizer = el('#split-view-v-resizer');
+            var bottomSection = el('#review-bottom-section');
+            var reviewContent = el('#review-content');
+
+            // Create overlay to prevent iframe from stealing events
+            var overlay = document.createElement('div');
+            overlay.id = 'split-resize-overlay';
+            overlay.style.cssText = 'position:fixed;top:0;left:0;right:0;bottom:0;z-index:9999;display:none;';
+            document.body.appendChild(overlay);
+
+            // Store reference for cleanup
+            this.splitViewOverlay = overlay;
+
+            // === Horizontal Resizer (left/right) ===
+            if (hResizer && previewPanel && topSection) {
+                var hIsResizing = false;
+                var hStartX, hStartWidth;
+
+                function startHResize(e) {
+                    hIsResizing = true;
+                    hStartX = e.clientX;
+                    hStartWidth = previewPanel.offsetWidth;
+                    hResizer.classList.add('dragging');
+                    overlay.style.display = 'block';
+                    overlay.style.cursor = 'col-resize';
+                    document.body.style.cursor = 'col-resize';
+                    document.body.style.userSelect = 'none';
+                    if (previewViewport) previewViewport.style.pointerEvents = 'none';
+                    e.preventDefault();
+                }
+
+                function doHResize(e) {
+                    if (!hIsResizing) return;
+                    e.preventDefault();
+
+                    var containerWidth = topSection.offsetWidth;
+                    var newWidth = hStartWidth + (e.clientX - hStartX);
+
+                    // Constrain between 250px and 70% of container
+                    var minWidth = 250;
+                    var maxWidth = containerWidth * 0.7;
+                    newWidth = Math.max(minWidth, Math.min(maxWidth, newWidth));
+
+                    // Use flex shorthand for consistent sizing
+                    previewPanel.style.flex = '0 0 ' + newWidth + 'px';
+                    previewPanel.style.width = '';
+                }
+
+                function stopHResize() {
+                    if (!hIsResizing) return;
+                    hIsResizing = false;
+                    hResizer.classList.remove('dragging');
+                    overlay.style.display = 'none';
+                    document.body.style.cursor = '';
+                    document.body.style.userSelect = '';
+                    if (previewViewport) previewViewport.style.pointerEvents = '';
+
+                    // Save pixel width to localStorage
+                    try {
+                        var currentWidth = previewPanel.offsetWidth;
+                        localStorage.setItem('fc_splitview_h_width_px', currentWidth);
+                    } catch (e) { /* ignore */ }
+                }
+
+                hResizer.addEventListener('mousedown', startHResize);
+                document.addEventListener('mousemove', doHResize);
+                document.addEventListener('mouseup', stopHResize);
+                overlay.addEventListener('mousemove', doHResize);
+                overlay.addEventListener('mouseup', stopHResize);
+
+                // Store references for cleanup
+                this.splitViewHResizeHandlers = {
+                    startHResize: startHResize,
+                    doHResize: doHResize,
+                    stopHResize: stopHResize
+                };
+
+                // Restore saved width
+                try {
+                    var savedWidth = localStorage.getItem('fc_splitview_h_width_px');
+                    if (savedWidth) {
+                        var widthPx = parseInt(savedWidth, 10);
+                        var containerWidth = topSection.offsetWidth;
+                        widthPx = Math.max(250, Math.min(containerWidth * 0.7, widthPx));
+                        previewPanel.style.flex = '0 0 ' + widthPx + 'px';
+                        previewPanel.style.width = '';
+                    }
+                } catch (e) { /* ignore */ }
+            }
+
+            // === Vertical Resizer (top/bottom) ===
+            if (vResizer && topSection && bottomSection && reviewContent) {
+                var vIsResizing = false;
+                var vStartY, vStartTopHeight;
+
+                function startVResize(e) {
+                    vIsResizing = true;
+                    vStartY = e.clientY;
+                    vStartTopHeight = topSection.offsetHeight;
+                    vResizer.classList.add('dragging');
+                    overlay.style.display = 'block';
+                    overlay.style.cursor = 'row-resize';
+                    document.body.style.cursor = 'row-resize';
+                    document.body.style.userSelect = 'none';
+                    if (previewViewport) previewViewport.style.pointerEvents = 'none';
+                    e.preventDefault();
+                }
+
+                function doVResize(e) {
+                    if (!vIsResizing) return;
+                    e.preventDefault();
+
+                    var containerHeight = reviewContent.offsetHeight;
+                    var newTopHeight = vStartTopHeight + (e.clientY - vStartY);
+
+                    // Constrain between 200px and 80% of container
+                    var minHeight = 200;
+                    var maxHeight = containerHeight * 0.8;
+                    newTopHeight = Math.max(minHeight, Math.min(maxHeight, newTopHeight));
+
+                    // Use flex shorthand for consistent sizing
+                    topSection.style.flex = '0 0 ' + newTopHeight + 'px';
+                    bottomSection.style.flex = '1';
+                }
+
+                function stopVResize() {
+                    if (!vIsResizing) return;
+                    vIsResizing = false;
+                    vResizer.classList.remove('dragging');
+                    overlay.style.display = 'none';
+                    document.body.style.cursor = '';
+                    document.body.style.userSelect = '';
+                    if (previewViewport) previewViewport.style.pointerEvents = '';
+
+                    // Save pixel height to localStorage
+                    try {
+                        var currentHeight = topSection.offsetHeight;
+                        localStorage.setItem('fc_splitview_v_height_px', currentHeight);
+                    } catch (e) { /* ignore */ }
+                }
+
+                vResizer.addEventListener('mousedown', startVResize);
+                document.addEventListener('mousemove', doVResize);
+                document.addEventListener('mouseup', stopVResize);
+                overlay.addEventListener('mousemove', doVResize);
+                overlay.addEventListener('mouseup', stopVResize);
+
+                // Store references for cleanup
+                this.splitViewVResizeHandlers = {
+                    startVResize: startVResize,
+                    doVResize: doVResize,
+                    stopVResize: stopVResize
+                };
+
+                // Restore saved height
+                try {
+                    var savedHeight = localStorage.getItem('fc_splitview_v_height_px');
+                    if (savedHeight) {
+                        var heightPx = parseInt(savedHeight, 10);
+                        var containerHeight = reviewContent.offsetHeight;
+                        heightPx = Math.max(200, Math.min(containerHeight * 0.8, heightPx));
+                        topSection.style.flex = '0 0 ' + heightPx + 'px';
+                        bottomSection.style.flex = '1';
+                    }
+                } catch (e) { /* ignore */ }
+            }
+        },
+
+        cleanupSplitViewResizers: function() {
+            // Remove overlay
+            if (this.splitViewOverlay) {
+                this.splitViewOverlay.remove();
+                this.splitViewOverlay = null;
+            }
+
+            // Remove horizontal resizer event listeners
+            var hResizer = el('#panel-resizer');
+            if (hResizer && this.splitViewHResizeHandlers) {
+                hResizer.removeEventListener('mousedown', this.splitViewHResizeHandlers.startHResize);
+                document.removeEventListener('mousemove', this.splitViewHResizeHandlers.doHResize);
+                document.removeEventListener('mouseup', this.splitViewHResizeHandlers.stopHResize);
+                this.splitViewHResizeHandlers = null;
+            }
+
+            // Remove vertical resizer event listeners
+            var vResizer = el('#split-view-v-resizer');
+            if (vResizer && this.splitViewVResizeHandlers) {
+                vResizer.removeEventListener('mousedown', this.splitViewVResizeHandlers.startVResize);
+                document.removeEventListener('mousemove', this.splitViewVResizeHandlers.doVResize);
+                document.removeEventListener('mouseup', this.splitViewVResizeHandlers.stopVResize);
+                this.splitViewVResizeHandlers = null;
+            }
         },
 
         bindSublistEvents: function(container) {
@@ -4261,11 +4478,15 @@
             var reviewContent = el('#review-content');
             var topSection = el('#review-top-section');
             var bottomSection = el('#review-bottom-section');
+            var vResizer = el('#split-view-v-resizer');
             var previewPanel = el('#preview-panel');
             var extractionPanel = el('#extraction-panel');
             var resizer = el('#panel-resizer');
 
             if (!reviewContent || !topSection) return;
+
+            // Clean up split view resizers event listeners
+            this.cleanupSplitViewResizers();
 
             // Move ALL sublist sections back to their original parent tab content
             // Use the stored data-original-tab-content attribute to find correct parent
@@ -4309,8 +4530,9 @@
             if (resizer) reviewContent.appendChild(resizer);
             reviewContent.appendChild(extractionPanel);
 
-            // Remove the split view sections
+            // Remove the split view sections and vertical resizer
             if (topSection) topSection.remove();
+            if (vResizer) vResizer.remove();
             if (bottomSection) bottomSection.remove();
         },
 
