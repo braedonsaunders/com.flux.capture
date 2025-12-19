@@ -6,5 +6,6 @@
         <path>~/Objects/customscript_fc_router.xml</path>
         <path>~/Objects/customscript_fc_suitelet.xml</path>
         <path>~/Objects/customscript_fc_email_capture.xml</path>
+        <path>~/Objects/customscript_fc_document_ue.xml</path>
     </objects>
 </deploy>
