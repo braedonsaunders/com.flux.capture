@@ -2400,31 +2400,52 @@ define([
             var pluginExists = false;
             var scriptInternalId = null;
 
-            // Method 1: Try to query the pluginimplementation table for the email address
+            // Method 1: Try to query the script table for email capture plugin with emailaddress
             try {
-                var pluginQuery = query.runSuiteQL({
-                    query: "SELECT id, name, emailaddress, isinactive " +
-                           "FROM pluginimplementation " +
+                var scriptQuery = query.runSuiteQL({
+                    query: "SELECT id, scriptid, name, scripttype, emailaddress, isinactive " +
+                           "FROM script " +
                            "WHERE scriptid = 'customscript_fc_email_capture'"
                 });
 
-                if (pluginQuery && pluginQuery.results && pluginQuery.results.length > 0) {
-                    var row = pluginQuery.results[0];
+                if (scriptQuery && scriptQuery.results && scriptQuery.results.length > 0) {
+                    var row = scriptQuery.results[0];
                     pluginExists = true;
-                    emailAddress = row.values[2]; // emailaddress column
-                    pluginEnabled = row.values[3] === 'F'; // isinactive = F means active
                     scriptInternalId = row.values[0];
-                    log.debug('Plugin found via SuiteQL', JSON.stringify(row.values));
+                    emailAddress = row.values[4]; // emailaddress column
+                    pluginEnabled = row.values[5] === 'F'; // isinactive = F means active
+                    log.debug('Plugin found via script table', JSON.stringify(row.values));
                 }
-            } catch (pluginErr) {
-                log.debug('pluginimplementation query failed', pluginErr.message);
+            } catch (scriptErr) {
+                log.debug('script table query failed', scriptErr.message);
             }
 
-            // Method 2: Try emailcaptureplugin table if method 1 failed
+            // Method 2: Try pluginimplementation table
+            if (!emailAddress) {
+                try {
+                    var pluginQuery = query.runSuiteQL({
+                        query: "SELECT id, name, emailaddress, isinactive, script " +
+                               "FROM pluginimplementation " +
+                               "WHERE script.scriptid = 'customscript_fc_email_capture'"
+                    });
+
+                    if (pluginQuery && pluginQuery.results && pluginQuery.results.length > 0) {
+                        var row = pluginQuery.results[0];
+                        pluginExists = true;
+                        emailAddress = row.values[2]; // emailaddress column
+                        pluginEnabled = row.values[3] === 'F';
+                        log.debug('Plugin found via pluginimplementation', JSON.stringify(row.values));
+                    }
+                } catch (pluginErr) {
+                    log.debug('pluginimplementation query failed', pluginErr.message);
+                }
+            }
+
+            // Method 3: Try emailcaptureplugin table
             if (!emailAddress) {
                 try {
                     var ecpQuery = query.runSuiteQL({
-                        query: "SELECT id, scriptid, name " +
+                        query: "SELECT id, scriptid, name, emailaddress " +
                                "FROM emailcaptureplugin " +
                                "WHERE scriptid = 'customscript_fc_email_capture'"
                     });
@@ -2432,6 +2453,7 @@ define([
                     if (ecpQuery && ecpQuery.results && ecpQuery.results.length > 0) {
                         pluginExists = true;
                         scriptInternalId = ecpQuery.results[0].values[0];
+                        emailAddress = ecpQuery.results[0].values[3];
                         log.debug('Plugin found in emailcaptureplugin', JSON.stringify(ecpQuery.results[0].values));
                     }
                 } catch (ecpErr) {
@@ -2439,7 +2461,7 @@ define([
                 }
             }
 
-            // Method 3: Try script table
+            // Method 4: Try script search with N/search
             if (!pluginExists) {
                 try {
                     var scriptSearch = search.create({

@@ -197,9 +197,10 @@ function createFluxDocument(fileObj, originalFileName, senderEmail, subject) {
     doc.setFieldValue('custrecord_flux_anomalies', '[]');
     doc.setFieldValue('custrecord_flux_confidence_score', '0');
 
-    // Set current user as uploader (system user for email capture)
+    // Only set uploaded_by if we have a valid (positive) user ID
+    // System users like -4 are not valid employee references
     var userId = nlapiGetContext().getUser();
-    if (userId) {
+    if (userId && parseInt(userId) > 0) {
         doc.setFieldValue('custrecord_flux_uploaded_by', userId);
     }
 
