@@ -51,6 +51,8 @@
         currentPage: 1,
         pageSize: 25,
         totalItems: 0,
+        // Track inbox zero state to avoid replaying confetti on refresh
+        wasAtInboxZero: false,
 
         // ==========================================
         // INITIALIZATION
@@ -816,12 +818,16 @@
 
             var listEl = el('#document-list');
             var zeroEl = el('#inbox-zero');
+            var isAtInboxZero = reviewDocs.length === 0 && this.currentFilter === 'review';
 
-            if (reviewDocs.length === 0 && this.currentFilter === 'review') {
+            if (isAtInboxZero) {
                 if (listEl) listEl.style.display = 'none';
                 if (zeroEl) {
                     zeroEl.style.display = 'flex';
-                    this.triggerCelebration();
+                    // Only trigger confetti when transitioning to inbox zero, not on refresh
+                    if (!this.wasAtInboxZero) {
+                        this.triggerCelebration();
+                    }
                 }
 
                 // Update stats
@@ -836,6 +842,9 @@
                 if (listEl) listEl.style.display = 'block';
                 if (zeroEl) zeroEl.style.display = 'none';
             }
+
+            // Track state for next check
+            this.wasAtInboxZero = isAtInboxZero;
         },
 
         updateBadges: function() {
