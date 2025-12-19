@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<usereventscript scriptid="customscript_fc_document_ue">
+    <name>Flux Capture - Document Events</name>
+    <scriptfile>[/SuiteApps/com.flux.capture/scripts/FC_Document_UE.js]</scriptfile>
+    <description>Triggers document processing when new Flux documents are created</description>
+    <notifyadmins>F</notifyadmins>
+    <notifyemails></notifyemails>
+    <notifyowner>T</notifyowner>
+    <isinactive>F</isinactive>
+    <scriptdeployments>
+        <scriptdeployment scriptid="customdeploy_fc_document_ue">
+            <status>RELEASED</status>
+            <title>Flux Document Processing Trigger</title>
+            <isdeployed>T</isdeployed>
+            <loglevel>DEBUG</loglevel>
+            <recordtype>[scriptid=customrecord_flux_document]</recordtype>
+        </scriptdeployment>
+    </scriptdeployments>
+</usereventscript>
