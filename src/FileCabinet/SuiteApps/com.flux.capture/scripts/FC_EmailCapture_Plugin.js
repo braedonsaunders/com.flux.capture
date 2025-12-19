@@ -84,12 +84,8 @@ function process(email) {
         }
 
         nlapiLogExecution('AUDIT', 'Flux Capture: Import Complete',
-            'Imported: ' + importedCount + ', Skipped: ' + skippedCount);
-
-        // Trigger async processing if we imported any documents
-        if (importedCount > 0) {
-            triggerProcessing();
-        }
+            'Imported: ' + importedCount + ', Skipped: ' + skippedCount +
+            '. Documents will be processed by scheduled MapReduce (runs every 15 min)');
 
     } catch (e) {
         nlapiLogExecution('ERROR', 'Flux Capture: Plugin Error', e.toString());
@@ -210,21 +206,6 @@ function createFluxDocument(fileObj, originalFileName, senderEmail, subject) {
     return nlapiSubmitRecord(doc);
 }
 
-/**
- * Trigger the MapReduce processing script
- */
-function triggerProcessing() {
-    try {
-        // Schedule the MapReduce task to process pending documents
-        var taskParams = {};
-
-        var status = nlapiScheduleScript('customscript_fc_process_docs_mr', 'customdeploy_fc_process_docs_mr', taskParams);
-
-        nlapiLogExecution('AUDIT', 'Flux Capture: Processing Triggered',
-            'MapReduce task status: ' + status);
-    } catch (e) {
-        // Log but don't fail - documents will be picked up by next scheduled run
-        nlapiLogExecution('DEBUG', 'Flux Capture: Could not trigger processing',
-            e.toString() + ' - documents will process on next scheduled run');
-    }
-}
+// Note: Processing is handled by a scheduled MapReduce deployment (customdeploy_fc_process_docs_scheduled)
+// that runs every 15 minutes to pick up pending documents.
+// SS1.0 Email Capture Plugins cannot directly trigger SS2.x MapReduce tasks.
