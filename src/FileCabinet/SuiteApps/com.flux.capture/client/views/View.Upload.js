@@ -19,6 +19,7 @@
             renderTemplate('tpl-upload', 'view-container');
             this.bindEvents();
             this.reset();
+            this.loadEmailInboxInfo();
         },
 
         reset: function() {
@@ -432,6 +433,56 @@
                 self.reset();
                 Router.navigate('queue');
             }, 2000);
+        },
+
+        loadEmailInboxInfo: function() {
+            var self = this;
+
+            API.get('emailInboxStatus')
+                .then(function(result) {
+                    var data = result.data || result || {};
+                    var emailAddress = data.emailAddress;
+
+                    if (emailAddress) {
+                        var infoEl = el('#email-inbox-info');
+                        var addressEl = el('#upload-email-address');
+                        var copyBtn = el('#btn-copy-upload-email');
+
+                        if (infoEl) infoEl.style.display = 'block';
+                        if (addressEl) addressEl.textContent = emailAddress;
+
+                        if (copyBtn) {
+                            copyBtn.addEventListener('click', function() {
+                                self.copyEmailToClipboard(emailAddress);
+                            });
+                        }
+                    }
+                })
+                .catch(function(err) {
+                    // Silently fail - email inbox is optional
+                    console.debug('Email inbox info not available:', err);
+                });
+        },
+
+        copyEmailToClipboard: function(emailAddress) {
+            if (navigator.clipboard && navigator.clipboard.writeText) {
+                navigator.clipboard.writeText(emailAddress)
+                    .then(function() {
+                        UI.toast('Email address copied', 'success');
+                    })
+                    .catch(function() {
+                        UI.toast('Failed to copy', 'error');
+                    });
+            } else {
+                // Fallback
+                var temp = document.createElement('input');
+                temp.value = emailAddress;
+                document.body.appendChild(temp);
+                temp.select();
+                document.execCommand('copy');
+                document.body.removeChild(temp);
+                UI.toast('Email address copied', 'success');
+            }
         },
 
         cleanup: function() {
