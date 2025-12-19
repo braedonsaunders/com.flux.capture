@@ -6,7 +6,7 @@
  * Flux Capture - Main Suitelet
  * Uses iframe to preserve NetSuite menu while serving app
  */
-define(['N/file', 'N/runtime', 'N/url', 'N/ui/serverWidget', 'N/search', '/SuiteApps/com.flux.capture/lib/FC_Debug'], function(file, runtime, url, serverWidget, search, fcDebug) {
+define(['N/file', 'N/runtime', 'N/url', 'N/ui/serverWidget', 'N/search', 'N/task', 'N/log', '/SuiteApps/com.flux.capture/lib/FC_Debug'], function(file, runtime, url, serverWidget, search, task, log, fcDebug) {
 
     'use strict';
 
@@ -32,7 +32,18 @@ define(['N/file', 'N/runtime', 'N/url', 'N/ui/serverWidget', 'N/search', '/Suite
         'js_view_documents': 'client/views/View.Documents.js'
     };
 
+    var SCRIPT_IDS = {
+        PROCESS_DOCUMENTS_MR: 'customscript_fc_process_docs_mr',
+        PROCESS_DOCUMENTS_DEPLOY: 'customdeploy_fc_process_docs_mr'
+    };
+
     function onRequest(context) {
+        // Handle POST requests for API actions (like triggering processing)
+        if (context.request.method === 'POST') {
+            handlePostRequest(context);
+            return;
+        }
+
         if (context.request.method !== 'GET') {
             context.response.write('Method not allowed');
             return;
@@ -49,6 +60,36 @@ define(['N/file', 'N/runtime', 'N/url', 'N/ui/serverWidget', 'N/search', '/Suite
         } catch (error) {
             log.error('Suitelet Error', { message: error.message, stack: error.stack });
             context.response.write('<h1>Error</h1><pre>' + error.message + '</pre>');
+        }
+    }
+
+    /**
+     * Handle POST requests for API actions
+     */
+    function handlePostRequest(context) {
+        var action = context.request.parameters.action;
+
+        try {
+            if (action === 'triggerProcessing') {
+                var mrTask = task.create({
+                    taskType: task.TaskType.MAP_REDUCE,
+                    scriptId: SCRIPT_IDS.PROCESS_DOCUMENTS_MR,
+                    deploymentId: SCRIPT_IDS.PROCESS_DOCUMENTS_DEPLOY
+                });
+                var taskId = mrTask.submit();
+
+                log.audit('FC_Suitelet.triggerProcessing', 'MapReduce task submitted: ' + taskId);
+
+                context.response.setHeader({ name: 'Content-Type', value: 'application/json' });
+                context.response.write(JSON.stringify({ success: true, taskId: taskId }));
+            } else {
+                context.response.setHeader({ name: 'Content-Type', value: 'application/json' });
+                context.response.write(JSON.stringify({ success: false, error: 'Unknown action: ' + action }));
+            }
+        } catch (e) {
+            log.error('FC_Suitelet.handlePost', e.message);
+            context.response.setHeader({ name: 'Content-Type', value: 'application/json' });
+            context.response.write(JSON.stringify({ success: false, error: e.message }));
         }
     }
 
