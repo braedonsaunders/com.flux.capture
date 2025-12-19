@@ -1749,20 +1749,29 @@
                             <div class="email-setup-panel" id="email-setup-panel" style="display:none;">
                                 <div class="email-setup-header">
                                     <i class="fas fa-info-circle" style="color: var(--color-warning);"></i>
-                                    <span>Email Inbox Setup Required</span>
+                                    <span>Email Inbox Configuration</span>
                                 </div>
                                 <div class="email-setup-instructions">
-                                    <p>The Email Capture feature needs to be enabled in your NetSuite account:</p>
+                                    <p>To enable email ingestion, follow these steps:</p>
                                     <ol>
-                                        <li>Go to <strong>Setup &gt; Company &gt; Enable Features</strong></li>
-                                        <li>On the <strong>SuiteCloud</strong> subtab, enable <strong>Server SuiteScript</strong></li>
                                         <li>Go to <strong>Customization &gt; Plug-ins &gt; Manage Plug-ins</strong></li>
-                                        <li>Find <strong>Flux Capture Email Inbox</strong> and ensure it's enabled</li>
-                                        <li>Note the generated email address shown next to the plug-in</li>
+                                        <li>Find <strong>Flux Capture Email Inbox</strong> in the list</li>
+                                        <li>Click the checkbox to enable it</li>
+                                        <li>Copy the generated email address shown next to the plug-in name</li>
+                                        <li>Paste it below and click Save</li>
                                     </ol>
-                                    <button class="btn btn-primary" id="btn-refresh-email-status">
-                                        <i class="fas fa-sync"></i> Check Status
-                                    </button>
+                                    <div class="email-address-input-group">
+                                        <label for="email-address-input">Email Capture Address:</label>
+                                        <div class="email-address-display">
+                                            <input type="text" id="email-address-input" class="email-address-input" placeholder="emails.xxxxx.xxxx.xxxxx@xxxxx.email.netsuite.com">
+                                            <button class="btn btn-primary btn-sm" id="btn-save-email-address">
+                                                <i class="fas fa-save"></i> Save
+                                            </button>
+                                        </div>
+                                        <small class="email-address-help">
+                                            The address format is: emails.{accountid}.{numbers}.{hash}@{accountid}.email.netsuite.com
+                                        </small>
+                                    </div>
                                 </div>
                             </div>
                         </div>
