@@ -261,7 +261,8 @@ define([
                     result = testProviderConnection(context.providerType, context.config);
                     break;
                 case 'triggerProcessing':
-                    result = triggerDocumentProcessing();
+                    // Deprecated - User Event script now triggers processing automatically
+                    result = Response.success({ message: 'Processing is now triggered automatically via User Event' });
                     break;
                 default:
                     result = Response.error('INVALID_ACTION', 'Unknown action: ' + action);
@@ -2097,60 +2098,20 @@ define([
             return Response.error('RECORD_CREATE_FAILED', 'Failed to create document record: ' + recordError.message);
         }
 
-        // Step 3: Dispatch async processing task
-        var taskId = null;
-        if (context.autoProcess !== false) {
-            try {
-                var mrTask = task.create({
-                    taskType: task.TaskType.MAP_REDUCE,
-                    scriptId: SCRIPT_IDS.PROCESS_DOCUMENTS_MR,
-                    deploymentId: SCRIPT_IDS.PROCESS_DOCUMENTS_DEPLOY
-                });
-                taskId = mrTask.submit();
-                log.audit('uploadDocument.taskDispatched', {
-                    taskId: taskId,
-                    documentId: documentId
-                });
-            } catch (taskError) {
-                log.error('uploadDocument.taskDispatch', taskError.message);
-                // Don't fail the upload - task will be picked up on next scheduled run
-            }
-        }
+        // Processing is triggered automatically by User Event script (FC_Document_UE.js)
+        // which fires afterSubmit on all flux_document creates (email, UI, API)
 
         return Response.success({
             documentId: documentId,
             documentCode: docId,
             fileId: fileId,
             fileName: fileName,
-            status: DocStatus.PENDING,
-            taskId: taskId
+            status: DocStatus.PENDING
         }, 'Document uploaded - processing queued');
     }
 
-    /**
-     * Trigger document processing MapReduce task
-     * Called by email capture plugin to process newly imported documents
-     */
-    function triggerDocumentProcessing() {
-        try {
-            var mrTask = task.create({
-                taskType: task.TaskType.MAP_REDUCE,
-                scriptId: SCRIPT_IDS.PROCESS_DOCUMENTS_MR,
-                deploymentId: SCRIPT_IDS.PROCESS_DOCUMENTS_DEPLOY
-            });
-            var taskId = mrTask.submit();
-
-            log.audit('triggerDocumentProcessing', 'MapReduce task submitted: ' + taskId);
-
-            return Response.success({
-                taskId: taskId,
-                message: 'Document processing triggered'
-            });
-        } catch (e) {
-            log.error('triggerDocumentProcessing', e.message);
-            return Response.error('TRIGGER_FAILED', 'Failed to trigger processing: ' + e.message);
-        }
-    }
+    // Note: triggerDocumentProcessing function removed - User Event script (FC_Document_UE.js)
+    // now handles MapReduce triggering for all document sources automatically
 
     function processDocument(documentId) {
         if (!documentId) {

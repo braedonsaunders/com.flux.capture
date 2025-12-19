@@ -84,12 +84,8 @@ function process(email) {
         }
 
         nlapiLogExecution('AUDIT', 'Flux Capture: Import Complete',
-            'Imported: ' + importedCount + ', Skipped: ' + skippedCount);
-
-        // Trigger async processing via RESTlet
-        if (importedCount > 0) {
-            triggerProcessingViaRestlet();
-        }
+            'Imported: ' + importedCount + ', Skipped: ' + skippedCount +
+            '. Processing triggered automatically via User Event.');
 
     } catch (e) {
         nlapiLogExecution('ERROR', 'Flux Capture: Plugin Error', e.toString());
@@ -210,38 +206,6 @@ function createFluxDocument(fileObj, originalFileName, senderEmail, subject) {
     return nlapiSubmitRecord(doc);
 }
 
-/**
- * Trigger document processing by calling the FC_Suitelet
- * Suitelets can be called internally without authentication issues
- */
-function triggerProcessingViaRestlet() {
-    try {
-        // Get the Suitelet URL - nlapiResolveURL returns relative, need to make it absolute
-        var relativePath = nlapiResolveURL('SUITELET', 'customscript_fc_suitelet', 'customdeploy_fc_suitelet');
-
-        // Build full URL using account domain
-        var domain = nlapiGetContext().getSetting('SCRIPT', 'custscript_domain');
-        if (!domain) {
-            // Fallback: construct from account ID
-            var accountId = nlapiGetContext().getCompany();
-            domain = 'https://' + accountId + '.app.netsuite.com';
-        }
-
-        var suiteletUrl = domain + relativePath + '&action=triggerProcessing';
-
-        nlapiLogExecution('DEBUG', 'Flux Capture: Triggering processing', 'URL: ' + suiteletUrl);
-
-        // Make POST request to Suitelet
-        var response = nlapiRequestURL(suiteletUrl, null, null, 'POST');
-        var responseCode = response.getCode();
-        var responseBody = response.getBody();
-
-        nlapiLogExecution('AUDIT', 'Flux Capture: Processing Triggered',
-            'Response code: ' + responseCode + ', Body: ' + responseBody);
-
-    } catch (e) {
-        // Log but don't fail - worst case documents will be picked up on next manual trigger
-        nlapiLogExecution('ERROR', 'Flux Capture: Could not trigger processing',
-            e.toString());
-    }
-}
+// Note: Document processing is triggered automatically by the User Event script
+// (FC_Document_UE.js) which fires afterSubmit when flux_document records are created.
+// This ensures processing works for all sources: email, UI upload, and API.
