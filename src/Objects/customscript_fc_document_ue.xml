@@ -10,7 +10,6 @@
     <scriptdeployments>
         <scriptdeployment scriptid="customdeploy_fc_document_ue">
             <status>RELEASED</status>
-            <title>Flux Document Processing Trigger</title>
             <isdeployed>T</isdeployed>
             <loglevel>DEBUG</loglevel>
             <recordtype>[scriptid=customrecord_flux_document]</recordtype>
