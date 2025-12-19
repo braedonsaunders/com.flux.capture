@@ -16,17 +16,5 @@
             <loglevel>DEBUG</loglevel>
             <runasrole>ADMINISTRATOR</runasrole>
         </scriptdeployment>
-        <scriptdeployment scriptid="customdeploy_fc_process_docs_scheduled">
-            <status>RELEASED</status>
-            <title>Flux Capture - Auto Process (Every 15 min)</title>
-            <isdeployed>T</isdeployed>
-            <loglevel>DEBUG</loglevel>
-            <runasrole>ADMINISTRATOR</runasrole>
-            <recurrence>
-                <single>
-                    <repeat>EVERY_QUARTER_HOUR</repeat>
-                </single>
-            </recurrence>
-        </scriptdeployment>
     </scriptdeployments>
 </mapreducescript>

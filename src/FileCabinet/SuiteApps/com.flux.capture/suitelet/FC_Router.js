@@ -260,6 +260,9 @@ define([
                 case 'testprovider':
                     result = testProviderConnection(context.providerType, context.config);
                     break;
+                case 'triggerProcessing':
+                    result = triggerDocumentProcessing();
+                    break;
                 default:
                     result = Response.error('INVALID_ACTION', 'Unknown action: ' + action);
             }
@@ -2124,6 +2127,31 @@ define([
         }, 'Document uploaded - processing queued');
     }
 
+    /**
+     * Trigger document processing MapReduce task
+     * Called by email capture plugin to process newly imported documents
+     */
+    function triggerDocumentProcessing() {
+        try {
+            var mrTask = task.create({
+                taskType: task.TaskType.MAP_REDUCE,
+                scriptId: SCRIPT_IDS.PROCESS_DOCUMENTS_MR,
+                deploymentId: SCRIPT_IDS.PROCESS_DOCUMENTS_DEPLOY
+            });
+            var taskId = mrTask.submit();
+
+            log.audit('triggerDocumentProcessing', 'MapReduce task submitted: ' + taskId);
+
+            return Response.success({
+                taskId: taskId,
+                message: 'Document processing triggered'
+            });
+        } catch (e) {
+            log.error('triggerDocumentProcessing', e.message);
+            return Response.error('TRIGGER_FAILED', 'Failed to trigger processing: ' + e.message);
+        }
+    }
+
     function processDocument(documentId) {
         if (!documentId) {
             return Response.error('MISSING_PARAM', 'Document ID is required');
@@ -2412,7 +2440,7 @@ define([
             var pluginExists = false;
             var scriptInternalId = null;
 
-            // Method 1: Check if plugin exists via SuiteQL on script table
+            // Method 1: Query script table and try to get email address from various sources
             try {
                 var scriptQuery = query.runSuiteQL({
                     query: "SELECT id, name, isinactive FROM script WHERE scriptid = 'customscript_fc_email_capture'"
@@ -2423,12 +2451,56 @@ define([
                     scriptInternalId = scriptQuery.results[0].values[0];
                     pluginEnabled = scriptQuery.results[0].values[2] === 'F';
                     log.audit('Email plugin found', 'ID: ' + scriptInternalId + ', enabled: ' + pluginEnabled);
+
+                    // Try to load the email capture plugin record to get email address
+                    try {
+                        var pluginRec = record.load({
+                            type: 'emailcaptureplugin',
+                            id: scriptInternalId
+                        });
+                        // Try various field names that might contain the email
+                        var possibleFields = ['emailaddress', 'email', 'custscript_email', 'address'];
+                        for (var i = 0; i < possibleFields.length; i++) {
+                            try {
+                                var val = pluginRec.getValue({ fieldId: possibleFields[i] });
+                                if (val && val.indexOf('@') > -1) {
+                                    emailAddress = val;
+                                    log.audit('Email found on record', 'Field: ' + possibleFields[i] + ', Value: ' + val);
+                                    break;
+                                }
+                            } catch (fieldErr) {
+                                // Field doesn't exist, try next
+                            }
+                        }
+
+                        // Also try getting all fields to find email
+                        if (!emailAddress) {
+                            var fields = pluginRec.getFields();
+                            log.debug('emailcaptureplugin fields', JSON.stringify(fields));
+                        }
+                    } catch (loadErr) {
+                        log.debug('Could not load emailcaptureplugin record', loadErr.message);
+                    }
                 }
             } catch (scriptErr) {
                 log.debug('Script query failed', scriptErr.message);
             }
 
-            // Method 2: Check saved config for email address (required since NS doesn't expose it via API)
+            // Method 2: Try querying script deployment for email-related info
+            if (!emailAddress && scriptInternalId) {
+                try {
+                    var deployQuery = query.runSuiteQL({
+                        query: "SELECT * FROM scriptdeployment WHERE script = " + scriptInternalId
+                    });
+                    if (deployQuery && deployQuery.results && deployQuery.results.length > 0) {
+                        log.debug('Script deployment data', JSON.stringify(deployQuery.results[0].values));
+                    }
+                } catch (deployErr) {
+                    log.debug('Deployment query failed', deployErr.message);
+                }
+            }
+
+            // Method 3: Check saved config for email address
             if (!emailAddress) {
                 try {
                     var configQuery = query.runSuiteQL({
