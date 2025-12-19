@@ -3,8 +3,19 @@
  * @NModuleScope Public
  * @module FluxCapture/Extraction/TableAnalyzer
  *
- * Smart Table Analyzer v2.0
+ * Smart Table Analyzer v3.1
  * Intelligent column detection, multi-row item handling, and line item extraction
+ *
+ * v3.1 Improvements:
+ * - Fixed backward-lookback to always capture item codes from orphan rows
+ * - Combines descriptions from orphan rows when item code is merged
+ * - Handles multi-row line items where first row has item code but no amount
+ *
+ * v3.0 Improvements:
+ * - Comprehensive diagnostic logging system for troubleshooting
+ * - Position-aware summary detection (must be in bottom 25%)
+ * - Less aggressive filtering (accepts $0 amounts, short descriptions)
+ * - Quantity-aware conditional summary patterns
  *
  * v2.0 Improvements:
  * - Two-pass row classification for better line item detection
@@ -813,24 +824,50 @@ define(['N/log', '../FC_Debug'], function(log, fcDebug) {
                         qty: currentItem.quantity
                     });
 
-                    // Look backwards for description-only rows that belong to this item
-                    // (if current row has no description but previous rows do)
-                    if (!currentItem.description || currentItem.description.length < 3) {
+                    // v3.1: Always look backwards for orphan rows that may have item codes or descriptions
+                    // This handles multi-row line items where first row has item code but no amount
+                    {
+                        let foundItemCode = !!currentItem.itemCode;
+                        let prependDesc = '';
+                        let gotItemCodeFromOrphan = false;
+                        const itemCodeCol = columns.find(c => c.type === ColumnType.ITEM_CODE);
+                        const descCol = columns.find(c => c.type === ColumnType.DESCRIPTION);
+
                         for (let j = i - 1; j >= 0; j--) {
                             const prevAnalysis = rowAnalysis[j];
-                            // Stop if we hit another anchor or summary
+                            // Stop if we hit another anchor, summary, or used row
                             if (prevAnalysis.hasAmount || prevAnalysis.isSummary || prevAnalysis.used) break;
-                            // Check if prev row has description
-                            if (prevAnalysis.hasDescription) {
-                                const prevRow = body[j];
-                                const descCol = columns.find(c => c.type === ColumnType.DESCRIPTION);
-                                if (descCol) {
-                                    const prevDesc = prevRow[descCol.index]?.text || '';
-                                    currentItem.description = prevDesc + (currentItem.description ? ' ' + currentItem.description : '');
-                                    prevAnalysis.used = true;
+
+                            const prevRow = body[j];
+
+                            // Grab item code if we don't have one and prev row has one
+                            if (!foundItemCode && prevAnalysis.hasItemCode && itemCodeCol) {
+                                const prevItemCode = prevRow[itemCodeCol.index]?.text || '';
+                                if (prevItemCode) {
+                                    currentItem.itemCode = prevItemCode;
+                                    foundItemCode = true;
+                                    gotItemCodeFromOrphan = true;
+                                    this.addDiagnostic('BACKWARD_MERGE', `Grabbed item code "${prevItemCode}" from orphan row[${j}]`);
                                 }
-                                break; // Only look back one row typically
                             }
+
+                            // Grab description from orphan row to prepend
+                            if (prevAnalysis.hasDescription && descCol) {
+                                const prevDesc = prevRow[descCol.index]?.text || '';
+                                if (prevDesc) {
+                                    prependDesc = prevDesc + (prependDesc ? ' ' + prependDesc : '');
+                                }
+                            }
+
+                            prevAnalysis.used = true;
+                        }
+
+                        // Prepend captured descriptions if:
+                        // 1. Anchor row lacks or has short description, OR
+                        // 2. We grabbed an item code from orphan row (descriptions are clearly related)
+                        if (prependDesc && (gotItemCodeFromOrphan || !currentItem.description || currentItem.description.length < 3)) {
+                            currentItem.description = prependDesc + (currentItem.description ? ' ' + currentItem.description : '');
+                            this.addDiagnostic('BACKWARD_MERGE', `Prepended description from orphan rows: "${prependDesc.substring(0, 40)}"`);
                         }
                     }
                 }
