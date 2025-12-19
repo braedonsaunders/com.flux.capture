@@ -4396,6 +4396,7 @@ body.dark-mode #btn-dark-mode i::before {
 }
 .flow-drop-container.compact .dropzone-secondary { display: none; }
 .flow-drop-container.compact .dropzone-formats { display: none; }
+.flow-drop-container.compact .dropzone-email-hint { display: none; }
 .flow-drop-container.compact .dropzone-rings,
 .flow-drop-container.compact .dropzone-particles,
 .flow-drop-container.compact .dropzone-glow,
@@ -4626,6 +4627,34 @@ body.dark-mode #btn-dark-mode i::before {
     color: var(--text-tertiary);
     font-size: var(--font-size-xs);
     border-radius: var(--radius-sm);
+}
+
+/* Email hint in dropzone */
+.dropzone-email-hint {
+    margin-top: var(--space-md);
+    font-size: var(--font-size-xs);
+    color: var(--text-tertiary);
+    display: flex;
+    align-items: center;
+    gap: var(--space-xs);
+}
+.dropzone-email-hint strong {
+    color: var(--text-secondary);
+    font-weight: 500;
+}
+.btn-copy-inline {
+    background: none;
+    border: none;
+    color: var(--text-tertiary);
+    cursor: pointer;
+    padding: 2px 4px;
+    font-size: var(--font-size-xs);
+    opacity: 0.6;
+    transition: opacity 0.2s;
+}
+.btn-copy-inline:hover {
+    opacity: 1;
+    color: var(--color-primary);
 }
 
 /* Document Type Selector */
