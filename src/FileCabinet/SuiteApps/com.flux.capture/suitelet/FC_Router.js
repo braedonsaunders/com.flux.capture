@@ -486,6 +486,11 @@ define([
     }
 
     function getDocumentList(context) {
+        log.audit('getDocumentList', 'Called with context: ' + JSON.stringify({
+            page: context.page, pageSize: context.pageSize, status: context.status,
+            documentType: context.documentType, sortBy: context.sortBy, sortDir: context.sortDir
+        }));
+
         var page = parseInt(context.page) || 1;
         var pageSize = Math.min(parseInt(context.pageSize) || 25, 100);
         var status = context.status;
@@ -501,7 +506,7 @@ define([
             'custrecord_flux_confidence_score as confidence, custrecord_flux_vendor as vendorId, ' +
             'BUILTIN.DF(custrecord_flux_vendor) as vendorName, custrecord_flux_invoice_number as invoiceNumber, ' +
             'custrecord_flux_total_amount as totalAmount, custrecord_flux_anomalies as anomalies, ' +
-            'custrecord_flux_created_date as createdDate, custrecord_flux_uploaded_by as uploadedBy, ' +
+            'COALESCE(custrecord_flux_created_date, custrecord_flux_email_received, created) as createdDate, custrecord_flux_uploaded_by as uploadedBy, ' +
             'BUILTIN.DF(custrecord_flux_uploaded_by) as uploadedByName, custrecord_flux_source as source ' +
             'FROM customrecord_flux_document WHERE 1=1';
 
@@ -530,11 +535,11 @@ define([
             params.push(vendorId);
         }
         if (dateFrom) {
-            sql += " AND custrecord_flux_created_date >= TO_DATE(?, 'YYYY-MM-DD')";
+            sql += " AND COALESCE(custrecord_flux_created_date, custrecord_flux_email_received, created) >= TO_DATE(?, 'YYYY-MM-DD')";
             params.push(dateFrom);
         }
         if (dateTo) {
-            sql += " AND custrecord_flux_created_date <= TO_DATE(?, 'YYYY-MM-DD')";
+            sql += " AND COALESCE(custrecord_flux_created_date, custrecord_flux_email_received, created) <= TO_DATE(?, 'YYYY-MM-DD')";
             params.push(dateTo);
         }
 
@@ -543,17 +548,21 @@ define([
         var total = countResult.results.length > 0 ? countResult.results[0].values[0] : 0;
 
         var sortColumns = {
-            'created': 'custrecord_flux_created_date',
+            'created': 'COALESCE(custrecord_flux_created_date, custrecord_flux_email_received, created)',
             'confidence': 'custrecord_flux_confidence_score',
             'vendor': 'custrecord_flux_vendor',
             'status': 'custrecord_flux_status',
             'amount': 'custrecord_flux_total_amount'
         };
-        var sortColumn = sortColumns[sortBy] || 'custrecord_flux_created_date';
+        var sortColumn = sortColumns[sortBy] || 'COALESCE(custrecord_flux_created_date, custrecord_flux_email_received, created)';
 
-        sql += ' ORDER BY ' + sortColumn + ' ' + sortDir;
+        sql += ' ORDER BY ' + sortColumn + ' ' + sortDir + ' NULLS LAST';
+
+        log.audit('getDocumentList', 'SQL: ' + sql + ' | Params: ' + JSON.stringify(params));
 
         var results = query.runSuiteQL({ query: sql, params: params });
+
+        log.audit('getDocumentList', 'Query returned ' + (results.results ? results.results.length : 0) + ' total results, count query returned: ' + total);
 
         // Manual pagination since SuiteQL doesn't support OFFSET/FETCH
         var startIndex = (page - 1) * pageSize;
