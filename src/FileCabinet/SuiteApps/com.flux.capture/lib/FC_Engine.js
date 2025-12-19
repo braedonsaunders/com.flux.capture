@@ -627,14 +627,48 @@ define([
             let lineItemWarnings = [];
             let skippedLineItems = [];
             let tableDiagnostics = [];
+            let lineItemExtractionMethod = 'table_analyzer'; // Track how we extracted line items
 
             // ========== LINE ITEM EXTRACTION DIAGNOSTICS ==========
             fcDebug.debugAudit('FC_Engine.LINEITEM_START', JSON.stringify({
                 rawTableCount: rawResult.rawTables?.length || 0,
-                hasLayoutTable: !!layout.lineItemsTable
+                hasLayoutTable: !!layout.lineItemsTable,
+                hasAzureResult: !!rawResult._azureResult,
+                hasMindeeResult: !!rawResult._mindeeResult
             }));
 
-            if (rawResult.rawTables && rawResult.rawTables.length > 0) {
+            // v4.0: CHECK FOR PROVIDER-NATIVE STRUCTURED LINE ITEMS
+            // Azure and Mindee already extract line items in a structured format
+            // Use them directly instead of re-processing through TableAnalyzer
+            const providerLineItems = this._extractProviderNativeLineItems(rawResult, extractionContext);
+
+            if (providerLineItems && providerLineItems.items.length > 0) {
+                // Use provider-native line items directly - skip TableAnalyzer
+                lineItems = providerLineItems.items;
+                lineItemExtractionMethod = providerLineItems.method;
+                lineItemWarnings = providerLineItems.warnings || [];
+                extractionWarnings.push(...lineItemWarnings);
+
+                fcDebug.debugAudit('FC_Engine.PROVIDER_NATIVE_LINEITEMS', JSON.stringify({
+                    method: lineItemExtractionMethod,
+                    itemCount: lineItems.length,
+                    confidence: providerLineItems.confidence
+                }));
+
+                // Log each provider-native line item
+                lineItems.forEach((item, idx) => {
+                    fcDebug.debugAudit(`FC_Engine.LINEITEM[${idx}]`, JSON.stringify({
+                        desc: (item.description || '').substring(0, 50),
+                        code: item.itemCode,
+                        qty: item.quantity,
+                        rate: item.unitPrice,
+                        amt: item.amount,
+                        source: 'provider_native'
+                    }));
+                });
+            }
+            // Fall back to TableAnalyzer for OCI or when provider doesn't have structured items
+            else if (rawResult.rawTables && rawResult.rawTables.length > 0) {
                 // Log all tables found
                 rawResult.rawTables.forEach((t, idx) => {
                     fcDebug.debugAudit(`FC_Engine.TABLE[${idx}]`, JSON.stringify({
@@ -714,6 +748,59 @@ define([
             // Try to infer missing amounts
             this._inferMissingAmounts(fields, lineItems);
 
+            // v4.0: Cross-validate line items sum vs extracted totals
+            if (lineItems.length > 0) {
+                const lineItemsSum = lineItems.reduce((sum, item) => sum + (item.amount || 0), 0);
+                const roundedSum = Math.round(lineItemsSum * 100) / 100;
+
+                // Check against subtotal or total if available
+                let validationTarget = null;
+                let validationTargetName = '';
+
+                if (fields.subtotal) {
+                    const subtotalAmount = this.amountParser.parse(fields.subtotal, extractionContext);
+                    if (subtotalAmount.amount > 0) {
+                        validationTarget = subtotalAmount.amount;
+                        validationTargetName = 'subtotal';
+                    }
+                }
+
+                if (!validationTarget && fields.totalAmount) {
+                    const totalAmount = this.amountParser.parse(fields.totalAmount, extractionContext);
+                    if (totalAmount.amount > 0) {
+                        validationTarget = totalAmount.amount;
+                        validationTargetName = 'total';
+                    }
+                }
+
+                if (validationTarget) {
+                    const diff = Math.abs(roundedSum - validationTarget);
+                    const diffPercent = validationTarget > 0 ? (diff / validationTarget) * 100 : 0;
+
+                    fcDebug.debugAudit('FC_Engine.LINEITEM_SUM_VALIDATION', JSON.stringify({
+                        lineItemsSum: roundedSum,
+                        target: validationTarget,
+                        targetType: validationTargetName,
+                        diff: diff.toFixed(2),
+                        diffPercent: diffPercent.toFixed(1)
+                    }));
+
+                    // If significant mismatch (>5%), flag for review
+                    if (diffPercent > 5 && diff > 1) {
+                        extractionWarnings.push({
+                            type: 'line_item_sum_mismatch',
+                            message: `Line items sum (${roundedSum.toFixed(2)}) doesn't match ${validationTargetName} (${validationTarget.toFixed(2)}) - ${diffPercent.toFixed(1)}% difference`,
+                            data: {
+                                lineItemsSum: roundedSum,
+                                expectedTotal: validationTarget,
+                                difference: diff,
+                                differencePercent: diffPercent
+                            }
+                        });
+                    }
+                }
+            }
+
             fcDebug.debug('FluxCapture.intelligentExtraction', {
                 fieldsExtracted: Object.keys(fields).filter(k => fields[k]).length,
                 lineItems: lineItems.length,
@@ -753,7 +840,9 @@ define([
                 skippedLineItems: skippedLineItems,
                 lineItemWarnings: lineItemWarnings,
                 // v3.0: Include table diagnostics for debugging
-                tableDiagnostics: tableDiagnostics
+                tableDiagnostics: tableDiagnostics,
+                // v4.0: Track how line items were extracted
+                lineItemExtractionMethod: lineItemExtractionMethod
             };
         }
 
@@ -1131,6 +1220,256 @@ define([
             if (typeof obj === 'string') return obj;
             if (typeof obj === 'number') return String(obj);
             return obj.text || obj.name || obj.value || obj.content || null;
+        }
+
+        /**
+         * v4.0: Extract line items directly from provider-native structured data
+         * This bypasses TableAnalyzer for Azure/Mindee which already extract structured line items
+         * @param {Object} rawResult - Raw extraction result from provider
+         * @param {Object} context - Extraction context
+         * @returns {Object|null} { items: Array, method: string, confidence: number, warnings: Array }
+         */
+        _extractProviderNativeLineItems(rawResult, context = {}) {
+            // Check for Azure native line items
+            if (rawResult._azureResult) {
+                return this._extractAzureNativeLineItems(rawResult._azureResult, context);
+            }
+
+            // Check for Mindee native line items
+            if (rawResult._mindeeResult) {
+                return this._extractMindeeNativeLineItems(rawResult._mindeeResult, context);
+            }
+
+            return null;
+        }
+
+        /**
+         * v4.0: Extract line items directly from Azure Form Recognizer result
+         * Azure's prebuilt-invoice model provides highly accurate structured line items
+         */
+        _extractAzureNativeLineItems(azureResult, context) {
+            const items = [];
+            const warnings = [];
+
+            try {
+                const documents = azureResult.documents || [];
+                if (documents.length === 0) return null;
+
+                const doc = documents[0];
+                const fields = doc.fields || {};
+                const itemsField = fields.Items || fields.LineItems;
+
+                if (!itemsField || !itemsField.valueArray || itemsField.valueArray.length === 0) {
+                    return null;
+                }
+
+                fcDebug.debugAudit('FC_Engine.AZURE_NATIVE', `Found ${itemsField.valueArray.length} Azure native line items`);
+
+                // Azure field name mappings
+                const fieldMap = {
+                    'Description': 'description',
+                    'ProductCode': 'itemCode',
+                    'Quantity': 'quantity',
+                    'Unit': 'unit',
+                    'UnitPrice': 'unitPrice',
+                    'Amount': 'amount',
+                    'Tax': 'tax',
+                    'Date': 'date'
+                };
+
+                for (const itemData of itemsField.valueArray) {
+                    const itemFields = itemData.valueObject || {};
+                    const item = {
+                        itemCode: null,
+                        description: '',
+                        memo: null,
+                        quantity: null,
+                        unit: null,
+                        unitPrice: null,
+                        amount: null,
+                        tax: null,
+                        confidence: 0.9,
+                        _source: 'azure_native'
+                    };
+
+                    let confSum = 0;
+                    let confCount = 0;
+
+                    for (const [azureField, ourField] of Object.entries(fieldMap)) {
+                        const fieldData = itemFields[azureField];
+                        if (!fieldData) continue;
+
+                        let value = null;
+                        if (fieldData.type === 'currency' && fieldData.valueCurrency) {
+                            value = fieldData.valueCurrency.amount;
+                        } else if (fieldData.type === 'number') {
+                            value = fieldData.valueNumber;
+                        } else {
+                            value = fieldData.valueString || fieldData.content;
+                        }
+
+                        if (value !== null && value !== undefined) {
+                            item[ourField] = value;
+                            if (fieldData.confidence) {
+                                confSum += fieldData.confidence;
+                                confCount++;
+                            }
+                        }
+                    }
+
+                    // Calculate item confidence
+                    if (confCount > 0) {
+                        item.confidence = confSum / confCount;
+                    }
+
+                    // v4.0: Apply math validation for Azure items too
+                    if (item.quantity > 0 && item.unitPrice > 0 && item.amount !== null) {
+                        const expected = Math.round(item.quantity * item.unitPrice * 100) / 100;
+                        if (Math.abs(expected - item.amount) > 0.02) {
+                            item._mathMismatch = true;
+                            item._expectedAmount = expected;
+                        } else {
+                            item._mathValidated = true;
+                        }
+                    }
+
+                    // Only include items with some meaningful data
+                    if (item.description || item.itemCode || item.amount !== null) {
+                        items.push(item);
+                    }
+                }
+
+                if (items.length > 0) {
+                    return {
+                        items: items,
+                        method: 'azure_native',
+                        confidence: 0.95,
+                        warnings: warnings
+                    };
+                }
+            } catch (e) {
+                fcDebug.debug('FC_Engine._extractAzureNativeLineItems', `Error: ${e.message}`);
+                warnings.push({
+                    type: 'azure_extraction_error',
+                    message: `Failed to extract Azure native line items: ${e.message}`
+                });
+            }
+
+            return null;
+        }
+
+        /**
+         * v4.0: Extract line items directly from Mindee result
+         * Mindee's invoice model provides structured line_items array
+         */
+        _extractMindeeNativeLineItems(mindeeResult, context) {
+            const items = [];
+            const warnings = [];
+
+            try {
+                const document = mindeeResult.document || {};
+                const inference = document.inference || {};
+                const prediction = inference.prediction || {};
+                const lineItemsData = prediction.line_items || [];
+
+                if (lineItemsData.length === 0) return null;
+
+                fcDebug.debugAudit('FC_Engine.MINDEE_NATIVE', `Found ${lineItemsData.length} Mindee native line items`);
+
+                // Mindee field name mappings
+                const fieldMap = {
+                    'description': 'description',
+                    'product_code': 'itemCode',
+                    'quantity': 'quantity',
+                    'unit_measure': 'unit',
+                    'unit_price': 'unitPrice',
+                    'total_amount': 'amount',
+                    'tax_amount': 'tax',
+                    'tax_rate': 'taxRate'
+                };
+
+                for (const itemData of lineItemsData) {
+                    const item = {
+                        itemCode: null,
+                        description: '',
+                        memo: null,
+                        quantity: null,
+                        unit: null,
+                        unitPrice: null,
+                        amount: null,
+                        tax: null,
+                        confidence: 0.9,
+                        _source: 'mindee_native'
+                    };
+
+                    let confSum = 0;
+                    let confCount = 0;
+
+                    for (const [mindeeField, ourField] of Object.entries(fieldMap)) {
+                        const fieldData = itemData[mindeeField];
+                        if (!fieldData) continue;
+
+                        let value = null;
+                        let confidence = 0;
+
+                        // Mindee can return {value, confidence} objects or direct values
+                        if (typeof fieldData === 'object' && 'value' in fieldData) {
+                            value = fieldData.value;
+                            confidence = fieldData.confidence || 0;
+                        } else if (typeof fieldData === 'object' && 'amount' in fieldData) {
+                            value = fieldData.amount;
+                            confidence = fieldData.confidence || 0;
+                        } else {
+                            value = fieldData;
+                            confidence = 1;
+                        }
+
+                        if (value !== null && value !== undefined && value !== '') {
+                            item[ourField] = value;
+                            confSum += confidence;
+                            confCount++;
+                        }
+                    }
+
+                    // Calculate item confidence
+                    if (confCount > 0) {
+                        item.confidence = confSum / confCount;
+                    }
+
+                    // v4.0: Apply math validation for Mindee items too
+                    if (item.quantity > 0 && item.unitPrice > 0 && item.amount !== null) {
+                        const expected = Math.round(item.quantity * item.unitPrice * 100) / 100;
+                        if (Math.abs(expected - item.amount) > 0.02) {
+                            item._mathMismatch = true;
+                            item._expectedAmount = expected;
+                        } else {
+                            item._mathValidated = true;
+                        }
+                    }
+
+                    // Only include items with some meaningful data
+                    if (item.description || item.itemCode || item.amount !== null) {
+                        items.push(item);
+                    }
+                }
+
+                if (items.length > 0) {
+                    return {
+                        items: items,
+                        method: 'mindee_native',
+                        confidence: 0.92,
+                        warnings: warnings
+                    };
+                }
+            } catch (e) {
+                fcDebug.debug('FC_Engine._extractMindeeNativeLineItems', `Error: ${e.message}`);
+                warnings.push({
+                    type: 'mindee_extraction_error',
+                    message: `Failed to extract Mindee native line items: ${e.message}`
+                });
+            }
+
+            return null;
         }
 
         /**
