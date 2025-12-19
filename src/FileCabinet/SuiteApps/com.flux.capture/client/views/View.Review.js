@@ -882,8 +882,7 @@
                         var option = options[0];
                         subsidiaryField.value = option.value;
                         subsidiaryDisplay.value = option.text;
-                        // Track the change
-                        self.changes['subsidiary'] = option.value;
+                        // Note: Don't track as change - this is auto-initialization, not user edit
                     }
                 }).catch(function() {
                     // Ignore errors - not critical
@@ -917,8 +916,7 @@
                 if (currentPeriod && currentPeriod.value) {
                     periodField.value = currentPeriod.value;
                     periodDisplay.value = currentPeriod.text;
-                    // Track the change
-                    self.changes['postingperiod'] = currentPeriod.value;
+                    // Note: Don't track as change - this is auto-initialization, not user edit
                     // Remove the data attribute since we've resolved it
                     periodWrapper.removeAttribute('data-needs-current-period');
                 }
