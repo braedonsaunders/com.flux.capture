@@ -2339,6 +2339,12 @@
             var normalizedFieldId = (fieldId || '').toLowerCase();
             var value = item[fieldId] || item[normalizedFieldId] || '';
             var displayValue = item[fieldId + '_display'] || item[normalizedFieldId + '_display'] || '';
+
+            // Apply default value if no value exists and field has a default
+            if (!value && field.defaultValue) {
+                value = field.defaultValue;
+                displayValue = field.defaultValueText || value;
+            }
             var inputId = 'line-' + sublistId + '-' + idx + '-' + fieldId;
 
             // Detect if this is a select field (by type or by known field ID)
@@ -3092,20 +3098,11 @@
             if (!this.sublistData) this.sublistData = {};
             if (!this.sublistData[sublistId]) this.sublistData[sublistId] = [];
 
-            // Create empty line based on sublist type (normalize to lowercase for comparison)
-            var slType = (sublistId || '').toLowerCase();
-            var newLine = { amount: 0 };
-            if (slType === 'expense') {
-                newLine.account = '';
-                newLine.memo = '';
-            } else if (slType === 'item') {
-                newLine.item = '';
-                newLine.description = '';
-                newLine.quantity = 1;
-                newLine.rate = 0;
-            }
+            // Create empty line using schema (includes defaults from field config)
+            var newLine = this.createEmptyLine(sublistId);
 
             this.sublistData[sublistId].push(newLine);
+            var slType = (sublistId || '').toLowerCase();
             this.changes[slType + 'Lines'] = this.sublistData[sublistId];
             this.markUnsaved();
             this.refreshSublist(sublistId);
@@ -3466,23 +3463,32 @@
             this.refreshSublist(sublistId);
         },
 
-        // Create empty line from schema (dynamic field aware)
+        // Create empty line from schema (dynamic field aware with default values)
         createEmptyLine: function(sublistId) {
             var schema = this.getSublistSchema(sublistId);
             var line = {};
+            // Support both 'columns' (from XML) and 'fields' (from server extraction)
+            var fields = schema.columns || schema.fields || [];
 
-            (schema.fields || []).forEach(function(f) {
-                if (f.type === 'currency' || f.type === 'integer') {
+            fields.forEach(function(f) {
+                // Apply default value from field config if available
+                if (f.defaultValue !== undefined && f.defaultValue !== '') {
+                    line[f.id] = f.defaultValue;
+                    // Also store display text for select fields
+                    if (f.defaultValueText) {
+                        line[f.id + '_display'] = f.defaultValueText;
+                    }
+                } else if (f.type === 'currency' || f.type === 'integer') {
                     line[f.id] = 0;
                 } else {
                     line[f.id] = '';
                 }
             });
 
-            // Ensure minimum required fields exist
+            // Ensure minimum required fields exist (only if not already set by defaults)
             if (!line.hasOwnProperty('amount')) line.amount = 0;
 
-            // Add common fields based on sublist type
+            // Add common fields based on sublist type (only if not already set by defaults)
             var slType = (sublistId || '').toLowerCase();
             if (slType === 'expense') {
                 if (!line.hasOwnProperty('account')) line.account = '';

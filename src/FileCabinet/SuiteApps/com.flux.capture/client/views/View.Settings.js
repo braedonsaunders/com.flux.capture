@@ -1250,18 +1250,25 @@
         },
 
         renderEditorColumn: function(column, sublistIdx, colIdx) {
+            var typeIcon = this.getFieldTypeIcon(column.type);
             var isHidden = column.visible === false;
             var visibleClass = isHidden ? 'fa-eye-slash' : 'fa-eye';
             var hiddenClass = isHidden ? ' is-hidden' : '';
             var visibilityBadge = isHidden ? '<span class="field-badge hidden-badge">HIDDEN</span>' : '';
+            var defaultBadge = column.defaultValue ? '<span class="field-badge default-badge">Default</span>' : '';
 
             var html = '<div class="editor-node editor-column' + hiddenClass + '" data-sublist-idx="' + sublistIdx + '" data-col-idx="' + colIdx + '">';
             html += '<div class="node-header field-header">' +
-                '<i class="fas fa-columns field-type-icon"></i>' +
+                '<i class="fas ' + typeIcon + ' field-type-icon"></i>' +
                 '<span class="node-label">' + escapeHtml(column.label || column.id) + '</span>' +
                 '<span class="field-id">(' + escapeHtml(column.id) + ')</span>' +
+                defaultBadge +
                 visibilityBadge +
+                '<span class="node-meta">' + (column.type || 'text') + '</span>' +
                 '<div class="node-actions">' +
+                '<button class="btn-icon" data-action="edit-settings" data-type="column" data-sublist-idx="' + sublistIdx + '" data-idx="' + colIdx + '" title="Edit column settings">' +
+                '<i class="fas fa-cog"></i>' +
+                '</button>' +
                 '<button class="btn-icon' + (isHidden ? '' : ' btn-icon-active') + '" data-action="toggle-visible" data-type="column" data-sublist-idx="' + sublistIdx + '" data-idx="' + colIdx + '" title="' + (isHidden ? 'Show column' : 'Hide column') + '">' +
                 '<i class="fas ' + visibleClass + '"></i>' +
                 '</button>' +
@@ -1497,8 +1504,10 @@
         editFieldSettings: function(btn, type) {
             var self = this;
             var item = this.getConfigItem(btn.dataset, type);
-            if (!item || type !== 'field') return;
+            if (!item || (type !== 'field' && type !== 'column')) return;
 
+            var isColumn = type === 'column';
+            var sublistIdx = isColumn ? parseInt(btn.dataset.sublistIdx) : null;
             var fieldId = item.id || '';
             var currentLabel = item.label || fieldId;
             var currentDefault = item.defaultValue || '';
@@ -1508,19 +1517,25 @@
             // Check if this is a select/typeahead field
             var isSelectField = this.isSelectField(fieldId) || fieldType === 'select' || fieldType === 'multiselect';
 
-            // Check if this is the posting period field (special handling)
-            var isPostingPeriod = fieldId.toLowerCase() === 'postingperiod';
+            // Check if this is the posting period field (special handling) - only for header fields
+            var isPostingPeriod = !isColumn && fieldId.toLowerCase() === 'postingperiod';
+
+            // Modal title and hint based on type
+            var modalTitle = isColumn ? 'Column Settings' : 'Field Settings';
+            var hintText = isColumn ?
+                'This value will be pre-filled when adding new lines.' :
+                'This value will be pre-filled when creating new transactions.';
 
             // Build modal HTML
             var modalHtml = '<div class="modal-overlay" id="field-settings-modal">' +
                 '<div class="modal modal-sm">' +
                     '<div class="modal-header">' +
-                        '<h3><i class="fas fa-cog"></i> Field Settings</h3>' +
+                        '<h3><i class="fas fa-cog"></i> ' + modalTitle + '</h3>' +
                         '<button class="modal-close" id="close-field-settings">&times;</button>' +
                     '</div>' +
                     '<div class="modal-body">' +
                         '<div class="form-field">' +
-                            '<label>Field ID</label>' +
+                            '<label>' + (isColumn ? 'Column' : 'Field') + ' ID</label>' +
                             '<input type="text" value="' + escapeHtml(fieldId) + '" disabled class="input-disabled">' +
                         '</div>' +
                         '<div class="form-field">' +
@@ -1578,7 +1593,7 @@
                 modalHtml += '<input type="text" id="field-default-value" value="' + escapeHtml(currentDefault) + '" placeholder="Enter default value...">';
             }
 
-            modalHtml += '<p class="field-hint">This value will be pre-filled when creating new transactions.</p>' +
+            modalHtml += '<p class="field-hint">' + hintText + '</p>' +
                         '</div>' +
                     '</div>' +
                     '<div class="modal-footer">' +
@@ -1658,19 +1673,44 @@
                     delete item.defaultValueText;
                 }
 
-                // Also update the corresponding field in bodyFields (used by Review page)
-                var bodyFields = self.editedConfig.bodyFields || [];
-                var bodyField = bodyFields.find(function(f) { return f.id === fieldId; });
-                if (bodyField) {
-                    if (newLabel) bodyField.label = newLabel;
-                    if (newDefault) {
-                        bodyField.defaultValue = newDefault;
-                        if (newDefaultText && (isSelectField || isPostingPeriod)) {
-                            bodyField.defaultValueText = newDefaultText;
+                if (isColumn) {
+                    // For columns: also update sublistFields (used by Review page)
+                    var sublistFields = self.editedConfig.sublistFields || {};
+                    var layout = self.editedConfig.layout || self.editedConfig;
+                    var sublists = self.editedConfig.sublists || layout.sublists || [];
+                    var sublist = sublists[sublistIdx];
+                    var sublistId = sublist ? sublist.id : null;
+
+                    if (sublistId && sublistFields[sublistId]) {
+                        var slField = sublistFields[sublistId].find(function(f) { return f.id === fieldId; });
+                        if (slField) {
+                            if (newLabel) slField.label = newLabel;
+                            if (newDefault) {
+                                slField.defaultValue = newDefault;
+                                if (newDefaultText && isSelectField) {
+                                    slField.defaultValueText = newDefaultText;
+                                }
+                            } else {
+                                delete slField.defaultValue;
+                                delete slField.defaultValueText;
+                            }
                         }
-                    } else {
-                        delete bodyField.defaultValue;
-                        delete bodyField.defaultValueText;
+                    }
+                } else {
+                    // For header fields: also update the corresponding field in bodyFields (used by Review page)
+                    var bodyFields = self.editedConfig.bodyFields || [];
+                    var bodyField = bodyFields.find(function(f) { return f.id === fieldId; });
+                    if (bodyField) {
+                        if (newLabel) bodyField.label = newLabel;
+                        if (newDefault) {
+                            bodyField.defaultValue = newDefault;
+                            if (newDefaultText && (isSelectField || isPostingPeriod)) {
+                                bodyField.defaultValueText = newDefaultText;
+                            }
+                        } else {
+                            delete bodyField.defaultValue;
+                            delete bodyField.defaultValueText;
+                        }
                     }
                 }
 
