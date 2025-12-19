@@ -555,6 +555,12 @@
                     var dropdown = el('#doc-type-dropdown');
                     if (dropdown) dropdown.classList.remove('open');
                 }
+                // Close transform dropdowns when clicking outside
+                if (!e.target.closest('.transform-dropdown')) {
+                    document.querySelectorAll('.transform-dropdown.open').forEach(function(d) {
+                        d.classList.remove('open');
+                    });
+                }
             });
 
             // Back button
@@ -1850,12 +1856,70 @@
                         '<button class="btn btn-ghost btn-sm btn-add-line" data-sublist="' + sl.id + '">' +
                             '<i class="fas fa-plus"></i> Add Row' +
                         '</button>' +
+                        self.renderTransformDropdown(sl.id, slType) +
                     '</div>' +
                 '</div>';
             });
 
             html += '</div>';
             return html;
+        },
+
+        // Render transform dropdown menu for sublist footer
+        renderTransformDropdown: function(sublistId, slType) {
+            var isExpense = slType === 'expense';
+            var groupByField = isExpense ? 'account' : 'item';
+            var groupByLabel = isExpense ? 'Account' : 'Item';
+            var groupByIcon = isExpense ? 'fa-book' : 'fa-box';
+
+            return '<div class="transform-dropdown" id="transform-dropdown-' + sublistId + '">' +
+                '<button class="btn btn-ghost btn-sm btn-transform" data-sublist="' + sublistId + '">' +
+                    '<i class="fas fa-wand-magic-sparkles"></i> Transform ' +
+                    '<i class="fas fa-chevron-down transform-arrow"></i>' +
+                '</button>' +
+                '<div class="transform-menu">' +
+                    '<div class="transform-section">' +
+                        '<div class="transform-section-label">Consolidate</div>' +
+                        '<div class="transform-option" data-action="collapse" data-sublist="' + sublistId + '">' +
+                            '<i class="fas fa-compress"></i> Collapse to One Line' +
+                        '</div>' +
+                    '</div>' +
+                    '<div class="transform-section">' +
+                        '<div class="transform-section-label">Group By</div>' +
+                        '<div class="transform-option" data-action="by-' + groupByField + '" data-sublist="' + sublistId + '">' +
+                            '<i class="fas ' + groupByIcon + '"></i> By ' + groupByLabel +
+                        '</div>' +
+                        '<div class="transform-option" data-action="by-department" data-sublist="' + sublistId + '">' +
+                            '<i class="fas fa-sitemap"></i> By Department' +
+                        '</div>' +
+                        '<div class="transform-option" data-action="by-class" data-sublist="' + sublistId + '">' +
+                            '<i class="fas fa-tags"></i> By Class' +
+                        '</div>' +
+                        '<div class="transform-option" data-action="by-location" data-sublist="' + sublistId + '">' +
+                            '<i class="fas fa-map-marker-alt"></i> By Location' +
+                        '</div>' +
+                    '</div>' +
+                    '<div class="transform-section">' +
+                        '<div class="transform-section-label">Distribute</div>' +
+                        '<div class="transform-option" data-action="split-equal" data-sublist="' + sublistId + '">' +
+                            '<i class="fas fa-divide"></i> Split Equally...' +
+                        '</div>' +
+                        '<div class="transform-option" data-action="apply-defaults" data-sublist="' + sublistId + '">' +
+                            '<i class="fas fa-fill-drip"></i> Apply Header Defaults' +
+                        '</div>' +
+                    '</div>' +
+                    '<div class="transform-divider"></div>' +
+                    '<div class="transform-option" data-action="duplicate-all" data-sublist="' + sublistId + '">' +
+                        '<i class="fas fa-copy"></i> Duplicate All Lines' +
+                    '</div>' +
+                    '<div class="transform-option transform-danger" data-action="clear-all" data-sublist="' + sublistId + '">' +
+                        '<i class="fas fa-trash"></i> Clear All Lines' +
+                    '</div>' +
+                '</div>' +
+            '</div>' +
+            '<button class="btn btn-ghost btn-sm btn-undo-transform" id="btn-undo-' + sublistId + '" data-sublist="' + sublistId + '" style="display:none;" title="Undo last transform">' +
+                '<i class="fas fa-undo"></i> Undo' +
+            '</button>';
         },
 
         // Bind tab navigation events
@@ -2627,6 +2691,40 @@
                         }
                         return;
                     }
+
+                    // Transform dropdown toggle
+                    var transformBtn = e.target.closest('.btn-transform');
+                    if (transformBtn) {
+                        e.stopPropagation();
+                        var dropdown = transformBtn.closest('.transform-dropdown');
+                        if (dropdown) {
+                            // Close other open dropdowns first
+                            document.querySelectorAll('.transform-dropdown.open').forEach(function(d) {
+                                if (d !== dropdown) d.classList.remove('open');
+                            });
+                            dropdown.classList.toggle('open');
+                        }
+                        return;
+                    }
+
+                    // Transform option click
+                    var transformOption = e.target.closest('.transform-option');
+                    if (transformOption) {
+                        var action = transformOption.dataset.action;
+                        var sublistId = transformOption.dataset.sublist;
+                        var dropdown = transformOption.closest('.transform-dropdown');
+                        if (dropdown) dropdown.classList.remove('open');
+                        self.transformSublist(sublistId, action);
+                        return;
+                    }
+
+                    // Undo transform button
+                    var undoBtn = e.target.closest('.btn-undo-transform');
+                    if (undoBtn) {
+                        var sublistId = undoBtn.dataset.sublist;
+                        self.undoTransform(sublistId);
+                        return;
+                    }
                 });
 
                 // Line input changes
@@ -3088,6 +3186,411 @@
             if (totalEl) {
                 totalEl.textContent = '$' + total.toFixed(2);
             }
+        },
+
+        // ==========================================
+        // TRANSFORM OPERATIONS
+        // ==========================================
+
+        // Undo state for transforms (simple single-level, lost on reload)
+        transformUndoState: null,
+
+        // Get sublist schema for field type detection
+        getSublistSchema: function(sublistId) {
+            var sublists = (this.formFields || {}).sublists || [];
+            var normalizedId = (sublistId || '').toLowerCase();
+            return sublists.find(function(sl) {
+                return (sl.id || '').toLowerCase() === normalizedId;
+            }) || { fields: [] };
+        },
+
+        // Check if field is numeric (currency or integer type)
+        isNumericField: function(fieldId, sublistId) {
+            var schema = this.getSublistSchema(sublistId);
+            var normalizedFieldId = (fieldId || '').toLowerCase();
+            var field = (schema.fields || []).find(function(f) {
+                return (f.id || '').toLowerCase() === normalizedFieldId;
+            });
+            if (field && (field.type === 'currency' || field.type === 'integer')) return true;
+            // Fallback for common numeric fields
+            var numericIds = ['amount', 'rate', 'quantity', 'grossamt', 'tax1amt', 'units'];
+            return numericIds.indexOf(normalizedFieldId) !== -1;
+        },
+
+        // Store undo state before transform
+        storeUndoState: function(sublistId) {
+            this.transformUndoState = {
+                sublistId: sublistId,
+                lines: JSON.parse(JSON.stringify(this.sublistData[sublistId] || []))
+            };
+            // Show undo button
+            var undoBtn = el('#btn-undo-' + sublistId);
+            if (undoBtn) undoBtn.style.display = 'inline-flex';
+        },
+
+        // Undo last transform
+        undoTransform: function(sublistId) {
+            if (!this.transformUndoState || this.transformUndoState.sublistId !== sublistId) {
+                UI.toast('Nothing to undo', 'info');
+                return;
+            }
+
+            this.sublistData[sublistId] = this.transformUndoState.lines;
+            var slType = (sublistId || '').toLowerCase();
+            this.changes[slType + 'Lines'] = this.transformUndoState.lines;
+            this.transformUndoState = null;
+
+            // Hide undo button
+            var undoBtn = el('#btn-undo-' + sublistId);
+            if (undoBtn) undoBtn.style.display = 'none';
+
+            this.markUnsaved();
+            this.refreshSublist(sublistId);
+            this.updateTabCounts();
+            UI.toast('Transform undone', 'success');
+        },
+
+        // Main transform dispatcher
+        transformSublist: function(sublistId, action) {
+            var lines = this.sublistData[sublistId] || [];
+            if (lines.length === 0 && action !== 'clear-all') {
+                UI.toast('No lines to transform', 'info');
+                return;
+            }
+
+            // Store undo state BEFORE transform
+            this.storeUndoState(sublistId);
+
+            var newLines = [];
+            var self = this;
+
+            switch (action) {
+                case 'collapse':
+                    newLines = this.collapseLines(lines, sublistId);
+                    UI.toast('Collapsed to ' + newLines.length + ' line', 'success');
+                    break;
+                case 'by-department':
+                    newLines = this.groupLinesBy(lines, 'department', sublistId);
+                    UI.toast('Grouped into ' + newLines.length + ' lines by department', 'success');
+                    break;
+                case 'by-class':
+                    newLines = this.groupLinesBy(lines, 'class', sublistId);
+                    UI.toast('Grouped into ' + newLines.length + ' lines by class', 'success');
+                    break;
+                case 'by-location':
+                    newLines = this.groupLinesBy(lines, 'location', sublistId);
+                    UI.toast('Grouped into ' + newLines.length + ' lines by location', 'success');
+                    break;
+                case 'by-account':
+                    newLines = this.groupLinesBy(lines, 'account', sublistId);
+                    UI.toast('Grouped into ' + newLines.length + ' lines by account', 'success');
+                    break;
+                case 'by-item':
+                    newLines = this.groupLinesBy(lines, 'item', sublistId);
+                    UI.toast('Grouped into ' + newLines.length + ' lines by item', 'success');
+                    break;
+                case 'apply-defaults':
+                    this.applyDefaultsToLines(sublistId);
+                    UI.toast('Applied header defaults to lines', 'success');
+                    return; // Already handles refresh
+                case 'duplicate-all':
+                    newLines = lines.concat(JSON.parse(JSON.stringify(lines)));
+                    UI.toast('Duplicated ' + lines.length + ' lines', 'success');
+                    break;
+                case 'clear-all':
+                    if (!confirm('Clear all line items? This can be undone.')) {
+                        this.transformUndoState = null; // Cancel undo state
+                        var undoBtn = el('#btn-undo-' + sublistId);
+                        if (undoBtn) undoBtn.style.display = 'none';
+                        return;
+                    }
+                    newLines = [this.createEmptyLine(sublistId)];
+                    UI.toast('Cleared all lines', 'success');
+                    break;
+                case 'split-equal':
+                    this.showSplitDialog(sublistId);
+                    return; // Dialog handles the rest
+                default:
+                    UI.toast('Unknown transform action', 'error');
+                    return;
+            }
+
+            this.sublistData[sublistId] = newLines;
+            var slType = (sublistId || '').toLowerCase();
+            this.changes[slType + 'Lines'] = newLines;
+            this.markUnsaved();
+            this.refreshSublist(sublistId);
+            this.updateTabCounts();
+        },
+
+        // Collapse all lines into one, preserving all dynamic fields
+        collapseLines: function(lines, sublistId) {
+            if (lines.length === 0) return [this.createEmptyLine(sublistId)];
+            if (lines.length === 1) return JSON.parse(JSON.stringify(lines));
+
+            var self = this;
+            var collapsed = {};
+
+            // Collect all unique keys from all lines
+            var allKeys = {};
+            lines.forEach(function(line) {
+                Object.keys(line).forEach(function(k) { allKeys[k] = true; });
+            });
+
+            Object.keys(allKeys).forEach(function(key) {
+                // Skip display value keys - handle with their parent
+                if (key.indexOf('_display') !== -1) return;
+
+                if (self.isNumericField(key, sublistId)) {
+                    // Sum numeric fields
+                    collapsed[key] = lines.reduce(function(sum, l) {
+                        return sum + (parseFloat(l[key]) || 0);
+                    }, 0);
+                } else {
+                    // For non-numeric: collect unique non-empty values
+                    var values = lines.map(function(l) { return l[key]; }).filter(function(v) {
+                        return v !== undefined && v !== null && v !== '';
+                    });
+                    var unique = [];
+                    values.forEach(function(v) {
+                        if (unique.indexOf(v) === -1) unique.push(v);
+                    });
+
+                    if (unique.length === 1) {
+                        // All same - keep single value and its display value
+                        collapsed[key] = unique[0];
+                        var dispKey = key + '_display';
+                        var dispVals = lines.map(function(l) { return l[dispKey]; }).filter(function(v) {
+                            return v !== undefined && v !== null && v !== '';
+                        });
+                        if (dispVals.length > 0) collapsed[dispKey] = dispVals[0];
+                    } else if (key === 'memo' || key === 'description') {
+                        // Merge text fields with semicolon
+                        collapsed[key] = unique.join('; ');
+                    }
+                    // Other fields with mixed values: leave empty (user decides)
+                }
+            });
+
+            return [collapsed];
+        },
+
+        // Group lines by a specific field, preserving all dynamic fields
+        groupLinesBy: function(lines, groupField, sublistId) {
+            var self = this;
+            var groups = {};
+            var displayKey = groupField + '_display';
+
+            lines.forEach(function(line) {
+                var key = line[groupField] || '__empty__';
+
+                if (!groups[key]) {
+                    // Clone first line as base (preserves all custom fields)
+                    groups[key] = JSON.parse(JSON.stringify(line));
+                    // Reset numeric fields to start fresh accumulation
+                    Object.keys(groups[key]).forEach(function(fieldId) {
+                        if (fieldId.indexOf('_display') !== -1) return;
+                        if (self.isNumericField(fieldId, sublistId)) {
+                            groups[key][fieldId] = parseFloat(line[fieldId]) || 0;
+                        }
+                    });
+                } else {
+                    // Merge subsequent lines - sum numeric fields only
+                    Object.keys(line).forEach(function(fieldId) {
+                        if (fieldId.indexOf('_display') !== -1) return;
+                        if (self.isNumericField(fieldId, sublistId)) {
+                            groups[key][fieldId] = (parseFloat(groups[key][fieldId]) || 0) +
+                                                   (parseFloat(line[fieldId]) || 0);
+                        }
+                    });
+                }
+            });
+
+            return Object.keys(groups).map(function(k) { return groups[k]; });
+        },
+
+        // Apply header-level defaults to all lines missing those values
+        applyDefaultsToLines: function(sublistId) {
+            var bodyFields = (this.formData && this.formData.bodyFields) || {};
+            var defaults = {
+                department: bodyFields.department || bodyFields.Department || '',
+                class: bodyFields['class'] || bodyFields.Class || '',
+                location: bodyFields.location || bodyFields.Location || ''
+            };
+
+            // Also get display values
+            var displayDefaults = {
+                department_display: bodyFields.department_display || bodyFields.Department_display || '',
+                class_display: bodyFields.class_display || bodyFields.Class_display || '',
+                location_display: bodyFields.location_display || bodyFields.Location_display || ''
+            };
+
+            var lines = this.sublistData[sublistId] || [];
+            var appliedCount = 0;
+
+            lines.forEach(function(line) {
+                Object.keys(defaults).forEach(function(field) {
+                    if (!line[field] && defaults[field]) {
+                        line[field] = defaults[field];
+                        var dispKey = field + '_display';
+                        if (displayDefaults[dispKey]) {
+                            line[dispKey] = displayDefaults[dispKey];
+                        }
+                        appliedCount++;
+                    }
+                });
+            });
+
+            var slType = (sublistId || '').toLowerCase();
+            this.changes[slType + 'Lines'] = lines;
+            this.markUnsaved();
+            this.refreshSublist(sublistId);
+        },
+
+        // Create empty line from schema (dynamic field aware)
+        createEmptyLine: function(sublistId) {
+            var schema = this.getSublistSchema(sublistId);
+            var line = {};
+
+            (schema.fields || []).forEach(function(f) {
+                if (f.type === 'currency' || f.type === 'integer') {
+                    line[f.id] = 0;
+                } else {
+                    line[f.id] = '';
+                }
+            });
+
+            // Ensure minimum required fields exist
+            if (!line.hasOwnProperty('amount')) line.amount = 0;
+
+            // Add common fields based on sublist type
+            var slType = (sublistId || '').toLowerCase();
+            if (slType === 'expense') {
+                if (!line.hasOwnProperty('account')) line.account = '';
+                if (!line.hasOwnProperty('memo')) line.memo = '';
+            } else if (slType === 'item') {
+                if (!line.hasOwnProperty('item')) line.item = '';
+                if (!line.hasOwnProperty('description')) line.description = '';
+                if (!line.hasOwnProperty('quantity')) line.quantity = 1;
+                if (!line.hasOwnProperty('rate')) line.rate = 0;
+            }
+
+            return line;
+        },
+
+        // Show split equally dialog
+        showSplitDialog: function(sublistId) {
+            var self = this;
+            var lines = this.sublistData[sublistId] || [];
+            var total = lines.reduce(function(sum, l) {
+                return sum + (parseFloat(l.amount) || 0);
+            }, 0);
+
+            // Create dialog overlay
+            var overlay = document.createElement('div');
+            overlay.className = 'split-dialog-overlay';
+            overlay.id = 'split-dialog-overlay';
+            overlay.innerHTML =
+                '<div class="split-dialog">' +
+                    '<h4><i class="fas fa-divide"></i> Split Equally</h4>' +
+                    '<div class="split-dialog-body">' +
+                        '<label for="split-count">Number of lines to create:</label>' +
+                        '<input type="number" id="split-count" min="2" max="100" value="2" autofocus>' +
+                        '<small>Total amount ($' + total.toFixed(2) + ') will be divided equally</small>' +
+                    '</div>' +
+                    '<div class="split-dialog-actions">' +
+                        '<button class="btn btn-ghost btn-sm" id="split-cancel">Cancel</button>' +
+                        '<button class="btn btn-primary btn-sm" id="split-confirm">Split</button>' +
+                    '</div>' +
+                '</div>';
+
+            document.body.appendChild(overlay);
+
+            // Focus input
+            var input = el('#split-count');
+            if (input) {
+                input.focus();
+                input.select();
+            }
+
+            // Bind events
+            el('#split-cancel').addEventListener('click', function() {
+                overlay.remove();
+                // Cancel undo state since we stored it before showing dialog
+                self.transformUndoState = null;
+                var undoBtn = el('#btn-undo-' + sublistId);
+                if (undoBtn) undoBtn.style.display = 'none';
+            });
+
+            el('#split-confirm').addEventListener('click', function() {
+                var count = parseInt(input.value) || 2;
+                if (count < 2) count = 2;
+                if (count > 100) count = 100;
+
+                overlay.remove();
+                self.executeSplit(sublistId, count);
+            });
+
+            // Enter key to confirm
+            input.addEventListener('keydown', function(e) {
+                if (e.key === 'Enter') {
+                    el('#split-confirm').click();
+                } else if (e.key === 'Escape') {
+                    el('#split-cancel').click();
+                }
+            });
+
+            // Click outside to close
+            overlay.addEventListener('click', function(e) {
+                if (e.target === overlay) {
+                    el('#split-cancel').click();
+                }
+            });
+        },
+
+        // Execute split equally operation
+        executeSplit: function(sublistId, count) {
+            var lines = this.sublistData[sublistId] || [];
+            var total = lines.reduce(function(sum, l) {
+                return sum + (parseFloat(l.amount) || 0);
+            }, 0);
+
+            var amountPerLine = Math.round((total / count) * 100) / 100; // Round to 2 decimals
+            var remainder = Math.round((total - (amountPerLine * count)) * 100) / 100;
+
+            var newLines = [];
+            var baseLine = lines.length > 0 ? JSON.parse(JSON.stringify(lines[0])) : this.createEmptyLine(sublistId);
+
+            // Clear numeric values from base line except the split amount
+            var self = this;
+            Object.keys(baseLine).forEach(function(key) {
+                if (key.indexOf('_display') !== -1) return;
+                if (self.isNumericField(key, sublistId) && key !== 'quantity') {
+                    baseLine[key] = 0;
+                }
+            });
+
+            for (var i = 0; i < count; i++) {
+                var newLine = JSON.parse(JSON.stringify(baseLine));
+                newLine.amount = amountPerLine;
+                // Add remainder to first line
+                if (i === 0 && remainder !== 0) {
+                    newLine.amount = Math.round((amountPerLine + remainder) * 100) / 100;
+                }
+                // Update rate if it's an item line with quantity
+                if (newLine.quantity && newLine.quantity > 0) {
+                    newLine.rate = newLine.amount / newLine.quantity;
+                }
+                newLines.push(newLine);
+            }
+
+            this.sublistData[sublistId] = newLines;
+            var slType = (sublistId || '').toLowerCase();
+            this.changes[slType + 'Lines'] = newLines;
+            this.markUnsaved();
+            this.refreshSublist(sublistId);
+            this.updateTabCounts();
+            UI.toast('Split into ' + count + ' lines of $' + amountPerLine.toFixed(2) + ' each', 'success');
         },
 
         // ==========================================
