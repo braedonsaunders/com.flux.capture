@@ -20,7 +20,9 @@ define(['N/log', 'N/record', 'N/query', 'N/runtime', '../FC_Debug'], function(lo
         AMOUNT_FORMAT: 'amount_format',         // Vendor amount format (period/comma decimal)
         ACCOUNT_MAPPING: 'account_mapping',     // Description pattern -> GL account
         FIELD_PATTERN: 'field_pattern',         // Custom field extraction patterns
-        EXTRACTION_TEMPLATE: 'extraction_template' // Vendor document layout template
+        EXTRACTION_TEMPLATE: 'extraction_template', // Vendor document layout template
+        ITEM_MAPPING: 'item_mapping',           // OCR line item text -> NetSuite item ID
+        CUSTOM_FIELD_MAPPING: 'custom_field_mapping' // OCR label -> custom field ID
     });
 
     /**
@@ -88,6 +90,19 @@ define(['N/log', 'N/record', 'N/query', 'N/runtime', '../FC_Debug'], function(lo
                     case 'account':
                         learningType = LearningType.ACCOUNT_MAPPING;
                         result = this.learnAccountMapping(correction, context);
+                        break;
+
+                    case 'lineItem.item':
+                    case 'item':
+                        // Learn item mapping: OCR text -> NetSuite item ID
+                        learningType = LearningType.ITEM_MAPPING;
+                        result = this.learnItemMapping(correction, context);
+                        break;
+
+                    case 'customField':
+                        // Learn custom field assignment: OCR label -> form field ID
+                        learningType = LearningType.CUSTOM_FIELD_MAPPING;
+                        result = this.learnCustomFieldMapping(correction, context);
                         break;
 
                     default:
@@ -400,6 +415,150 @@ define(['N/log', 'N/record', 'N/query', 'N/runtime', '../FC_Debug'], function(lo
         }
 
         /**
+         * Learn item mapping: OCR line item text -> NetSuite item ID
+         * When user selects an item for a line item, remember it for this vendor
+         */
+        learnItemMapping(correction, context) {
+            const vendorId = correction.vendorId;
+            const ocrText = String(correction.original || context.lineItemDescription || '').trim();
+            const itemId = correction.corrected;
+
+            if (!ocrText || !itemId) {
+                return { success: false, reason: 'Missing OCR text or item ID' };
+            }
+
+            // Normalize the OCR text for matching
+            const normalizedText = ocrText.toLowerCase().replace(/[^a-z0-9\s]/g, ' ').trim();
+
+            // Key: vendor-specific or global
+            const key = vendorId ? `vendor_${vendorId}` : 'global';
+
+            // Get existing mappings for this vendor
+            const existing = this.getConfig(LearningType.ITEM_MAPPING, key);
+            const data = existing?.data || {
+                vendorId: vendorId || null,
+                mappings: []
+            };
+
+            // Check if we already have a mapping for this text
+            const existingMapping = data.mappings.find(m =>
+                m.normalizedText === normalizedText
+            );
+
+            if (existingMapping) {
+                // Update existing mapping
+                existingMapping.itemId = itemId;
+                existingMapping.usageCount = (existingMapping.usageCount || 0) + 1;
+                existingMapping.lastUsed = new Date().toISOString();
+                existingMapping.confidence = Math.min(0.5 + existingMapping.usageCount * 0.1, 0.95);
+            } else {
+                // Add new mapping
+                data.mappings.push({
+                    ocrText: ocrText,
+                    normalizedText: normalizedText,
+                    itemId: itemId,
+                    usageCount: 1,
+                    confidence: 0.6,
+                    createdAt: new Date().toISOString(),
+                    lastUsed: new Date().toISOString()
+                });
+            }
+
+            // Keep only last 100 mappings per vendor
+            data.mappings = data.mappings
+                .sort((a, b) => new Date(b.lastUsed) - new Date(a.lastUsed))
+                .slice(0, 100);
+
+            data.lastUpdated = new Date().toISOString();
+
+            log.audit('CorrectionLearner.learnItemMapping', {
+                vendorId: vendorId,
+                ocrText: ocrText.substring(0, 50),
+                itemId: itemId,
+                mappingCount: data.mappings.length
+            });
+
+            return this.storeConfig({
+                type: LearningType.ITEM_MAPPING,
+                key: key,
+                data: data,
+                existingId: existing?.id
+            });
+        }
+
+        /**
+         * Learn custom field mapping: OCR label -> form custom field ID
+         * When user assigns an extracted field to a custom field, remember it
+         */
+        learnCustomFieldMapping(correction, context) {
+            const vendorId = correction.vendorId;
+            const sourceLabel = String(correction.original || context.sourceLabel || '').trim();
+            const targetFieldId = correction.corrected;
+
+            if (!sourceLabel || !targetFieldId) {
+                return { success: false, reason: 'Missing source label or target field ID' };
+            }
+
+            // Normalize the label for matching
+            const normalizedLabel = sourceLabel.toLowerCase().replace(/[^a-z0-9\s]/g, ' ').trim();
+
+            // Key: vendor-specific or global
+            const key = vendorId ? `vendor_${vendorId}` : 'global';
+
+            // Get existing mappings
+            const existing = this.getConfig(LearningType.CUSTOM_FIELD_MAPPING, key);
+            const data = existing?.data || {
+                vendorId: vendorId || null,
+                mappings: []
+            };
+
+            // Check if we already have a mapping for this label
+            const existingMapping = data.mappings.find(m =>
+                m.normalizedLabel === normalizedLabel
+            );
+
+            if (existingMapping) {
+                // Update existing mapping
+                existingMapping.targetFieldId = targetFieldId;
+                existingMapping.usageCount = (existingMapping.usageCount || 0) + 1;
+                existingMapping.lastUsed = new Date().toISOString();
+                existingMapping.confidence = Math.min(0.6 + existingMapping.usageCount * 0.1, 0.98);
+            } else {
+                // Add new mapping
+                data.mappings.push({
+                    sourceLabel: sourceLabel,
+                    normalizedLabel: normalizedLabel,
+                    targetFieldId: targetFieldId,
+                    usageCount: 1,
+                    confidence: 0.7,
+                    createdAt: new Date().toISOString(),
+                    lastUsed: new Date().toISOString()
+                });
+            }
+
+            // Keep only last 50 mappings per vendor
+            data.mappings = data.mappings
+                .sort((a, b) => new Date(b.lastUsed) - new Date(a.lastUsed))
+                .slice(0, 50);
+
+            data.lastUpdated = new Date().toISOString();
+
+            log.audit('CorrectionLearner.learnCustomFieldMapping', {
+                vendorId: vendorId,
+                sourceLabel: sourceLabel,
+                targetFieldId: targetFieldId,
+                mappingCount: data.mappings.length
+            });
+
+            return this.storeConfig({
+                type: LearningType.CUSTOM_FIELD_MAPPING,
+                key: key,
+                data: data,
+                existingId: existing?.id
+            });
+        }
+
+        /**
          * Get learned date format for vendor
          */
         getVendorDateFormat(vendorId) {
@@ -453,6 +612,131 @@ define(['N/log', 'N/record', 'N/query', 'N/runtime', '../FC_Debug'], function(lo
             }
 
             return null;
+        }
+
+        /**
+         * Get suggested item for line item description
+         * Matches OCR text against learned item mappings
+         */
+        getSuggestedItem(vendorId, ocrText) {
+            if (!ocrText) return null;
+
+            const normalizedText = ocrText.toLowerCase().replace(/[^a-z0-9\s]/g, ' ').trim();
+
+            // Try vendor-specific first
+            if (vendorId) {
+                const vendorConfig = this.getConfig(LearningType.ITEM_MAPPING, `vendor_${vendorId}`);
+                if (vendorConfig?.data?.mappings) {
+                    // Exact match first
+                    const exactMatch = vendorConfig.data.mappings.find(m =>
+                        m.normalizedText === normalizedText
+                    );
+                    if (exactMatch) {
+                        return {
+                            itemId: exactMatch.itemId,
+                            confidence: exactMatch.confidence || 0.8,
+                            source: 'vendor_specific',
+                            matchType: 'exact'
+                        };
+                    }
+
+                    // Contains match
+                    const containsMatch = vendorConfig.data.mappings.find(m =>
+                        normalizedText.includes(m.normalizedText) ||
+                        m.normalizedText.includes(normalizedText)
+                    );
+                    if (containsMatch) {
+                        return {
+                            itemId: containsMatch.itemId,
+                            confidence: (containsMatch.confidence || 0.6) * 0.8,
+                            source: 'vendor_specific',
+                            matchType: 'partial'
+                        };
+                    }
+                }
+            }
+
+            // Try global mappings
+            const globalConfig = this.getConfig(LearningType.ITEM_MAPPING, 'global');
+            if (globalConfig?.data?.mappings) {
+                const match = globalConfig.data.mappings.find(m =>
+                    m.normalizedText === normalizedText
+                );
+                if (match) {
+                    return {
+                        itemId: match.itemId,
+                        confidence: (match.confidence || 0.5) * 0.7,
+                        source: 'global',
+                        matchType: 'exact'
+                    };
+                }
+            }
+
+            return null;
+        }
+
+        /**
+         * Get suggested custom field for OCR label
+         * Matches OCR label against learned custom field mappings
+         */
+        getSuggestedCustomField(vendorId, sourceLabel) {
+            if (!sourceLabel) return null;
+
+            const normalizedLabel = sourceLabel.toLowerCase().replace(/[^a-z0-9\s]/g, ' ').trim();
+
+            // Try vendor-specific first
+            if (vendorId) {
+                const vendorConfig = this.getConfig(LearningType.CUSTOM_FIELD_MAPPING, `vendor_${vendorId}`);
+                if (vendorConfig?.data?.mappings) {
+                    const match = vendorConfig.data.mappings.find(m =>
+                        m.normalizedLabel === normalizedLabel
+                    );
+                    if (match) {
+                        return {
+                            fieldId: match.targetFieldId,
+                            confidence: match.confidence || 0.8,
+                            source: 'vendor_specific'
+                        };
+                    }
+                }
+            }
+
+            // Try global mappings
+            const globalConfig = this.getConfig(LearningType.CUSTOM_FIELD_MAPPING, 'global');
+            if (globalConfig?.data?.mappings) {
+                const match = globalConfig.data.mappings.find(m =>
+                    m.normalizedLabel === normalizedLabel
+                );
+                if (match) {
+                    return {
+                        fieldId: match.targetFieldId,
+                        confidence: (match.confidence || 0.6) * 0.8,
+                        source: 'global'
+                    };
+                }
+            }
+
+            return null;
+        }
+
+        /**
+         * Get all item mappings for a vendor (for bulk processing)
+         */
+        getVendorItemMappings(vendorId) {
+            if (!vendorId) return [];
+
+            const config = this.getConfig(LearningType.ITEM_MAPPING, `vendor_${vendorId}`);
+            return config?.data?.mappings || [];
+        }
+
+        /**
+         * Get all custom field mappings for a vendor
+         */
+        getVendorCustomFieldMappings(vendorId) {
+            if (!vendorId) return [];
+
+            const config = this.getConfig(LearningType.CUSTOM_FIELD_MAPPING, `vendor_${vendorId}`);
+            return config?.data?.mappings || [];
         }
 
         /**

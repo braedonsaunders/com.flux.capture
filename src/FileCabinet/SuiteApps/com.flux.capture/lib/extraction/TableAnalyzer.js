@@ -62,8 +62,15 @@ define(['N/log', '../FC_Debug'], function(log, fcDebug) {
     ];
 
     /**
-     * Smart Table Analyzer
+     * Smart Table Analyzer v3.0
      * Uses multiple signals to identify columns and extract line items
+     *
+     * v3.0 Improvements:
+     * - Fixed overly strict filtering (accepts $0 amounts, calculates from qty*rate)
+     * - Position-aware summary row detection (must be in bottom 25%)
+     * - Context-aware row classification
+     * - Better column detection sampling (not just first 10 rows)
+     * - Provider-agnostic design
      */
     class TableAnalyzer {
         constructor(amountParser) {
@@ -147,16 +154,24 @@ define(['N/log', '../FC_Debug'], function(log, fcDebug) {
                 [ColumnType.DATE]: /\d{1,2}[\-\/]\d{1,2}[\-\/]\d{2,4}/
             };
 
-            // Summary row indicators
+            // Summary row indicators - STRICT patterns only
+            // Position check is now required in addition to pattern match
             this.SUMMARY_PATTERNS = [
                 /^sub\s*total$/i, /^subtotal$/i,
-                /^total$/i, /^grand\s*total$/i,
+                /^grand\s*total$/i,
+                /^total\s*(amount|due|payable)?\s*$/i,
+                /^amount\s*(due|payable|owing)$/i,
+                /^balance\s*(due|forward)?$/i,
+                /^net\s*(amount|total|due)$/i,
+                /^gross\s*(amount|total)$/i
+            ];
+
+            // These patterns ONLY match if NO quantity is present
+            // (because "tax", "shipping", "discount" can be legitimate line items)
+            this.SUMMARY_PATTERNS_NO_QTY = [
                 /^tax$/i, /^vat$/i, /^gst$/i, /^hst$/i, /^pst$/i,
                 /^shipping$/i, /^freight$/i, /^delivery$/i,
-                /^discount$/i, /^adjustment$/i,
-                /^amount\s*due$/i, /^balance$/i,
-                /^net$/i, /^gross$/i,
-                /^\s*$/ // Empty row
+                /^discount$/i, /^adjustment$/i
             ];
         }
 
@@ -364,16 +379,36 @@ define(['N/log', '../FC_Debug'], function(log, fcDebug) {
 
         /**
          * Identify column type from data patterns
+         * v3.0: Sample from beginning, middle, AND end of table
          */
         identifyFromData(bodyRows, colIndex) {
             if (!bodyRows || bodyRows.length === 0) {
                 return { type: ColumnType.UNKNOWN, confidence: 0 };
             }
 
-            // Sample data from column
-            const samples = bodyRows
-                .slice(0, Math.min(10, bodyRows.length))
-                .map(row => row[colIndex]?.text || '')
+            // Sample from beginning, middle, and end of table (not just first 10)
+            const totalRows = bodyRows.length;
+            const sampleIndices = new Set();
+
+            // First 10 rows
+            for (let i = 0; i < Math.min(10, totalRows); i++) {
+                sampleIndices.add(i);
+            }
+
+            // Middle rows (5 from center)
+            const midStart = Math.max(0, Math.floor(totalRows / 2) - 2);
+            for (let i = midStart; i < Math.min(midStart + 5, totalRows); i++) {
+                sampleIndices.add(i);
+            }
+
+            // Last 5 rows (but not summary rows typically)
+            const endStart = Math.max(0, totalRows - 7);
+            for (let i = endStart; i < totalRows - 2; i++) { // Skip last 2 (likely totals)
+                sampleIndices.add(i);
+            }
+
+            const samples = [...sampleIndices]
+                .map(i => bodyRows[i]?.[colIndex]?.text || '')
                 .filter(v => v.length > 0);
 
             if (samples.length === 0) {
@@ -392,10 +427,11 @@ define(['N/log', '../FC_Debug'], function(log, fcDebug) {
             }
 
             // Check for text-heavy column (likely DESCRIPTION)
+            // v3.0: Lower threshold from 70% to 50% for better detection
             const textSamples = samples.filter(s =>
-                s.length >= 5 && /[a-zA-Z]{3,}/.test(s)
+                s.length >= 4 && /[a-zA-Z]{2,}/.test(s)
             );
-            if (textSamples.length / samples.length >= 0.7) {
+            if (textSamples.length / samples.length >= 0.5) {
                 typeCounts[ColumnType.DESCRIPTION] = textSamples.length;
             }
 
@@ -418,30 +454,40 @@ define(['N/log', '../FC_Debug'], function(log, fcDebug) {
 
         /**
          * Apply positional heuristics to column identification
+         * v3.0: Lower confidence for positional guesses - these should be last resort
          */
         applyPositionalHeuristics(column, index, totalColumns) {
+            // Only apply if still UNKNOWN and confidence is 0
+            if (column.type !== ColumnType.UNKNOWN || column.confidence > 0) {
+                return;
+            }
+
             // First column is often item code or description
-            if (index === 0 && column.type === ColumnType.UNKNOWN) {
+            if (index === 0) {
                 column.type = ColumnType.ITEM_CODE;
-                column.confidence = 0.5;
+                column.confidence = 0.3; // Low confidence - positional guess
+                column._positionalGuess = true;
             }
 
             // Second column is often description if first is code
-            if (index === 1 && column.type === ColumnType.UNKNOWN) {
+            if (index === 1) {
                 column.type = ColumnType.DESCRIPTION;
-                column.confidence = 0.6;
+                column.confidence = 0.35;
+                column._positionalGuess = true;
             }
 
             // Last column is usually amount
-            if (index === totalColumns - 1 && column.type === ColumnType.UNKNOWN) {
+            if (index === totalColumns - 1) {
                 column.type = ColumnType.AMOUNT;
-                column.confidence = 0.7;
+                column.confidence = 0.4; // Slightly higher - last column is often amount
+                column._positionalGuess = true;
             }
 
             // Second to last is often unit price
-            if (index === totalColumns - 2 && column.type === ColumnType.UNKNOWN) {
+            if (index === totalColumns - 2) {
                 column.type = ColumnType.UNIT_PRICE;
-                column.confidence = 0.5;
+                column.confidence = 0.3;
+                column._positionalGuess = true;
             }
         }
 
@@ -517,10 +563,12 @@ define(['N/log', '../FC_Debug'], function(log, fcDebug) {
         }
 
         /**
-         * TWO-PASS LINE ITEM EXTRACTION (v2.0)
-         * Pass 1: Identify all "anchor" rows (rows with amounts)
+         * TWO-PASS LINE ITEM EXTRACTION (v3.0)
+         * Pass 1: Identify all "anchor" rows (rows with amounts) with position context
          * Pass 2: Associate description-only rows with nearest anchor
          * This prevents losing line items when amount and description are on different rows
+         *
+         * v3.0: Position-aware summary detection - rows must be in bottom 25% to be summary
          */
         extractLineItemsTwoPass(structure, columns, context) {
             const items = [];
@@ -528,9 +576,14 @@ define(['N/log', '../FC_Debug'], function(log, fcDebug) {
 
             if (body.length === 0) return items;
 
-            // PASS 1: Identify anchor rows (rows with monetary amounts)
+            const totalRows = body.length;
+
+            // PASS 1: Identify anchor rows (rows with monetary amounts) WITH position context
             const rowAnalysis = body.map((row, idx) => {
                 const analysis = this.analyzeRow(row, columns, idx);
+                // Add position context for summary detection
+                analysis.rowPosition = idx / totalRows; // 0.0 to 1.0
+                analysis.isInSummaryZone = idx >= totalRows * 0.75; // Bottom 25%
                 return analysis;
             });
 
@@ -542,17 +595,28 @@ define(['N/log', '../FC_Debug'], function(log, fcDebug) {
                 const analysis = rowAnalysis[i];
                 const row = body[i];
 
-                // Skip summary rows
+                // v3.0: Position-aware summary detection
+                // Only skip as summary if: matches pattern AND (in summary zone OR has no quantity)
                 if (analysis.isSummary) {
-                    // But check if it might actually be a line item named "Total" or "Discount"
-                    if (analysis.hasAmount && analysis.hasQuantity) {
-                        // Likely a legitimate item with a summary-like name
-                        this.addWarning('potential_line_item_skipped',
-                            `Row "${analysis.descriptionText}" has amount & qty but matches summary pattern`,
-                            { rowIndex: i, description: analysis.descriptionText }
+                    // If has quantity, it's likely a real line item regardless of name
+                    if (analysis.hasQuantity && analysis.quantity > 0) {
+                        // NOT a summary - it's a line item named "Total", "Tax", etc.
+                        fcDebug.debug('TableAnalyzer.twoPass',
+                            `Keeping row "${analysis.descriptionText}" as line item (has quantity: ${analysis.quantity})`
                         );
+                        // Fall through to process as line item
                     }
-                    continue;
+                    // If NOT in summary zone (top 75% of table), keep it
+                    else if (!analysis.isInSummaryZone) {
+                        fcDebug.debug('TableAnalyzer.twoPass',
+                            `Keeping row "${analysis.descriptionText}" - not in summary zone (position: ${(analysis.rowPosition * 100).toFixed(0)}%)`
+                        );
+                        // Fall through to process as line item
+                    }
+                    // Otherwise it's truly a summary row - skip it
+                    else {
+                        continue;
+                    }
                 }
 
                 // Is this an anchor row (has amount)?
@@ -629,29 +693,34 @@ define(['N/log', '../FC_Debug'], function(log, fcDebug) {
 
         /**
          * Analyze a single row for classification
+         * v3.0: Parse quantity as number for better summary detection
          */
         analyzeRow(row, columns, rowIndex) {
             const descCol = columns.find(c => c.type === ColumnType.DESCRIPTION);
             const amtCol = columns.find(c => c.type === ColumnType.AMOUNT);
             const qtyCol = columns.find(c => c.type === ColumnType.QUANTITY);
             const memoCol = columns.find(c => c.type === ColumnType.MEMO);
+            const itemCodeCol = columns.find(c => c.type === ColumnType.ITEM_CODE);
 
             const descText = descCol ? (row[descCol.index]?.text || '') : '';
             const amtText = amtCol ? (row[amtCol.index]?.text || '') : '';
             const qtyText = qtyCol ? (row[qtyCol.index]?.text || '') : '';
             const memoText = memoCol ? (row[memoCol.index]?.text || '') : '';
+            const itemCodeText = itemCodeCol ? (row[itemCodeCol.index]?.text || '') : '';
 
             // Check for amount - must have digits and look like currency
             const hasAmount = amtText && /\d+[.,]?\d*/.test(amtText) && amtText.trim().length > 0;
 
-            // Check for description - meaningful text
-            const hasDescription = descText && descText.trim().length >= 2;
+            // Check for description - meaningful text (v3.0: allow single char if has itemCode)
+            const hasDescription = descText && descText.trim().length >= 1;
+            const hasItemCode = itemCodeText && itemCodeText.trim().length >= 1;
 
-            // Check for quantity
-            const hasQuantity = qtyText && /\d/.test(qtyText);
+            // Parse quantity as number for better decision making
+            const quantityValue = this.parseQuantity(qtyText);
+            const hasQuantity = quantityValue !== null && quantityValue > 0;
 
-            // Check if this is a summary row
-            const isSummary = this.isSummaryRow(descText);
+            // Check if this is a summary row (using new patterns)
+            const isSummary = this.isSummaryRow(descText, hasQuantity);
 
             // Count empty cells
             const emptyCells = row.filter(c => !c.text || c.text.trim() === '').length;
@@ -663,9 +732,12 @@ define(['N/log', '../FC_Debug'], function(log, fcDebug) {
                 amountText: amtText,
                 quantityText: qtyText,
                 memoText: memoText,
+                itemCodeText: itemCodeText,
                 hasDescription,
+                hasItemCode,
                 hasAmount,
                 hasQuantity,
+                quantity: quantityValue,
                 isSummary,
                 sparseness,
                 used: false // Track if row has been consumed
@@ -760,11 +832,24 @@ define(['N/log', '../FC_Debug'], function(log, fcDebug) {
 
         /**
          * Check if description indicates a summary row
+         * v3.0: Uses hasQuantity to avoid false positives on items named "Tax", "Shipping", etc.
          */
-        isSummaryRow(description) {
+        isSummaryRow(description, hasQuantity = false) {
             if (!description) return false;
             const normalized = description.toLowerCase().trim();
-            return this.SUMMARY_PATTERNS.some(p => p.test(normalized));
+
+            // Strict patterns always indicate summary (regardless of quantity)
+            if (this.SUMMARY_PATTERNS.some(p => p.test(normalized))) {
+                return true;
+            }
+
+            // Conditional patterns only match if NO quantity present
+            // (Tax, Shipping, Discount can be real line items if they have quantity)
+            if (!hasQuantity && this.SUMMARY_PATTERNS_NO_QTY.some(p => p.test(normalized))) {
+                return true;
+            }
+
+            return false;
         }
 
         /**
@@ -909,41 +994,64 @@ define(['N/log', '../FC_Debug'], function(log, fcDebug) {
         }
 
         /**
-         * Post-process line items (v2.0 - less aggressive filtering)
-         * Instead of silently dropping items, we flag them for review
+         * Post-process line items (v3.0 - MUCH less aggressive filtering)
+         * Key changes:
+         * - Accept $0 amounts (free items, credits)
+         * - Accept items with only itemCode (no description needed)
+         * - Calculate amount from qty * rate before filtering
+         * - Only skip truly empty rows
          */
         postProcess(lineItems, columns) {
             const validItems = [];
             const skippedItems = [];
 
             for (const item of lineItems) {
-                // Check if item meets minimum requirements
-                const hasValidDescription = item.description && item.description.trim().length >= 2;
-                const hasValidAmount = item.amount > 0;
-                const hasValidQuantity = item.quantity > 0;
+                // v3.0: Calculate amount from qty * rate if missing
+                if ((item.amount === null || item.amount === undefined) &&
+                    item.quantity > 0 && item.unitPrice > 0) {
+                    item.amount = Math.round(item.quantity * item.unitPrice * 100) / 100;
+                    item._amountCalculated = true;
+                }
 
-                // LESS AGGRESSIVE: Keep items with description OR (amount AND qty)
-                if (hasValidDescription || (hasValidAmount && hasValidQuantity)) {
-                    // Mark items that might need review
-                    if (!hasValidDescription) {
+                // Check what we have - v3.0: much more lenient
+                const hasIdentifier = (item.description && item.description.trim().length >= 1) ||
+                                     (item.itemCode && item.itemCode.trim().length >= 1);
+                const hasAmount = item.amount !== null && item.amount !== undefined; // Accept $0!
+                const hasQuantity = item.quantity !== null && item.quantity > 0;
+                const hasRate = item.unitPrice !== null && item.unitPrice > 0;
+
+                // v3.0: Keep item if it has EITHER:
+                // 1. An identifier (description OR itemCode)
+                // 2. Some numeric data (amount OR quantity OR rate)
+                const hasNumericData = hasAmount || hasQuantity || hasRate;
+
+                if (hasIdentifier || hasNumericData) {
+                    // Flag items that might need review (but still keep them!)
+                    if (!hasIdentifier) {
                         item._needsDescriptionReview = true;
                     }
-                    if (!hasValidAmount && !hasValidQuantity) {
+                    if (!hasAmount && !hasQuantity) {
                         item._needsAmountReview = true;
                     }
+
+                    // Clean up description
+                    if (item.description) {
+                        item.description = item.description.trim();
+                    }
+
                     validItems.push(item);
                 }
-                // Track skipped items for transparency
+                // Only skip truly empty rows
                 else {
                     skippedItems.push({
                         description: item.description || '[empty]',
+                        itemCode: item.itemCode || null,
                         amount: item.amount,
                         quantity: item.quantity,
-                        reason: !hasValidDescription ? 'missing_description' :
-                            !hasValidAmount && !hasValidQuantity ? 'missing_amount_and_qty' : 'unknown'
+                        reason: 'no_identifier_or_numeric_data'
                     });
                     this.addWarning('line_item_skipped',
-                        `Skipped item: "${(item.description || '').substring(0, 30)}..." - missing required fields`,
+                        `Skipped empty row - no description, code, or amounts`,
                         { item: skippedItems[skippedItems.length - 1] }
                     );
                 }
@@ -953,21 +1061,24 @@ define(['N/log', '../FC_Debug'], function(log, fcDebug) {
             let confidence = 0.7;
 
             // Boost confidence if we identified key columns
-            const hasDescription = columns.some(c => c.type === ColumnType.DESCRIPTION);
-            const hasAmount = columns.some(c => c.type === ColumnType.AMOUNT);
-            const hasMemo = columns.some(c => c.type === ColumnType.MEMO);
+            const hasDescriptionCol = columns.some(c => c.type === ColumnType.DESCRIPTION);
+            const hasAmountCol = columns.some(c => c.type === ColumnType.AMOUNT);
+            const hasMemoCol = columns.some(c => c.type === ColumnType.MEMO);
+            const hasItemCodeCol = columns.some(c => c.type === ColumnType.ITEM_CODE);
 
-            if (hasDescription && hasAmount) {
+            if (hasDescriptionCol && hasAmountCol) {
                 confidence += 0.15;
             }
-            if (hasMemo) {
+            if (hasMemoCol) {
+                confidence += 0.05;
+            }
+            if (hasItemCodeCol) {
                 confidence += 0.05;
             }
 
-            // Slight penalty if we skipped items (but not as harsh as before)
-            if (lineItems.length > 0 && skippedItems.length > 0) {
-                const skipRatio = skippedItems.length / lineItems.length;
-                confidence -= skipRatio * 0.1; // Max 10% penalty
+            // v3.0: Only penalize if ALL items were skipped
+            if (lineItems.length > 0 && validItems.length === 0) {
+                confidence -= 0.2;
             }
 
             // Calculate total from line items

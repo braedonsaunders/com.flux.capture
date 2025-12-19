@@ -31,6 +31,7 @@ define([
     './extraction/AmountParser',
     './extraction/LayoutAnalyzer',
     './extraction/TableAnalyzer',
+    './extraction/DynamicFieldMatcher',
     // Resolution modules
     './resolution/VendorMatcher',
     './resolution/TaxIdExtractor',
@@ -38,15 +39,19 @@ define([
     './learning/CorrectionLearner',
     './learning/AliasManager',
     // Validation modules
-    './validation/CrossFieldValidator'
+    './validation/CrossFieldValidator',
+    // Vendor modules
+    './vendors/VendorDataLoader'
 ], function(
     file, record, search, query, runtime, log, format, encode,
     fcDebug,
     ProviderFactoryModule,
     FieldMatcherModule, DateParserModule, AmountParserModule, LayoutAnalyzerModule, TableAnalyzerModule,
+    DynamicFieldMatcherModule,
     VendorMatcherModule, TaxIdExtractorModule,
     CorrectionLearnerModule, AliasManagerModule,
-    CrossFieldValidatorModule
+    CrossFieldValidatorModule,
+    VendorDataLoaderModule
 ) {
 
     'use strict';
@@ -110,6 +115,10 @@ define([
             this.taxIdExtractor = new TaxIdExtractorModule.TaxIdExtractor();
             this.correctionLearner = new CorrectionLearnerModule.CorrectionLearner(this.aliasManager);
             this.crossFieldValidator = new CrossFieldValidatorModule.CrossFieldValidator();
+
+            // v3.0: New modules for enhanced extraction
+            this.dynamicFieldMatcher = new DynamicFieldMatcherModule.DynamicFieldMatcher();
+            this.vendorDataLoader = new VendorDataLoaderModule.VendorDataLoader();
 
             this.vendorCache = null;
 
@@ -180,6 +189,30 @@ define([
                 // Stage 4: Entity resolution - vendor matching with multiple signals
                 const vendorMatch = this._performVendorResolution(extractionResult, rawResult.rawText);
 
+                // Stage 4.5: Load vendor defaults LIVE from NetSuite
+                let vendorDefaults = null;
+                if (vendorMatch && vendorMatch.vendorId) {
+                    vendorDefaults = this.vendorDataLoader.getVendorDefaults(vendorMatch.vendorId);
+                    if (vendorDefaults) {
+                        fcDebug.debug('FC_Engine.vendorDefaults', {
+                            vendorId: vendorMatch.vendorId,
+                            subsidiary: vendorDefaults.subsidiary,
+                            currency: vendorDefaults.currency,
+                            terms: vendorDefaults.terms
+                        });
+                    }
+                }
+
+                // Stage 4.6: Match unmatched extractions to custom form fields
+                let customFieldMatches = {};
+                if (options.formSchema && extractionResult.allExtractedFields) {
+                    customFieldMatches = this.dynamicFieldMatcher.matchCustomFields(
+                        extractionResult.allExtractedFields,
+                        options.formSchema,
+                        extractionResult.fields
+                    );
+                }
+
                 // Stage 5: Cross-field validation
                 const validation = this.crossFieldValidator.validate(extractionResult);
 
@@ -220,7 +253,11 @@ define([
                         // v2.0: Include extraction warnings for transparency
                         extractionWarnings: extractionResult.extractionWarnings || [],
                         skippedLineItems: extractionResult.skippedLineItems || [],
-                        lineItemWarnings: extractionResult.lineItemWarnings || []
+                        lineItemWarnings: extractionResult.lineItemWarnings || [],
+                        // v3.0: Vendor defaults loaded LIVE from NetSuite
+                        vendorDefaults: vendorDefaults,
+                        // v3.0: Custom field auto-matches from dynamic field matcher
+                        customFieldMatches: customFieldMatches
                     }
                 };
 
