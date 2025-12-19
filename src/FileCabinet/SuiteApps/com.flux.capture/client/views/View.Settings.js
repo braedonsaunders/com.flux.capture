@@ -297,6 +297,13 @@
                     self.loadEmailInboxStatus();
                 });
             }
+
+            var saveEmailBtn = el('#btn-save-email-address');
+            if (saveEmailBtn) {
+                saveEmailBtn.addEventListener('click', function() {
+                    self.saveEmailAddress();
+                });
+            }
         },
 
         // ==========================================
@@ -2420,6 +2427,55 @@
                 document.execCommand('copy');
                 UI.toast('Email address copied to clipboard', 'success');
             }
+        },
+
+        saveEmailAddress: function() {
+            var self = this;
+            var emailInput = el('#email-address-input');
+            var saveBtn = el('#btn-save-email-address');
+
+            if (!emailInput || !emailInput.value.trim()) {
+                UI.toast('Please enter an email address', 'warning');
+                return;
+            }
+
+            var emailAddress = emailInput.value.trim();
+
+            // Basic validation
+            if (emailAddress.indexOf('@') === -1 || emailAddress.indexOf('netsuite.com') === -1) {
+                UI.toast('Please enter a valid NetSuite email capture address', 'error');
+                return;
+            }
+
+            // Disable button during save
+            if (saveBtn) {
+                saveBtn.disabled = true;
+                saveBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Saving...';
+            }
+
+            API.put('emailInboxConfig', { emailAddress: emailAddress })
+                .then(function(result) {
+                    if (saveBtn) {
+                        saveBtn.disabled = false;
+                        saveBtn.innerHTML = '<i class="fas fa-save"></i> Save';
+                    }
+
+                    UI.toast('Email address saved successfully', 'success');
+
+                    // Update config and refresh display
+                    self.emailInboxConfig = {
+                        enabled: true,
+                        emailAddress: emailAddress
+                    };
+                    self.showEmailAddressPanel(self.emailInboxConfig);
+                })
+                .catch(function(err) {
+                    if (saveBtn) {
+                        saveBtn.disabled = false;
+                        saveBtn.innerHTML = '<i class="fas fa-save"></i> Save';
+                    }
+                    UI.toast('Failed to save: ' + (err.message || 'Unknown error'), 'error');
+                });
         },
 
         loadRecentEmailImports: function() {

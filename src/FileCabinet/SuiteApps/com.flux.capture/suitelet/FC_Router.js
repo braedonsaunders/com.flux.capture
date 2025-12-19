@@ -310,6 +310,9 @@ define([
                 case 'providerconfig':
                     result = saveProviderConfig(context);
                     break;
+                case 'emailInboxConfig':
+                    result = saveEmailInboxConfig(context);
+                    break;
                 default:
                     result = Response.error('INVALID_ACTION', 'Unknown action: ' + action);
             }
@@ -2393,66 +2396,154 @@ define([
         try {
             var accountId = runtime.accountId;
 
-            // Search for the email capture plugin deployment to check if it's active
-            var pluginSearch = search.create({
-                type: 'scriptdeployment',
+            // Check if we have a saved email address in config
+            var savedEmailAddress = null;
+            var configSearch = search.create({
+                type: 'customrecord_flux_config',
                 filters: [
-                    ['scriptid', 'is', 'customdeploy_fc_email_capture']
+                    ['custrecord_flux_cfg_type', 'is', 'email_capture'],
+                    ['custrecord_flux_cfg_key', 'is', 'inbox_address'],
+                    ['custrecord_flux_cfg_active', 'is', 'T']
                 ],
-                columns: ['status', 'scriptid']
+                columns: ['custrecord_flux_cfg_data']
             });
 
-            var isEnabled = false;
-            var pluginResults = pluginSearch.run().getRange({ start: 0, end: 1 });
-
-            if (pluginResults && pluginResults.length > 0) {
-                var status = pluginResults[0].getValue('status');
-                isEnabled = (status === 'RELEASED' || status === 'TESTING');
+            var configResults = configSearch.run().getRange({ start: 0, end: 1 });
+            if (configResults && configResults.length > 0) {
+                var configData = configResults[0].getValue('custrecord_flux_cfg_data');
+                if (configData) {
+                    try {
+                        var parsed = JSON.parse(configData);
+                        savedEmailAddress = parsed.emailAddress;
+                    } catch (parseErr) {
+                        savedEmailAddress = configData;
+                    }
+                }
             }
 
-            // Construct the email address based on NetSuite's convention
-            // Email capture plugins get addresses like: customscript_fc_email_capture@{accountid}.netsuite.com
-            var emailAddress = 'customscript_fc_email_capture@' + accountId.toLowerCase().replace('_', '-') + '.netsuite.com';
+            // Try to find the email capture plugin script to verify it exists
+            var pluginExists = false;
+            try {
+                var scriptSearch = search.create({
+                    type: 'script',
+                    filters: [
+                        ['scriptid', 'is', 'customscript_fc_email_capture']
+                    ],
+                    columns: ['name', 'scriptid']
+                });
+                var scriptResults = scriptSearch.run().getRange({ start: 0, end: 1 });
+                pluginExists = scriptResults && scriptResults.length > 0;
+            } catch (scriptErr) {
+                log.debug('Script search error', scriptErr);
+            }
 
             // Get document stats for email source
             var todayStart = new Date();
             todayStart.setHours(0, 0, 0, 0);
 
-            var statsQuery = query.runSuiteQL({
-                query: "SELECT " +
-                    "COUNT(CASE WHEN custrecord_flux_email_received >= TO_DATE('" + format.format({ value: todayStart, type: format.Type.DATE }) + "', 'MM/DD/YYYY') THEN 1 END) as today, " +
-                    "COUNT(*) as total " +
-                    "FROM customrecord_flux_document " +
-                    "WHERE custrecord_flux_source = 2"
-            });
-
             var documentsToday = 0;
             var documentsTotal = 0;
 
-            if (statsQuery && statsQuery.results && statsQuery.results.length > 0) {
-                documentsToday = parseInt(statsQuery.results[0].values[0]) || 0;
-                documentsTotal = parseInt(statsQuery.results[0].values[1]) || 0;
+            try {
+                var statsQuery = query.runSuiteQL({
+                    query: "SELECT " +
+                        "COUNT(CASE WHEN custrecord_flux_email_received >= TO_DATE('" + format.format({ value: todayStart, type: format.Type.DATE }) + "', 'MM/DD/YYYY') THEN 1 END) as today, " +
+                        "COUNT(*) as total " +
+                        "FROM customrecord_flux_document " +
+                        "WHERE custrecord_flux_source = 2"
+                });
+
+                if (statsQuery && statsQuery.results && statsQuery.results.length > 0) {
+                    documentsToday = parseInt(statsQuery.results[0].values[0]) || 0;
+                    documentsTotal = parseInt(statsQuery.results[0].values[1]) || 0;
+                }
+            } catch (statsErr) {
+                log.debug('Stats query error', statsErr);
             }
+
+            // Plugin is considered enabled if we have a saved email address
+            var isEnabled = !!savedEmailAddress;
 
             return Response.success({
                 enabled: isEnabled,
-                emailAddress: emailAddress,
+                pluginExists: pluginExists,
+                emailAddress: savedEmailAddress || '',
                 accountId: accountId,
                 documentsToday: documentsToday,
-                documentsTotal: documentsTotal
+                documentsTotal: documentsTotal,
+                needsConfiguration: pluginExists && !savedEmailAddress
             });
         } catch (e) {
             log.error('getEmailInboxStatus Error', e);
-            // Return a fallback with constructed email address
-            var fallbackAccountId = runtime.accountId;
             return Response.success({
                 enabled: false,
-                emailAddress: 'customscript_fc_email_capture@' + fallbackAccountId.toLowerCase().replace('_', '-') + '.netsuite.com',
-                accountId: fallbackAccountId,
+                pluginExists: false,
+                emailAddress: '',
+                accountId: runtime.accountId,
                 documentsToday: 0,
                 documentsTotal: 0,
                 error: e.message
             });
+        }
+    }
+
+    /**
+     * Save Email Inbox Configuration
+     */
+    function saveEmailInboxConfig(context) {
+        try {
+            var emailAddress = context.emailAddress;
+
+            if (!emailAddress) {
+                return Response.error('MISSING_PARAM', 'Email address is required');
+            }
+
+            // Validate email format (should be from netsuite.com)
+            if (emailAddress.indexOf('@') === -1 || emailAddress.indexOf('netsuite.com') === -1) {
+                return Response.error('INVALID_EMAIL', 'Please enter a valid NetSuite email capture address');
+            }
+
+            // Check for existing config record
+            var existingSearch = search.create({
+                type: 'customrecord_flux_config',
+                filters: [
+                    ['custrecord_flux_cfg_type', 'is', 'email_capture'],
+                    ['custrecord_flux_cfg_key', 'is', 'inbox_address']
+                ],
+                columns: ['internalid']
+            });
+
+            var existingResults = existingSearch.run().getRange({ start: 0, end: 1 });
+            var configRecord;
+
+            if (existingResults && existingResults.length > 0) {
+                // Update existing
+                configRecord = record.load({
+                    type: 'customrecord_flux_config',
+                    id: existingResults[0].id
+                });
+            } else {
+                // Create new
+                configRecord = record.create({
+                    type: 'customrecord_flux_config'
+                });
+                configRecord.setValue('custrecord_flux_cfg_type', 'email_capture');
+                configRecord.setValue('custrecord_flux_cfg_key', 'inbox_address');
+            }
+
+            configRecord.setValue('custrecord_flux_cfg_data', JSON.stringify({ emailAddress: emailAddress }));
+            configRecord.setValue('custrecord_flux_cfg_active', true);
+            configRecord.setValue('custrecord_flux_cfg_modified', new Date());
+
+            var savedId = configRecord.save();
+
+            return Response.success({
+                configId: savedId,
+                emailAddress: emailAddress
+            });
+        } catch (e) {
+            log.error('saveEmailInboxConfig Error', e);
+            return Response.error('SAVE_FAILED', e.message);
         }
     }
 

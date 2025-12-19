@@ -7584,6 +7584,19 @@ body.extraction-selecting .form-field:hover {
     color: var(--text-primary);
 }
 
+.email-address-input-group {
+    margin-top: var(--space-lg);
+    padding-top: var(--space-lg);
+    border-top: 1px solid var(--border-color);
+}
+
+.email-address-input-group label {
+    display: block;
+    font-weight: 500;
+    color: var(--text-primary);
+    margin-bottom: var(--space-sm);
+}
+
 .file-type-badges {
     display: flex;
     gap: var(--space-xs);
