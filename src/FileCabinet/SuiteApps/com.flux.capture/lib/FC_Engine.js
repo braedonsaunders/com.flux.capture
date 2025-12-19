@@ -626,8 +626,25 @@ define([
             let lineItems = [];
             let lineItemWarnings = [];
             let skippedLineItems = [];
+            let tableDiagnostics = [];
+
+            // ========== LINE ITEM EXTRACTION DIAGNOSTICS ==========
+            fcDebug.debugAudit('FC_Engine.LINEITEM_START', JSON.stringify({
+                rawTableCount: rawResult.rawTables?.length || 0,
+                hasLayoutTable: !!layout.lineItemsTable
+            }));
 
             if (rawResult.rawTables && rawResult.rawTables.length > 0) {
+                // Log all tables found
+                rawResult.rawTables.forEach((t, idx) => {
+                    fcDebug.debugAudit(`FC_Engine.TABLE[${idx}]`, JSON.stringify({
+                        headerRows: t.headerRows?.length || 0,
+                        bodyRows: t.bodyRows?.length || 0,
+                        footerRows: t.footerRows?.length || 0,
+                        confidence: t.confidence
+                    }));
+                });
+
                 // Find the line items table (usually the largest)
                 const lineItemsTable = layout.lineItemsTable?.raw ||
                     rawResult.rawTables.reduce((best, t) =>
@@ -636,8 +653,47 @@ define([
                     );
 
                 if (lineItemsTable) {
+                    fcDebug.debugAudit('FC_Engine.SELECTED_TABLE', JSON.stringify({
+                        bodyRows: lineItemsTable.bodyRows?.length || 0,
+                        headerRows: lineItemsTable.headerRows?.length || 0,
+                        reason: layout.lineItemsTable ? 'layout_detected' : 'largest_table'
+                    }));
+
+                    // Pass table index for logging
+                    extractionContext.tableIndex = 0;
                     const tableResult = this.tableAnalyzer.analyze(lineItemsTable, extractionContext);
                     lineItems = tableResult.lineItems;
+
+                    // Store diagnostics for return
+                    if (tableResult.diagnostics) {
+                        tableDiagnostics = tableResult.diagnostics;
+                    }
+
+                    // Log extraction result summary
+                    fcDebug.debugAudit('FC_Engine.LINEITEM_RESULT', JSON.stringify({
+                        extractedCount: lineItems.length,
+                        skippedCount: tableResult.skippedItems?.length || 0,
+                        warningCount: tableResult.warnings?.length || 0,
+                        totalFromItems: tableResult.totalFromItems,
+                        confidence: tableResult.confidence?.toFixed(2)
+                    }));
+
+                    // Log each line item extracted
+                    lineItems.forEach((item, idx) => {
+                        fcDebug.debugAudit(`FC_Engine.LINEITEM[${idx}]`, JSON.stringify({
+                            desc: (item.description || '').substring(0, 50),
+                            code: item.itemCode,
+                            qty: item.quantity,
+                            rate: item.unitPrice,
+                            amt: item.amount,
+                            hasMemo: !!item.memo,
+                            flags: {
+                                needsDescReview: item._needsDescriptionReview,
+                                needsAmtReview: item._needsAmountReview,
+                                amtCalculated: item._amountCalculated
+                            }
+                        }));
+                    });
 
                     // Collect TableAnalyzer warnings
                     if (tableResult.warnings && tableResult.warnings.length > 0) {
@@ -695,7 +751,9 @@ define([
                 // v2.0: Include extraction warnings and skipped items
                 extractionWarnings: extractionWarnings,
                 skippedLineItems: skippedLineItems,
-                lineItemWarnings: lineItemWarnings
+                lineItemWarnings: lineItemWarnings,
+                // v3.0: Include table diagnostics for debugging
+                tableDiagnostics: tableDiagnostics
             };
         }
 
