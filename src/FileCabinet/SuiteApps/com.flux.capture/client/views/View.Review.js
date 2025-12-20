@@ -1885,6 +1885,15 @@
 
             var html = '';
 
+            // ========== INFO ALERT - How extraction works ==========
+            html += '<div class="extraction-info-alert">' +
+                '<i class="fas fa-lightbulb"></i>' +
+                '<div class="info-content">' +
+                    '<strong>AI-Extracted Data</strong> ' +
+                    '<span>Review the extracted values below. Click any field to edit, then Save to create the transaction in NetSuite.</span>' +
+                '</div>' +
+            '</div>';
+
             // ========== COMPACT STATUS BAR (Confidence + Alerts) ==========
             html += '<div class="form-section status-bar-section">' +
                 '<div class="status-bar">' +
