@@ -20,9 +20,41 @@
         init: function() {
             renderTemplate('tpl-settings', 'view-container');
             this.bindEvents();
+            this.loadGeneralSettings();
             this.loadFormConfig(this.currentFormType);
             this.loadCaptureScriptStatus();
             this.loadProviderConfig();
+        },
+
+        loadGeneralSettings: function() {
+            API.get('settings')
+                .then(function(result) {
+                    var settings = result.data || result;
+
+                    // Populate form controls with saved values
+                    var defaultTypeEl = el('#default-type');
+                    if (defaultTypeEl && settings.defaultDocumentType) {
+                        defaultTypeEl.value = settings.defaultDocumentType;
+                    }
+
+                    var defaultLineSublistEl = el('#default-line-sublist');
+                    if (defaultLineSublistEl && settings.defaultLineSublist) {
+                        defaultLineSublistEl.value = settings.defaultLineSublist;
+                    }
+
+                    var duplicateEl = el('#duplicate-detection');
+                    if (duplicateEl) {
+                        duplicateEl.checked = settings.duplicateDetection !== false;
+                    }
+
+                    var amountEl = el('#amount-validation');
+                    if (amountEl) {
+                        amountEl.checked = settings.amountValidation !== false;
+                    }
+                })
+                .catch(function(err) {
+                    console.warn('Could not load settings:', err);
+                });
         },
 
         bindEvents: function() {
@@ -35,15 +67,6 @@
                     self.switchSettingsTab(targetTab);
                 });
             });
-
-            // Threshold slider
-            var thresholdEl = el('#auto-threshold');
-            var thresholdValue = el('#threshold-value');
-            if (thresholdEl && thresholdValue) {
-                thresholdEl.addEventListener('input', function() {
-                    thresholdValue.textContent = this.value + '%';
-                });
-            }
 
             // Save button
             var saveBtn = el('#btn-save-settings');
@@ -2054,10 +2077,10 @@
             var btn = el('#btn-save-settings');
 
             var settings = {
-                autoApproveThreshold: parseInt(el('#auto-threshold').value) || 85,
                 defaultDocumentType: el('#default-type').value || 'auto',
                 duplicateDetection: el('#duplicate-detection').checked,
-                amountValidation: el('#amount-validation').checked
+                amountValidation: el('#amount-validation').checked,
+                defaultLineSublist: el('#default-line-sublist') ? el('#default-line-sublist').value : 'auto'
             };
 
             if (btn) {
