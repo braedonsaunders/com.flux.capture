@@ -2191,6 +2191,7 @@ define([
             } else {
                 // Create new record
                 var configRec = record.create({ type: 'customrecord_flux_config' });
+                configRec.setValue({ fieldId: 'name', value: 'settings_general' });
                 configRec.setValue({ fieldId: 'custrecord_flux_cfg_type', value: 'settings' });
                 configRec.setValue({ fieldId: 'custrecord_flux_cfg_key', value: 'general' });
                 configRec.setValue({ fieldId: 'custrecord_flux_cfg_data', value: JSON.stringify(settingsData) });
