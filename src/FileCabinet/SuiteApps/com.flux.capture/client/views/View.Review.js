@@ -4811,10 +4811,39 @@
                 });
             });
 
-            // Line input changes
-            container.querySelectorAll('.line-input, .line-desc, .line-qty, .line-price, .line-amount').forEach(function(input) {
-                input.addEventListener('change', function() {
-                    self.handleLineItemChange(this);
+            // Line input changes (delegated event handling like the main sublist rendering)
+            container.querySelectorAll('.sublist-table tbody').forEach(function(tbody) {
+                var sublistContainer = tbody.closest('.sublist-container');
+                var sublistId = sublistContainer ? sublistContainer.id.replace('sublist-', '') : '';
+
+                // Handle regular input changes
+                tbody.addEventListener('input', function(e) {
+                    var input = e.target;
+                    if (!input.classList.contains('line-input')) return;
+
+                    var row = input.closest('tr');
+                    if (!row) return;
+
+                    var idx = parseInt(row.dataset.idx, 10);
+                    var fieldId = input.dataset.field;
+                    var value = input.value;
+
+                    self.updateSublistLine(sublistId, idx, fieldId, value);
+                });
+
+                // Handle checkbox changes
+                tbody.addEventListener('change', function(e) {
+                    var input = e.target;
+                    if (!input.classList.contains('line-checkbox')) return;
+
+                    var row = input.closest('tr');
+                    if (!row) return;
+
+                    var idx = parseInt(row.dataset.idx, 10);
+                    var fieldId = input.dataset.field;
+                    var value = input.checked;
+
+                    self.updateSublistLine(sublistId, idx, fieldId, value, true);
                 });
             });
         },
