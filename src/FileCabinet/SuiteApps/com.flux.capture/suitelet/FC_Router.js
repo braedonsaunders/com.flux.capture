@@ -208,6 +208,9 @@ define([
                 case 'suggestedAccount':
                     result = getSuggestedAccount(context.vendorId, context.description);
                     break;
+                case 'codingSuggestions':
+                    result = getCodingSuggestions(context.vendorId, context.lineItems);
+                    break;
                 case 'scriptstatus':
                     result = getScriptDeploymentStatus(context.deploymentId);
                     break;
@@ -251,9 +254,6 @@ define([
                 case 'emailImport':
                     result = importFromEmail(context);
                     break;
-                case 'checkEmails':
-                    result = checkEmailInbox(context);
-                    break;
                 case 'learn':
                     result = submitCorrection(context);
                     break;
@@ -294,9 +294,6 @@ define([
                     break;
                 case 'assign':
                     result = assignDocument(context);
-                    break;
-                case 'settings':
-                    result = updateSettings(context);
                     break;
                 case 'formconfig':
                     // Save user-customized form config (from XML upload or manual)
@@ -2473,10 +2470,6 @@ define([
         });
     }
 
-    function checkEmailInbox(context) {
-        return Response.success({ message: 'Email check endpoint ready' });
-    }
-
     /**
      * Get Email Inbox Status
      * Returns the email capture plugin status and email address
@@ -2844,6 +2837,46 @@ define([
         }
     }
 
+    /**
+     * Get all coding suggestions for a document
+     * Returns header defaults and line item suggestions based on learned patterns
+     * @param {string|number} vendorId - Vendor ID
+     * @param {string|Array} lineItems - JSON string or array of line items with descriptions
+     */
+    function getCodingSuggestions(vendorId, lineItems) {
+        if (!vendorId) {
+            return Response.success({
+                headerDefaults: {},
+                lineItemSuggestions: [],
+                meta: { hasLearning: false, reason: 'No vendor specified' }
+            });
+        }
+
+        try {
+            // Parse lineItems if it's a JSON string
+            var parsedLineItems = [];
+            if (lineItems) {
+                if (typeof lineItems === 'string') {
+                    try {
+                        parsedLineItems = JSON.parse(lineItems);
+                    } catch (parseErr) {
+                        fcDebug.debug('getCodingSuggestions', 'Failed to parse lineItems: ' + parseErr.message);
+                    }
+                } else if (Array.isArray(lineItems)) {
+                    parsedLineItems = lineItems;
+                }
+            }
+
+            var engine = new FC_Engine.FluxCaptureEngine({ enableLearning: true });
+            var suggestions = engine.getSuggestedCoding(parseInt(vendorId), parsedLineItems);
+
+            return Response.success(suggestions);
+        } catch (e) {
+            log.error('getCodingSuggestions', e.message);
+            return Response.error('SUGGESTIONS_FAILED', e.message);
+        }
+    }
+
     function submitCorrection(context) {
         var documentId = context.documentId;
         var fieldName = context.fieldName;
@@ -3025,6 +3058,59 @@ define([
                 transactionId = createTransactionFromDocument(docRecord, actualTransactionType);
             }
 
+            // SMART AUTO-CODING: Learn from this approved transaction
+            var learningResult = null;
+            if (vendorId) {
+                try {
+                    var formData = JSON.parse(docRecord.getValue('custrecord_flux_form_data') || 'null');
+                    if (formData) {
+                        var engine = new FC_Engine.FluxCaptureEngine({ enableLearning: true });
+
+                        // Extract header fields for learning
+                        var headerFields = {};
+                        var bodyFields = formData.bodyFields || {};
+                        if (bodyFields.department) headerFields.department = bodyFields.department;
+                        if (bodyFields.class) headerFields.class = bodyFields.class;
+                        if (bodyFields.location) headerFields.location = bodyFields.location;
+                        if (bodyFields.terms) headerFields.terms = bodyFields.terms;
+
+                        // Extract line items for learning
+                        var lineItems = [];
+                        var sublists = formData.sublists || {};
+                        var expenseLines = sublists.expense || sublists.item || [];
+                        for (var i = 0; i < expenseLines.length; i++) {
+                            var line = expenseLines[i];
+                            lineItems.push({
+                                description: line.memo || line.description || '',
+                                account: line.account || line.expenseaccount || '',
+                                department: line.department || '',
+                                class: line.class || '',
+                                location: line.location || '',
+                                item: line.item || ''
+                            });
+                        }
+
+                        // Learn from this approval
+                        learningResult = engine.learnFromApproval({
+                            vendorId: parseInt(vendorId),
+                            headerFields: headerFields,
+                            lineItems: lineItems
+                        });
+
+                        log.audit('FluxCapture.ApprovalLearning', {
+                            vendorId: vendorId,
+                            documentId: documentId,
+                            headerFieldsLearned: Object.keys(headerFields).length,
+                            lineItemsLearned: lineItems.length,
+                            success: learningResult ? learningResult.success : false
+                        });
+                    }
+                } catch (learnErr) {
+                    // Don't fail the approval if learning fails
+                    log.error('FluxCapture.ApprovalLearning', learnErr.message);
+                }
+            }
+
             record.submitFields({
                 type: 'customrecord_flux_document',
                 id: documentId,
@@ -3039,7 +3125,8 @@ define([
                 documentId: documentId,
                 transactionId: transactionId,
                 transactionType: actualTransactionType,
-                status: DocStatus.COMPLETED
+                status: DocStatus.COMPLETED,
+                learned: learningResult ? learningResult.success : false
             }, 'Document approved');
         } catch (e) {
             log.error('Approve error', e);
@@ -3111,10 +3198,6 @@ define([
         });
 
         return Response.success({ documentId: documentId, assigneeId: assigneeId });
-    }
-
-    function updateSettings(context) {
-        return Response.success({ message: 'Settings endpoint ready' });
     }
 
     // ==================== DELETE Implementations ====================
