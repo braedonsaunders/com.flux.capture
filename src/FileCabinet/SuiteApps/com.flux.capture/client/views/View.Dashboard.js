@@ -64,9 +64,7 @@
                 self.render();
 
                 // Update nav badges
-                if (self.stats.toReview > 0) {
-                    UI.updateBadge(self.stats.toReview);
-                }
+                UI.updateBadge(self.stats.toReview);
             }).catch(function(err) {
                 console.error('[MissionControl] Load error:', err);
                 self.render();

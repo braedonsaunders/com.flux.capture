@@ -513,14 +513,14 @@
         },
 
         /**
-         * Update queue badge count
+         * Update documents badge count in sidebar navigation
          * @param {number} count - Badge count
          */
         updateBadge: function(count) {
-            var badge = el('#queue-badge');
+            var badge = el('#documents-badge');
             if (badge) {
                 badge.textContent = count;
-                badge.style.display = count > 0 ? 'flex' : 'none';
+                badge.style.display = count > 0 ? 'inline-flex' : 'none';
             }
         },
 
