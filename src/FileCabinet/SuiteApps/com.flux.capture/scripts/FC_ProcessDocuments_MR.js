@@ -125,10 +125,8 @@ define([
             if (result.success) {
                 const extraction = result.extraction;
 
+                // Always require manual review regardless of confidence score
                 let newStatus = DocStatus.NEEDS_REVIEW;
-                if (extraction.confidence.overall >= 85 && extraction.anomalies.length === 0) {
-                    newStatus = DocStatus.EXTRACTED;
-                }
 
                 // Parse dates
                 const invoiceDate = parseExtractedDate(extraction.fields && extraction.fields.invoiceDate);
