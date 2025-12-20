@@ -1718,10 +1718,6 @@
                             '<span class="status-label">Alert' + (anomalies.length > 1 ? 's' : '') + '</span>' +
                             '<i class="fas fa-chevron-down alert-chevron"></i>' +
                         '</div>' : '') +
-                    '<div class="status-spacer"></div>' +
-                    '<button class="btn btn-ghost btn-sm" id="btn-shortcuts" title="Keyboard Shortcuts">' +
-                        '<i class="fas fa-keyboard"></i>' +
-                    '</button>' +
                 '</div>' +
                 (anomalies.length > 0 ?
                     '<div class="alert-details" id="alert-details" style="display:none;">' +
@@ -3081,11 +3077,6 @@
                         self.hideTypeaheadDropdown(wrapper);
                     }
                 });
-            });
-
-            // Shortcuts help
-            this.on('#btn-shortcuts', 'click', function() {
-                self.showShortcutsHelp();
             });
 
             // ========== BODY FIELD TYPEAHEAD HANDLERS ==========
