@@ -806,8 +806,10 @@
                 }
             });
 
-            // Note: Shortcuts button (#btn-shortcuts) is bound in bindFormEvents()
-            // because it's rendered dynamically in renderExtractionForm()
+            // Keyboard shortcuts button
+            this.on('#btn-shortcuts', 'click', function() {
+                self.showShortcutsHelp();
+            });
 
             // Panel resizer
             this.initPanelResizer();
