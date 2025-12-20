@@ -316,6 +316,24 @@
             <showinlist>F</showinlist>
         </customrecordcustomfield>
 
+        <customrecordcustomfield scriptid="custrecord_flux_operation_url">
+            <fieldtype>TEXTAREA</fieldtype>
+            <label>Operation URL</label>
+            <description>Azure operation location URL for async polling continuation</description>
+            <ismandatory>F</ismandatory>
+            <displaytype>HIDDEN</displaytype>
+            <showinlist>F</showinlist>
+        </customrecordcustomfield>
+
+        <customrecordcustomfield scriptid="custrecord_flux_poll_count">
+            <fieldtype>INTEGER</fieldtype>
+            <label>Poll Count</label>
+            <description>Number of polling attempts made for this document</description>
+            <ismandatory>F</ismandatory>
+            <displaytype>HIDDEN</displaytype>
+            <showinlist>F</showinlist>
+        </customrecordcustomfield>
+
         <customrecordcustomfield scriptid="custrecord_flux_email_sender">
             <fieldtype>EMAIL</fieldtype>
             <label>Email Sender</label>
