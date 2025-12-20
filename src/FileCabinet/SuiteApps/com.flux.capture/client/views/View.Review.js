@@ -3212,6 +3212,16 @@
             var value = option.dataset.value;
             var text = option.dataset.text;
             var fieldId = hiddenInput ? hiddenInput.dataset.field : null;
+            var employeeData = null;
+
+            // Parse employeeData if present (for employee/nextapprover fields)
+            if (option.dataset.employeeData) {
+                try {
+                    employeeData = JSON.parse(option.dataset.employeeData);
+                } catch (e) {
+                    // Ignore parse errors
+                }
+            }
 
             if (hiddenInput) hiddenInput.value = value;
             if (displayInput) displayInput.value = text;
@@ -3221,6 +3231,9 @@
             if (fieldId) {
                 this.changes[fieldId] = value;
                 this.changes[fieldId + '_display'] = text;
+                if (employeeData) {
+                    this.changes[fieldId + '_employeeData'] = employeeData;
+                }
                 this.markUnsaved();
             }
         },
@@ -4209,7 +4222,12 @@
             }
 
             var html = options.map(function(r) {
-                return '<div class="typeahead-option" data-value="' + escapeHtml(r.value) + '" data-text="' + escapeHtml(r.text) + '">' +
+                var dataAttrs = 'data-value="' + escapeHtml(r.value) + '" data-text="' + escapeHtml(r.text) + '"';
+                // Include employeeData as JSON data attribute for employee/nextapprover fields
+                if (r.employeeData) {
+                    dataAttrs += ' data-employee-data="' + escapeHtml(JSON.stringify(r.employeeData)) + '"';
+                }
+                return '<div class="typeahead-option" ' + dataAttrs + '>' +
                     '<span class="typeahead-text">' + escapeHtml(r.text) + '</span>' +
                     '</div>';
             }).join('');
@@ -4224,6 +4242,16 @@
 
             var value = option.dataset.value;
             var text = option.dataset.text;
+            var employeeData = null;
+
+            // Parse employeeData if present
+            if (option.dataset.employeeData) {
+                try {
+                    employeeData = JSON.parse(option.dataset.employeeData);
+                } catch (e) {
+                    // Ignore parse errors
+                }
+            }
 
             if (hiddenInput) hiddenInput.value = value;
             if (displayInput) displayInput.value = text;
@@ -4237,9 +4265,21 @@
                 var fieldId = hiddenInput ? hiddenInput.dataset.field : displayInput.dataset.field;
                 this.updateSublistLine(sublistId, idx, fieldId, value);
 
-                // Also store the display text
+                // Also store the display text and employeeData
                 if (this.sublistData && this.sublistData[sublistId] && this.sublistData[sublistId][idx]) {
                     this.sublistData[sublistId][idx][fieldId + '_display'] = text;
+                    if (employeeData) {
+                        this.sublistData[sublistId][idx][fieldId + '_employeeData'] = employeeData;
+                    }
+                }
+            } else {
+                // Header field - store employeeData in bodyFieldData
+                var fieldId = hiddenInput ? hiddenInput.dataset.field : (displayInput ? displayInput.dataset.field : null);
+                if (fieldId && this.bodyFieldData) {
+                    this.bodyFieldData[fieldId + '_display'] = text;
+                    if (employeeData) {
+                        this.bodyFieldData[fieldId + '_employeeData'] = employeeData;
+                    }
                 }
             }
 
