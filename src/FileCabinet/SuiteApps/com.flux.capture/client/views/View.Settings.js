@@ -1904,25 +1904,26 @@
                 var isNone = !currentDefault;
 
                 modalHtml += '<div class="posting-period-options">' +
-                    '<label class="radio-label">' +
+                    '<label class="radio-option">' +
                         '<input type="radio" name="period-default-type" value="none"' + (isNone ? ' checked' : '') + '>' +
-                        ' No default' +
+                        '<span class="radio-text">No default</span>' +
                     '</label>' +
-                    '<label class="radio-label">' +
+                    '<label class="radio-option">' +
                         '<input type="radio" name="period-default-type" value="current"' + (isCurrentPeriod ? ' checked' : '') + '>' +
-                        ' <i class="fas fa-calendar-check"></i> Use Current Period <span class="hint-badge">Recommended</span>' +
+                        '<span class="radio-text"><i class="fas fa-calendar-check"></i> Use Current Period</span>' +
+                        '<span class="hint-badge">Recommended</span>' +
                     '</label>' +
-                    '<label class="radio-label">' +
-                        '<input type="radio" name="period-default-type" value="specific"' + (isSpecificPeriod ? ' checked' : '') + '>' +
-                        ' Specific period:' +
-                    '</label>' +
-                '</div>' +
-                '<div class="typeahead-select default-value-typeahead" data-field="' + fieldId + '" data-lookup="accountingperiods" id="specific-period-wrapper"' + (!isSpecificPeriod ? ' style="display:none; margin-left: 24px;"' : ' style="margin-left: 24px;"') + '>' +
-                    '<input type="hidden" id="field-default-value" value="' + (isSpecificPeriod ? escapeHtml(currentDefault) : '') + '">' +
-                    '<input type="text" class="typeahead-input" id="field-default-display" ' +
-                        'style="background: #ffffff !important; border: 1px solid #ddd;" ' +
-                        'value="' + (isSpecificPeriod ? escapeHtml(currentDefaultText || currentDefault) : '') + '" placeholder="Search to select period..." autocomplete="off">' +
-                    '<div class="typeahead-dropdown" style="background: #ffffff;"></div>' +
+                    '<div class="radio-option-group">' +
+                        '<label class="radio-option">' +
+                            '<input type="radio" name="period-default-type" value="specific"' + (isSpecificPeriod ? ' checked' : '') + '>' +
+                            '<span class="radio-text">Specific period</span>' +
+                        '</label>' +
+                        '<div class="radio-sub-option default-value-typeahead" data-field="' + fieldId + '" data-lookup="accountingperiods" id="specific-period-wrapper"' + (!isSpecificPeriod ? ' style="display:none;"' : '') + '>' +
+                            '<input type="hidden" id="field-default-value" value="' + (isSpecificPeriod ? escapeHtml(currentDefault) : '') + '">' +
+                            '<input type="text" class="typeahead-input" id="field-default-display" value="' + (isSpecificPeriod ? escapeHtml(currentDefaultText || currentDefault) : '') + '" placeholder="Search to select period..." autocomplete="off">' +
+                            '<div class="typeahead-dropdown"></div>' +
+                        '</div>' +
+                    '</div>' +
                 '</div>';
             } else if (isSelectField) {
                 var lookupType = this.getLookupTypeForField(fieldId);
