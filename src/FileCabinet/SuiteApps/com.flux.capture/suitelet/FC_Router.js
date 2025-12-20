@@ -1079,15 +1079,11 @@ define([
                 });
             });
 
-            // Search jobs/projects
+            // Search jobs/projects (companyname not valid for JOB, use entityid only)
             var jobFilters = [['isinactive', 'is', 'F']];
             if (searchQuery && searchQuery.length >= 1) {
                 jobFilters.push('AND');
-                jobFilters.push([
-                    ['entityid', 'contains', searchQuery],
-                    'OR',
-                    ['companyname', 'contains', searchQuery]
-                ]);
+                jobFilters.push(['entityid', 'contains', searchQuery]);
             }
 
             var jobSearch = search.create({
@@ -1096,7 +1092,6 @@ define([
                 columns: [
                     search.createColumn({ name: 'internalid' }),
                     search.createColumn({ name: 'entityid', sort: search.Sort.ASC }),
-                    search.createColumn({ name: 'companyname' }),
                     search.createColumn({ name: 'customer' })
                 ]
             });
@@ -1104,10 +1099,9 @@ define([
             var jobResults = jobSearch.run().getRange({ start: 0, end: halfLimit });
             jobResults.forEach(function(result) {
                 var entityId = result.getValue('entityid') || '';
-                var companyName = result.getValue('companyname') || '';
                 options.push({
                     value: result.getValue('internalid'),
-                    text: entityId ? entityId + ' - ' + companyName : companyName,
+                    text: entityId,
                     type: 'project'
                 });
             });
