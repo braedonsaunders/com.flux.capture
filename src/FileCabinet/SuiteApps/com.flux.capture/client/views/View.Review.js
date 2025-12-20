@@ -5873,48 +5873,9 @@
          * Render the Extraction Pool as a compact dropdown for the unified header
          */
         renderExtractionPoolDropdown: function() {
-            var self = this;
-            var unmatched = this.extractionPool.unmatched;
-            var isExpanded = this.extractionPool.panelExpanded;
-
-            var html = '<div class="header-dropdown pool-dropdown" id="pool-dropdown" style="display:none;">' +
-                '<div class="pool-dropdown-content">';
-
-            if (unmatched.length === 0) {
-                html += '<div class="dropdown-empty">' +
-                    '<i class="fas fa-check-circle"></i>' +
-                    '<span>All fields matched</span>' +
-                '</div>';
-            } else {
-                html += '<div class="pool-chips" id="pool-chips">';
-                unmatched.forEach(function(item) {
-                    var confClass = item.confidence >= 0.85 ? 'high' : item.confidence >= 0.6 ? 'medium' : 'low';
-                    var displayValue = String(item.value).length > 25 ?
-                        String(item.value).substring(0, 25) + '...' : item.value;
-
-                    html += '<div class="pool-chip" draggable="true" ' +
-                        'data-extraction-id="' + item.id + '" ' +
-                        'data-extraction-key="' + escapeHtml(item.key) + '" ' +
-                        'data-extraction-value="' + escapeHtml(item.value) + '">' +
-                        '<span class="chip-label">' + escapeHtml(item.label) + '</span>' +
-                        '<span class="chip-value">' + escapeHtml(displayValue) + '</span>' +
-                        '<span class="chip-conf conf-' + confClass + '">' + Math.round(item.confidence * 100) + '%</span>' +
-                        '<button class="chip-action chip-locate" title="Find in document"><i class="fas fa-crosshairs"></i></button>' +
-                        '<button class="chip-action chip-dismiss" title="Dismiss"><i class="fas fa-times"></i></button>' +
-                    '</div>';
-                });
-                html += '</div>';
-            }
-
-            html += '</div>' +
-                '<div class="pool-dropdown-footer">' +
-                    '<button class="btn btn-ghost btn-sm" id="btn-toggle-annotations">' +
-                        '<i class="fas fa-highlighter"></i> Highlight on Document' +
-                    '</button>' +
-                '</div>' +
+            return '<div class="header-dropdown pool-dropdown" id="pool-dropdown" style="display:none;">' +
+                this.renderPoolDropdownContent() +
             '</div>';
-
-            return html;
         },
 
         /**
@@ -6044,7 +6005,7 @@
         refreshExtractionPool: function() {
             var poolPanel = el('#extraction-pool-panel');
 
-            // Re-render pool panel
+            // Re-render pool panel (legacy)
             if (poolPanel) {
                 var newPoolHtml = this.renderExtractionPoolPanel();
                 var tempDiv = document.createElement('div');
@@ -6054,6 +6015,9 @@
 
             // Re-bind events
             this.bindExtractionPoolEvents();
+
+            // Also refresh unified header pool dropdown
+            this.refreshPoolDropdown();
         },
 
         /**
@@ -6530,7 +6494,8 @@
         refreshPoolDropdown: function() {
             var dropdown = el('#pool-dropdown');
             if (dropdown) {
-                dropdown.innerHTML = this.renderExtractionPoolDropdown().replace(/<div class="header-dropdown pool-dropdown"[^>]*>/, '').replace(/<\/div>$/, '');
+                // Re-render the dropdown content
+                dropdown.innerHTML = this.renderPoolDropdownContent();
             }
 
             // Update badge count
@@ -6547,6 +6512,51 @@
             }
 
             this.bindPoolChipEvents();
+        },
+
+        /**
+         * Render just the inner content of the pool dropdown
+         */
+        renderPoolDropdownContent: function() {
+            var self = this;
+            var unmatched = this.extractionPool.unmatched;
+
+            var html = '<div class="pool-dropdown-content">';
+
+            if (unmatched.length === 0) {
+                html += '<div class="dropdown-empty">' +
+                    '<i class="fas fa-check-circle"></i>' +
+                    '<span>All fields matched</span>' +
+                '</div>';
+            } else {
+                html += '<div class="pool-chips" id="pool-chips">';
+                unmatched.forEach(function(item) {
+                    var confClass = item.confidence >= 0.85 ? 'high' : item.confidence >= 0.6 ? 'medium' : 'low';
+                    var displayValue = String(item.value).length > 25 ?
+                        String(item.value).substring(0, 25) + '...' : item.value;
+
+                    html += '<div class="pool-chip" draggable="true" ' +
+                        'data-extraction-id="' + item.id + '" ' +
+                        'data-extraction-key="' + escapeHtml(item.key) + '" ' +
+                        'data-extraction-value="' + escapeHtml(item.value) + '">' +
+                        '<span class="chip-label">' + escapeHtml(item.label) + '</span>' +
+                        '<span class="chip-value">' + escapeHtml(displayValue) + '</span>' +
+                        '<span class="chip-conf conf-' + confClass + '">' + Math.round(item.confidence * 100) + '%</span>' +
+                        '<button class="chip-action chip-locate" title="Find in document"><i class="fas fa-crosshairs"></i></button>' +
+                        '<button class="chip-action chip-dismiss" title="Dismiss"><i class="fas fa-times"></i></button>' +
+                    '</div>';
+                });
+                html += '</div>';
+            }
+
+            html += '</div>' +
+                '<div class="pool-dropdown-footer">' +
+                    '<button class="btn btn-ghost btn-sm" id="btn-toggle-annotations">' +
+                        '<i class="fas fa-highlighter"></i> Highlight on Document' +
+                    '</button>' +
+                '</div>';
+
+            return html;
         },
 
         // ==========================================
