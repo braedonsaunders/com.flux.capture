@@ -162,9 +162,9 @@
         </customrecordcustomfield>
 
         <customrecordcustomfield scriptid="custrecord_flux_line_items">
-            <fieldtype>TEXTAREA</fieldtype>
+            <fieldtype>CLOBTEXT</fieldtype>
             <label>Line Items</label>
-            <description>Extracted line items as JSON</description>
+            <description>Extracted line items as JSON (unlimited length)</description>
             <ismandatory>F</ismandatory>
             <displaytype>NORMAL</displaytype>
             <showinlist>F</showinlist>

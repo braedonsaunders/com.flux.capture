@@ -124,9 +124,9 @@ define([
             this.apiKey = config.apiKey || '';
             this.defaultModel = config.defaultModel || AZURE_MODELS.invoice;
             this.pollingInterval = config.pollingInterval || 1000;
-            // v4.1: Increased max attempts since we use lighter sleep to save governance
-            // HTTP latency (~200-500ms) provides natural spacing, so more attempts = longer total wait
-            this.maxPollingAttempts = config.maxPollingAttempts || 180;
+            // v4.2: Removed busy-wait sleep loop entirely - HTTP latency (~200-500ms) provides natural spacing
+            // 300 attempts × ~300ms = ~90 seconds polling time, with minimal governance burn
+            this.maxPollingAttempts = config.maxPollingAttempts || 300;
         }
 
         /**
@@ -381,16 +381,15 @@ define([
                         throw new Error(`Azure analysis failed: ${errorMsg}`);
                     }
 
-                    // Status is 'running' or 'notStarted' - wait and retry
-                    this._sleep(this.pollingInterval);
+                    // Status is 'running' or 'notStarted' - loop again
+                    // HTTP latency (~200-500ms) provides natural spacing between attempts
 
                 } catch (e) {
                     if (e.message && e.message.includes('Azure analysis failed')) {
                         throw e;
                     }
                     this._error('pollForResults', e.message);
-                    // Continue polling on transient errors
-                    this._sleep(this.pollingInterval);
+                    // Continue polling on transient errors - HTTP latency provides spacing
                 }
             }
 
@@ -399,22 +398,15 @@ define([
         }
 
         /**
-         * Sleep for specified milliseconds
-         * FIXED: Previous busy-wait (while Date.now()) was burning through governance.
-         * Now uses fixed iteration count that provides ~100-200ms delay while staying
-         * well under governance limits (~50K statements vs 10M limit).
-         * Combined with HTTP latency (~200-500ms), this gives adequate spacing.
-         * @param {number} ms - Requested sleep time (used for logging only)
+         * Sleep method - DEPRECATED in v4.2
+         * Previously used busy-wait loop which burned excessive governance units.
+         * Now removed - HTTP latency (~200-500ms per request) provides natural spacing.
+         * Method kept for backwards compatibility but does nothing.
+         * @param {number} ms - Ignored
+         * @deprecated No longer used - HTTP latency provides natural polling spacing
          */
         _sleep(ms) {
-            // SuiteScript doesn't have native sleep, and time-based busy-wait burns governance
-            // Use fixed iteration count: 50,000 iterations ≈ 100-200ms delay
-            // This is governance-friendly (50K << 10M limit) while providing real delay
-            // Combined with HTTP latency and increased maxPollingAttempts, total timeout ~60-90s
-            for (let i = 0; i < 50000; i++) {
-                // Each iteration is ~1-3 microseconds
-                // 50K iterations ≈ 100-200ms depending on server load
-            }
+            // No-op: Busy-wait loops burn governance. HTTP latency provides natural spacing.
         }
 
         /**
