@@ -1059,6 +1059,9 @@
             var container = el('#form-editor-container');
             if (!container) return;
 
+            // Capture current expand/collapse state before re-rendering
+            var editorState = this.captureEditorState();
+
             var config = this.editedConfig;
             if (!config) {
                 container.innerHTML = '<div class="editor-placeholder">' +
@@ -1140,6 +1143,9 @@
 
             // Bind editor events
             this.bindEditorEvents(container);
+
+            // Restore expand/collapse state after re-rendering
+            this.restoreEditorState(editorState);
         },
 
         renderEditorTab: function(tab, tabIdx) {
@@ -1325,6 +1331,57 @@
                 'file': 'fa-file'
             };
             return icons[type] || 'fa-input-text';
+        },
+
+        /**
+         * Capture the current expand/collapse state of all editor sections
+         * @returns {Object} Map of section IDs to their collapsed state
+         */
+        captureEditorState: function() {
+            var container = el('#form-editor-container');
+            if (!container) return {};
+
+            var state = {};
+            container.querySelectorAll('[data-toggle]').forEach(function(header) {
+                var targetId = header.dataset.toggle;
+                var content = el('#' + targetId);
+                if (content) {
+                    state[targetId] = content.classList.contains('collapsed');
+                }
+            });
+            return state;
+        },
+
+        /**
+         * Restore the expand/collapse state of editor sections
+         * @param {Object} state - Map of section IDs to their collapsed state
+         */
+        restoreEditorState: function(state) {
+            var container = el('#form-editor-container');
+            if (!container || !state) return;
+
+            Object.keys(state).forEach(function(targetId) {
+                var content = el('#' + targetId);
+                var header = container.querySelector('[data-toggle="' + targetId + '"]');
+                var icon = header ? header.querySelector('.toggle-icon') : null;
+
+                if (content) {
+                    var isCollapsed = state[targetId];
+                    if (isCollapsed) {
+                        content.classList.add('collapsed');
+                        if (icon) {
+                            icon.classList.remove('fa-chevron-down');
+                            icon.classList.add('fa-chevron-right');
+                        }
+                    } else {
+                        content.classList.remove('collapsed');
+                        if (icon) {
+                            icon.classList.remove('fa-chevron-right');
+                            icon.classList.add('fa-chevron-down');
+                        }
+                    }
+                }
+            });
         },
 
         bindEditorEvents: function(container) {
