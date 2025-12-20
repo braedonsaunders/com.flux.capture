@@ -719,6 +719,7 @@
                 '<td class="col-actions">' +
                     '<div class="row-actions">' +
                         '<button class="row-action btn-approve" data-action="approve" title="Approve"><i class="fas fa-check"></i></button>' +
+                        '<button class="row-action btn-reprocess" data-action="reprocess" title="Reprocess"><i class="fas fa-rotate"></i></button>' +
                         '<button class="row-action btn-open" data-action="open" title="Open"><i class="fas fa-expand"></i></button>' +
                         '<button class="row-action btn-delete" data-action="delete" title="Delete"><i class="fas fa-trash-can"></i></button>' +
                     '</div>' +
@@ -1010,6 +1011,9 @@
                 case 'approve':
                     this.approveDocument(docId);
                     break;
+                case 'reprocess':
+                    this.reprocessDocument(docId);
+                    break;
                 case 'open':
                     Router.navigate('review', { docId: docId });
                     break;
@@ -1091,6 +1095,29 @@
                         localStorage.setItem('fc_processed_today', String(self.processedToday));
 
                         UI.toast('Document deleted', 'success');
+                        self.loadData();
+                    })
+                    .catch(function(err) {
+                        UI.toast('Error: ' + err.message, 'error');
+                    });
+            });
+        },
+
+        reprocessDocument: function(docId) {
+            var self = this;
+
+            UI.confirm({
+                title: 'Reprocess Document',
+                message: 'Clear extraction data and reprocess this document?',
+                confirmText: 'Reprocess',
+                cancelText: 'Cancel',
+                type: 'info'
+            }).then(function(confirmed) {
+                if (!confirmed) return;
+
+                API.post('reprocess', { documentId: docId })
+                    .then(function() {
+                        UI.toast('Document queued for reprocessing', 'success');
                         self.loadData();
                     })
                     .catch(function(err) {

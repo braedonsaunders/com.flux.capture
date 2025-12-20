@@ -15,6 +15,7 @@
         'KeyA': { action: 'approve', description: 'Approve & next' },
         'KeyR': { action: 'reject', description: 'Reject document' },
         'KeyS': { action: 'skip', description: 'Skip to next' },
+        'KeyX': { action: 'reprocess', description: 'Reprocess document' },
         'KeyV': { action: 'splitView', description: 'Toggle split view' },
         'Escape': { action: 'back', description: 'Back to documents' },
         'ArrowRight': { action: 'nextDoc', description: 'Next document' },
@@ -611,6 +612,11 @@
                 self.skipDocument();
             });
 
+            // Reprocess button
+            this.on('#btn-reprocess', 'click', function() {
+                self.reprocessDocument();
+            });
+
             // Note: Save button (#btn-save) is bound in bindFormEvents()
             // because it's rendered dynamically in renderExtractionForm()
 
@@ -852,6 +858,7 @@
                     case 'approve': self.approveDocument(); break;
                     case 'reject': self.rejectDocument(); break;
                     case 'skip': self.skipDocument(); break;
+                    case 'reprocess': self.reprocessDocument(); break;
                     case 'splitView': self.toggleSplitView(); break;
                     case 'back': self.navigateBack(); break;
                     case 'nextDoc': self.goToNextDocument(); break;
@@ -4289,6 +4296,29 @@
                 // Last document - go back to documents list
                 Router.navigate('documents');
             }
+        },
+
+        reprocessDocument: function() {
+            var self = this;
+
+            if (!confirm('Reprocess this document? This will clear extraction data and re-run AI processing.')) {
+                return;
+            }
+
+            API.post('reprocess', { documentId: this.docId })
+                .then(function() {
+                    UI.toast('Document queued for reprocessing', 'success');
+
+                    // Go to next document or back to documents list
+                    if (self.queueIndex >= 0 && self.queueIndex < self.queueIds.length - 1) {
+                        self.goToNextDocument();
+                    } else {
+                        Router.navigate('documents');
+                    }
+                })
+                .catch(function(err) {
+                    UI.toast('Error: ' + err.message, 'error');
+                });
         },
 
         changeDocumentType: function(newType, newTypeText) {
