@@ -147,7 +147,7 @@ define([
                 this._audit('extract', `Analysis complete`);
 
                 // Normalize results
-                return this._normalizeResult(result, docType);
+                return this._normalizeResult(result, docType, options);
 
             } catch (e) {
                 this._error('extract', {
@@ -285,9 +285,10 @@ define([
          * Normalize Mindee result to standard format
          * @param {Object} result - Mindee analysis result
          * @param {string} docType - Document type
+         * @param {Object} options - Extraction options including maxPages
          * @returns {Object} - Normalized result
          */
-        _normalizeResult(result, docType) {
+        _normalizeResult(result, docType, options = {}) {
             const rawFields = [];
             const rawTables = [];
             let rawText = '';
@@ -296,10 +297,17 @@ define([
             const document = result.document || {};
             const inference = document.inference || {};
             const prediction = inference.prediction || {};
-            const pages = inference.pages || [];
+            let pages = inference.pages || [];
 
-            // Get page count
-            const pageCount = pages.length || document.n_pages || 1;
+            // Get original page count and apply limit if specified
+            const totalDocumentPages = pages.length || document.n_pages || 1;
+            const maxPages = options.maxPages || 0;
+
+            if (maxPages > 0 && pages.length > maxPages) {
+                this._audit('normalizeResult', `Limiting from ${pages.length} pages to first ${maxPages} pages`);
+                pages = pages.slice(0, maxPages);
+            }
+            const pageCount = pages.length || 1;
 
             // Select appropriate field mappings based on document type
             const fieldMappings = docType === 'receipt'
@@ -367,6 +375,8 @@ define([
                 rawTables: rawTables,
                 rawText: rawText.trim(),
                 pageCount: pageCount,
+                totalDocumentPages: totalDocumentPages,
+                pagesLimited: totalDocumentPages > pageCount,
                 mimeType: null,
                 _mindeeResult: result // Keep for debugging
             };
