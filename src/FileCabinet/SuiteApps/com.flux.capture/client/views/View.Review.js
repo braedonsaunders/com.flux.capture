@@ -2126,12 +2126,24 @@
                         '</div>' +
                     '</div>' +
                     '<div class="transform-section">' +
-                        '<div class="transform-section-label">Distribute</div>' +
+                        '<div class="transform-section-label">Split</div>' +
                         '<div class="transform-option" data-action="split-equal" data-sublist="' + sublistId + '">' +
                             '<i class="fas fa-divide"></i> Split Equally...' +
                         '</div>' +
                         '<div class="transform-option" data-action="apply-defaults" data-sublist="' + sublistId + '">' +
                             '<i class="fas fa-fill-drip"></i> Apply Header Defaults' +
+                        '</div>' +
+                    '</div>' +
+                    '<div class="transform-section">' +
+                        '<div class="transform-section-label">Distribute By</div>' +
+                        '<div class="transform-option" data-action="distribute-department" data-sublist="' + sublistId + '">' +
+                            '<i class="fas fa-sitemap"></i> By Department...' +
+                        '</div>' +
+                        '<div class="transform-option" data-action="distribute-class" data-sublist="' + sublistId + '">' +
+                            '<i class="fas fa-tags"></i> By Class...' +
+                        '</div>' +
+                        '<div class="transform-option" data-action="distribute-location" data-sublist="' + sublistId + '">' +
+                            '<i class="fas fa-map-marker-alt"></i> By Location...' +
                         '</div>' +
                     '</div>' +
                     '<div class="transform-divider"></div>' +
@@ -3645,6 +3657,15 @@
                 case 'split-equal':
                     this.showSplitDialog(sublistId);
                     return; // Dialog handles the rest
+                case 'distribute-department':
+                    this.showDistributeByModal(sublistId, 'department');
+                    return; // Modal handles the rest
+                case 'distribute-class':
+                    this.showDistributeByModal(sublistId, 'class');
+                    return; // Modal handles the rest
+                case 'distribute-location':
+                    this.showDistributeByModal(sublistId, 'location');
+                    return; // Modal handles the rest
                 default:
                     UI.toast('Unknown transform action', 'error');
                     return;
@@ -3953,6 +3974,323 @@
             this.refreshSublist(sublistId);
             this.updateTabCounts();
             UI.toast('Split into ' + count + ' lines of $' + amountPerLine.toFixed(2) + ' each', 'success');
+        },
+
+        // Show distribute by modal for department/class/location
+        showDistributeByModal: function(sublistId, fieldType) {
+            var self = this;
+            var lines = this.sublistData[sublistId] || [];
+            var total = lines.reduce(function(sum, l) {
+                return sum + (parseFloat(l.amount) || 0);
+            }, 0);
+
+            // Determine datasource type and labels
+            var dsType, fieldLabel, fieldIcon;
+            switch (fieldType) {
+                case 'department':
+                    dsType = 'departments';
+                    fieldLabel = 'Department';
+                    fieldIcon = 'fa-sitemap';
+                    break;
+                case 'class':
+                    dsType = 'classes';
+                    fieldLabel = 'Class';
+                    fieldIcon = 'fa-tags';
+                    break;
+                case 'location':
+                    dsType = 'locations';
+                    fieldLabel = 'Location';
+                    fieldIcon = 'fa-map-marker-alt';
+                    break;
+                default:
+                    UI.toast('Unknown field type', 'error');
+                    return;
+            }
+
+            // Show loading overlay
+            var overlay = document.createElement('div');
+            overlay.className = 'distribute-dialog-overlay';
+            overlay.id = 'distribute-dialog-overlay';
+            overlay.innerHTML =
+                '<div class="distribute-dialog">' +
+                    '<div class="distribute-dialog-loading">' +
+                        '<i class="fas fa-spinner fa-spin"></i> Loading ' + fieldLabel + 's...' +
+                    '</div>' +
+                '</div>';
+            document.body.appendChild(overlay);
+
+            // Fetch the options from the datasource API
+            API.get('datasource', { type: dsType })
+                .then(function(response) {
+                    var options = response.options || response.data || response || [];
+
+                    if (!options || options.length === 0) {
+                        overlay.remove();
+                        self.transformUndoState = null;
+                        var undoBtn = el('#btn-undo-' + sublistId);
+                        if (undoBtn) undoBtn.style.display = 'none';
+                        UI.toast('No ' + fieldLabel.toLowerCase() + 's available to distribute by', 'warning');
+                        return;
+                    }
+
+                    // Build modal content
+                    var optionsHtml = options.map(function(opt, idx) {
+                        var optValue = opt.value || opt.id || '';
+                        var optText = opt.text || opt.name || opt.label || optValue;
+                        return '<div class="distribute-row" data-value="' + escapeHtml(optValue) + '" data-text="' + escapeHtml(optText) + '">' +
+                            '<div class="distribute-row-check">' +
+                                '<input type="checkbox" id="dist-check-' + idx + '" class="distribute-checkbox" data-value="' + escapeHtml(optValue) + '">' +
+                            '</div>' +
+                            '<div class="distribute-row-label">' +
+                                '<label for="dist-check-' + idx + '">' + escapeHtml(optText) + '</label>' +
+                            '</div>' +
+                            '<div class="distribute-row-percent">' +
+                                '<input type="number" class="distribute-percent" data-value="' + escapeHtml(optValue) + '" ' +
+                                    'min="0" max="100" step="0.01" value="0" disabled placeholder="%">' +
+                                '<span class="percent-sign">%</span>' +
+                            '</div>' +
+                            '<div class="distribute-row-amount">' +
+                                '<span class="distribute-amount" data-value="' + escapeHtml(optValue) + '">$0.00</span>' +
+                            '</div>' +
+                        '</div>';
+                    }).join('');
+
+                    var dialogHtml =
+                        '<div class="distribute-dialog">' +
+                            '<div class="distribute-dialog-header">' +
+                                '<h4><i class="fas ' + fieldIcon + '"></i> Distribute by ' + fieldLabel + '</h4>' +
+                                '<button class="distribute-close" id="distribute-close">&times;</button>' +
+                            '</div>' +
+                            '<div class="distribute-dialog-info">' +
+                                '<div class="distribute-total">' +
+                                    '<span class="distribute-total-label">Total Amount:</span>' +
+                                    '<span class="distribute-total-value">$' + total.toFixed(2) + '</span>' +
+                                '</div>' +
+                                '<div class="distribute-summary">' +
+                                    '<span class="distribute-allocated-label">Allocated:</span>' +
+                                    '<span class="distribute-allocated-value" id="distribute-allocated">0%</span>' +
+                                    '<span class="distribute-remaining" id="distribute-remaining">(100% remaining)</span>' +
+                                '</div>' +
+                            '</div>' +
+                            '<div class="distribute-dialog-body">' +
+                                '<div class="distribute-header-row">' +
+                                    '<div class="distribute-row-check"></div>' +
+                                    '<div class="distribute-row-label">' + fieldLabel + '</div>' +
+                                    '<div class="distribute-row-percent">Percent</div>' +
+                                    '<div class="distribute-row-amount">Amount</div>' +
+                                '</div>' +
+                                '<div class="distribute-options">' + optionsHtml + '</div>' +
+                            '</div>' +
+                            '<div class="distribute-dialog-actions">' +
+                                '<button class="btn btn-ghost btn-sm" id="distribute-cancel">Cancel</button>' +
+                                '<button class="btn btn-ghost btn-sm" id="distribute-equal">Distribute Equally</button>' +
+                                '<button class="btn btn-primary btn-sm" id="distribute-confirm" disabled>Apply Distribution</button>' +
+                            '</div>' +
+                        '</div>';
+
+                    overlay.innerHTML = dialogHtml;
+
+                    // Bind events
+                    var updateTotals = function() {
+                        var totalPercent = 0;
+                        overlay.querySelectorAll('.distribute-percent:not(:disabled)').forEach(function(input) {
+                            totalPercent += parseFloat(input.value) || 0;
+                        });
+
+                        var allocatedEl = el('#distribute-allocated');
+                        var remainingEl = el('#distribute-remaining');
+                        var confirmBtn = el('#distribute-confirm');
+
+                        if (allocatedEl) allocatedEl.textContent = totalPercent.toFixed(2) + '%';
+                        if (remainingEl) {
+                            var remaining = 100 - totalPercent;
+                            remainingEl.textContent = '(' + remaining.toFixed(2) + '% remaining)';
+                            remainingEl.classList.toggle('over-allocated', remaining < 0);
+                            remainingEl.classList.toggle('fully-allocated', Math.abs(remaining) < 0.01);
+                        }
+
+                        // Enable confirm button only when allocated is 100%
+                        if (confirmBtn) {
+                            var isValid = Math.abs(totalPercent - 100) < 0.01;
+                            confirmBtn.disabled = !isValid;
+                        }
+
+                        // Update individual amounts
+                        overlay.querySelectorAll('.distribute-percent').forEach(function(input) {
+                            var value = input.dataset.value;
+                            var percent = parseFloat(input.value) || 0;
+                            var amount = (total * percent / 100);
+                            var amountEl = overlay.querySelector('.distribute-amount[data-value="' + value + '"]');
+                            if (amountEl) {
+                                amountEl.textContent = '$' + amount.toFixed(2);
+                            }
+                        });
+                    };
+
+                    // Checkbox change handler
+                    overlay.querySelectorAll('.distribute-checkbox').forEach(function(checkbox) {
+                        checkbox.addEventListener('change', function() {
+                            var value = this.dataset.value;
+                            var percentInput = overlay.querySelector('.distribute-percent[data-value="' + value + '"]');
+                            if (percentInput) {
+                                percentInput.disabled = !this.checked;
+                                if (!this.checked) {
+                                    percentInput.value = 0;
+                                }
+                                updateTotals();
+                            }
+                        });
+                    });
+
+                    // Percent input change handler
+                    overlay.querySelectorAll('.distribute-percent').forEach(function(input) {
+                        input.addEventListener('input', updateTotals);
+                        input.addEventListener('change', updateTotals);
+                    });
+
+                    // Distribute equally button
+                    el('#distribute-equal').addEventListener('click', function() {
+                        var checked = overlay.querySelectorAll('.distribute-checkbox:checked');
+                        if (checked.length === 0) {
+                            UI.toast('Please select at least one ' + fieldLabel.toLowerCase() + ' first', 'warning');
+                            return;
+                        }
+                        var equalPercent = Math.round((100 / checked.length) * 100) / 100;
+                        var remainder = 100 - (equalPercent * checked.length);
+
+                        checked.forEach(function(cb, idx) {
+                            var percentInput = overlay.querySelector('.distribute-percent[data-value="' + cb.dataset.value + '"]');
+                            if (percentInput) {
+                                var pct = equalPercent;
+                                if (idx === 0) pct = Math.round((equalPercent + remainder) * 100) / 100;
+                                percentInput.value = pct;
+                            }
+                        });
+                        updateTotals();
+                    });
+
+                    // Close button
+                    var closeModal = function() {
+                        overlay.remove();
+                        self.transformUndoState = null;
+                        var undoBtn = el('#btn-undo-' + sublistId);
+                        if (undoBtn) undoBtn.style.display = 'none';
+                    };
+
+                    el('#distribute-close').addEventListener('click', closeModal);
+                    el('#distribute-cancel').addEventListener('click', closeModal);
+
+                    // Click outside to close
+                    overlay.addEventListener('click', function(e) {
+                        if (e.target === overlay) closeModal();
+                    });
+
+                    // Escape to close
+                    var escHandler = function(e) {
+                        if (e.key === 'Escape') {
+                            closeModal();
+                            document.removeEventListener('keydown', escHandler);
+                        }
+                    };
+                    document.addEventListener('keydown', escHandler);
+
+                    // Confirm button
+                    el('#distribute-confirm').addEventListener('click', function() {
+                        var distribution = [];
+                        overlay.querySelectorAll('.distribute-checkbox:checked').forEach(function(cb) {
+                            var value = cb.dataset.value;
+                            var row = cb.closest('.distribute-row');
+                            var text = row ? row.dataset.text : value;
+                            var percentInput = overlay.querySelector('.distribute-percent[data-value="' + value + '"]');
+                            var percent = parseFloat(percentInput.value) || 0;
+                            if (percent > 0) {
+                                distribution.push({
+                                    value: value,
+                                    text: text,
+                                    percent: percent
+                                });
+                            }
+                        });
+
+                        if (distribution.length === 0) {
+                            UI.toast('Please configure at least one distribution', 'warning');
+                            return;
+                        }
+
+                        overlay.remove();
+                        document.removeEventListener('keydown', escHandler);
+                        self.executeDistribution(sublistId, fieldType, distribution, total);
+                    });
+                })
+                .catch(function(err) {
+                    overlay.remove();
+                    self.transformUndoState = null;
+                    var undoBtn = el('#btn-undo-' + sublistId);
+                    if (undoBtn) undoBtn.style.display = 'none';
+                    UI.toast('Failed to load ' + fieldLabel.toLowerCase() + 's: ' + (err.message || err), 'error');
+                });
+        },
+
+        // Execute distribution operation
+        executeDistribution: function(sublistId, fieldType, distribution, total) {
+            var self = this;
+            var lines = this.sublistData[sublistId] || [];
+
+            // Use first line as template (or create empty if no lines)
+            var baseLine = lines.length > 0 ? JSON.parse(JSON.stringify(lines[0])) : this.createEmptyLine(sublistId);
+
+            // Clear numeric values from base line (except quantity which we preserve if present)
+            Object.keys(baseLine).forEach(function(key) {
+                if (key.indexOf('_display') !== -1) return;
+                if (self.isNumericField(key, sublistId) && key !== 'quantity') {
+                    baseLine[key] = 0;
+                }
+            });
+
+            // Clear the distribution field from the base line
+            baseLine[fieldType] = '';
+            baseLine[fieldType + '_display'] = '';
+
+            var newLines = [];
+            var totalAllocated = 0;
+
+            distribution.forEach(function(dist, idx) {
+                var amount = Math.round((total * dist.percent / 100) * 100) / 100;
+
+                // Handle rounding on last line to ensure exact total
+                if (idx === distribution.length - 1) {
+                    amount = Math.round((total - totalAllocated) * 100) / 100;
+                }
+                totalAllocated += amount;
+
+                var newLine = JSON.parse(JSON.stringify(baseLine));
+                newLine.amount = amount;
+                newLine[fieldType] = dist.value;
+                newLine[fieldType + '_display'] = dist.text;
+
+                // Update rate if it's an item line with quantity
+                if (newLine.quantity && newLine.quantity > 0) {
+                    newLine.rate = newLine.amount / newLine.quantity;
+                }
+
+                newLines.push(newLine);
+            });
+
+            this.sublistData[sublistId] = newLines;
+            var slType = (sublistId || '').toLowerCase();
+            this.changes[slType + 'Lines'] = newLines;
+
+            // Also update formData.sublists so renderSublistTable picks up the changes
+            if (this.formData && this.formData.sublists) {
+                this.formData.sublists[slType] = newLines;
+            }
+
+            this.markUnsaved();
+            this.refreshSublist(sublistId);
+            this.updateTabCounts();
+
+            var fieldLabel = fieldType.charAt(0).toUpperCase() + fieldType.slice(1);
+            UI.toast('Distributed $' + total.toFixed(2) + ' across ' + newLines.length + ' ' + fieldLabel.toLowerCase() + 's', 'success');
         },
 
         // ==========================================
