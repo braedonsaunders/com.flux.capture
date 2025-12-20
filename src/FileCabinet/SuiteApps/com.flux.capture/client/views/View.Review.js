@@ -2411,6 +2411,14 @@
             else if (field.type === 'integer' || field.id === 'quantity') {
                 return '<td><input type="number" step="1" class="line-input line-qty" id="' + inputId + '" value="' + (parseInt(value) || 0) + '" data-field="' + field.id + '"></td>';
             }
+            // Checkbox fields - handle same as header-level checkboxes
+            else if (field.type === 'checkbox' || this.isCheckboxField(normalizedFieldId, field.type)) {
+                var isChecked = value === 'T' || value === true || value === 'true' || value === '1';
+                return '<td class="checkbox-cell"><label class="checkbox-label">' +
+                    '<input type="checkbox" class="line-input line-checkbox" id="' + inputId + '" ' +
+                    'data-field="' + fieldId + '"' + (isChecked ? ' checked' : '') + '>' +
+                    '</label></td>';
+            }
             // Default text input
             else {
                 return '<td><input type="text" class="line-input" id="' + inputId + '" value="' + escapeHtml(value) + '" data-field="' + field.id + '"></td>';
@@ -2809,6 +2817,22 @@
                     self.updateSublistLine(sublistId, idx, fieldId, value);
                 });
 
+                // Checkbox change events (checkboxes don't fire 'input' events)
+                lineSection.addEventListener('change', function(e) {
+                    var input = e.target;
+                    if (!input.classList.contains('line-checkbox')) return;
+
+                    var row = input.closest('tr');
+                    if (!row) return;
+
+                    var idx = parseInt(row.dataset.idx, 10);
+                    var sublistId = row.dataset.sublist;
+                    var fieldId = input.dataset.field;
+                    var value = input.checked;
+
+                    self.updateSublistLine(sublistId, idx, fieldId, value, true);
+                });
+
                 // ========== TYPEAHEAD SEARCH FOR SELECT FIELDS ==========
                 lineSection.addEventListener('input', function(e) {
                     var input = e.target;
@@ -3180,7 +3204,7 @@
             this.updateTabCounts();
         },
 
-        updateSublistLine: function(sublistId, idx, fieldId, value) {
+        updateSublistLine: function(sublistId, idx, fieldId, value, isCheckbox) {
             if (!this.sublistData || !this.sublistData[sublistId]) return;
 
             var line = this.sublistData[sublistId][idx];
@@ -3189,6 +3213,10 @@
             // Convert numeric fields
             if (fieldId === 'amount' || fieldId === 'rate' || fieldId === 'quantity') {
                 value = parseFloat(value) || 0;
+            }
+            // Convert checkbox values to T/F format (same as header-level checkboxes)
+            else if (isCheckbox) {
+                value = (value === true || value === 'true' || value === 'on') ? 'T' : 'F';
             }
 
             line[fieldId] = value;
