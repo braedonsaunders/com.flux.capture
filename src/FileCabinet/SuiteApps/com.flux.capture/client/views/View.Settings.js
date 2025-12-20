@@ -42,6 +42,11 @@
                         defaultLineSublistEl.value = settings.defaultLineSublist;
                     }
 
+                    var maxPagesEl = el('#max-extraction-pages');
+                    if (maxPagesEl && typeof settings.maxExtractionPages !== 'undefined') {
+                        maxPagesEl.value = settings.maxExtractionPages;
+                    }
+
                     var duplicateEl = el('#duplicate-detection');
                     if (duplicateEl) {
                         duplicateEl.checked = settings.duplicateDetection !== false;
@@ -2568,11 +2573,13 @@
             var self = this;
             var btn = el('#btn-save-settings');
 
+            var maxPagesVal = el('#max-extraction-pages') ? parseInt(el('#max-extraction-pages').value, 10) : 0;
             var settings = {
                 defaultDocumentType: el('#default-type').value || 'auto',
                 duplicateDetection: el('#duplicate-detection').checked,
                 amountValidation: el('#amount-validation').checked,
-                defaultLineSublist: el('#default-line-sublist') ? el('#default-line-sublist').value : 'auto'
+                defaultLineSublist: el('#default-line-sublist') ? el('#default-line-sublist').value : 'auto',
+                maxExtractionPages: isNaN(maxPagesVal) ? 0 : maxPagesVal
             };
 
             if (btn) {

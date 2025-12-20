@@ -314,6 +314,9 @@ define([
                 case 'emailInboxConfig':
                     result = saveEmailInboxConfig(context);
                     break;
+                case 'settings':
+                    result = saveSettings(context);
+                    break;
                 default:
                     result = Response.error('INVALID_ACTION', 'Unknown action: ' + action);
             }
@@ -2143,11 +2146,64 @@ define([
             duplicateDetection: savedSettings.duplicateDetection !== false,
             amountValidation: savedSettings.amountValidation !== false,
             defaultLineSublist: savedSettings.defaultLineSublist || 'auto',
+            maxExtractionPages: savedSettings.maxExtractionPages || 0,
             maxFileSize: 10485760,
             supportedFileTypes: ['pdf', 'png', 'jpg', 'jpeg', 'tiff', 'tif', 'gif', 'bmp']
         };
 
         return Response.success(settings);
+    }
+
+    function saveSettings(context) {
+        try {
+            var settingsData = {
+                defaultDocumentType: context.defaultDocumentType || 'auto',
+                duplicateDetection: context.duplicateDetection !== false,
+                amountValidation: context.amountValidation !== false,
+                defaultLineSublist: context.defaultLineSublist || 'auto',
+                maxExtractionPages: parseInt(context.maxExtractionPages, 10) || 0
+            };
+
+            // Find existing config record or create new one
+            var configSearch = search.create({
+                type: 'customrecord_flux_config',
+                filters: [
+                    ['custrecord_flux_cfg_type', 'is', 'settings'],
+                    'AND',
+                    ['custrecord_flux_cfg_key', 'is', 'general']
+                ],
+                columns: ['internalid']
+            });
+            var results = configSearch.run().getRange({ start: 0, end: 1 });
+
+            var configId;
+            if (results.length > 0) {
+                // Update existing record
+                configId = results[0].id;
+                record.submitFields({
+                    type: 'customrecord_flux_config',
+                    id: configId,
+                    values: {
+                        'custrecord_flux_cfg_data': JSON.stringify(settingsData),
+                        'custrecord_flux_cfg_active': true
+                    }
+                });
+            } else {
+                // Create new record
+                var configRec = record.create({ type: 'customrecord_flux_config' });
+                configRec.setValue({ fieldId: 'custrecord_flux_cfg_type', value: 'settings' });
+                configRec.setValue({ fieldId: 'custrecord_flux_cfg_key', value: 'general' });
+                configRec.setValue({ fieldId: 'custrecord_flux_cfg_data', value: JSON.stringify(settingsData) });
+                configRec.setValue({ fieldId: 'custrecord_flux_cfg_active', value: true });
+                configId = configRec.save();
+            }
+
+            log.audit('saveSettings', 'Settings saved: ' + JSON.stringify(settingsData));
+            return Response.success({ saved: true, configId: configId });
+        } catch (e) {
+            log.error('saveSettings', e);
+            return Response.error('SAVE_SETTINGS_ERROR', e.message);
+        }
     }
 
     function getAnalytics(context) {

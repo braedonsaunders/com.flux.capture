@@ -241,6 +241,8 @@ define([
                         validation: validation,
                         rawText: extractionResult.rawText,
                         pageCount: extractionResult.pageCount,
+                        totalDocumentPages: extractionResult.totalDocumentPages || extractionResult.pageCount,
+                        pagesLimited: extractionResult.pagesLimited || false,
                         processingTime: processingTime,
                         allExtractedFields: extractionResult.allExtractedFields || {},
                         extractionMeta: {
@@ -301,7 +303,8 @@ define([
                 const result = provider.extract(fileObj, {
                     documentType: options.documentType,
                     language: options.language,
-                    timeout: options.timeout
+                    timeout: options.timeout,
+                    maxPages: options.maxExtractionPages || 0
                 });
 
                 fcDebug.debug('FluxCapture.extract', {

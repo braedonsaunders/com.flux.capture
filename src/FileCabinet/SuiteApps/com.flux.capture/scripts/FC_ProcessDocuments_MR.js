@@ -30,6 +30,35 @@ define([
     });
 
     /**
+     * Load general settings from config record
+     */
+    function loadSettings() {
+        try {
+            var configSearch = search.create({
+                type: 'customrecord_flux_config',
+                filters: [
+                    ['custrecord_flux_cfg_type', 'is', 'settings'],
+                    'AND',
+                    ['custrecord_flux_cfg_key', 'is', 'general'],
+                    'AND',
+                    ['custrecord_flux_cfg_active', 'is', 'T']
+                ],
+                columns: ['custrecord_flux_cfg_data']
+            });
+            var results = configSearch.run().getRange({ start: 0, end: 1 });
+            if (results.length > 0) {
+                var dataStr = results[0].getValue('custrecord_flux_cfg_data');
+                if (dataStr) {
+                    return JSON.parse(dataStr);
+                }
+            }
+        } catch (e) {
+            log.debug('loadSettings', 'No saved settings found: ' + e.message);
+        }
+        return {};
+    }
+
+    /**
      * Get documents that need processing
      */
     function getInputData() {
@@ -108,6 +137,10 @@ define([
                 }
             });
 
+            // Load settings to get maxExtractionPages
+            const settings = loadSettings();
+            const maxExtractionPages = settings.maxExtractionPages || 0;
+
             // Process with FC_Engine (pass fileId, not file object - engine loads it internally)
             const engine = new FC_Engine.FluxCaptureEngine();
             const startTime = Date.now();
@@ -117,7 +150,8 @@ define([
                 enableVendorMatching: true,
                 enableAnomalyDetection: true,
                 enableFraudDetection: true,
-                enableLearning: true
+                enableLearning: true,
+                maxExtractionPages: maxExtractionPages
             });
 
             const processingTime = Date.now() - startTime;
