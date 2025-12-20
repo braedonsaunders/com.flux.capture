@@ -1699,49 +1699,61 @@
 
             var html = '';
 
-            // ========== INFO ALERT - How extraction works ==========
-            html += '<div class="extraction-info-alert">' +
-                '<i class="fas fa-lightbulb"></i>' +
-                '<div class="info-content">' +
-                    '<strong>AI-Extracted Data</strong> ' +
-                    '<span>Review the extracted values below. Click any field to edit, then Save to create the transaction in NetSuite.</span>' +
-                '</div>' +
-            '</div>';
+            // ========== UNIFIED REVIEW HEADER ==========
+            // Compute unmatched extractions for header
+            this.computeUnmatchedExtractions();
+            var unmatchedCount = this.extractionPool.unmatched.length;
 
-            // ========== COMPACT STATUS BAR (Confidence + Alerts) ==========
-            html += '<div class="form-section status-bar-section">' +
-                '<div class="status-bar">' +
-                    '<div class="status-item confidence-status ' + confClass + '">' +
-                        '<span class="status-value">' + normalizedConfidence + '%</span>' +
-                        '<span class="status-label">' + (confClass === 'high' ? 'High' : confClass === 'medium' ? 'Medium' : 'Low') + '</span>' +
+            html += '<div class="review-header">' +
+                '<div class="review-header-bar">' +
+                    // Confidence indicator
+                    '<div class="header-metric confidence-metric ' + confClass + '">' +
+                        '<div class="metric-ring ' + confClass + '">' +
+                            '<svg viewBox="0 0 36 36">' +
+                                '<circle cx="18" cy="18" r="15.9" fill="none" stroke="currentColor" stroke-opacity="0.15" stroke-width="3"/>' +
+                                '<circle cx="18" cy="18" r="15.9" fill="none" stroke="currentColor" stroke-width="3" ' +
+                                    'stroke-dasharray="' + normalizedConfidence + ' 100" stroke-linecap="round" transform="rotate(-90 18 18)"/>' +
+                            '</svg>' +
+                            '<span class="metric-value">' + normalizedConfidence + '</span>' +
+                        '</div>' +
+                        '<span class="metric-label">Confidence</span>' +
                     '</div>' +
+                    // Alerts indicator (if any)
                     (anomalies.length > 0 ?
-                        '<div class="status-item alert-status" id="alert-status-toggle">' +
-                            '<i class="fas fa-triangle-exclamation"></i>' +
-                            '<span class="status-value">' + anomalies.length + '</span>' +
-                            '<span class="status-label">Alert' + (anomalies.length > 1 ? 's' : '') + '</span>' +
-                            '<i class="fas fa-chevron-down alert-chevron"></i>' +
+                        '<div class="header-metric alert-metric" id="alert-status-toggle">' +
+                            '<div class="metric-icon alert-icon">' +
+                                '<i class="fas fa-triangle-exclamation"></i>' +
+                                '<span class="metric-badge">' + anomalies.length + '</span>' +
+                            '</div>' +
+                            '<span class="metric-label">Alert' + (anomalies.length > 1 ? 's' : '') + '</span>' +
+                            '<i class="fas fa-chevron-down metric-chevron"></i>' +
+                        '</div>' : '') +
+                    // Spacer
+                    '<div class="header-spacer"></div>' +
+                    // Additional fields indicator (if any)
+                    (unmatchedCount > 0 ?
+                        '<div class="header-metric pool-metric" id="pool-header-toggle">' +
+                            '<div class="metric-icon pool-icon">' +
+                                '<i class="fas fa-layer-group"></i>' +
+                                '<span class="metric-badge">' + unmatchedCount + '</span>' +
+                            '</div>' +
+                            '<span class="metric-label">Extra Fields</span>' +
+                            '<i class="fas fa-chevron-down metric-chevron"></i>' +
                         '</div>' : '') +
                 '</div>' +
+                // Alert details dropdown
                 (anomalies.length > 0 ?
-                    '<div class="alert-details" id="alert-details" style="display:none;">' +
+                    '<div class="header-dropdown alert-dropdown" id="alert-details" style="display:none;">' +
                         anomalies.map(function(a) {
-                            return '<div class="alert-detail-item alert-' + a.severity + '">' +
+                            return '<div class="dropdown-item alert-' + a.severity + '">' +
                                 '<i class="fas fa-' + (a.severity === 'high' ? 'exclamation-circle' : 'info-circle') + '"></i>' +
                                 '<span>' + escapeHtml(a.message) + '</span>' +
                             '</div>';
                         }).join('') +
                     '</div>' : '') +
+                // Extraction pool dropdown
+                (unmatchedCount > 0 ? this.renderExtractionPoolDropdown() : '') +
             '</div>';
-
-            // ========== EXTRACTION POOL PANEL ==========
-            // Compute unmatched extractions
-            this.computeUnmatchedExtractions();
-            var unmatchedCount = this.extractionPool.unmatched.length;
-
-            if (unmatchedCount > 0) {
-                html += this.renderExtractionPoolPanel();
-            }
 
             // ========== VENDOR SECTION (entity field with search) ==========
             var isVendorRequired = this.isFieldMandatory('entity', bodyFields);
@@ -2811,21 +2823,76 @@
                 });
             }
 
-            // Toggle alert details
+            // Toggle alert details in unified header
             var alertToggle = el('#alert-status-toggle');
             if (alertToggle) {
-                alertToggle.onclick = function() {
+                alertToggle.onclick = function(e) {
+                    e.stopPropagation();
                     var details = el('#alert-details');
-                    var chevron = alertToggle.querySelector('.alert-chevron');
+                    var poolDropdown = el('#pool-dropdown');
+                    var chevron = alertToggle.querySelector('.metric-chevron');
+
+                    // Close pool dropdown if open
+                    if (poolDropdown && poolDropdown.style.display !== 'none') {
+                        poolDropdown.style.display = 'none';
+                        var poolToggle = el('#pool-header-toggle');
+                        if (poolToggle) {
+                            var poolChevron = poolToggle.querySelector('.metric-chevron');
+                            if (poolChevron) {
+                                poolChevron.classList.remove('fa-chevron-up');
+                                poolChevron.classList.add('fa-chevron-down');
+                            }
+                        }
+                    }
+
                     if (details) {
                         var isHidden = details.style.display === 'none';
                         details.style.display = isHidden ? 'block' : 'none';
+                        alertToggle.classList.toggle('active', isHidden);
                         if (chevron) {
                             chevron.classList.toggle('fa-chevron-down', !isHidden);
                             chevron.classList.toggle('fa-chevron-up', isHidden);
                         }
                     }
                 };
+            }
+
+            // Toggle pool dropdown in unified header
+            var poolToggle = el('#pool-header-toggle');
+            if (poolToggle) {
+                poolToggle.onclick = function(e) {
+                    e.stopPropagation();
+                    var dropdown = el('#pool-dropdown');
+                    var alertDetails = el('#alert-details');
+                    var chevron = poolToggle.querySelector('.metric-chevron');
+
+                    // Close alert dropdown if open
+                    if (alertDetails && alertDetails.style.display !== 'none') {
+                        alertDetails.style.display = 'none';
+                        var alertToggleEl = el('#alert-status-toggle');
+                        if (alertToggleEl) {
+                            alertToggleEl.classList.remove('active');
+                            var alertChevron = alertToggleEl.querySelector('.metric-chevron');
+                            if (alertChevron) {
+                                alertChevron.classList.remove('fa-chevron-up');
+                                alertChevron.classList.add('fa-chevron-down');
+                            }
+                        }
+                    }
+
+                    if (dropdown) {
+                        var isHidden = dropdown.style.display === 'none';
+                        dropdown.style.display = isHidden ? 'block' : 'none';
+                        poolToggle.classList.toggle('active', isHidden);
+                        if (chevron) {
+                            chevron.classList.toggle('fa-chevron-down', !isHidden);
+                            chevron.classList.toggle('fa-chevron-up', isHidden);
+                        }
+                    }
+                };
+
+                // Bind chip actions within pool dropdown
+                self.bindPoolChipEvents();
             }
 
             // Track all field changes
@@ -5803,6 +5870,54 @@
         },
 
         /**
+         * Render the Extraction Pool as a compact dropdown for the unified header
+         */
+        renderExtractionPoolDropdown: function() {
+            var self = this;
+            var unmatched = this.extractionPool.unmatched;
+            var isExpanded = this.extractionPool.panelExpanded;
+
+            var html = '<div class="header-dropdown pool-dropdown" id="pool-dropdown" style="display:none;">' +
+                '<div class="pool-dropdown-content">';
+
+            if (unmatched.length === 0) {
+                html += '<div class="dropdown-empty">' +
+                    '<i class="fas fa-check-circle"></i>' +
+                    '<span>All fields matched</span>' +
+                '</div>';
+            } else {
+                html += '<div class="pool-chips" id="pool-chips">';
+                unmatched.forEach(function(item) {
+                    var confClass = item.confidence >= 0.85 ? 'high' : item.confidence >= 0.6 ? 'medium' : 'low';
+                    var displayValue = String(item.value).length > 25 ?
+                        String(item.value).substring(0, 25) + '...' : item.value;
+
+                    html += '<div class="pool-chip" draggable="true" ' +
+                        'data-extraction-id="' + item.id + '" ' +
+                        'data-extraction-key="' + escapeHtml(item.key) + '" ' +
+                        'data-extraction-value="' + escapeHtml(item.value) + '">' +
+                        '<span class="chip-label">' + escapeHtml(item.label) + '</span>' +
+                        '<span class="chip-value">' + escapeHtml(displayValue) + '</span>' +
+                        '<span class="chip-conf conf-' + confClass + '">' + Math.round(item.confidence * 100) + '%</span>' +
+                        '<button class="chip-action chip-locate" title="Find in document"><i class="fas fa-crosshairs"></i></button>' +
+                        '<button class="chip-action chip-dismiss" title="Dismiss"><i class="fas fa-times"></i></button>' +
+                    '</div>';
+                });
+                html += '</div>';
+            }
+
+            html += '</div>' +
+                '<div class="pool-dropdown-footer">' +
+                    '<button class="btn btn-ghost btn-sm" id="btn-toggle-annotations">' +
+                        '<i class="fas fa-highlighter"></i> Highlight on Document' +
+                    '</button>' +
+                '</div>' +
+            '</div>';
+
+            return html;
+        },
+
+        /**
          * Apply an extraction value to a form field
          */
         applyExtractionToField: function(extractionKey, extractionData, targetFieldId) {
@@ -6319,6 +6434,119 @@
                     }
                 }, true);
             });
+        },
+
+        /**
+         * Bind pool chip events in the unified header dropdown
+         */
+        bindPoolChipEvents: function() {
+            var self = this;
+
+            document.querySelectorAll('.pool-chip').forEach(function(chip) {
+                // Drag support
+                chip.ondragstart = function(e) {
+                    self.extractionPool.dragActive = true;
+                    e.dataTransfer.effectAllowed = 'copy';
+                    e.dataTransfer.setData('text/plain', JSON.stringify({
+                        key: chip.dataset.extractionKey,
+                        value: chip.dataset.extractionValue,
+                        id: chip.dataset.extractionId
+                    }));
+                    chip.classList.add('dragging');
+                    document.body.classList.add('extraction-dragging');
+                };
+
+                chip.ondragend = function() {
+                    self.extractionPool.dragActive = false;
+                    chip.classList.remove('dragging');
+                    document.body.classList.remove('extraction-dragging');
+                    document.querySelectorAll('.form-field.drop-target').forEach(function(f) {
+                        f.classList.remove('drop-target', 'drop-hover');
+                    });
+                };
+
+                // Locate button
+                var locateBtn = chip.querySelector('.chip-locate');
+                if (locateBtn) {
+                    locateBtn.onclick = function(e) {
+                        e.stopPropagation();
+                        if (!self.extractionPool.showAnnotations) {
+                            self.toggleAnnotations();
+                        }
+                        var annotation = document.querySelector('.extraction-annotation[data-field-key="' + chip.dataset.extractionKey + '"]');
+                        if (annotation) {
+                            annotation.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                            annotation.classList.add('highlight-pulse');
+                            setTimeout(function() { annotation.classList.remove('highlight-pulse'); }, 2000);
+                        }
+                    };
+                }
+
+                // Dismiss button
+                var dismissBtn = chip.querySelector('.chip-dismiss');
+                if (dismissBtn) {
+                    dismissBtn.onclick = function(e) {
+                        e.stopPropagation();
+                        var key = chip.dataset.extractionKey;
+                        self.extractionPool.unmatched = self.extractionPool.unmatched.filter(function(item) {
+                            return item.key !== key;
+                        });
+                        self.refreshPoolDropdown();
+                    };
+                }
+
+                // Click to select
+                chip.onclick = function(e) {
+                    if (e.target.closest('.chip-action')) return;
+
+                    var wasSelected = chip.classList.contains('selected');
+                    document.querySelectorAll('.pool-chip.selected').forEach(function(c) {
+                        c.classList.remove('selected');
+                    });
+
+                    if (!wasSelected) {
+                        chip.classList.add('selected');
+                        self.extractionPool.selectedCardId = chip.dataset.extractionId;
+                        document.body.classList.add('extraction-selecting');
+                    } else {
+                        self.extractionPool.selectedCardId = null;
+                        document.body.classList.remove('extraction-selecting');
+                    }
+                };
+            });
+
+            // Toggle annotations button
+            var annotBtn = el('#btn-toggle-annotations');
+            if (annotBtn) {
+                annotBtn.onclick = function() {
+                    self.toggleAnnotations();
+                };
+            }
+        },
+
+        /**
+         * Refresh the pool dropdown in unified header
+         */
+        refreshPoolDropdown: function() {
+            var dropdown = el('#pool-dropdown');
+            if (dropdown) {
+                dropdown.innerHTML = this.renderExtractionPoolDropdown().replace(/<div class="header-dropdown pool-dropdown"[^>]*>/, '').replace(/<\/div>$/, '');
+            }
+
+            // Update badge count
+            var badge = document.querySelector('#pool-header-toggle .metric-badge');
+            if (badge) {
+                badge.textContent = this.extractionPool.unmatched.length;
+            }
+
+            // Hide toggle if no more items
+            if (this.extractionPool.unmatched.length === 0) {
+                var toggle = el('#pool-header-toggle');
+                if (toggle) toggle.style.display = 'none';
+                if (dropdown) dropdown.style.display = 'none';
+            }
+
+            this.bindPoolChipEvents();
         },
 
         // ==========================================
