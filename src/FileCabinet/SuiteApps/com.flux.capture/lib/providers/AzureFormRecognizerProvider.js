@@ -182,8 +182,10 @@ define([
         /**
          * Submit document for analysis and return operation URL (no polling).
          * Use this for async processing where polling is handled separately.
-         * @param {Object} fileObj - NetSuite file object
+         * @param {Object|null} fileObj - NetSuite file object, or null if using options.base64Content
          * @param {Object} options - Extraction options
+         * @param {string} [options.base64Content] - Pre-processed base64 content (for chunked PDFs)
+         * @param {string} [options.fileName] - File name (required if using base64Content)
          * @returns {Object} - { operationUrl: string, model: string }
          */
         submitForAnalysis(fileObj, options = {}) {
@@ -196,6 +198,41 @@ define([
 
             try {
                 const model = this._getModelForDocumentType(options.documentType);
+
+                // Check if we have pre-processed content (from PDF chunking)
+                if (options.base64Content) {
+                    this._audit('submitForAnalysis', {
+                        message: `Submitting pre-chunked content with model: ${model}`,
+                        fileName: options.fileName,
+                        wasChunked: options.wasChunked,
+                        originalPageCount: options.originalPageCount
+                    });
+
+                    const operationUrl = this._submitBase64Content(
+                        options.base64Content,
+                        options.fileName || 'document.pdf',
+                        model
+                    );
+
+                    if (!operationUrl) {
+                        throw new Error('Failed to submit document for analysis');
+                    }
+
+                    this._debug('submitForAnalysis', `Operation submitted: ${operationUrl}`);
+
+                    return {
+                        operationUrl: operationUrl,
+                        model: model,
+                        wasChunked: options.wasChunked,
+                        originalPageCount: options.originalPageCount
+                    };
+                }
+
+                // Standard file object submission
+                if (!fileObj) {
+                    throw new Error('Either fileObj or options.base64Content is required');
+                }
+
                 this._audit('submitForAnalysis', `Submitting document with model: ${model}`);
 
                 const operationUrl = this._submitDocument(fileObj, model);
@@ -401,6 +438,87 @@ define([
             }
 
             return this.defaultModel;
+        }
+
+        /**
+         * Submit pre-processed base64 content for analysis (used for chunked PDFs)
+         * @param {string} base64Content - Base64 encoded content
+         * @param {string} fileName - Original file name (for content type detection)
+         * @param {string} model - Model ID
+         * @returns {string|null} - Operation location URL or null
+         */
+        _submitBase64Content(base64Content, fileName, model) {
+            // Build the analyze URL
+            const analyzeUrl = `${this.endpoint}/formrecognizer/documentModels/${model}:analyze?api-version=${AZURE_API_VERSION}`;
+
+            // Determine content type from file name
+            const fileNameLower = fileName.toLowerCase();
+            let contentType = 'application/octet-stream';
+            if (fileNameLower.endsWith('.pdf')) {
+                contentType = 'application/pdf';
+            } else if (fileNameLower.endsWith('.png')) {
+                contentType = 'image/png';
+            } else if (fileNameLower.endsWith('.jpg') || fileNameLower.endsWith('.jpeg')) {
+                contentType = 'image/jpeg';
+            } else if (fileNameLower.endsWith('.tiff') || fileNameLower.endsWith('.tif')) {
+                contentType = 'image/tiff';
+            }
+
+            this._debug('submitBase64Content', {
+                url: analyzeUrl,
+                contentType: contentType,
+                contentSize: base64Content ? base64Content.length : 0
+            });
+
+            try {
+                // Submit as base64 encoded content
+                const requestBody = JSON.stringify({
+                    base64Source: base64Content
+                });
+
+                const response = https.post({
+                    url: analyzeUrl,
+                    headers: {
+                        'Ocp-Apim-Subscription-Key': this.apiKey,
+                        'Content-Type': 'application/json'
+                    },
+                    body: requestBody
+                });
+
+                this._debug('submitBase64Content.response', {
+                    code: response.code,
+                    headers: Object.keys(response.headers || {})
+                });
+
+                // Check for successful submission (202 Accepted)
+                if (response.code === 202) {
+                    // Get operation location from headers
+                    const operationLocation = response.headers['Operation-Location'] ||
+                        response.headers['operation-location'];
+
+                    if (operationLocation) {
+                        return operationLocation;
+                    }
+                }
+
+                // Handle error responses
+                if (response.code >= 400) {
+                    let errorMessage = `Azure API error: ${response.code}`;
+                    try {
+                        const errorBody = JSON.parse(response.body);
+                        errorMessage = errorBody.error?.message || errorBody.message || errorMessage;
+                    } catch (e) { /* ignore parse error */ }
+
+                    this._error('submitBase64Content', errorMessage);
+                    throw new Error(errorMessage);
+                }
+
+                return null;
+
+            } catch (e) {
+                this._error('submitBase64Content', e.message);
+                throw e;
+            }
         }
 
         /**

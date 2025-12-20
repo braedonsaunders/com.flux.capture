@@ -21,8 +21,9 @@ define([
     'N/log',
     'N/runtime',
     'N/task',
-    '/SuiteApps/com.flux.capture/lib/FC_Engine'
-], function(record, file, search, log, runtime, task, FC_Engine) {
+    '/SuiteApps/com.flux.capture/lib/FC_Engine',
+    '/SuiteApps/com.flux.capture/lib/utils/PDFUtils'
+], function(record, file, search, log, runtime, task, FC_Engine, PDFUtils) {
 
     'use strict';
 
@@ -257,27 +258,89 @@ define([
 
                 // Load file and submit to Azure
                 const fileObj = file.load({ id: fileId });
+                const fileName = fileObj.name.toLowerCase();
+                const isPDF = fileName.endsWith('.pdf');
 
                 log.audit('FC_ProcessDocuments.map.submit', {
                     documentId: documentId,
-                    fileName: fileObj.name
+                    fileName: fileObj.name,
+                    isPDF: isPDF,
+                    maxExtractionPages: maxExtractionPages
                 });
 
-                const submitResult = provider.submitForAnalysis(fileObj, {
+                // For PDFs with page limit, chunk before sending to Azure
+                let contentToSubmit = null;
+                let wasChunked = false;
+                let originalPageCount = 0;
+
+                if (isPDF && maxExtractionPages > 0) {
+                    const fileContent = fileObj.getContents();
+
+                    // Check if it's actually a PDF and count pages
+                    if (PDFUtils.isPDF(fileContent)) {
+                        const pageCount = PDFUtils.countPages(fileContent);
+
+                        log.audit('FC_ProcessDocuments.map.pdfAnalysis', {
+                            documentId: documentId,
+                            pageCount: pageCount,
+                            maxExtractionPages: maxExtractionPages
+                        });
+
+                        if (pageCount > maxExtractionPages) {
+                            // Chunk the PDF to first N pages
+                            const chunkResult = PDFUtils.extractFirstPages(fileContent, maxExtractionPages);
+
+                            if (chunkResult.success && chunkResult.wasChunked) {
+                                contentToSubmit = chunkResult.content;
+                                wasChunked = true;
+                                originalPageCount = chunkResult.originalPageCount;
+
+                                log.audit('FC_ProcessDocuments.map.pdfChunked', {
+                                    documentId: documentId,
+                                    originalPages: originalPageCount,
+                                    chunkedTo: maxExtractionPages
+                                });
+                            } else if (!chunkResult.success) {
+                                log.error('FC_ProcessDocuments.map.chunkError', {
+                                    documentId: documentId,
+                                    error: chunkResult.error
+                                });
+                                // Fall through to submit original file
+                            }
+                        }
+                    }
+                }
+
+                // Submit to Azure (with chunked content if available)
+                const submitOptions = {
                     documentType: documentType
-                });
+                };
+
+                if (contentToSubmit) {
+                    submitOptions.base64Content = contentToSubmit;
+                    submitOptions.fileName = fileObj.name;
+                    submitOptions.wasChunked = wasChunked;
+                    submitOptions.originalPageCount = originalPageCount;
+                }
+
+                const submitResult = provider.submitForAnalysis(
+                    contentToSubmit ? null : fileObj,
+                    submitOptions
+                );
 
                 currentOperationUrl = submitResult.operationUrl;
                 currentPollCount = 0;
 
-                // Save operation URL immediately
+                // Save operation URL immediately (and chunking info for reference)
+                const updateValues = {
+                    'custrecord_flux_operation_url': currentOperationUrl,
+                    'custrecord_flux_poll_count': 0
+                };
+
                 record.submitFields({
                     type: 'customrecord_flux_document',
                     id: documentId,
-                    values: {
-                        'custrecord_flux_operation_url': currentOperationUrl,
-                        'custrecord_flux_poll_count': 0
-                    }
+                    values: updateValues
                 });
             }
 
