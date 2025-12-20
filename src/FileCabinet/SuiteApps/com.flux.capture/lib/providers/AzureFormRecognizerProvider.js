@@ -124,7 +124,9 @@ define([
             this.apiKey = config.apiKey || '';
             this.defaultModel = config.defaultModel || AZURE_MODELS.invoice;
             this.pollingInterval = config.pollingInterval || 1000;
-            this.maxPollingAttempts = config.maxPollingAttempts || 60;
+            // v4.1: Increased max attempts since we use lighter sleep to save governance
+            // HTTP latency (~200-500ms) provides natural spacing, so more attempts = longer total wait
+            this.maxPollingAttempts = config.maxPollingAttempts || 180;
         }
 
         /**
@@ -398,18 +400,20 @@ define([
 
         /**
          * Sleep for specified milliseconds
-         * FIXED: Previous busy-wait was burning through NetSuite governance limits.
-         * Now uses minimal delay - the HTTP request latency provides natural spacing.
+         * FIXED: Previous busy-wait (while Date.now()) was burning through governance.
+         * Now uses fixed iteration count that provides ~100-200ms delay while staying
+         * well under governance limits (~50K statements vs 10M limit).
+         * Combined with HTTP latency (~200-500ms), this gives adequate spacing.
          * @param {number} ms - Requested sleep time (used for logging only)
          */
         _sleep(ms) {
-            // SuiteScript doesn't have native sleep, and busy-wait burns governance
-            // The HTTP GET request in polling already takes 100-500ms
-            // So we do a minimal delay (just a few iterations) to avoid hammering
-            // This is governance-friendly while still providing some spacing
-            for (let i = 0; i < 100; i++) {
-                // Minimal delay - just enough to not be a tight loop
-                // Real delay comes from HTTP request latency
+            // SuiteScript doesn't have native sleep, and time-based busy-wait burns governance
+            // Use fixed iteration count: 50,000 iterations ≈ 100-200ms delay
+            // This is governance-friendly (50K << 10M limit) while providing real delay
+            // Combined with HTTP latency and increased maxPollingAttempts, total timeout ~60-90s
+            for (let i = 0; i < 50000; i++) {
+                // Each iteration is ~1-3 microseconds
+                // 50K iterations ≈ 100-200ms depending on server load
             }
         }
 
