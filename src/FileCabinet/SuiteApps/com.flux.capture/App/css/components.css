@@ -1134,9 +1134,10 @@
 /* Required field visual indicator */
 .form-field.is-required {
     position: relative;
-    padding-left: var(--space-sm);
     border-left: 3px solid var(--color-danger);
+    background: var(--color-danger-bg);
     border-radius: var(--radius-sm);
+    padding: var(--space-xs) var(--space-sm);
 }
 
 .form-field input[type="checkbox"] {

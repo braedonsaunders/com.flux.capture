@@ -1739,10 +1739,11 @@
             }
 
             // ========== VENDOR SECTION (entity field with search) ==========
+            var isVendorRequired = this.isFieldMandatory('entity', bodyFields);
             html += '<div class="form-section">' +
                 '<h4><i class="fas fa-building"></i> Vendor</h4>' +
-                '<div class="form-field vendor-field">' +
-                    '<label>Vendor Name ' + this.renderConfidenceBadge('vendorName') + (this.isFieldMandatory('entity', bodyFields) ? ' <span class="required">*</span>' : '') + '</label>' +
+                '<div class="form-field vendor-field' + (isVendorRequired ? ' is-required' : '') + '">' +
+                    '<label>Vendor Name ' + this.renderConfidenceBadge('vendorName') + (isVendorRequired ? ' <span class="required">*</span>' : '') + '</label>' +
                     '<div class="vendor-search-wrapper">' +
                         '<input type="text" id="field-vendor" class="vendor-input" value="' + escapeHtml(doc.vendorName || '') + '" placeholder="Search or enter vendor name..." autocomplete="off">' +
                         '<div class="vendor-dropdown" id="vendor-dropdown" style="display:none;"></div>' +
@@ -1936,26 +1937,29 @@
 
 
             // ========== AMOUNTS (Always visible) ==========
+            var isSubtotalRequired = this.isFieldMandatory('subtotal', bodyFields);
+            var isTaxRequired = this.isFieldMandatory('taxAmount', bodyFields) || this.isFieldMandatory('taxtotal', bodyFields);
+            var isTotalRequired = this.isFieldMandatory('totalAmount', bodyFields) || this.isFieldMandatory('usertotal', bodyFields) || this.isFieldMandatory('total', bodyFields);
             html += '<div class="form-section amounts-section">' +
                 '<h4><i class="fas fa-calculator"></i> Amounts</h4>' +
                 '<div class="form-row">' +
-                    '<div class="form-field">' +
-                        '<label>Subtotal ' + this.renderConfidenceBadge('subtotal') + '</label>' +
+                    '<div class="form-field' + (isSubtotalRequired ? ' is-required' : '') + '">' +
+                        '<label>Subtotal ' + this.renderConfidenceBadge('subtotal') + (isSubtotalRequired ? ' <span class="required">*</span>' : '') + '</label>' +
                         '<div class="input-with-prefix">' +
                             '<span class="input-prefix">$</span>' +
                             '<input type="number" step="0.01" id="field-subtotal" value="' + (doc.subtotal || 0).toFixed(2) + '">' +
                         '</div>' +
                     '</div>' +
-                    '<div class="form-field">' +
-                        '<label>Tax ' + this.renderConfidenceBadge('taxAmount') + '</label>' +
+                    '<div class="form-field' + (isTaxRequired ? ' is-required' : '') + '">' +
+                        '<label>Tax ' + this.renderConfidenceBadge('taxAmount') + (isTaxRequired ? ' <span class="required">*</span>' : '') + '</label>' +
                         '<div class="input-with-prefix">' +
                             '<span class="input-prefix">$</span>' +
                             '<input type="number" step="0.01" id="field-taxAmount" value="' + (doc.taxAmount || 0).toFixed(2) + '">' +
                         '</div>' +
                     '</div>' +
                 '</div>' +
-                '<div class="form-field total-field">' +
-                    '<label>Total Amount ' + this.renderConfidenceBadge('totalAmount') + '</label>' +
+                '<div class="form-field total-field' + (isTotalRequired ? ' is-required' : '') + '">' +
+                    '<label>Total Amount ' + this.renderConfidenceBadge('totalAmount') + (isTotalRequired ? ' <span class="required">*</span>' : '') + '</label>' +
                     '<div class="input-with-prefix total-input">' +
                         '<span class="input-prefix">$</span>' +
                         '<input type="number" step="0.01" id="field-totalAmount" value="' + (doc.totalAmount || 0).toFixed(2) + '">' +
