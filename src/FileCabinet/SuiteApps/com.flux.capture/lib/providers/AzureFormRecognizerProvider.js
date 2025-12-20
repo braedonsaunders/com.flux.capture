@@ -168,7 +168,7 @@ define([
                 this._audit('extract', `Analysis complete, status: ${result.status}`);
 
                 // Step 3: Normalize results
-                return this._normalizeResult(result);
+                return this._normalizeResult(result, options);
 
             } catch (e) {
                 this._error('extract', {
@@ -558,16 +558,24 @@ define([
         /**
          * Normalize Azure result to standard format
          * @param {Object} result - Azure analysis result
+         * @param {Object} options - Extraction options including maxPages
          * @returns {Object} - Normalized result
          */
-        _normalizeResult(result) {
+        _normalizeResult(result, options = {}) {
             const analyzeResult = result.analyzeResult || {};
             const rawFields = [];
             const rawTables = [];
             let rawText = '';
 
-            // Get page count
-            const pages = analyzeResult.pages || [];
+            // Get page count and apply limit if specified
+            let pages = analyzeResult.pages || [];
+            const totalDocumentPages = pages.length || 1;
+            const maxPages = options.maxPages || 0;
+
+            if (maxPages > 0 && pages.length > maxPages) {
+                this._audit('normalizeResult', `Limiting from ${pages.length} pages to first ${maxPages} pages`);
+                pages = pages.slice(0, maxPages);
+            }
             const pageCount = pages.length || 1;
 
             // Extract raw text from pages
@@ -629,6 +637,8 @@ define([
                 rawTables: rawTables,
                 rawText: rawText.trim(),
                 pageCount: pageCount,
+                totalDocumentPages: totalDocumentPages,
+                pagesLimited: totalDocumentPages > pageCount,
                 mimeType: null,
                 _azureResult: analyzeResult // Keep for debugging
             };

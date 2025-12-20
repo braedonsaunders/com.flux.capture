@@ -1061,7 +1061,14 @@
                         <button class="btn btn-icon btn-ghost" id="btn-rotate" title="Rotate">
                             <i class="fas fa-rotate-right"></i>
                         </button>
+                        <div class="toolbar-divider"></div>
+                        <button class="btn btn-icon btn-ghost" id="btn-page-prev" title="Previous Page">
+                            <i class="fas fa-chevron-left"></i>
+                        </button>
                         <span class="page-display" id="page-display">1 / 1</span>
+                        <button class="btn btn-icon btn-ghost" id="btn-page-next" title="Next Page">
+                            <i class="fas fa-chevron-right"></i>
+                        </button>
                     </div>
                 </div>
                 <div class="toolbar-title">
@@ -1288,6 +1295,15 @@
                                     <option value="expense">Expense (Account-based)</option>
                                     <option value="item">Item (Inventory-based)</option>
                                 </select>
+                            </div>
+                        </div>
+                        <div class="setting-row">
+                            <div class="setting-label">
+                                <span>Max Extraction Pages</span>
+                                <small>Limit pages processed per document (0 = no limit). Useful for large utility bills where only first pages contain invoice data.</small>
+                            </div>
+                            <div class="setting-control">
+                                <input type="number" id="max-extraction-pages" min="0" max="500" value="0" style="width: 80px; text-align: center;">
                             </div>
                         </div>
                     </div>

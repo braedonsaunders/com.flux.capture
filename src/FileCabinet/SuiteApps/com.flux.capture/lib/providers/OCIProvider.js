@@ -78,9 +78,17 @@ define([
 
                 const result = this.docCaptureModule.documentToStructure(extractOptions);
 
-                this._debug('extract', `Received result with ${result.pages ? result.pages.length : 0} pages`);
+                const totalPages = result.pages ? result.pages.length : 0;
+                this._debug('extract', `Received result with ${totalPages} pages`);
 
-                return this._normalizeResult(result);
+                // Apply page limit if specified (maxPages > 0)
+                const maxPages = options.maxPages || 0;
+                if (maxPages > 0 && result.pages && result.pages.length > maxPages) {
+                    this._audit('extract', `Limiting extraction from ${result.pages.length} pages to first ${maxPages} pages`);
+                    result.pages = result.pages.slice(0, maxPages);
+                }
+
+                return this._normalizeResult(result, totalPages);
 
             } catch (e) {
                 this._error('extract', {
@@ -151,11 +159,13 @@ define([
         /**
          * Normalize OCI result to standard format
          * @param {Object} result - Raw N/documentCapture result
+         * @param {number} originalPageCount - Original page count before any limiting
          * @returns {Object} - Normalized result
          */
-        _normalizeResult(result) {
+        _normalizeResult(result, originalPageCount) {
             let rawText = '';
             const pageCount = result.pages ? result.pages.length : 1;
+            const totalDocumentPages = originalPageCount || pageCount;
             const rawFields = [];
             const rawTables = [];
 
@@ -221,6 +231,8 @@ define([
                 rawTables: rawTables,
                 rawText: rawText.trim(),
                 pageCount: pageCount,
+                totalDocumentPages: totalDocumentPages,
+                pagesLimited: totalDocumentPages > pageCount,
                 mimeType: result.mimeType || null
             };
         }

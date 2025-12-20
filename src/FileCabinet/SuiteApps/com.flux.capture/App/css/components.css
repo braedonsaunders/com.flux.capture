@@ -1591,6 +1591,360 @@
     color: var(--color-danger);
 }
 
+/* ==========================================
+   UNIFIED REVIEW HEADER
+   Premium compact header with confidence, alerts, and extraction pool
+   ========================================== */
+
+.review-header {
+    background: linear-gradient(135deg, var(--gray-50) 0%, var(--gray-100) 100%);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-lg);
+    margin-bottom: var(--space-md);
+    overflow: hidden;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+}
+
+.review-header-bar {
+    display: flex;
+    align-items: center;
+    gap: var(--space-md);
+    padding: var(--space-sm) var(--space-md);
+    min-height: 52px;
+}
+
+.header-spacer {
+    flex: 1;
+}
+
+/* Header Metrics */
+.header-metric {
+    display: flex;
+    align-items: center;
+    gap: var(--space-xs);
+    padding: var(--space-xs) var(--space-sm);
+    border-radius: var(--radius-md);
+    font-size: var(--font-size-sm);
+    cursor: pointer;
+    transition: all 0.15s ease;
+    user-select: none;
+}
+
+.header-metric:hover {
+    background: rgba(0, 0, 0, 0.04);
+}
+
+.header-metric.active {
+    background: rgba(0, 0, 0, 0.06);
+}
+
+.metric-label {
+    color: var(--text-secondary);
+    font-size: var(--font-size-xs);
+    font-weight: 500;
+}
+
+.metric-chevron {
+    font-size: 10px;
+    color: var(--text-tertiary);
+    margin-left: 2px;
+    transition: transform 0.2s ease;
+}
+
+/* Confidence Ring */
+.confidence-metric {
+    cursor: default;
+}
+
+.confidence-metric:hover {
+    background: transparent;
+}
+
+.metric-ring {
+    position: relative;
+    width: 36px;
+    height: 36px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.metric-ring svg {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    transform: rotate(-90deg);
+}
+
+.metric-ring.high {
+    color: var(--color-success);
+}
+
+.metric-ring.medium {
+    color: var(--color-warning);
+}
+
+.metric-ring.low {
+    color: var(--color-danger);
+}
+
+.metric-ring .metric-value {
+    font-size: 11px;
+    font-weight: 700;
+    color: inherit;
+    z-index: 1;
+}
+
+/* Alert Metric */
+.alert-metric {
+    background: rgba(245, 158, 11, 0.08);
+}
+
+.alert-metric:hover {
+    background: rgba(245, 158, 11, 0.15);
+}
+
+.alert-metric.active {
+    background: rgba(245, 158, 11, 0.2);
+}
+
+.metric-icon {
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin-right: 6px;
+}
+
+.alert-icon i {
+    color: var(--color-warning);
+    font-size: 16px;
+}
+
+.metric-badge {
+    position: absolute;
+    top: -6px;
+    right: -8px;
+    min-width: 16px;
+    height: 16px;
+    padding: 0 4px;
+    font-size: 10px;
+    font-weight: 700;
+    color: white;
+    background: var(--color-warning);
+    border-radius: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.alert-metric .metric-label {
+    color: #92400e;
+}
+
+/* Pool Metric */
+.pool-metric {
+    background: rgba(217, 119, 6, 0.08);
+}
+
+.pool-metric:hover {
+    background: rgba(217, 119, 6, 0.15);
+}
+
+.pool-metric.active {
+    background: rgba(217, 119, 6, 0.2);
+}
+
+.pool-icon i {
+    color: #d97706;
+    font-size: 16px;
+}
+
+.pool-metric .metric-badge {
+    background: #d97706;
+}
+
+.pool-metric .metric-label {
+    color: #92400e;
+}
+
+/* Header Dropdowns */
+.header-dropdown {
+    border-top: 1px solid var(--border-color);
+    background: white;
+    animation: slideDown 0.15s ease;
+}
+
+@keyframes slideDown {
+    from {
+        opacity: 0;
+        transform: translateY(-8px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+/* Alert Dropdown */
+.alert-dropdown {
+    padding: var(--space-sm) var(--space-md);
+}
+
+.alert-dropdown .dropdown-item {
+    display: flex;
+    align-items: flex-start;
+    gap: var(--space-sm);
+    padding: var(--space-xs) 0;
+    font-size: var(--font-size-sm);
+    color: var(--text-primary);
+}
+
+.alert-dropdown .dropdown-item i {
+    color: var(--color-warning);
+    margin-top: 2px;
+    flex-shrink: 0;
+}
+
+.alert-dropdown .dropdown-item.alert-high i {
+    color: var(--color-danger);
+}
+
+/* Pool Dropdown */
+.pool-dropdown {
+    padding: 0;
+}
+
+.pool-dropdown-content {
+    padding: var(--space-sm) var(--space-md);
+    max-height: 200px;
+    overflow-y: auto;
+}
+
+.pool-chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-xs);
+}
+
+.pool-chip {
+    display: flex;
+    align-items: center;
+    gap: var(--space-xs);
+    padding: 6px 10px;
+    background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%);
+    border: 1px solid #fcd34d;
+    border-radius: var(--radius-md);
+    font-size: var(--font-size-xs);
+    cursor: grab;
+    transition: all 0.15s ease;
+    user-select: none;
+}
+
+.pool-chip:hover {
+    background: linear-gradient(135deg, #fde68a 0%, #fcd34d 100%);
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+    transform: translateY(-1px);
+}
+
+.pool-chip.dragging {
+    opacity: 0.5;
+    cursor: grabbing;
+}
+
+.pool-chip.selected {
+    border-color: #d97706;
+    box-shadow: 0 0 0 2px rgba(217, 119, 6, 0.3);
+}
+
+.chip-label {
+    font-weight: 600;
+    color: #92400e;
+}
+
+.chip-value {
+    color: #78350f;
+    max-width: 150px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.chip-conf {
+    font-weight: 700;
+    padding: 2px 6px;
+    border-radius: 4px;
+    font-size: 10px;
+}
+
+.chip-conf.conf-high {
+    background: rgba(34, 197, 94, 0.2);
+    color: var(--color-success);
+}
+
+.chip-conf.conf-medium {
+    background: rgba(245, 158, 11, 0.2);
+    color: #b45309;
+}
+
+.chip-conf.conf-low {
+    background: rgba(239, 68, 68, 0.2);
+    color: var(--color-danger);
+}
+
+.chip-action {
+    background: none;
+    border: none;
+    padding: 2px;
+    color: #92400e;
+    cursor: pointer;
+    opacity: 0.6;
+    transition: opacity 0.15s ease;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.chip-action:hover {
+    opacity: 1;
+}
+
+.chip-action i {
+    font-size: 11px;
+}
+
+.pool-dropdown-footer {
+    display: flex;
+    justify-content: center;
+    padding: var(--space-xs) var(--space-md);
+    background: var(--gray-50);
+    border-top: 1px solid var(--border-color);
+}
+
+.pool-dropdown-footer .btn {
+    color: #92400e;
+    font-size: var(--font-size-xs);
+}
+
+.pool-dropdown-footer .btn:hover {
+    background: rgba(217, 119, 6, 0.1);
+}
+
+.dropdown-empty {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: var(--space-sm);
+    padding: var(--space-md);
+    color: var(--text-tertiary);
+    font-size: var(--font-size-sm);
+}
+
+.dropdown-empty i {
+    color: var(--color-success);
+}
+
 /* Layout Notice */
 .layout-notice {
     display: flex;
@@ -7389,10 +7743,29 @@ tr.doc-row.approving { animation: compress-out 0.3s ease forwards; }
     backface-visibility: hidden;
 }
 
+/* Container for all PDF pages - enables continuous scrolling */
+.pdf-pages-container {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: var(--space-lg);
+    padding-bottom: var(--space-xl);
+    width: 100%;
+}
+
 /* Wrapper to keep canvas and annotations aligned */
 .pdf-page-wrapper {
     position: relative;
     display: inline-block;
+    flex-shrink: 0;
+}
+
+/* Canvas styling for multi-page view */
+.pdf-page-canvas {
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
+    background: white;
+    max-width: 100%;
+    height: auto;
 }
 
 .pdf-loading {
