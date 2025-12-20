@@ -3,8 +3,14 @@
  * @NModuleScope Public
  * @module FluxCapture/Extraction/TableAnalyzer
  *
- * Smart Table Analyzer v4.0
+ * Smart Table Analyzer v4.1
  * Intelligent column detection, multi-row item handling, and line item extraction
+ *
+ * v4.1 Improvements:
+ * - Enhanced memo extraction: scans ALL row cells for text-heavy content
+ * - Uses DESCRIPTION column as memo fallback when no dedicated MEMO column
+ * - Aggressive text field scanning for memo content
+ * - Better memo population from any available text fields
  *
  * v4.0 Improvements:
  * - FORWARD-LOOKING row association: captures item codes/descriptions from rows AFTER anchor
@@ -796,6 +802,8 @@ define(['N/log', '../FC_Debug'], function(log, fcDebug) {
                     }
                     // Start new item
                     currentItem = this.createLineItem(row, columns, context);
+                    // v4.1: Enhanced memo extraction
+                    this.enhanceMemoExtraction(currentItem, row, columns);
                 } else if (rowType === 'CONTINUATION' && currentItem) {
                     // Append to current item
                     this.appendToLineItem(currentItem, row, columns);
@@ -807,6 +815,8 @@ define(['N/log', '../FC_Debug'], function(log, fcDebug) {
                             items.push(currentItem);
                         }
                         currentItem = this.createLineItem(row, columns, context);
+                        // v4.1: Enhanced memo extraction
+                        this.enhanceMemoExtraction(currentItem, row, columns);
                     } else if (currentItem) {
                         this.appendToLineItem(currentItem, row, columns);
                     }
@@ -905,17 +915,21 @@ define(['N/log', '../FC_Debug'], function(log, fcDebug) {
                         items.push(currentItem);
                         this.addDiagnostic('ITEM_CREATED', `Saved line item (before new anchor)`, {
                             desc: currentItem.description?.substring(0, 40),
-                            amt: currentItem.amount
+                            amt: currentItem.amount,
+                            memo: currentItem.memo?.substring(0, 30) || '[empty]'
                         });
                     }
 
                     // Start new item from this anchor row
                     currentItem = this.createLineItem(row, columns, context);
+                    // v4.1: Enhanced memo extraction - scan row cells for text content
+                    this.enhanceMemoExtraction(currentItem, row, columns);
                     itemStartIdx = i;
                     this.addDiagnostic('ROW_DECISION', `Row[${i}] NEW_ANCHOR: Starting new line item`, {
                         desc: currentItem.description?.substring(0, 40),
                         amt: currentItem.amount,
-                        qty: currentItem.quantity
+                        qty: currentItem.quantity,
+                        memo: currentItem.memo?.substring(0, 30)
                     });
 
                     // v3.1: Always look backwards for orphan rows that may have item codes or descriptions
@@ -1053,10 +1067,13 @@ define(['N/log', '../FC_Debug'], function(log, fcDebug) {
                 else if (analysis.hasDescription && analysis.hasQuantity) {
                     // Has description and quantity but no amount - might be valid
                     currentItem = this.createLineItem(row, columns, context);
+                    // v4.1: Enhanced memo extraction
+                    this.enhanceMemoExtraction(currentItem, row, columns);
                     currentItem._needsAmountReview = true;
                     this.addDiagnostic('ROW_DECISION', `Row[${i}] NEW_NO_AMOUNT: Has desc+qty but no amount`, {
                         desc: analysis.descriptionText?.substring(0, 40),
-                        qty: analysis.quantity
+                        qty: analysis.quantity,
+                        memo: currentItem.memo?.substring(0, 30)
                     });
                     this.addWarning('line_item_missing_amount',
                         `Line item "${analysis.descriptionText.substring(0, 50)}..." has quantity but no amount`,
@@ -1078,11 +1095,14 @@ define(['N/log', '../FC_Debug'], function(log, fcDebug) {
                 items.push(currentItem);
                 this.addDiagnostic('ITEM_CREATED', `Saved final line item`, {
                     desc: currentItem.description?.substring(0, 40),
-                    amt: currentItem.amount
+                    amt: currentItem.amount,
+                    memo: currentItem.memo?.substring(0, 30) || '[empty]'
                 });
             }
 
-            this.addDiagnostic('EXTRACTION', `Two-pass extraction complete: ${items.length} items created`);
+            // v4.1: Log memo extraction summary
+            const itemsWithMemo = items.filter(i => i.memo && i.memo.length > 0).length;
+            this.addDiagnostic('EXTRACTION', `Two-pass extraction complete: ${items.length} items created, ${itemsWithMemo} with memo`);
 
             return items;
         }
@@ -1150,14 +1170,23 @@ define(['N/log', '../FC_Debug'], function(log, fcDebug) {
 
         /**
          * Extract embedded memo from description field
+         * v4.1: Enhanced to always populate memo from description when empty
          * Modifies item in place
          */
         extractMemoFromDescription(item) {
             if (!item.description) return;
 
-            // If there's already a memo, don't overwrite
-            if (item.memo && item.memo.length > 5) return;
+            const MEMO_MIN_LENGTH = 10;           // Minimum text length to use as memo
+            const SUBSTANTIAL_DESC_LENGTH = 15;   // Description length to consider "substantial"
 
+            // If there's already a substantial memo, don't overwrite
+            if (item.memo && item.memo.trim().length >= MEMO_MIN_LENGTH) {
+                return;
+            }
+
+            let foundPatternMatch = false;
+
+            // First, try to extract memo using patterns
             for (const patternDef of MEMO_EXTRACTION_PATTERNS) {
                 const match = item.description.match(patternDef.pattern);
                 if (match && match[patternDef.group]) {
@@ -1184,8 +1213,137 @@ define(['N/log', '../FC_Debug'], function(log, fcDebug) {
                         remainingDesc: item.description.substring(0, 50)
                     });
 
-                    break; // Only extract once
+                    foundPatternMatch = true;
+                    break; // Only extract once per pattern
                 }
+            }
+
+            // v4.1: FALLBACK - If still no memo and description is substantial, use it as memo
+            // This ensures memo is ALWAYS populated when we have description text
+            if (!item.memo && item.description && item.description.trim().length >= SUBSTANTIAL_DESC_LENGTH) {
+                item.memo = item.description.trim();
+                fcDebug.debug('TableAnalyzer.extractMemoFromDescription', {
+                    action: 'FALLBACK: Using full description as memo',
+                    memo: item.memo.substring(0, 50)
+                });
+            }
+
+            // v4.1: Even if description is short, use it as memo if we have nothing
+            if (!item.memo && item.description && item.description.trim().length >= 5) {
+                item.memo = item.description.trim();
+                fcDebug.debug('TableAnalyzer.extractMemoFromDescription', {
+                    action: 'Using short description as memo',
+                    memo: item.memo
+                });
+            }
+        }
+
+        /**
+         * v4.1: Enhanced memo extraction - scans all row cells for text-heavy content
+         * This method is more aggressive than extractMemoFromDescription and should be
+         * called after createLineItem to populate memo from any available text
+         *
+         * Priority order:
+         * 1. Dedicated MEMO column (already handled in createLineItem)
+         * 2. DESCRIPTION column content (if no memo yet and description is substantial)
+         * 3. Any other cell with significant text content
+         *
+         * @param {Object} item - Line item to enhance
+         * @param {Array} row - Raw row data
+         * @param {Array} columns - Column definitions
+         */
+        enhanceMemoExtraction(item, row, columns) {
+            // Skip if already have substantial memo
+            if (item.memo && item.memo.trim().length >= 10) {
+                return;
+            }
+
+            const MIN_MEMO_LENGTH = 5;         // Minimum text length to consider as memo
+            const LONG_TEXT_THRESHOLD = 20;    // Text longer than this is "substantial"
+
+            // Track columns we should skip (amount, quantity, etc. - not memo candidates)
+            const skipTypes = new Set([
+                ColumnType.AMOUNT, ColumnType.UNIT_PRICE, ColumnType.QUANTITY,
+                ColumnType.TAX, ColumnType.DISCOUNT, ColumnType.DATE, ColumnType.UNIT
+            ]);
+
+            // Find all text-heavy cells in the row
+            const textCandidates = [];
+
+            for (let i = 0; i < row.length; i++) {
+                const cell = row[i];
+                const text = (cell?.text || '').trim();
+
+                if (!text || text.length < MIN_MEMO_LENGTH) continue;
+
+                // Find the column definition for this cell
+                const column = columns.find(c => c.index === i);
+
+                // Skip numeric columns
+                if (column && skipTypes.has(column.type)) continue;
+
+                // Skip if it's the item code (short identifiers, not memo)
+                if (column?.type === ColumnType.ITEM_CODE) continue;
+
+                // Skip if text looks like a pure number/amount
+                if (/^[\d,.\s$€£¥-]+$/.test(text)) continue;
+
+                textCandidates.push({
+                    index: i,
+                    text: text,
+                    length: text.length,
+                    columnType: column?.type || ColumnType.UNKNOWN,
+                    isMemoColumn: column?.type === ColumnType.MEMO,
+                    isDescColumn: column?.type === ColumnType.DESCRIPTION
+                });
+            }
+
+            // Sort by priority: MEMO column > DESCRIPTION column > longest text
+            textCandidates.sort((a, b) => {
+                if (a.isMemoColumn && !b.isMemoColumn) return -1;
+                if (!a.isMemoColumn && b.isMemoColumn) return 1;
+                if (a.isDescColumn && !b.isDescColumn) return -1;
+                if (!a.isDescColumn && b.isDescColumn) return 1;
+                return b.length - a.length; // Longer text first
+            });
+
+            // If no memo yet, try to populate from candidates
+            if (!item.memo || item.memo.trim().length < MIN_MEMO_LENGTH) {
+                for (const candidate of textCandidates) {
+                    // Skip if this is already the item's description (to avoid duplication)
+                    if (candidate.isDescColumn && candidate.text === item.description) {
+                        // BUT: if description is substantial, use it as memo too
+                        if (candidate.text.length >= LONG_TEXT_THRESHOLD) {
+                            item.memo = candidate.text;
+                            fcDebug.debug('enhanceMemoExtraction', `Using description as memo: "${candidate.text.substring(0, 40)}..."`);
+                        }
+                        continue;
+                    }
+
+                    // Use this candidate as memo
+                    if (candidate.text.length >= MIN_MEMO_LENGTH) {
+                        item.memo = candidate.text;
+                        this.addDiagnostic('MEMO_ENHANCED', `Extracted memo from ${candidate.columnType} column`, {
+                            memo: candidate.text.substring(0, 50),
+                            source: candidate.columnType
+                        });
+                        break;
+                    }
+                }
+            }
+
+            // FALLBACK: If STILL no memo, use description as memo if it's substantial
+            if ((!item.memo || item.memo.trim().length < MIN_MEMO_LENGTH) &&
+                item.description && item.description.trim().length >= LONG_TEXT_THRESHOLD) {
+                item.memo = item.description;
+                this.addDiagnostic('MEMO_FALLBACK', `Using description as memo (fallback)`, {
+                    memo: item.description.substring(0, 50)
+                });
+            }
+
+            // Clean up memo if extracted
+            if (item.memo) {
+                item.memo = item.memo.trim().replace(/\s+/g, ' ');
             }
         }
 
@@ -1346,6 +1504,7 @@ define(['N/log', '../FC_Debug'], function(log, fcDebug) {
 
         /**
          * Append continuation row to existing line item
+         * v4.1: Enhanced to also scan for memo content in continuation rows
          */
         appendToLineItem(item, row, columns) {
             const descCol = columns.find(c => c.type === ColumnType.DESCRIPTION);
@@ -1356,12 +1515,39 @@ define(['N/log', '../FC_Debug'], function(log, fcDebug) {
                 }
             }
 
-            // Also append memo text if present
+            // Also append memo text if present from dedicated MEMO column
             const memoCol = columns.find(c => c.type === ColumnType.MEMO);
             if (memoCol) {
                 const addMemo = row[memoCol.index]?.text || '';
                 if (addMemo) {
                     item.memo = item.memo ? (item.memo + ' ' + addMemo) : addMemo;
+                }
+            }
+
+            // v4.1: If no dedicated memo column, scan for text-heavy cells as memo
+            if (!memoCol) {
+                const MIN_MEMO_TEXT = 10;
+                const skipTypes = new Set([
+                    ColumnType.AMOUNT, ColumnType.UNIT_PRICE, ColumnType.QUANTITY,
+                    ColumnType.TAX, ColumnType.DISCOUNT, ColumnType.DATE, ColumnType.UNIT,
+                    ColumnType.ITEM_CODE, ColumnType.DESCRIPTION
+                ]);
+
+                for (let i = 0; i < row.length; i++) {
+                    const cell = row[i];
+                    const text = (cell?.text || '').trim();
+
+                    if (!text || text.length < MIN_MEMO_TEXT) continue;
+
+                    const column = columns.find(c => c.index === i);
+                    if (column && skipTypes.has(column.type)) continue;
+
+                    // Skip pure numeric content
+                    if (/^[\d,.\s$€£¥-]+$/.test(text)) continue;
+
+                    // Found text content - append to memo
+                    item.memo = item.memo ? (item.memo + ' ' + text) : text;
+                    break; // Only take first text-heavy cell
                 }
             }
         }
@@ -1658,6 +1844,20 @@ define(['N/log', '../FC_Debug'], function(log, fcDebug) {
             const totalFromItems = validItems.reduce((sum, item) =>
                 sum + (item.amount || 0), 0
             );
+
+            // v4.1: Log memo extraction statistics
+            const itemsWithMemo = validItems.filter(i => i.memo && i.memo.trim().length > 0).length;
+            const avgMemoLength = itemsWithMemo > 0
+                ? Math.round(validItems.filter(i => i.memo).reduce((sum, i) => sum + i.memo.length, 0) / itemsWithMemo)
+                : 0;
+
+            this.addDiagnostic('MEMO_STATS', `Memo extraction summary`, {
+                totalItems: validItems.length,
+                withMemo: itemsWithMemo,
+                memoRate: validItems.length > 0 ? Math.round((itemsWithMemo / validItems.length) * 100) + '%' : '0%',
+                avgMemoLength: avgMemoLength,
+                hasMemoColumn: hasMemoCol
+            });
 
             return {
                 lineItems: validItems,
