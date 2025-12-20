@@ -249,6 +249,37 @@
                 });
             }
 
+            // Form editor search
+            var editorSearchInput = el('#editor-search-input');
+            var editorSearchClear = el('#editor-search-clear');
+
+            if (editorSearchInput) {
+                var searchTimeout = null;
+                editorSearchInput.addEventListener('input', function() {
+                    var query = this.value.trim();
+                    // Debounce search
+                    clearTimeout(searchTimeout);
+                    searchTimeout = setTimeout(function() {
+                        self.filterEditorNodes(query);
+                    }, 150);
+                    // Show/hide clear button
+                    if (editorSearchClear) {
+                        editorSearchClear.style.display = query ? 'flex' : 'none';
+                    }
+                });
+            }
+            if (editorSearchClear) {
+                editorSearchClear.addEventListener('click', function() {
+                    var input = el('#editor-search-input');
+                    if (input) {
+                        input.value = '';
+                        self.filterEditorNodes('');
+                        this.style.display = 'none';
+                        input.focus();
+                    }
+                });
+            }
+
             // Show shortcuts
             var shortcutsBtn = el('#btn-show-shortcuts');
             if (shortcutsBtn) {
@@ -2220,6 +2251,136 @@
             container.querySelectorAll('.toggle-icon').forEach(function(icon) {
                 icon.classList.remove('fa-chevron-right', 'fa-chevron-down');
                 icon.classList.add(expand ? 'fa-chevron-down' : 'fa-chevron-right');
+            });
+        },
+
+        filterEditorNodes: function(query) {
+            var container = el('#form-editor-container');
+            if (!container) return;
+
+            // Clear previous search state
+            container.querySelectorAll('.search-match, .search-hidden').forEach(function(node) {
+                node.classList.remove('search-match', 'search-hidden');
+            });
+
+            // If no query, show all and collapse to default state
+            if (!query) {
+                container.querySelectorAll('.section-content').forEach(function(content) {
+                    content.classList.remove('collapsed');
+                });
+                container.querySelectorAll('.node-content').forEach(function(content) {
+                    content.classList.add('collapsed');
+                });
+                container.querySelectorAll('.section-header .toggle-icon').forEach(function(icon) {
+                    icon.classList.remove('fa-chevron-right');
+                    icon.classList.add('fa-chevron-down');
+                });
+                container.querySelectorAll('.node-header .toggle-icon').forEach(function(icon) {
+                    icon.classList.remove('fa-chevron-down');
+                    icon.classList.add('fa-chevron-right');
+                });
+                return;
+            }
+
+            var lowerQuery = query.toLowerCase();
+            var matchedNodes = new Set();
+
+            // Find all matching field/column nodes (leaf nodes)
+            container.querySelectorAll('.editor-field, .editor-column').forEach(function(node) {
+                var label = node.querySelector('.node-label');
+                var fieldId = node.querySelector('.field-id');
+                var text = '';
+
+                if (label) text += label.textContent.toLowerCase();
+                if (fieldId) text += ' ' + fieldId.textContent.toLowerCase();
+
+                if (text.indexOf(lowerQuery) !== -1) {
+                    node.classList.add('search-match');
+                    matchedNodes.add(node);
+
+                    // Mark all parent nodes as having a match
+                    var parent = node.parentElement;
+                    while (parent && parent !== container) {
+                        if (parent.classList.contains('editor-node') ||
+                            parent.classList.contains('section-content') ||
+                            parent.classList.contains('node-content')) {
+                            matchedNodes.add(parent);
+                        }
+                        parent = parent.parentElement;
+                    }
+                }
+            });
+
+            // Also check tabs, groups, and sublist names
+            container.querySelectorAll('.editor-tab, .editor-group, .editor-sublist').forEach(function(node) {
+                var label = node.querySelector(':scope > .node-header .node-label');
+                if (label && label.textContent.toLowerCase().indexOf(lowerQuery) !== -1) {
+                    node.classList.add('search-match');
+                    matchedNodes.add(node);
+
+                    // Mark all parent nodes
+                    var parent = node.parentElement;
+                    while (parent && parent !== container) {
+                        if (parent.classList.contains('editor-node') ||
+                            parent.classList.contains('section-content') ||
+                            parent.classList.contains('node-content')) {
+                            matchedNodes.add(parent);
+                        }
+                        parent = parent.parentElement;
+                    }
+                }
+            });
+
+            // Hide non-matching leaf nodes
+            container.querySelectorAll('.editor-field, .editor-column').forEach(function(node) {
+                if (!matchedNodes.has(node)) {
+                    node.classList.add('search-hidden');
+                }
+            });
+
+            // Hide non-matching parent nodes (tabs, groups, sublists) that have no matching children
+            container.querySelectorAll('.editor-tab, .editor-group, .editor-sublist').forEach(function(node) {
+                if (!matchedNodes.has(node)) {
+                    node.classList.add('search-hidden');
+                }
+            });
+
+            // Expand all sections that have matches
+            container.querySelectorAll('.section-content').forEach(function(content) {
+                var hasMatch = content.querySelector('.search-match') ||
+                               content.querySelector('.editor-node:not(.search-hidden)');
+                if (hasMatch) {
+                    content.classList.remove('collapsed');
+                    var header = content.previousElementSibling;
+                    if (header && header.classList.contains('section-header')) {
+                        var icon = header.querySelector('.toggle-icon');
+                        if (icon) {
+                            icon.classList.remove('fa-chevron-right');
+                            icon.classList.add('fa-chevron-down');
+                        }
+                    }
+                } else {
+                    content.classList.add('collapsed');
+                }
+            });
+
+            // Expand parent nodes that contain matches
+            container.querySelectorAll('.node-content').forEach(function(content) {
+                var hasMatch = content.querySelector('.search-match') ||
+                               content.querySelector('.editor-node:not(.search-hidden)');
+                if (hasMatch) {
+                    content.classList.remove('collapsed');
+                    var header = content.previousElementSibling;
+                    if (header && header.classList.contains('node-header')) {
+                        var icon = header.querySelector('.toggle-icon');
+                        if (icon) {
+                            icon.classList.remove('fa-chevron-right');
+                            icon.classList.add('fa-chevron-down');
+                        }
+                    }
+                } else {
+                    content.classList.add('collapsed');
+                }
             });
         },
 
