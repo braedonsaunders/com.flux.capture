@@ -166,6 +166,81 @@ define([
             const engine = new FC_Engine.FluxCaptureEngine();
             const provider = engine.getExtractionProvider();
 
+            // Check if provider supports async polling (Azure) or is synchronous (Mindee, OCI)
+            const supportsAsyncPolling = typeof provider.submitForAnalysis === 'function' &&
+                                         typeof provider.pollWithLimit === 'function';
+
+            // For synchronous providers (Mindee, OCI), use the traditional flow
+            if (!supportsAsyncPolling) {
+                log.audit('FC_ProcessDocuments.map.sync', {
+                    documentId: documentId,
+                    provider: provider.getProviderName ? provider.getProviderName() : 'unknown'
+                });
+
+                // Mark as processing
+                record.submitFields({
+                    type: 'customrecord_flux_document',
+                    id: documentId,
+                    values: {
+                        'custrecord_flux_status': DocStatus.PROCESSING
+                    }
+                });
+
+                const startTime = Date.now();
+
+                // Use traditional synchronous processing
+                const result = engine.processDocument(fileId, {
+                    documentType: documentType,
+                    enableVendorMatching: true,
+                    enableAnomalyDetection: true,
+                    enableFraudDetection: true,
+                    enableLearning: true,
+                    maxExtractionPages: maxExtractionPages
+                });
+
+                const processingTime = Date.now() - startTime;
+
+                if (result.success) {
+                    const extraction = result.extraction;
+                    const updateValues = buildUpdateValues(extraction, documentType, processingTime);
+
+                    record.submitFields({
+                        type: 'customrecord_flux_document',
+                        id: documentId,
+                        values: updateValues
+                    });
+
+                    context.write({
+                        key: documentId,
+                        value: {
+                            success: true,
+                            status: DocStatus.NEEDS_REVIEW,
+                            confidence: extraction.confidence.overall,
+                            processingTime: processingTime
+                        }
+                    });
+                } else {
+                    record.submitFields({
+                        type: 'customrecord_flux_document',
+                        id: documentId,
+                        values: {
+                            'custrecord_flux_status': DocStatus.ERROR,
+                            'custrecord_flux_error_message': result.error || 'Processing failed'
+                        }
+                    });
+
+                    context.write({
+                        key: documentId,
+                        value: { success: false, error: result.error }
+                    });
+                }
+                return; // Exit early for sync providers
+            }
+
+            // =====================================================
+            // ASYNC POLLING FLOW (Azure Form Recognizer)
+            // =====================================================
+
             let currentOperationUrl = operationUrl;
             let currentPollCount = pollCount;
 
