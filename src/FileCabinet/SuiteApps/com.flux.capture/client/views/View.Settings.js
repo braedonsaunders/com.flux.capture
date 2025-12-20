@@ -1226,8 +1226,9 @@
             var visibilityBadge = isHidden ? '<span class="field-badge hidden-badge">HIDDEN</span>' : '';
             var defaultBadge = field.defaultValue ? '<span class="field-badge default-badge">Default</span>' : '';
 
-            var html = '<div class="editor-node editor-field' + hiddenClass + '" data-parent="' + parentKey + '" data-field-idx="' + fieldIdx + '">';
+            var html = '<div class="editor-node editor-field' + hiddenClass + '" draggable="true" data-parent="' + parentKey + '" data-field-idx="' + fieldIdx + '">';
             html += '<div class="node-header field-header">' +
+                '<i class="fas fa-grip-vertical drag-handle" title="Drag to reorder"></i>' +
                 '<i class="fas ' + typeIcon + ' field-type-icon"></i>' +
                 '<span class="node-label">' + escapeHtml(field.label || field.id) + '</span>' +
                 '<span class="field-id">(' + escapeHtml(field.id) + ')</span>' +
@@ -1286,8 +1287,9 @@
             var visibilityBadge = isHidden ? '<span class="field-badge hidden-badge">HIDDEN</span>' : '';
             var defaultBadge = column.defaultValue ? '<span class="field-badge default-badge">Default</span>' : '';
 
-            var html = '<div class="editor-node editor-column' + hiddenClass + '" data-sublist-idx="' + sublistIdx + '" data-col-idx="' + colIdx + '">';
+            var html = '<div class="editor-node editor-column' + hiddenClass + '" draggable="true" data-sublist-idx="' + sublistIdx + '" data-col-idx="' + colIdx + '">';
             html += '<div class="node-header field-header">' +
+                '<i class="fas fa-grip-vertical drag-handle" title="Drag to reorder"></i>' +
                 '<i class="fas ' + typeIcon + ' field-type-icon"></i>' +
                 '<span class="node-label">' + escapeHtml(column.label || column.id) + '</span>' +
                 '<span class="field-id">(' + escapeHtml(column.id) + ')</span>' +
@@ -1424,6 +1426,240 @@
                     }
                 });
             });
+
+            // Drag and drop reordering for fields and columns
+            this.bindDragReorder(container);
+        },
+
+        /**
+         * Bind drag-and-drop reordering for editor fields and columns
+         */
+        bindDragReorder: function(container) {
+            var self = this;
+            var draggedElement = null;
+            var draggedType = null; // 'field' or 'column'
+
+            // Get all draggable field and column nodes
+            var draggableNodes = container.querySelectorAll('.editor-field[draggable="true"], .editor-column[draggable="true"]');
+
+            draggableNodes.forEach(function(node) {
+                // Drag start
+                node.addEventListener('dragstart', function(e) {
+                    draggedElement = this;
+                    draggedType = this.classList.contains('editor-field') ? 'field' : 'column';
+
+                    // Set data for the drag operation
+                    e.dataTransfer.effectAllowed = 'move';
+                    e.dataTransfer.setData('text/plain', JSON.stringify({
+                        type: draggedType,
+                        parent: this.dataset.parent,
+                        fieldIdx: this.dataset.fieldIdx,
+                        sublistIdx: this.dataset.sublistIdx,
+                        colIdx: this.dataset.colIdx
+                    }));
+
+                    // Add dragging class for visual feedback
+                    setTimeout(function() {
+                        draggedElement.classList.add('dragging');
+                    }, 0);
+                });
+
+                // Drag end
+                node.addEventListener('dragend', function(e) {
+                    this.classList.remove('dragging');
+                    draggedElement = null;
+                    draggedType = null;
+
+                    // Remove all drop indicators
+                    container.querySelectorAll('.drop-indicator').forEach(function(indicator) {
+                        indicator.classList.remove('drop-indicator', 'drop-above', 'drop-below');
+                    });
+                });
+
+                // Drag over
+                node.addEventListener('dragover', function(e) {
+                    e.preventDefault();
+                    e.dataTransfer.dropEffect = 'move';
+
+                    // Only allow drop on same type of element (field on field, column on column)
+                    if (!draggedElement) return;
+
+                    var targetIsField = this.classList.contains('editor-field');
+                    var targetIsColumn = this.classList.contains('editor-column');
+
+                    if ((draggedType === 'field' && !targetIsField) ||
+                        (draggedType === 'column' && !targetIsColumn)) {
+                        return;
+                    }
+
+                    // For fields, check they have the same parent
+                    if (draggedType === 'field' && this.dataset.parent !== draggedElement.dataset.parent) {
+                        return;
+                    }
+
+                    // For columns, check they're in the same sublist
+                    if (draggedType === 'column' && this.dataset.sublistIdx !== draggedElement.dataset.sublistIdx) {
+                        return;
+                    }
+
+                    // Calculate drop position (above or below)
+                    var rect = this.getBoundingClientRect();
+                    var midpoint = rect.top + rect.height / 2;
+                    var isAbove = e.clientY < midpoint;
+
+                    // Remove previous indicators
+                    container.querySelectorAll('.drop-indicator').forEach(function(el) {
+                        el.classList.remove('drop-indicator', 'drop-above', 'drop-below');
+                    });
+
+                    // Add indicator to current target
+                    this.classList.add('drop-indicator', isAbove ? 'drop-above' : 'drop-below');
+                });
+
+                // Drag leave
+                node.addEventListener('dragleave', function(e) {
+                    this.classList.remove('drop-indicator', 'drop-above', 'drop-below');
+                });
+
+                // Drop
+                node.addEventListener('drop', function(e) {
+                    e.preventDefault();
+                    e.stopPropagation();
+
+                    if (!draggedElement || draggedElement === this) {
+                        return;
+                    }
+
+                    // Parse drag data
+                    var dragData;
+                    try {
+                        dragData = JSON.parse(e.dataTransfer.getData('text/plain'));
+                    } catch (err) {
+                        return;
+                    }
+
+                    // Validate same type
+                    var targetIsField = this.classList.contains('editor-field');
+                    var targetIsColumn = this.classList.contains('editor-column');
+
+                    if ((dragData.type === 'field' && !targetIsField) ||
+                        (dragData.type === 'column' && !targetIsColumn)) {
+                        return;
+                    }
+
+                    // Calculate drop position
+                    var rect = this.getBoundingClientRect();
+                    var midpoint = rect.top + rect.height / 2;
+                    var insertBefore = e.clientY < midpoint;
+
+                    // Perform the reorder
+                    if (dragData.type === 'field') {
+                        self.reorderField(dragData.parent, parseInt(dragData.fieldIdx), this.dataset.parent, parseInt(this.dataset.fieldIdx), insertBefore);
+                    } else if (dragData.type === 'column') {
+                        self.reorderColumn(parseInt(dragData.sublistIdx), parseInt(dragData.colIdx), parseInt(this.dataset.sublistIdx), parseInt(this.dataset.colIdx), insertBefore);
+                    }
+
+                    // Remove indicators and re-render
+                    container.querySelectorAll('.drop-indicator').forEach(function(el) {
+                        el.classList.remove('drop-indicator', 'drop-above', 'drop-below');
+                    });
+
+                    self.renderFormEditor();
+                });
+            });
+        },
+
+        /**
+         * Reorder a field within its parent container
+         */
+        reorderField: function(fromParent, fromIdx, toParent, toIdx, insertBefore) {
+            // Must be same parent for now
+            if (fromParent !== toParent) return;
+
+            var fieldsArray = this.getFieldsArrayForParent(fromParent);
+            if (!fieldsArray || fromIdx === toIdx) return;
+
+            // Remove from old position
+            var field = fieldsArray.splice(fromIdx, 1)[0];
+
+            // Calculate new position
+            var newIdx = toIdx;
+            if (fromIdx < toIdx) {
+                newIdx = insertBefore ? toIdx - 1 : toIdx;
+            } else {
+                newIdx = insertBefore ? toIdx : toIdx + 1;
+            }
+
+            // Insert at new position
+            fieldsArray.splice(newIdx, 0, field);
+
+            FCDebug.log('[View.Settings] Reordered field in', fromParent, 'from', fromIdx, 'to', newIdx);
+        },
+
+        /**
+         * Get the fields array for a given parent key
+         */
+        getFieldsArrayForParent: function(parentKey) {
+            if (!this.editedConfig) return null;
+
+            // Body fields
+            if (parentKey === 'body') {
+                return this.editedConfig.bodyFields;
+            }
+
+            // Tab-group fields (format: tab-X-group-Y)
+            var tabGroupMatch = parentKey.match(/^tab-(\d+)-group-(\d+)$/);
+            if (tabGroupMatch) {
+                var tabIdx = parseInt(tabGroupMatch[1]);
+                var groupIdx = parseInt(tabGroupMatch[2]);
+
+                var layout = this.editedConfig.layout || this.editedConfig;
+                var tabs = this.editedConfig.tabs || layout.tabs || [];
+
+                if (tabs[tabIdx] && tabs[tabIdx].fieldGroups && tabs[tabIdx].fieldGroups[groupIdx]) {
+                    return tabs[tabIdx].fieldGroups[groupIdx].fields;
+                }
+            }
+
+            return null;
+        },
+
+        /**
+         * Reorder a column within its sublist
+         */
+        reorderColumn: function(fromSublistIdx, fromColIdx, toSublistIdx, toColIdx, insertBefore) {
+            // Must be same sublist for now
+            if (fromSublistIdx !== toSublistIdx) return;
+
+            var sublists = this.editedConfig.sublists || (this.editedConfig.layout && this.editedConfig.layout.sublists) || [];
+            var sublist = sublists[fromSublistIdx];
+            if (!sublist) return;
+
+            // Handle both 'columns' (from XML) and 'fields' (from server extraction)
+            var columns = sublist.columns || sublist.fields;
+            if (!columns || fromColIdx === toColIdx) return;
+
+            // Remove from old position
+            var column = columns.splice(fromColIdx, 1)[0];
+
+            // Calculate new position
+            var newIdx = toColIdx;
+            if (fromColIdx < toColIdx) {
+                newIdx = insertBefore ? toColIdx - 1 : toColIdx;
+            } else {
+                newIdx = insertBefore ? toColIdx : toColIdx + 1;
+            }
+
+            // Insert at new position
+            columns.splice(newIdx, 0, column);
+
+            // Update columnOrder and visibleColumns to match the new order
+            // These are used by View.Review to determine column display order
+            var visibleColumns = columns.filter(function(c) { return c.visible !== false; });
+            sublist.columnOrder = visibleColumns.map(function(c) { return c.id; });
+            sublist.visibleColumns = sublist.columnOrder.slice();
+
+            FCDebug.log('[View.Settings] Reordered column in sublist', fromSublistIdx, 'from', fromColIdx, 'to', newIdx);
         },
 
         toggleItemVisibility: function(btn, type) {
