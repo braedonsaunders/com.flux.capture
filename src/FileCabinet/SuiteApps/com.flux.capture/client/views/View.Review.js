@@ -1841,7 +1841,7 @@
                                     if (domField) {
                                         nsField.label = domField.label || nsField.label;
                                         nsField.type = domField.type || nsField.type;
-                                        nsField.mandatory = domField.required || nsField.mandatory;
+                                        nsField.mandatory = domField.mandatory || domField.required || nsField.mandatory;
                                         nsField.isDisplay = domField.mode !== 'hidden' && domField.visible !== false;
                                         // Merge default values from layout field config
                                         if (domField.defaultValue) nsField.defaultValue = domField.defaultValue;
@@ -1854,7 +1854,7 @@
                                         id: fieldId,
                                         label: domField.label || fieldId,
                                         type: domField.type || 'text',
-                                        mandatory: domField.required || false,
+                                        mandatory: domField.mandatory || domField.required || false,
                                         isDisplay: true
                                     };
                                     // Copy default values from layout field config
