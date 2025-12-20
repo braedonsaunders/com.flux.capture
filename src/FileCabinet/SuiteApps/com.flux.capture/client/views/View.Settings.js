@@ -2008,6 +2008,16 @@
                     newDefaultText = defaultDisplayInput ? defaultDisplayInput.value : '';
                 }
 
+                // Get employeeData if present (for employee/nextapprover fields)
+                var employeeData = null;
+                if (defaultValueInput && defaultValueInput.dataset.employeeData) {
+                    try {
+                        employeeData = JSON.parse(defaultValueInput.dataset.employeeData);
+                    } catch (e) {
+                        // Ignore parse errors
+                    }
+                }
+
                 // Update the layout item
                 if (newLabel) item.label = newLabel;
                 if (newDefault) {
@@ -2015,9 +2025,13 @@
                     if (newDefaultText && (isSelectField || isPostingPeriod)) {
                         item.defaultValueText = newDefaultText;
                     }
+                    if (employeeData) {
+                        item.employeeData = employeeData;
+                    }
                 } else {
                     delete item.defaultValue;
                     delete item.defaultValueText;
+                    delete item.employeeData;
                 }
 
                 if (isColumn) {
@@ -2037,9 +2051,13 @@
                                 if (newDefaultText && isSelectField) {
                                     slField.defaultValueText = newDefaultText;
                                 }
+                                if (employeeData) {
+                                    slField.employeeData = employeeData;
+                                }
                             } else {
                                 delete slField.defaultValue;
                                 delete slField.defaultValueText;
+                                delete slField.employeeData;
                             }
                         }
                     }
@@ -2054,9 +2072,13 @@
                             if (newDefaultText && (isSelectField || isPostingPeriod)) {
                                 bodyField.defaultValueText = newDefaultText;
                             }
+                            if (employeeData) {
+                                bodyField.employeeData = employeeData;
+                            }
                         } else {
                             delete bodyField.defaultValue;
                             delete bodyField.defaultValueText;
+                            delete bodyField.employeeData;
                         }
                     }
                 }
@@ -2113,7 +2135,12 @@
                         }
 
                         dropdown.innerHTML = options.map(function(opt) {
-                            return '<div class="typeahead-option" data-value="' + escapeHtml(opt.value) + '" data-text="' + escapeHtml(opt.text) + '">' +
+                            var dataAttrs = 'data-value="' + escapeHtml(opt.value) + '" data-text="' + escapeHtml(opt.text) + '"';
+                            // Include employeeData as JSON data attribute for employee/nextapprover fields
+                            if (opt.employeeData) {
+                                dataAttrs += ' data-employee-data="' + escapeHtml(JSON.stringify(opt.employeeData)) + '"';
+                            }
+                            return '<div class="typeahead-option" ' + dataAttrs + '>' +
                                 escapeHtml(opt.text) + '</div>';
                         }).join('');
                         dropdown.style.display = 'block';
@@ -2127,6 +2154,12 @@
                 if (option) {
                     hiddenInput.value = option.dataset.value;
                     input.value = option.dataset.text;
+                    // Store employeeData if present
+                    if (option.dataset.employeeData) {
+                        hiddenInput.dataset.employeeData = option.dataset.employeeData;
+                    } else {
+                        delete hiddenInput.dataset.employeeData;
+                    }
                     dropdown.style.display = 'none';
                 }
             });
@@ -2143,12 +2176,17 @@
             API.get('datasource', { type: lookupType, query: query, limit: 20 }).then(function(response) {
                 var data = response.data || response;
                 var options = Array.isArray(data) ? data : (data.options || data.results || []);
-                // Normalize to { value, text } format
+                // Normalize to { value, text, employeeData } format
                 var normalized = options.map(function(opt) {
-                    return {
+                    var result = {
                         value: opt.value || opt.id || opt.internalid,
                         text: opt.text || opt.name || opt.label || opt.value
                     };
+                    // Preserve employeeData if present (for employee/nextapprover fields)
+                    if (opt.employeeData) {
+                        result.employeeData = opt.employeeData;
+                    }
+                    return result;
                 });
                 callback(normalized.slice(0, 10));
             }).catch(function() {

@@ -1116,6 +1116,78 @@ define([
     }
 
     /**
+     * Get employees for employee/nextapprover field dropdowns
+     * Returns employee data including email, title, department, and supervisor
+     */
+    function getEmployees(context) {
+        try {
+            var searchQuery = context.query || '';
+            var limit = Math.min(parseInt(context.limit) || 20, 100);
+
+            var filters = [['isinactive', 'is', 'F']];
+
+            // Search filter - search by name or email
+            if (searchQuery && searchQuery.length >= 1) {
+                filters.push('AND');
+                filters.push([
+                    ['entityid', 'contains', searchQuery],
+                    'OR',
+                    ['firstname', 'contains', searchQuery],
+                    'OR',
+                    ['lastname', 'contains', searchQuery],
+                    'OR',
+                    ['email', 'contains', searchQuery]
+                ]);
+            }
+
+            var employeeSearch = search.create({
+                type: search.Type.EMPLOYEE,
+                filters: filters,
+                columns: [
+                    search.createColumn({ name: 'internalid' }),
+                    search.createColumn({ name: 'entityid' }),
+                    search.createColumn({ name: 'firstname', sort: search.Sort.ASC }),
+                    search.createColumn({ name: 'lastname' }),
+                    search.createColumn({ name: 'email' }),
+                    search.createColumn({ name: 'title' }),
+                    search.createColumn({ name: 'department' }),
+                    search.createColumn({ name: 'supervisor' })
+                ]
+            });
+
+            var options = [];
+            var results = employeeSearch.run().getRange({ start: 0, end: limit });
+
+            results.forEach(function(result) {
+                var firstName = result.getValue('firstname') || '';
+                var lastName = result.getValue('lastname') || '';
+                var fullName = (firstName + ' ' + lastName).trim();
+
+                options.push({
+                    value: result.getValue('internalid'),
+                    text: fullName || result.getValue('entityid'),
+                    employeeData: {
+                        entityId: result.getValue('entityid'),
+                        firstName: firstName,
+                        lastName: lastName,
+                        email: result.getValue('email') || '',
+                        title: result.getValue('title') || '',
+                        department: result.getText('department') || '',
+                        departmentId: result.getValue('department') || '',
+                        supervisor: result.getText('supervisor') || '',
+                        supervisorId: result.getValue('supervisor') || ''
+                    }
+                });
+            });
+
+            return Response.success(options);
+        } catch (e) {
+            log.error('getEmployees Error', e);
+            return Response.error('EMPLOYEES_ERROR', e.message);
+        }
+    }
+
+    /**
      * Get items for line item dropdowns
      * Returns inventory/non-inventory items for vendor bills
      */
@@ -1296,10 +1368,8 @@ define([
                     break;
                 case 'employees':
                 case 'employee':
-                    searchType = search.Type.EMPLOYEE;
-                    columns = ['internalid', 'entityid', 'firstname', 'lastname'];
-                    displayFormat = 'employee-name'; // Special format for employees
-                    break;
+                    // Use dedicated function to include employee data
+                    return getEmployees(context);
                 case 'vendors':
                 case 'vendor':
                     searchType = search.Type.VENDOR;
