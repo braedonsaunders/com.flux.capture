@@ -8187,3 +8187,472 @@ body.extraction-selecting .form-field:hover {
     color: var(--text-tertiary);
     text-transform: uppercase;
 }
+
+/* ==========================================
+   PREMIUM SKELETON LOADERS - Review Page
+   World-class loading experience with
+   smooth shimmer animations
+   ========================================== */
+
+/* Base skeleton shimmer animation */
+@keyframes skeletonShimmer {
+    0% {
+        background-position: -200% 0;
+    }
+    100% {
+        background-position: 200% 0;
+    }
+}
+
+/* Skeleton fade in/out animations */
+@keyframes skeletonFadeIn {
+    0% {
+        opacity: 0;
+        transform: scale(0.98);
+    }
+    100% {
+        opacity: 1;
+        transform: scale(1);
+    }
+}
+
+@keyframes skeletonFadeOut {
+    0% {
+        opacity: 1;
+        transform: scale(1);
+    }
+    100% {
+        opacity: 0;
+        transform: scale(1.02);
+    }
+}
+
+/* Subtle pulse for skeleton containers */
+@keyframes skeletonPulse {
+    0%, 100% {
+        opacity: 1;
+    }
+    50% {
+        opacity: 0.85;
+    }
+}
+
+/* Base skeleton element */
+.skeleton {
+    background: linear-gradient(
+        90deg,
+        var(--gray-200) 0%,
+        var(--gray-100) 20%,
+        var(--gray-50) 40%,
+        var(--gray-100) 60%,
+        var(--gray-200) 100%
+    );
+    background-size: 200% 100%;
+    animation: skeletonShimmer 1.8s ease-in-out infinite;
+    border-radius: var(--radius-sm);
+}
+
+/* Darker skeleton for dark backgrounds (PDF viewer) */
+.skeleton-dark {
+    background: linear-gradient(
+        90deg,
+        rgba(255, 255, 255, 0.05) 0%,
+        rgba(255, 255, 255, 0.12) 20%,
+        rgba(255, 255, 255, 0.18) 40%,
+        rgba(255, 255, 255, 0.12) 60%,
+        rgba(255, 255, 255, 0.05) 100%
+    );
+    background-size: 200% 100%;
+    animation: skeletonShimmer 1.8s ease-in-out infinite;
+    border-radius: var(--radius-sm);
+}
+
+/* ==========================================
+   PDF SKELETON LOADER
+   Mimics a document page layout
+   ========================================== */
+.pdf-skeleton-container {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: var(--space-lg);
+    animation: skeletonFadeIn 0.3s cubic-bezier(0.4, 0, 0.2, 1) forwards;
+    z-index: 10;
+}
+
+.pdf-skeleton-container.skeleton-exiting {
+    animation: skeletonFadeOut 0.25s cubic-bezier(0.4, 0, 0.6, 1) forwards;
+}
+
+.pdf-skeleton {
+    width: 100%;
+    max-width: 520px;
+    aspect-ratio: 8.5 / 11;
+    background: rgba(255, 255, 255, 0.03);
+    border-radius: var(--radius-lg);
+    padding: var(--space-xl);
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-md);
+    box-shadow:
+        0 0 0 1px rgba(255, 255, 255, 0.06),
+        0 4px 24px rgba(0, 0, 0, 0.3);
+    animation: skeletonPulse 2.5s ease-in-out infinite;
+    overflow: hidden;
+}
+
+/* Document header area */
+.pdf-skeleton-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    margin-bottom: var(--space-md);
+}
+
+.pdf-skeleton-logo {
+    width: 80px;
+    height: 32px;
+}
+
+.pdf-skeleton-title-block {
+    text-align: right;
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-xs);
+}
+
+.pdf-skeleton-title {
+    width: 120px;
+    height: 20px;
+    margin-left: auto;
+}
+
+.pdf-skeleton-subtitle {
+    width: 80px;
+    height: 14px;
+    margin-left: auto;
+}
+
+/* Address blocks */
+.pdf-skeleton-addresses {
+    display: flex;
+    justify-content: space-between;
+    margin-bottom: var(--space-lg);
+}
+
+.pdf-skeleton-address {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    flex: 0 0 45%;
+}
+
+.pdf-skeleton-address-line {
+    height: 12px;
+    border-radius: 2px;
+}
+
+.pdf-skeleton-address-line:nth-child(1) { width: 60%; }
+.pdf-skeleton-address-line:nth-child(2) { width: 90%; }
+.pdf-skeleton-address-line:nth-child(3) { width: 75%; }
+.pdf-skeleton-address-line:nth-child(4) { width: 50%; }
+
+/* Table skeleton */
+.pdf-skeleton-table {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    margin-bottom: var(--space-md);
+}
+
+.pdf-skeleton-table-header {
+    display: flex;
+    gap: var(--space-sm);
+    padding-bottom: var(--space-sm);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+    margin-bottom: var(--space-sm);
+}
+
+.pdf-skeleton-table-header .skeleton-dark {
+    height: 14px;
+    flex: 1;
+}
+
+.pdf-skeleton-table-header .skeleton-dark:nth-child(1) { flex: 3; }
+.pdf-skeleton-table-header .skeleton-dark:nth-child(2) { flex: 1; }
+.pdf-skeleton-table-header .skeleton-dark:nth-child(3) { flex: 1.5; }
+.pdf-skeleton-table-header .skeleton-dark:nth-child(4) { flex: 1.5; }
+
+.pdf-skeleton-table-row {
+    display: flex;
+    gap: var(--space-sm);
+    padding: var(--space-xs) 0;
+}
+
+.pdf-skeleton-table-row .skeleton-dark {
+    height: 12px;
+    flex: 1;
+}
+
+.pdf-skeleton-table-row .skeleton-dark:nth-child(1) { flex: 3; }
+.pdf-skeleton-table-row .skeleton-dark:nth-child(2) { flex: 1; }
+.pdf-skeleton-table-row .skeleton-dark:nth-child(3) { flex: 1.5; }
+.pdf-skeleton-table-row .skeleton-dark:nth-child(4) { flex: 1.5; }
+
+/* Stagger row animations */
+.pdf-skeleton-table-row:nth-child(1) .skeleton-dark { animation-delay: 0.05s; }
+.pdf-skeleton-table-row:nth-child(2) .skeleton-dark { animation-delay: 0.1s; }
+.pdf-skeleton-table-row:nth-child(3) .skeleton-dark { animation-delay: 0.15s; }
+.pdf-skeleton-table-row:nth-child(4) .skeleton-dark { animation-delay: 0.2s; }
+.pdf-skeleton-table-row:nth-child(5) .skeleton-dark { animation-delay: 0.25s; }
+
+/* Totals section */
+.pdf-skeleton-totals {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: var(--space-xs);
+    padding-top: var(--space-md);
+    border-top: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.pdf-skeleton-total-row {
+    display: flex;
+    gap: var(--space-lg);
+    align-items: center;
+}
+
+.pdf-skeleton-total-label {
+    width: 60px;
+    height: 12px;
+}
+
+.pdf-skeleton-total-value {
+    width: 80px;
+    height: 12px;
+}
+
+.pdf-skeleton-total-row:last-child .skeleton-dark {
+    height: 16px;
+}
+
+/* ==========================================
+   FORM SKELETON LOADER
+   Mimics the extraction form layout
+   ========================================== */
+.form-skeleton-container {
+    position: absolute;
+    inset: 0;
+    padding: var(--space-lg);
+    overflow: hidden;
+    animation: skeletonFadeIn 0.3s cubic-bezier(0.4, 0, 0.2, 1) forwards;
+    z-index: 10;
+    background: var(--surface-body);
+}
+
+.form-skeleton-container.skeleton-exiting {
+    animation: skeletonFadeOut 0.25s cubic-bezier(0.4, 0, 0.6, 1) forwards;
+}
+
+.form-skeleton {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-lg);
+    animation: skeletonPulse 2.5s ease-in-out infinite;
+    animation-delay: 0.1s;
+}
+
+/* Status bar skeleton */
+.form-skeleton-status {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: var(--space-sm) var(--space-md);
+    background: var(--surface-card);
+    border-radius: var(--radius-md);
+    border: 1px solid var(--border-color);
+}
+
+.form-skeleton-status-left {
+    display: flex;
+    align-items: center;
+    gap: var(--space-md);
+}
+
+.form-skeleton-badge {
+    width: 100px;
+    height: 24px;
+    border-radius: var(--radius-full);
+}
+
+.form-skeleton-status-text {
+    width: 150px;
+    height: 16px;
+}
+
+.form-skeleton-status-right {
+    display: flex;
+    gap: var(--space-sm);
+}
+
+.form-skeleton-icon {
+    width: 32px;
+    height: 32px;
+    border-radius: var(--radius-sm);
+}
+
+/* Tab bar skeleton */
+.form-skeleton-tabs {
+    display: flex;
+    gap: var(--space-xs);
+    padding: var(--space-xs);
+    background: var(--gray-100);
+    border-radius: var(--radius-md);
+}
+
+.form-skeleton-tab {
+    height: 32px;
+    border-radius: var(--radius-sm);
+    flex: 1;
+}
+
+.form-skeleton-tab:first-child {
+    background: var(--surface-card);
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+}
+
+/* Field group skeleton */
+.form-skeleton-section {
+    background: var(--surface-card);
+    border-radius: var(--radius-lg);
+    border: 1px solid var(--border-color);
+    padding: var(--space-md);
+}
+
+.form-skeleton-section-title {
+    width: 120px;
+    height: 18px;
+    margin-bottom: var(--space-md);
+}
+
+.form-skeleton-fields {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: var(--space-md);
+}
+
+.form-skeleton-field {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-xs);
+}
+
+.form-skeleton-label {
+    width: 80px;
+    height: 14px;
+}
+
+.form-skeleton-input {
+    height: 40px;
+    border-radius: var(--radius-md);
+}
+
+/* Full width fields */
+.form-skeleton-field.full-width {
+    grid-column: span 2;
+}
+
+.form-skeleton-field.full-width .form-skeleton-label {
+    width: 120px;
+}
+
+/* Line items table skeleton */
+.form-skeleton-table-section {
+    background: var(--surface-card);
+    border-radius: var(--radius-lg);
+    border: 1px solid var(--border-color);
+    overflow: hidden;
+}
+
+.form-skeleton-table-header {
+    display: flex;
+    gap: var(--space-sm);
+    padding: var(--space-sm) var(--space-md);
+    background: var(--gray-50);
+    border-bottom: 1px solid var(--border-color);
+}
+
+.form-skeleton-table-header .skeleton {
+    height: 14px;
+    flex: 1;
+}
+
+.form-skeleton-table-header .skeleton:nth-child(1) { flex: 0.5; }
+.form-skeleton-table-header .skeleton:nth-child(2) { flex: 3; }
+.form-skeleton-table-header .skeleton:nth-child(3) { flex: 1; }
+.form-skeleton-table-header .skeleton:nth-child(4) { flex: 1; }
+.form-skeleton-table-header .skeleton:nth-child(5) { flex: 1; }
+
+.form-skeleton-table-body {
+    padding: var(--space-sm) var(--space-md);
+}
+
+.form-skeleton-table-row {
+    display: flex;
+    gap: var(--space-sm);
+    padding: var(--space-sm) 0;
+    border-bottom: 1px solid var(--gray-100);
+}
+
+.form-skeleton-table-row:last-child {
+    border-bottom: none;
+}
+
+.form-skeleton-table-row .skeleton {
+    height: 36px;
+    flex: 1;
+    border-radius: var(--radius-md);
+}
+
+.form-skeleton-table-row .skeleton:nth-child(1) { flex: 0.5; height: 20px; align-self: center; }
+.form-skeleton-table-row .skeleton:nth-child(2) { flex: 3; }
+.form-skeleton-table-row .skeleton:nth-child(3) { flex: 1; }
+.form-skeleton-table-row .skeleton:nth-child(4) { flex: 1; }
+.form-skeleton-table-row .skeleton:nth-child(5) { flex: 1; }
+
+/* Stagger form skeleton animations */
+.form-skeleton-section:nth-child(1) { animation-delay: 0s; }
+.form-skeleton-section:nth-child(2) { animation-delay: 0.08s; }
+.form-skeleton-section:nth-child(3) { animation-delay: 0.16s; }
+.form-skeleton-table-section { animation-delay: 0.24s; }
+
+.form-skeleton-field:nth-child(1) .skeleton { animation-delay: 0s; }
+.form-skeleton-field:nth-child(2) .skeleton { animation-delay: 0.03s; }
+.form-skeleton-field:nth-child(3) .skeleton { animation-delay: 0.06s; }
+.form-skeleton-field:nth-child(4) .skeleton { animation-delay: 0.09s; }
+.form-skeleton-field:nth-child(5) .skeleton { animation-delay: 0.12s; }
+.form-skeleton-field:nth-child(6) .skeleton { animation-delay: 0.15s; }
+
+/* Content reveal animation - smooth entrance after skeleton exits */
+@keyframes contentReveal {
+    0% {
+        opacity: 0;
+        transform: translateY(12px);
+    }
+    100% {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.pdf-content-reveal {
+    animation: contentReveal 0.4s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+}
+
+.form-content-reveal {
+    animation: contentReveal 0.4s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+    animation-delay: 0.03s;
+}
