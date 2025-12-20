@@ -3563,20 +3563,25 @@
             // Amount can still be manually overridden by directly editing the amount field
             var normalizedFieldId = (fieldId || '').toLowerCase();
             if ((normalizedFieldId === 'quantity' || normalizedFieldId === 'rate') && this.hasAutoCalculateColumns(sublistId, idx)) {
-                var qty = parseFloat(line.quantity) || parseFloat(line.Quantity) || 0;
-                var rate = parseFloat(line.rate) || parseFloat(line.Rate) || 0;
+                // Get quantity and rate values - check all case variants (lowercase, Capitalized, UPPERCASE)
+                var qty = parseFloat(line.quantity) || parseFloat(line.Quantity) || parseFloat(line.QUANTITY) || 0;
+                var rate = parseFloat(line.rate) || parseFloat(line.Rate) || parseFloat(line.RATE) || 0;
                 var calculatedAmount = qty * rate;
 
-                // Update both possible case variants in the line data
+                // Update all possible case variants in the line data
                 line.amount = calculatedAmount;
                 line.Amount = calculatedAmount;
+                line.AMOUNT = calculatedAmount;
 
-                // Find and update the amount input in the DOM (search by data-field attribute)
+                // Find and update the amount input in the DOM (case-insensitive search)
                 var container = el('#sublist-' + sublistId);
                 if (container) {
                     var row = container.querySelector('tr[data-idx="' + idx + '"]');
                     if (row) {
-                        var amountInput = row.querySelector('.line-input[data-field="amount"], .line-input[data-field="Amount"]');
+                        // Find amount input by checking data-field attribute case-insensitively
+                        var amountInput = Array.from(row.querySelectorAll('.line-input')).find(function(input) {
+                            return (input.dataset.field || '').toLowerCase() === 'amount';
+                        });
                         if (amountInput) amountInput.value = calculatedAmount.toFixed(2);
                     }
                 }
