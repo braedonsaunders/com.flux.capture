@@ -2220,8 +2220,8 @@
             var id = (fieldId || '').toLowerCase();
             var selectFields = [
                 'entity', 'vendor', 'subsidiary', 'department', 'class', 'location',
-                'account', 'terms', 'currency', 'postingperiod', 'employee', 'approvalstatus',
-                'item', 'customer', 'nexus', 'taxcode', 'expenseaccount', 'salesrep'
+                'account', 'terms', 'currency', 'postingperiod', 'employee', 'nextapprover',
+                'approvalstatus', 'item', 'customer', 'nexus', 'taxcode', 'expenseaccount', 'salesrep'
             ];
             return selectFields.indexOf(id) !== -1 || id.indexOf('custbody') === 0;
         },
