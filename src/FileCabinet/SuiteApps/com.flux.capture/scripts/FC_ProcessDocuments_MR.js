@@ -4,18 +4,25 @@
  * @NModuleScope SameAccount
  *
  * Flux Capture - Document Processing Map/Reduce
- * Processes documents asynchronously using N/documentCapture
+ * Processes documents asynchronously with self-chaining for long-running extractions.
+ *
+ * v4.2: Implements async polling architecture to handle batch uploads without
+ * exceeding governance limits. Documents are processed in phases:
+ * 1. PENDING → Submit to Azure, poll with limit, save state if still running
+ * 2. PROCESSING (with operation URL) → Continue polling from saved state
+ * 3. When complete → Process with FC_Engine, set to NEEDS_REVIEW
+ * 4. summarize() chains another MR run if any docs still need polling
  */
 
 define([
     'N/record',
     'N/file',
     'N/search',
-    'N/query',
     'N/log',
     'N/runtime',
+    'N/task',
     '/SuiteApps/com.flux.capture/lib/FC_Engine'
-], function(record, file, search, query, log, runtime, FC_Engine) {
+], function(record, file, search, log, runtime, task, FC_Engine) {
 
     'use strict';
 
@@ -28,6 +35,13 @@ define([
         COMPLETED: 6,
         ERROR: 7
     });
+
+    // Configuration for async polling
+    const POLLING_CONFIG = {
+        MAX_ATTEMPTS_PER_RUN: 15,      // Max poll attempts per MR run per document
+        MAX_TOTAL_ATTEMPTS: 300,        // Absolute max attempts before timeout
+        CHAIN_DELAY_SECONDS: 30         // Delay before chaining next MR run
+    };
 
     /**
      * Load general settings from config record
@@ -59,226 +73,361 @@ define([
     }
 
     /**
-     * Get documents that need processing
+     * Get documents that need processing.
+     * Includes both new PENDING docs and PROCESSING docs that need continued polling.
      */
     function getInputData() {
         log.audit('FC_ProcessDocuments', 'Starting document processing job');
 
+        // Search for:
+        // 1. PENDING documents (new, need Azure submission)
+        // 2. PROCESSING documents with operation URL (need continued polling)
         return search.create({
             type: 'customrecord_flux_document',
             filters: [
-                ['custrecord_flux_status', 'is', DocStatus.PENDING]
+                [
+                    ['custrecord_flux_status', 'is', DocStatus.PENDING],
+                    'OR',
+                    [
+                        ['custrecord_flux_status', 'is', DocStatus.PROCESSING],
+                        'AND',
+                        ['custrecord_flux_operation_url', 'isnotempty', '']
+                    ]
+                ]
             ],
             columns: [
                 'internalid',
                 'custrecord_flux_source_file',
                 'custrecord_flux_document_type',
-                'custrecord_flux_document_id'
+                'custrecord_flux_document_id',
+                'custrecord_flux_status',
+                'custrecord_flux_operation_url',
+                'custrecord_flux_poll_count'
             ]
         });
     }
 
     /**
-     * Process each document
+     * Process each document - either submit new or continue polling
      */
     function map(context) {
         const searchResult = JSON.parse(context.value);
         const documentId = searchResult.id;
-        const fileId = searchResult.values.custrecord_flux_source_file.value;
+        const fileId = searchResult.values.custrecord_flux_source_file?.value || searchResult.values.custrecord_flux_source_file;
         const documentType = searchResult.values.custrecord_flux_document_type || 1;
         const docCode = searchResult.values.custrecord_flux_document_id;
+        const currentStatus = parseInt(searchResult.values.custrecord_flux_status, 10);
+        const operationUrl = searchResult.values.custrecord_flux_operation_url || '';
+        const pollCount = parseInt(searchResult.values.custrecord_flux_poll_count, 10) || 0;
+
+        const isNewDocument = currentStatus === DocStatus.PENDING;
+        const isContinuation = currentStatus === DocStatus.PROCESSING && operationUrl;
 
         log.audit('FC_ProcessDocuments.map', {
             documentId: documentId,
             fileId: fileId,
-            docCode: docCode
+            docCode: docCode,
+            isNewDocument: isNewDocument,
+            isContinuation: isContinuation,
+            pollCount: pollCount
         });
 
         try {
-            // CRITICAL: Check if document is still PENDING before processing
-            // This prevents race conditions when multiple MapReduce tasks run concurrently
-            // (each upload triggers a new task, and they may overlap)
-            // Use a search with filter (same approach as getInputData) for reliable status check
-            const stillPending = search.create({
-                type: 'customrecord_flux_document',
-                filters: [
-                    ['internalid', 'is', documentId],
-                    'AND',
-                    ['custrecord_flux_status', 'is', DocStatus.PENDING]
-                ],
-                columns: ['internalid']
-            }).run().getRange({ start: 0, end: 1 });
+            // For new documents, verify still PENDING (race condition check)
+            if (isNewDocument) {
+                const stillPending = search.create({
+                    type: 'customrecord_flux_document',
+                    filters: [
+                        ['internalid', 'is', documentId],
+                        'AND',
+                        ['custrecord_flux_status', 'is', DocStatus.PENDING]
+                    ],
+                    columns: ['internalid']
+                }).run().getRange({ start: 0, end: 1 });
 
-            if (stillPending.length === 0) {
-                // Document already claimed by another task or already processed
-                log.audit('FC_ProcessDocuments.map.skip', {
-                    documentId: documentId,
-                    docCode: docCode,
-                    reason: 'Document no longer PENDING - already being processed by another task'
-                });
-                // Write a skip result so summarize() knows this was intentional
-                context.write({
-                    key: documentId,
-                    value: {
-                        success: true,
-                        skipped: true,
-                        reason: 'Already processing or processed'
-                    }
-                });
-                return;
-            }
-
-            // Mark as processing
-            record.submitFields({
-                type: 'customrecord_flux_document',
-                id: documentId,
-                values: {
-                    'custrecord_flux_status': DocStatus.PROCESSING
+                if (stillPending.length === 0) {
+                    log.audit('FC_ProcessDocuments.map.skip', {
+                        documentId: documentId,
+                        reason: 'Document no longer PENDING'
+                    });
+                    context.write({
+                        key: documentId,
+                        value: { success: true, skipped: true, reason: 'Already processing' }
+                    });
+                    return;
                 }
-            });
+            }
 
             // Load settings to get maxExtractionPages
             const settings = loadSettings();
             const maxExtractionPages = settings.maxExtractionPages || 0;
 
-            // Process with FC_Engine (pass fileId, not file object - engine loads it internally)
+            // Initialize engine and get provider
             const engine = new FC_Engine.FluxCaptureEngine();
-            const startTime = Date.now();
+            const provider = engine.getExtractionProvider();
 
-            const result = engine.processDocument(fileId, {
-                documentType: documentType,
-                enableVendorMatching: true,
-                enableAnomalyDetection: true,
-                enableFraudDetection: true,
-                enableLearning: true,
-                maxExtractionPages: maxExtractionPages
+            // Check if provider supports async polling (Azure) or is synchronous (Mindee, OCI)
+            const supportsAsyncPolling = typeof provider.submitForAnalysis === 'function' &&
+                                         typeof provider.pollWithLimit === 'function';
+
+            // For synchronous providers (Mindee, OCI), use the traditional flow
+            if (!supportsAsyncPolling) {
+                log.audit('FC_ProcessDocuments.map.sync', {
+                    documentId: documentId,
+                    provider: provider.getProviderName ? provider.getProviderName() : 'unknown'
+                });
+
+                // Mark as processing
+                record.submitFields({
+                    type: 'customrecord_flux_document',
+                    id: documentId,
+                    values: {
+                        'custrecord_flux_status': DocStatus.PROCESSING
+                    }
+                });
+
+                const startTime = Date.now();
+
+                // Use traditional synchronous processing
+                const result = engine.processDocument(fileId, {
+                    documentType: documentType,
+                    enableVendorMatching: true,
+                    enableAnomalyDetection: true,
+                    enableFraudDetection: true,
+                    enableLearning: true,
+                    maxExtractionPages: maxExtractionPages
+                });
+
+                const processingTime = Date.now() - startTime;
+
+                if (result.success) {
+                    const extraction = result.extraction;
+                    const updateValues = buildUpdateValues(extraction, documentType, processingTime);
+
+                    record.submitFields({
+                        type: 'customrecord_flux_document',
+                        id: documentId,
+                        values: updateValues
+                    });
+
+                    context.write({
+                        key: documentId,
+                        value: {
+                            success: true,
+                            status: DocStatus.NEEDS_REVIEW,
+                            confidence: extraction.confidence.overall,
+                            processingTime: processingTime
+                        }
+                    });
+                } else {
+                    record.submitFields({
+                        type: 'customrecord_flux_document',
+                        id: documentId,
+                        values: {
+                            'custrecord_flux_status': DocStatus.ERROR,
+                            'custrecord_flux_error_message': result.error || 'Processing failed'
+                        }
+                    });
+
+                    context.write({
+                        key: documentId,
+                        value: { success: false, error: result.error }
+                    });
+                }
+                return; // Exit early for sync providers
+            }
+
+            // =====================================================
+            // ASYNC POLLING FLOW (Azure Form Recognizer)
+            // =====================================================
+
+            let currentOperationUrl = operationUrl;
+            let currentPollCount = pollCount;
+
+            // Phase 1: Submit to Azure (for new documents only)
+            if (isNewDocument) {
+                // Mark as processing
+                record.submitFields({
+                    type: 'customrecord_flux_document',
+                    id: documentId,
+                    values: {
+                        'custrecord_flux_status': DocStatus.PROCESSING
+                    }
+                });
+
+                // Load file and submit to Azure
+                const fileObj = file.load({ id: fileId });
+
+                log.audit('FC_ProcessDocuments.map.submit', {
+                    documentId: documentId,
+                    fileName: fileObj.name
+                });
+
+                const submitResult = provider.submitForAnalysis(fileObj, {
+                    documentType: documentType
+                });
+
+                currentOperationUrl = submitResult.operationUrl;
+                currentPollCount = 0;
+
+                // Save operation URL immediately
+                record.submitFields({
+                    type: 'customrecord_flux_document',
+                    id: documentId,
+                    values: {
+                        'custrecord_flux_operation_url': currentOperationUrl,
+                        'custrecord_flux_poll_count': 0
+                    }
+                });
+            }
+
+            // Phase 2: Poll for results (with limited attempts)
+            log.audit('FC_ProcessDocuments.map.poll', {
+                documentId: documentId,
+                operationUrl: currentOperationUrl.substring(0, 50) + '...',
+                startPollCount: currentPollCount
             });
 
-            const processingTime = Date.now() - startTime;
+            const pollResult = provider.pollWithLimit(currentOperationUrl, {
+                maxAttempts: POLLING_CONFIG.MAX_ATTEMPTS_PER_RUN,
+                startAttempt: currentPollCount,
+                maxTotalAttempts: POLLING_CONFIG.MAX_TOTAL_ATTEMPTS
+            });
 
-            if (result.success) {
-                const extraction = result.extraction;
+            // Update poll count
+            const newPollCount = pollResult.totalAttempts;
 
-                // Always require manual review regardless of confidence score
-                let newStatus = DocStatus.NEEDS_REVIEW;
+            if (pollResult.status === 'succeeded') {
+                // Phase 3: Process the extraction result
+                log.audit('FC_ProcessDocuments.map.succeeded', {
+                    documentId: documentId,
+                    totalAttempts: newPollCount
+                });
 
-                // Parse dates
-                const invoiceDate = parseExtractedDate(extraction.fields && extraction.fields.invoiceDate);
-                const dueDate = parseExtractedDate(extraction.fields && extraction.fields.dueDate);
+                const startTime = Date.now();
 
-                // Update the record with extracted data
-                const updateValues = {
-                    'custrecord_flux_status': newStatus,
-                    'custrecord_flux_document_type': extraction.documentType || documentType,
-                    'custrecord_flux_vendor': extraction.vendorMatch && extraction.vendorMatch.vendorId ? extraction.vendorMatch.vendorId : null,
-                    'custrecord_flux_vendor_match_confidence': extraction.vendorMatch ? extraction.vendorMatch.confidence : 0,
-                    'custrecord_flux_invoice_number': extraction.fields && extraction.fields.invoiceNumber ? extraction.fields.invoiceNumber : '',
-                    'custrecord_flux_invoice_date': invoiceDate,
-                    'custrecord_flux_due_date': dueDate,
-                    'custrecord_flux_subtotal': extraction.fields && extraction.fields.subtotal ? extraction.fields.subtotal : 0,
-                    'custrecord_flux_tax_amount': extraction.fields && extraction.fields.taxAmount ? extraction.fields.taxAmount : 0,
-                    'custrecord_flux_total_amount': extraction.fields && extraction.fields.totalAmount ? extraction.fields.totalAmount : 0,
-                    'custrecord_flux_po_number': extraction.fields && extraction.fields.poNumber ? extraction.fields.poNumber : '',
-                    'custrecord_flux_payment_terms': extraction.fields && extraction.fields.paymentTerms ? extraction.fields.paymentTerms : '',
-                    'custrecord_flux_line_items': JSON.stringify(extraction.lineItems || []),
-                    'custrecord_flux_anomalies': JSON.stringify(extraction.anomalies || []),
-                    'custrecord_flux_confidence_score': extraction.confidence.overall,
-                    'custrecord_flux_amount_validated': extraction.amountValidation ? extraction.amountValidation.valid : false,
-                    'custrecord_flux_processing_time': processingTime,
-                    'custrecord_flux_modified_date': new Date()
-                };
+                // Use FC_Engine to process the raw result
+                const result = engine.processWithRawResult(pollResult.result, {
+                    documentType: documentType,
+                    enableVendorMatching: true,
+                    enableAnomalyDetection: true,
+                    enableFraudDetection: true,
+                    maxExtractionPages: maxExtractionPages
+                });
 
-                // Build and store ALL extracted data as JSON for flexible field mapping
-                // This enables the extraction pool UI for mapping any extracted field to form fields
-                const extractedDataObj = {};
+                const processingTime = Date.now() - startTime;
 
-                // Include all fields from extraction
-                if (extraction.fields) {
-                    Object.keys(extraction.fields).forEach(function(key) {
-                        extractedDataObj[key] = extraction.fields[key];
+                if (result.success) {
+                    const extraction = result.extraction;
+
+                    // Update document with extracted data
+                    const updateValues = buildUpdateValues(extraction, documentType, processingTime);
+
+                    // Clear operation URL and poll count (no longer needed)
+                    updateValues['custrecord_flux_operation_url'] = '';
+                    updateValues['custrecord_flux_poll_count'] = 0;
+
+                    record.submitFields({
+                        type: 'customrecord_flux_document',
+                        id: documentId,
+                        values: updateValues
+                    });
+
+                    context.write({
+                        key: documentId,
+                        value: {
+                            success: true,
+                            status: DocStatus.NEEDS_REVIEW,
+                            confidence: extraction.confidence.overall,
+                            processingTime: processingTime,
+                            totalPollAttempts: newPollCount
+                        }
+                    });
+                } else {
+                    // FC_Engine processing failed
+                    record.submitFields({
+                        type: 'customrecord_flux_document',
+                        id: documentId,
+                        values: {
+                            'custrecord_flux_status': DocStatus.ERROR,
+                            'custrecord_flux_error_message': result.error || 'Processing failed',
+                            'custrecord_flux_operation_url': '',
+                            'custrecord_flux_poll_count': 0
+                        }
+                    });
+
+                    context.write({
+                        key: documentId,
+                        value: { success: false, error: result.error }
                     });
                 }
 
-                // Include vendor info
-                extractedDataObj.vendorName = extraction.vendorMatch ? extraction.vendorMatch.vendorName : '';
-                extractedDataObj.vendor = extraction.vendorMatch ? extraction.vendorMatch.vendorId : '';
-
-                // Include all raw extracted label/value pairs for flexible suggestions
-                if (extraction.allExtractedFields) {
-                    extractedDataObj._allExtractedFields = extraction.allExtractedFields;
-                }
-
-                // Include field confidences
-                if (extraction.fieldConfidences) {
-                    extractedDataObj._fieldConfidences = extraction.fieldConfidences;
-                }
-
-                // Metadata
-                extractedDataObj._confidence = extraction.confidence;
-                extractedDataObj._vendorMatch = extraction.vendorMatch;
-                extractedDataObj._extractedAt = new Date().toISOString();
-
-                updateValues['custrecord_flux_extracted_data'] = JSON.stringify(extractedDataObj);
-                // Note: custrecord_flux_form_data is NOT set here - it's only populated when user saves form edits
-
-                // Only set currency if it's a numeric ID
-                if (extraction.fields && extraction.fields.currency) {
-                    const currencyVal = extraction.fields.currency;
-                    if (typeof currencyVal === 'number' || (typeof currencyVal === 'string' && /^\d+$/.test(currencyVal))) {
-                        updateValues['custrecord_flux_currency'] = parseInt(currencyVal, 10);
-                    }
-                }
+            } else if (pollResult.status === 'running') {
+                // Still running - save state for next MR run
+                log.audit('FC_ProcessDocuments.map.stillRunning', {
+                    documentId: documentId,
+                    pollCount: newPollCount,
+                    needsContinuation: true
+                });
 
                 record.submitFields({
                     type: 'customrecord_flux_document',
                     id: documentId,
-                    values: updateValues
+                    values: {
+                        'custrecord_flux_poll_count': newPollCount
+                    }
                 });
 
                 context.write({
                     key: documentId,
                     value: {
                         success: true,
-                        status: newStatus,
-                        confidence: extraction.confidence.overall,
-                        processingTime: processingTime
+                        needsContinuation: true,
+                        pollCount: newPollCount
                     }
                 });
+
             } else {
-                // Processing failed
+                // Failed (timeout or error)
+                log.error('FC_ProcessDocuments.map.failed', {
+                    documentId: documentId,
+                    error: pollResult.error,
+                    totalAttempts: newPollCount
+                });
+
                 record.submitFields({
                     type: 'customrecord_flux_document',
                     id: documentId,
                     values: {
                         'custrecord_flux_status': DocStatus.ERROR,
-                        'custrecord_flux_error_message': result.error || 'Unknown processing error'
+                        'custrecord_flux_error_message': pollResult.error || 'Azure extraction failed',
+                        'custrecord_flux_operation_url': '',
+                        'custrecord_flux_poll_count': 0
                     }
                 });
 
                 context.write({
                     key: documentId,
-                    value: {
-                        success: false,
-                        error: result.error
-                    }
+                    value: { success: false, error: pollResult.error }
                 });
             }
 
         } catch (e) {
-            log.error('FC_ProcessDocuments.map', {
+            log.error('FC_ProcessDocuments.map.exception', {
                 documentId: documentId,
                 error: e.message,
                 stack: e.stack
             });
 
-            // Mark as error
             try {
                 record.submitFields({
                     type: 'customrecord_flux_document',
                     id: documentId,
                     values: {
                         'custrecord_flux_status': DocStatus.ERROR,
-                        'custrecord_flux_error_message': e.message
+                        'custrecord_flux_error_message': e.message,
+                        'custrecord_flux_operation_url': '',
+                        'custrecord_flux_poll_count': 0
                     }
                 });
             } catch (updateErr) {
@@ -287,28 +436,88 @@ define([
 
             context.write({
                 key: documentId,
-                value: {
-                    success: false,
-                    error: e.message
-                }
+                value: { success: false, error: e.message }
             });
         }
     }
 
     /**
-     * Summarize results
+     * Build update values object from extraction result
+     */
+    function buildUpdateValues(extraction, documentType, processingTime) {
+        const invoiceDate = parseExtractedDate(extraction.fields?.invoiceDate);
+        const dueDate = parseExtractedDate(extraction.fields?.dueDate);
+
+        const updateValues = {
+            'custrecord_flux_status': DocStatus.NEEDS_REVIEW,
+            'custrecord_flux_document_type': extraction.documentType || documentType,
+            'custrecord_flux_vendor': extraction.vendorMatch?.vendorId || null,
+            'custrecord_flux_vendor_match_confidence': extraction.vendorMatch?.confidence || 0,
+            'custrecord_flux_invoice_number': extraction.fields?.invoiceNumber || '',
+            'custrecord_flux_invoice_date': invoiceDate,
+            'custrecord_flux_due_date': dueDate,
+            'custrecord_flux_subtotal': extraction.fields?.subtotal || 0,
+            'custrecord_flux_tax_amount': extraction.fields?.taxAmount || 0,
+            'custrecord_flux_total_amount': extraction.fields?.totalAmount || 0,
+            'custrecord_flux_po_number': extraction.fields?.poNumber || '',
+            'custrecord_flux_payment_terms': extraction.fields?.paymentTerms || '',
+            'custrecord_flux_line_items': JSON.stringify(extraction.lineItems || []),
+            'custrecord_flux_anomalies': JSON.stringify(extraction.anomalies || []),
+            'custrecord_flux_confidence_score': extraction.confidence?.overall || 0,
+            'custrecord_flux_amount_validated': extraction.amountValidation?.valid || false,
+            'custrecord_flux_processing_time': processingTime,
+            'custrecord_flux_modified_date': new Date()
+        };
+
+        // Build extracted data JSON
+        const extractedDataObj = {};
+        if (extraction.fields) {
+            Object.keys(extraction.fields).forEach(function(key) {
+                extractedDataObj[key] = extraction.fields[key];
+            });
+        }
+        extractedDataObj.vendorName = extraction.vendorMatch?.vendorName || '';
+        extractedDataObj.vendor = extraction.vendorMatch?.vendorId || '';
+        if (extraction.allExtractedFields) {
+            extractedDataObj._allExtractedFields = extraction.allExtractedFields;
+        }
+        if (extraction.fieldConfidences) {
+            extractedDataObj._fieldConfidences = extraction.fieldConfidences;
+        }
+        extractedDataObj._confidence = extraction.confidence;
+        extractedDataObj._vendorMatch = extraction.vendorMatch;
+        extractedDataObj._extractedAt = new Date().toISOString();
+
+        updateValues['custrecord_flux_extracted_data'] = JSON.stringify(extractedDataObj);
+
+        // Currency
+        if (extraction.fields?.currency) {
+            const currencyVal = extraction.fields.currency;
+            if (typeof currencyVal === 'number' || (typeof currencyVal === 'string' && /^\d+$/.test(currencyVal))) {
+                updateValues['custrecord_flux_currency'] = parseInt(currencyVal, 10);
+            }
+        }
+
+        return updateValues;
+    }
+
+    /**
+     * Summarize results and chain another MR run if needed
      */
     function summarize(summary) {
         let processed = 0;
         let succeeded = 0;
         let failed = 0;
         let skipped = 0;
+        let needsContinuation = 0;
 
         summary.output.iterator().each(function(key, value) {
             processed++;
             const result = JSON.parse(value);
             if (result.skipped) {
                 skipped++;
+            } else if (result.needsContinuation) {
+                needsContinuation++;
             } else if (result.success) {
                 succeeded++;
             } else {
@@ -322,6 +531,7 @@ define([
             succeeded: succeeded,
             failed: failed,
             skipped: skipped,
+            needsContinuation: needsContinuation,
             totalTime: summary.seconds + 's'
         });
 
@@ -333,6 +543,40 @@ define([
             });
             return true;
         });
+
+        // Chain another MR run if any documents need continued polling
+        if (needsContinuation > 0) {
+            log.audit('FC_ProcessDocuments.summarize.chain', {
+                needsContinuation: needsContinuation,
+                schedulingNextRun: true
+            });
+
+            try {
+                // Get the current script's deployment
+                const scriptId = runtime.getCurrentScript().id;
+
+                // Create a new task to run this same script
+                const mrTask = task.create({
+                    taskType: task.TaskType.MAP_REDUCE,
+                    scriptId: scriptId
+                });
+
+                const taskId = mrTask.submit();
+
+                log.audit('FC_ProcessDocuments.summarize.chained', {
+                    taskId: taskId,
+                    forDocuments: needsContinuation
+                });
+
+            } catch (chainErr) {
+                // If we can't chain (e.g., task already queued), that's OK
+                // The documents will be picked up on the next scheduled run
+                log.error('FC_ProcessDocuments.summarize.chainError', {
+                    message: chainErr.message,
+                    note: 'Documents will be processed on next scheduled run'
+                });
+            }
+        }
     }
 
     /**

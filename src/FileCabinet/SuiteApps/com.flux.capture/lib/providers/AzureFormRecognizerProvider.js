@@ -180,6 +180,152 @@ define([
         }
 
         /**
+         * Submit document for analysis and return operation URL (no polling).
+         * Use this for async processing where polling is handled separately.
+         * @param {Object} fileObj - NetSuite file object
+         * @param {Object} options - Extraction options
+         * @returns {Object} - { operationUrl: string, model: string }
+         */
+        submitForAnalysis(fileObj, options = {}) {
+            const availability = this.checkAvailability();
+
+            if (!availability.available) {
+                this._error('submitForAnalysis', `Provider not available: ${availability.reason}`);
+                throw new Error(`Azure Form Recognizer not available: ${availability.reason}`);
+            }
+
+            try {
+                const model = this._getModelForDocumentType(options.documentType);
+                this._audit('submitForAnalysis', `Submitting document with model: ${model}`);
+
+                const operationUrl = this._submitDocument(fileObj, model);
+
+                if (!operationUrl) {
+                    throw new Error('Failed to submit document for analysis');
+                }
+
+                this._debug('submitForAnalysis', `Operation submitted: ${operationUrl}`);
+
+                return {
+                    operationUrl: operationUrl,
+                    model: model
+                };
+
+            } catch (e) {
+                this._error('submitForAnalysis', {
+                    message: e.message,
+                    stack: e.stack
+                });
+                throw e;
+            }
+        }
+
+        /**
+         * Poll for results with limited attempts. Returns result or status info.
+         * Use this for async processing where polling is spread across multiple script runs.
+         * @param {string} operationUrl - Azure operation location URL
+         * @param {Object} options - Polling options
+         * @param {number} [options.maxAttempts=15] - Max polling attempts for this run
+         * @param {number} [options.startAttempt=0] - Starting attempt count (for continuation)
+         * @param {number} [options.maxTotalAttempts=300] - Absolute max attempts before timeout
+         * @returns {Object} - { status: 'succeeded'|'running'|'failed', result?: Object, attempts: number, totalAttempts: number }
+         */
+        pollWithLimit(operationUrl, options = {}) {
+            const maxAttempts = options.maxAttempts || 15;
+            const startAttempt = options.startAttempt || 0;
+            const maxTotalAttempts = options.maxTotalAttempts || 300;
+
+            let attempts = 0;
+            let totalAttempts = startAttempt;
+
+            this._debug('pollWithLimit', {
+                operationUrl: operationUrl,
+                maxAttempts: maxAttempts,
+                startAttempt: startAttempt,
+                maxTotalAttempts: maxTotalAttempts
+            });
+
+            while (attempts < maxAttempts && totalAttempts < maxTotalAttempts) {
+                attempts++;
+                totalAttempts++;
+
+                try {
+                    const response = https.get({
+                        url: operationUrl,
+                        headers: {
+                            'Ocp-Apim-Subscription-Key': this.apiKey
+                        }
+                    });
+
+                    if (response.code !== 200) {
+                        this._error('pollWithLimit', `Unexpected response code: ${response.code}`);
+                        return {
+                            status: 'failed',
+                            error: `Unexpected response code: ${response.code}`,
+                            attempts: attempts,
+                            totalAttempts: totalAttempts
+                        };
+                    }
+
+                    const result = JSON.parse(response.body);
+
+                    this._debug('pollWithLimit', {
+                        attempt: attempts,
+                        totalAttempt: totalAttempts,
+                        status: result.status
+                    });
+
+                    if (result.status === 'succeeded') {
+                        this._audit('pollWithLimit', `Analysis complete after ${totalAttempts} total attempts`);
+                        return {
+                            status: 'succeeded',
+                            result: this._normalizeResult(result),
+                            attempts: attempts,
+                            totalAttempts: totalAttempts
+                        };
+                    }
+
+                    if (result.status === 'failed') {
+                        const errorMsg = result.error?.message || 'Analysis failed';
+                        this._error('pollWithLimit', errorMsg);
+                        return {
+                            status: 'failed',
+                            error: errorMsg,
+                            attempts: attempts,
+                            totalAttempts: totalAttempts
+                        };
+                    }
+
+                    // Status is 'running' or 'notStarted' - continue polling
+                    // HTTP latency (~200-500ms) provides natural spacing
+
+                } catch (e) {
+                    this._error('pollWithLimit', e.message);
+                    // Continue on transient errors
+                }
+            }
+
+            // Check if we've exceeded total attempts
+            if (totalAttempts >= maxTotalAttempts) {
+                this._error('pollWithLimit', `Timeout after ${totalAttempts} total attempts`);
+                return {
+                    status: 'failed',
+                    error: 'Azure analysis timed out',
+                    attempts: attempts,
+                    totalAttempts: totalAttempts
+                };
+            }
+
+            // Still running but hit per-run limit - need continuation
+            this._debug('pollWithLimit', `Still running after ${attempts} attempts, need continuation`);
+            return {
+                status: 'running',
+                attempts: attempts,
+                totalAttempts: totalAttempts
+            };
+        }
+
+        /**
          * Check if Azure Form Recognizer is available
          * @returns {Object}
          */

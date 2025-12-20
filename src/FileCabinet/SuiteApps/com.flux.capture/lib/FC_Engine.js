@@ -149,6 +149,14 @@ define([
         }
 
         /**
+         * Get the extraction provider for direct access (e.g., async extraction flows)
+         * @returns {Object} - The configured extraction provider
+         */
+        getExtractionProvider() {
+            return this._getExtractionProvider();
+        }
+
+        /**
          * Get current provider information
          * @returns {Object} Provider info
          */
@@ -265,6 +273,107 @@ define([
 
             } catch (error) {
                 log.error('FluxCaptureEngine.processDocument', { message: error.message, stack: error.stack });
+                return {
+                    success: false,
+                    error: error.message
+                };
+            }
+        }
+
+        /**
+         * Process a document with pre-extracted raw result (for async extraction flows).
+         * Use this when Azure extraction was done separately and you have the raw result.
+         * Performs stages 2-7: layout analysis, field extraction, vendor matching, validation.
+         * @param {Object} rawResult - Raw extraction result from Azure provider (normalized)
+         * @param {Object} options - Processing options
+         * @returns {Object} - Extraction results (same format as processDocument)
+         */
+        processWithRawResult(rawResult, options = {}) {
+            const startTime = Date.now();
+
+            try {
+                log.audit('FluxCapture.processWithRawResult', 'Processing with pre-extracted result');
+
+                // Stage 2: Layout analysis - identify document zones
+                const layout = this.layoutAnalyzer.analyze(rawResult);
+
+                // Stage 3: Intelligent field extraction with semantic matching
+                const extractionResult = this._performIntelligentExtraction(rawResult, layout, options);
+
+                // Stage 4: Entity resolution - vendor matching with multiple signals
+                const vendorMatch = this._performVendorResolution(extractionResult, rawResult.rawText);
+
+                // Stage 4.5: Load vendor defaults LIVE from NetSuite
+                let vendorDefaults = null;
+                if (vendorMatch && vendorMatch.vendorId) {
+                    vendorDefaults = this.vendorDataLoader.getVendorDefaults(vendorMatch.vendorId);
+                    if (vendorDefaults) {
+                        fcDebug.debug('FC_Engine.vendorDefaults', {
+                            vendorId: vendorMatch.vendorId,
+                            subsidiary: vendorDefaults.subsidiary,
+                            currency: vendorDefaults.currency,
+                            terms: vendorDefaults.terms
+                        });
+                    }
+                }
+
+                // Stage 4.6: Match unmatched extractions to custom form fields
+                let customFieldMatches = {};
+                if (options.formSchema && extractionResult.allExtractedFields) {
+                    customFieldMatches = this.dynamicFieldMatcher.matchCustomFields(
+                        extractionResult.allExtractedFields,
+                        options.formSchema,
+                        extractionResult.fields
+                    );
+                }
+
+                // Stage 5: Cross-field validation
+                const validation = this.crossFieldValidator.validate(extractionResult);
+
+                // Stage 6: Anomaly detection if enabled
+                let anomalies = [];
+                if (this.enableFraudDetection) {
+                    anomalies = this._detectAnomalies(extractionResult, vendorMatch, validation);
+                }
+
+                // Stage 7: Calculate confidence scores
+                const confidence = this._calculateConfidence(extractionResult, vendorMatch, validation);
+
+                const processingTime = Date.now() - startTime;
+                log.audit('FluxCapture.processWithRawResult', `Completed in ${processingTime}ms. Confidence: ${confidence.overall}%`);
+
+                return {
+                    success: true,
+                    extraction: {
+                        documentType: extractionResult.documentType || options.documentType || DocumentType.INVOICE,
+                        fields: extractionResult.fields,
+                        fieldConfidences: extractionResult.fieldConfidences || {},
+                        lineItems: extractionResult.lineItems,
+                        vendorMatch: vendorMatch,
+                        anomalies: anomalies,
+                        confidence: confidence,
+                        validation: validation,
+                        rawText: extractionResult.rawText,
+                        pageCount: extractionResult.pageCount,
+                        processingTime: processingTime,
+                        allExtractedFields: extractionResult.allExtractedFields || {},
+                        extractionMeta: {
+                            layout: {
+                                zones: Object.keys(layout.zones || {}).filter(z => (layout.zones[z] || []).length > 0),
+                                tableCount: (layout.tables || []).length
+                            },
+                            signals: vendorMatch.signals || []
+                        },
+                        extractionWarnings: extractionResult.extractionWarnings || [],
+                        skippedLineItems: extractionResult.skippedLineItems || [],
+                        lineItemWarnings: extractionResult.lineItemWarnings || [],
+                        vendorDefaults: vendorDefaults,
+                        customFieldMatches: customFieldMatches
+                    }
+                };
+
+            } catch (error) {
+                log.error('FluxCaptureEngine.processWithRawResult', { message: error.message, stack: error.stack });
                 return {
                     success: false,
                     error: error.message
