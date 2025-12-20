@@ -364,47 +364,44 @@
         },
 
         // ==========================================
-        // LOADING OVERLAY - Premium Loading Experience
+        // CONTENT TRANSITION ANIMATIONS
         // ==========================================
 
         /**
-         * Show the loading overlay with premium animation
+         * Trigger initial load animation (content slides in)
          */
-        showLoadingOverlay: function() {
-            var overlay = el('#review-loading-overlay');
+        animateInitialLoad: function() {
             var content = el('#review-content');
-
-            if (overlay) {
-                overlay.classList.remove('hidden');
-            }
             if (content) {
-                content.classList.remove('loaded');
-                content.classList.add('loading');
+                content.classList.remove('exiting', 'entering');
+                content.classList.add('initial-load');
             }
         },
 
         /**
-         * Hide the loading overlay and animate content in
+         * Trigger content enter animation after data is loaded
          */
-        hideLoadingOverlay: function() {
-            var overlay = el('#review-loading-overlay');
+        animateContentEnter: function() {
             var content = el('#review-content');
-
-            if (overlay) {
-                overlay.classList.add('hidden');
-            }
             if (content) {
-                content.classList.remove('loading');
-                content.classList.add('loaded');
+                content.classList.remove('exiting', 'initial-load');
+                content.classList.add('entering');
             }
         },
 
         /**
-         * Internal document transition - shows loading overlay while loading new document
+         * Internal document transition - slides content out, loads new doc, slides new content in
          * @param {number} newDocId - Document ID to load
          */
         transitionToDocument: function(newDocId) {
             var self = this;
+            var content = el('#review-content');
+
+            // Start exit animation
+            if (content) {
+                content.classList.remove('entering', 'initial-load');
+                content.classList.add('exiting');
+            }
 
             // Update URL without triggering router navigation
             if (window.history && window.history.replaceState) {
@@ -414,9 +411,6 @@
                 }
                 window.history.replaceState({ docId: newDocId }, '', newUrl);
             }
-
-            // Show loading overlay
-            this.showLoadingOverlay();
 
             // Update state
             this.docId = newDocId;
@@ -455,52 +449,55 @@
             // Update navigation buttons immediately
             this.updateNavigationButtons();
 
-            // Load new document data
-            API.get('document', { id: newDocId })
-                .then(function(data) {
-                    self.data = data;
-                    self.transactionType = self.getTransactionType(data.documentType);
+            // Wait for exit animation, then load and render new content
+            setTimeout(function() {
+                // Load new document data
+                API.get('document', { id: newDocId })
+                    .then(function(data) {
+                        self.data = data;
+                        self.transactionType = self.getTransactionType(data.documentType);
 
-                    // Load form schema and supporting data
-                    return Promise.all([
-                        API.get('formschema', { transactionType: self.transactionType }),
-                        API.get('accounts', { accountType: 'Expense' }),
-                        API.get('accounts', { accountType: 'COGS' }),
-                        API.get('items', {}),
-                        API.get('settings')
-                    ]);
-                })
-                .then(function(results) {
-                    self.formFields = results[0];
-                    self.expenseAccountsData = results[1] || [];
-                    self.cogsAccountsData = results[2] || [];
-                    self.itemsData = results[3] || [];
-                    self.settings = results[4] && results[4].data ? results[4].data : results[4] || {};
+                        // Load form schema and supporting data
+                        return Promise.all([
+                            API.get('formschema', { transactionType: self.transactionType }),
+                            API.get('accounts', { accountType: 'Expense' }),
+                            API.get('accounts', { accountType: 'COGS' }),
+                            API.get('items', {}),
+                            API.get('settings')
+                        ]);
+                    })
+                    .then(function(results) {
+                        self.formFields = results[0];
+                        self.expenseAccountsData = results[1] || [];
+                        self.cogsAccountsData = results[2] || [];
+                        self.itemsData = results[3] || [];
+                        self.settings = results[4] && results[4].data ? results[4].data : results[4] || {};
 
-                    self.injectSublistOptions(self.expenseAccountsData, self.cogsAccountsData, self.itemsData);
-                    self.initializeFormData();
+                        self.injectSublistOptions(self.expenseAccountsData, self.cogsAccountsData, self.itemsData);
+                        self.initializeFormData();
 
-                    self.isLoading = false;
+                        self.isLoading = false;
 
-                    // Render new content
-                    self.renderToolbar();
-                    self.renderPreview();
-                    self.renderExtractionForm();
+                        // Render new content
+                        self.renderToolbar();
+                        self.renderPreview();
+                        self.renderExtractionForm();
 
-                    // Hide loading overlay and animate content in
-                    self.hideLoadingOverlay();
+                        // Animate content in
+                        self.animateContentEnter();
 
-                    // Fetch coding suggestions if vendor is set
-                    if (self.data && self.data.vendorId) {
-                        self.fetchCodingSuggestions(self.data.vendorId);
-                    }
-                })
-                .catch(function(err) {
-                    console.error('[Review] Transition error:', err);
-                    self.isLoading = false;
-                    self.hideLoadingOverlay();
-                    self.showError(err.message);
-                });
+                        // Fetch coding suggestions if vendor is set
+                        if (self.data && self.data.vendorId) {
+                            self.fetchCodingSuggestions(self.data.vendorId);
+                        }
+                    })
+                    .catch(function(err) {
+                        console.error('[Review] Transition error:', err);
+                        self.isLoading = false;
+                        self.animateContentEnter();
+                        self.showError(err.message);
+                    });
+            }, 350); // Match slideOut animation duration
         },
 
         /**
@@ -1030,8 +1027,8 @@
             // Auto-select subsidiary if only one exists
             this.autoSelectSingleOptions();
 
-            // Hide loading overlay and animate content in
-            this.hideLoadingOverlay();
+            // Animate content in (initial load)
+            this.animateInitialLoad();
 
             // Focus first field
             setTimeout(function() {

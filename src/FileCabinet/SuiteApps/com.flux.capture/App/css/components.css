@@ -8299,131 +8299,6 @@ body.extraction-selecting .form-field:hover {
 }
 
 /* ==========================================
-   PREMIUM LOADING OVERLAY - Review Page
-   Stunning, rewarding loading experience
-   ========================================== */
-
-/* Loading overlay container */
-.review-loading-overlay {
-    position: absolute;
-    inset: 0;
-    z-index: 100;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    background: linear-gradient(
-        135deg,
-        rgba(15, 23, 42, 0.97) 0%,
-        rgba(30, 41, 59, 0.98) 50%,
-        rgba(15, 23, 42, 0.97) 100%
-    );
-    backdrop-filter: blur(8px);
-    opacity: 1;
-    transition: opacity 0.5s cubic-bezier(0.4, 0, 0.2, 1),
-                visibility 0.5s cubic-bezier(0.4, 0, 0.2, 1);
-}
-
-.review-loading-overlay.hidden {
-    opacity: 0;
-    visibility: hidden;
-    pointer-events: none;
-}
-
-/* Expanding pulse rings */
-@keyframes pulseRing {
-    0% {
-        transform: translate(-50%, -50%) scale(0.5);
-        opacity: 0.8;
-    }
-    100% {
-        transform: translate(-50%, -50%) scale(2.5);
-        opacity: 0;
-    }
-}
-
-.loading-pulse-ring {
-    position: absolute;
-    top: 50%;
-    left: 50%;
-    width: 80px;
-    height: 80px;
-    border: 2px solid rgba(59, 130, 246, 0.4);
-    border-radius: 50%;
-    transform: translate(-50%, -50%);
-    animation: pulseRing 2s cubic-bezier(0.4, 0, 0.2, 1) infinite;
-}
-
-.loading-pulse-ring.delay-1 {
-    animation-delay: 0.5s;
-    border-color: rgba(99, 102, 241, 0.35);
-}
-
-.loading-pulse-ring.delay-2 {
-    animation-delay: 1s;
-    border-color: rgba(139, 92, 246, 0.3);
-}
-
-/* Central glowing orb */
-@keyframes orbPulse {
-    0%, 100% {
-        transform: translate(-50%, -50%) scale(1);
-        box-shadow:
-            0 0 20px rgba(59, 130, 246, 0.4),
-            0 0 40px rgba(99, 102, 241, 0.3),
-            0 0 60px rgba(139, 92, 246, 0.2);
-    }
-    50% {
-        transform: translate(-50%, -50%) scale(1.1);
-        box-shadow:
-            0 0 30px rgba(59, 130, 246, 0.6),
-            0 0 60px rgba(99, 102, 241, 0.4),
-            0 0 90px rgba(139, 92, 246, 0.3);
-    }
-}
-
-@keyframes orbInnerRotate {
-    0% {
-        transform: rotate(0deg);
-    }
-    100% {
-        transform: rotate(360deg);
-    }
-}
-
-.loading-orb {
-    position: absolute;
-    top: 50%;
-    left: 50%;
-    width: 48px;
-    height: 48px;
-    background: linear-gradient(135deg, #3b82f6 0%, #6366f1 50%, #8b5cf6 100%);
-    border-radius: 50%;
-    transform: translate(-50%, -50%);
-    animation: orbPulse 2s ease-in-out infinite;
-}
-
-.loading-orb .orb-inner {
-    position: absolute;
-    inset: 4px;
-    background: linear-gradient(135deg, rgba(15, 23, 42, 0.9) 0%, rgba(30, 41, 59, 0.8) 100%);
-    border-radius: 50%;
-    animation: orbInnerRotate 3s linear infinite;
-}
-
-.loading-orb .orb-inner::before {
-    content: '';
-    position: absolute;
-    top: 2px;
-    left: 50%;
-    transform: translateX(-50%);
-    width: 8px;
-    height: 8px;
-    background: linear-gradient(135deg, #60a5fa 0%, #a78bfa 100%);
-    border-radius: 50%;
-    box-shadow: 0 0 10px rgba(96, 165, 250, 0.8);
-}
-
-/* ==========================================
    TOOLBAR PDF CONTROLS
    ========================================== */
 .toolbar-divider {
@@ -8442,14 +8317,14 @@ body.extraction-selecting .form-field:hover {
 .toolbar-pdf-controls .zoom-level {
     font-size: 11px;
     font-weight: 600;
-    color: var(--text-secondary);
+    color: var(--text-primary);
     min-width: 40px;
     text-align: center;
 }
 
 .toolbar-pdf-controls .page-display {
     font-size: 11px;
-    color: var(--text-tertiary);
+    color: var(--text-secondary);
     margin-left: var(--space-xs);
 }
 
@@ -8464,11 +8339,12 @@ body.extraction-selecting .form-field:hover {
    Clean, borderless document display
    ========================================== */
 .preview-panel {
-    background: transparent !important;
+    background: var(--surface-body) !important;
     border: none !important;
     display: flex;
     flex-direction: column;
     position: relative;
+    overflow: hidden;
 }
 
 .preview-viewport {
@@ -8479,7 +8355,7 @@ body.extraction-selecting .form-field:hover {
     justify-content: center;
     position: relative;
     min-height: 0;
-    padding: var(--space-lg);
+    padding: 0;
     /* Hide scrollbars but allow scroll */
     scrollbar-width: none; /* Firefox */
     -ms-overflow-style: none; /* IE/Edge */
@@ -8495,6 +8371,7 @@ body.extraction-selecting .form-field:hover {
     align-items: flex-start;
     justify-content: center;
     min-height: 100%;
+    padding: var(--space-lg);
 }
 
 .pdf-page-wrapper {
@@ -8513,8 +8390,9 @@ body.extraction-selecting .form-field:hover {
     display: none;
 }
 
-/* Extraction panel - hide scrollbar but allow scroll */
+/* Extraction panel - no border radius, hide scrollbar */
 .extraction-panel {
+    border-radius: 0 !important;
     scrollbar-width: none; /* Firefox */
     -ms-overflow-style: none; /* IE/Edge */
 }
@@ -8524,24 +8402,35 @@ body.extraction-selecting .form-field:hover {
 }
 
 /* ==========================================
-   CONTENT REVEAL ANIMATIONS
-   Smooth entrance after loading
+   DOCUMENT TRANSITION ANIMATIONS
+   Slide content in/out when navigating
    ========================================== */
-@keyframes contentSlideUp {
+@keyframes slideOutLeft {
     0% {
-        opacity: 0;
-        transform: translateY(24px);
+        opacity: 1;
+        transform: translateX(0);
     }
     100% {
-        opacity: 1;
-        transform: translateY(0);
+        opacity: 0;
+        transform: translateX(-100%);
     }
 }
 
-@keyframes contentSlideIn {
+@keyframes slideOutRight {
+    0% {
+        opacity: 1;
+        transform: translateX(0);
+    }
+    100% {
+        opacity: 0;
+        transform: translateX(100%);
+    }
+}
+
+@keyframes slideInFromLeft {
     0% {
         opacity: 0;
-        transform: translateX(-24px);
+        transform: translateX(-100%);
     }
     100% {
         opacity: 1;
@@ -8549,10 +8438,10 @@ body.extraction-selecting .form-field:hover {
     }
 }
 
-@keyframes contentSlideInRight {
+@keyframes slideInFromRight {
     0% {
         opacity: 0;
-        transform: translateX(24px);
+        transform: translateX(100%);
     }
     100% {
         opacity: 1;
@@ -8560,25 +8449,51 @@ body.extraction-selecting .form-field:hover {
     }
 }
 
-/* Content containers start hidden */
-.review-content.loading .preview-panel,
-.review-content.loading .extraction-panel,
-.review-content.loading .panel-resizer {
+/* Exit animations */
+.review-content.exiting .preview-panel {
+    animation: slideOutLeft 0.35s cubic-bezier(0.4, 0, 0.6, 1) forwards;
+}
+
+.review-content.exiting .extraction-panel {
+    animation: slideOutRight 0.35s cubic-bezier(0.4, 0, 0.6, 1) forwards;
+}
+
+.review-content.exiting .panel-resizer {
     opacity: 0;
+    transition: opacity 0.2s ease-out;
 }
 
-/* Animate in when ready */
-.review-content.loaded .preview-panel {
-    animation: contentSlideIn 0.6s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+/* Enter animations */
+.review-content.entering .preview-panel {
+    animation: slideInFromLeft 0.4s cubic-bezier(0.22, 1, 0.36, 1) forwards;
 }
 
-.review-content.loaded .panel-resizer {
-    animation: contentSlideUp 0.5s cubic-bezier(0.22, 1, 0.36, 1) forwards;
-    animation-delay: 0.15s;
+.review-content.entering .extraction-panel {
+    animation: slideInFromRight 0.4s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+}
+
+.review-content.entering .panel-resizer {
     opacity: 0;
+    animation: fadeIn 0.3s ease-out forwards;
+    animation-delay: 0.2s;
 }
 
-.review-content.loaded .extraction-panel {
-    animation: contentSlideInRight 0.6s cubic-bezier(0.22, 1, 0.36, 1) forwards;
-    animation-delay: 0.1s;
+@keyframes fadeIn {
+    0% { opacity: 0; }
+    100% { opacity: 1; }
+}
+
+/* Initial load animation - same as entering */
+.review-content.initial-load .preview-panel {
+    animation: slideInFromLeft 0.4s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+}
+
+.review-content.initial-load .extraction-panel {
+    animation: slideInFromRight 0.4s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+}
+
+.review-content.initial-load .panel-resizer {
+    opacity: 0;
+    animation: fadeIn 0.3s ease-out forwards;
+    animation-delay: 0.2s;
 }
