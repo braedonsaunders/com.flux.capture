@@ -2278,7 +2278,7 @@
                 suggestion = this.getFieldSuggestion(nsField.id, label, extractedData);
             }
 
-            var html = '<div class="form-field' + (suggestion ? ' has-suggestion' : '') + (isFullWidth ? ' full-width' : '') + '">' +
+            var html = '<div class="form-field' + (suggestion ? ' has-suggestion' : '') + (isFullWidth ? ' full-width' : '') + (isRequired ? ' is-required' : '') + '">' +
                 '<label>' + escapeHtml(label) + ' ' + this.renderConfidenceBadge(docKey) +
                 (isRequired ? ' <span class="required">*</span>' : '') + '</label>';
 

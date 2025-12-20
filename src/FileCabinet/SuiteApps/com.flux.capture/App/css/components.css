@@ -1139,6 +1139,14 @@
     font-weight: 600;
 }
 
+/* Required field visual indicator */
+.form-field.is-required {
+    position: relative;
+    padding-left: var(--space-sm);
+    border-left: 3px solid var(--color-danger);
+    border-radius: var(--radius-sm);
+}
+
 .form-field input[type="checkbox"] {
     width: auto;
     margin-right: var(--space-sm);
