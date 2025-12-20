@@ -1982,6 +1982,44 @@
 
             // ========== BIND EXTRACTION POOL EVENTS ==========
             this.bindExtractionPoolEvents();
+
+            // ========== REFRESH SPLIT VIEW DOM ==========
+            // If in split view mode, move newly rendered sublists to bottom section
+            this.refreshSplitViewDom();
+        },
+
+        /**
+         * Refresh split view DOM after re-rendering extraction form
+         * Moves newly rendered sublists to the bottom section and rebinds events
+         */
+        refreshSplitViewDom: function() {
+            var self = this;
+            var viewReview = el('.view-review');
+            var bottomSection = el('#review-bottom-section');
+            var extractionPanel = el('#extraction-panel');
+
+            // Only proceed if we're in split view mode and DOM elements exist
+            if (!viewReview || !viewReview.classList.contains('split-view')) return;
+            if (!bottomSection || !extractionPanel) return;
+
+            // Clear existing sublists from bottom section (they're from previous document)
+            var oldSublistSections = bottomSection.querySelectorAll('.line-section');
+            oldSublistSections.forEach(function(section) {
+                section.remove();
+            });
+
+            // Move new sublists from extraction panel to bottom section
+            var newSublistSections = extractionPanel.querySelectorAll('.line-section');
+            newSublistSections.forEach(function(sublistSection) {
+                var parentTabContent = sublistSection.closest('.form-tab-content');
+                if (parentTabContent) {
+                    sublistSection.dataset.originalTabContent = parentTabContent.getAttribute('data-tab-content');
+                }
+                bottomSection.appendChild(sublistSection);
+            });
+
+            // Rebind sublist events for the moved elements
+            this.bindSublistEvents(bottomSection);
         },
 
         // Get icon for a field group
