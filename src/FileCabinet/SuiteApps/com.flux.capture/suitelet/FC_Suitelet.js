@@ -26,7 +26,6 @@ define(['N/file', 'N/runtime', 'N/url', 'N/ui/serverWidget', 'N/search', 'N/task
         'js_view_queue': 'client/views/View.Queue.js',
         'js_view_review': 'client/views/View.Review.js',
         'js_view_rail': 'client/views/View.Rail.js',
-        'js_view_batch': 'client/views/View.Batch.js',
         'js_view_settings': 'client/views/View.Settings.js',
         'js_view_documents': 'client/views/View.Documents.js'
     };
@@ -339,7 +338,6 @@ define(['N/file', 'N/runtime', 'N/url', 'N/ui/serverWidget', 'N/search', 'N/task
         htmlContent = htmlContent.replace(/\{\{JS_VIEW_QUEUE_URL\}\}/g, fileUrls['js_view_queue'] || '');
         htmlContent = htmlContent.replace(/\{\{JS_VIEW_REVIEW_URL\}\}/g, fileUrls['js_view_review'] || '');
         htmlContent = htmlContent.replace(/\{\{JS_VIEW_RAIL_URL\}\}/g, fileUrls['js_view_rail'] || '');
-        htmlContent = htmlContent.replace(/\{\{JS_VIEW_BATCH_URL\}\}/g, fileUrls['js_view_batch'] || '');
         htmlContent = htmlContent.replace(/\{\{JS_VIEW_SETTINGS_URL\}\}/g, fileUrls['js_view_settings'] || '');
         htmlContent = htmlContent.replace(/\{\{JS_VIEW_DOCUMENTS_URL\}\}/g, fileUrls['js_view_documents'] || '');
 

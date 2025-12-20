@@ -19,6 +19,10 @@ define(['N/log', 'N/record', 'N/query', 'N/runtime', '../FC_Debug'], function(lo
         DATE_FORMAT: 'date_format',             // Vendor date format preference
         AMOUNT_FORMAT: 'amount_format',         // Vendor amount format (period/comma decimal)
         ACCOUNT_MAPPING: 'account_mapping',     // Description pattern -> GL account
+        DEPARTMENT_MAPPING: 'department_mapping', // Vendor/description -> department
+        CLASS_MAPPING: 'class_mapping',         // Vendor/description -> class
+        LOCATION_MAPPING: 'location_mapping',   // Vendor/description -> location
+        VENDOR_DEFAULTS: 'vendor_defaults',     // Vendor -> default header values
         FIELD_PATTERN: 'field_pattern',         // Custom field extraction patterns
         EXTRACTION_TEMPLATE: 'extraction_template', // Vendor document layout template
         ITEM_MAPPING: 'item_mapping',           // OCR line item text -> NetSuite item ID
@@ -103,6 +107,24 @@ define(['N/log', 'N/record', 'N/query', 'N/runtime', '../FC_Debug'], function(lo
                         // Learn custom field assignment: OCR label -> form field ID
                         learningType = LearningType.CUSTOM_FIELD_MAPPING;
                         result = this.learnCustomFieldMapping(correction, context);
+                        break;
+
+                    case 'department':
+                    case 'lineItem.department':
+                        learningType = LearningType.DEPARTMENT_MAPPING;
+                        result = this.learnSegmentMapping(correction, context, LearningType.DEPARTMENT_MAPPING);
+                        break;
+
+                    case 'class':
+                    case 'lineItem.class':
+                        learningType = LearningType.CLASS_MAPPING;
+                        result = this.learnSegmentMapping(correction, context, LearningType.CLASS_MAPPING);
+                        break;
+
+                    case 'location':
+                    case 'lineItem.location':
+                        learningType = LearningType.LOCATION_MAPPING;
+                        result = this.learnSegmentMapping(correction, context, LearningType.LOCATION_MAPPING);
                         break;
 
                     default:
@@ -737,6 +759,350 @@ define(['N/log', 'N/record', 'N/query', 'N/runtime', '../FC_Debug'], function(lo
 
             const config = this.getConfig(LearningType.CUSTOM_FIELD_MAPPING, `vendor_${vendorId}`);
             return config?.data?.mappings || [];
+        }
+
+        /**
+         * Learn segment mapping (department, class, or location)
+         * Generic method for learning classification fields
+         */
+        learnSegmentMapping(correction, context, segmentType) {
+            const vendorId = correction.vendorId;
+            const segmentId = correction.corrected;
+            const description = context.lineItemDescription || correction.lineItemDescription || '';
+
+            if (!segmentId) {
+                return { success: false, reason: 'Missing segment ID' };
+            }
+
+            // Key: vendor-specific or use description keywords
+            const keywords = this.extractKeywords(description);
+            const key = vendorId
+                ? `vendor_${vendorId}`
+                : (keywords.length > 0 ? `global_${keywords[0]}` : 'global_default');
+
+            const existing = this.getConfig(segmentType, key);
+            const data = existing?.data || {
+                vendorId: vendorId || null,
+                segmentId: segmentId,
+                keywords: keywords,
+                patterns: [],
+                usageCount: 0
+            };
+
+            // Update
+            data.segmentId = segmentId;
+            data.usageCount = (data.usageCount || 0) + 1;
+
+            // Store description pattern for matching
+            if (description && !data.patterns.includes(description.toLowerCase())) {
+                data.patterns = data.patterns.slice(-10);
+                data.patterns.push(description.toLowerCase());
+            }
+
+            data.lastUpdated = new Date().toISOString();
+
+            log.audit('CorrectionLearner.learnSegmentMapping', {
+                segmentType: segmentType,
+                vendorId: vendorId,
+                segmentId: segmentId,
+                usageCount: data.usageCount
+            });
+
+            return this.storeConfig({
+                type: segmentType,
+                key: key,
+                data: data,
+                existingId: existing?.id
+            });
+        }
+
+        /**
+         * Learn from an approved transaction
+         * Captures all coding data for future auto-suggestions
+         * @param {Object} approvalData - Data from the approved transaction
+         * @param {number} approvalData.vendorId - Vendor ID
+         * @param {Object} approvalData.headerFields - Header field values (department, class, location, etc.)
+         * @param {Array} approvalData.lineItems - Line items with account, department, class, location
+         * @returns {Object} Learning results summary
+         */
+        learnFromApproval(approvalData) {
+            if (!approvalData || !approvalData.vendorId) {
+                return { success: false, reason: 'Missing vendor ID' };
+            }
+
+            const vendorId = approvalData.vendorId;
+            const results = {
+                vendorDefaults: null,
+                lineItemLearnings: [],
+                success: true
+            };
+
+            try {
+                // 1. Learn vendor defaults from header fields
+                const headerFields = approvalData.headerFields || {};
+                const vendorDefaultsResult = this.learnVendorDefaults(vendorId, headerFields);
+                results.vendorDefaults = vendorDefaultsResult;
+
+                // 2. Learn from each line item
+                const lineItems = approvalData.lineItems || [];
+                for (let i = 0; i < lineItems.length; i++) {
+                    const line = lineItems[i];
+                    const description = line.description || line.memo || '';
+
+                    if (!description) continue;
+
+                    const lineLearnings = {};
+
+                    // Learn account mapping
+                    if (line.account) {
+                        const accountResult = this.learnAccountMapping({
+                            vendorId: vendorId,
+                            corrected: line.account,
+                            lineItemDescription: description
+                        }, { lineItemDescription: description });
+                        lineLearnings.account = accountResult.success;
+                    }
+
+                    // Learn department mapping
+                    if (line.department) {
+                        const deptResult = this.learnSegmentMapping({
+                            vendorId: vendorId,
+                            corrected: line.department
+                        }, { lineItemDescription: description }, LearningType.DEPARTMENT_MAPPING);
+                        lineLearnings.department = deptResult.success;
+                    }
+
+                    // Learn class mapping
+                    if (line.class) {
+                        const classResult = this.learnSegmentMapping({
+                            vendorId: vendorId,
+                            corrected: line.class
+                        }, { lineItemDescription: description }, LearningType.CLASS_MAPPING);
+                        lineLearnings.class = classResult.success;
+                    }
+
+                    // Learn location mapping
+                    if (line.location) {
+                        const locResult = this.learnSegmentMapping({
+                            vendorId: vendorId,
+                            corrected: line.location
+                        }, { lineItemDescription: description }, LearningType.LOCATION_MAPPING);
+                        lineLearnings.location = locResult.success;
+                    }
+
+                    // Learn item mapping if item ID present
+                    if (line.item && description) {
+                        const itemResult = this.learnItemMapping({
+                            vendorId: vendorId,
+                            original: description,
+                            corrected: line.item
+                        }, { lineItemDescription: description });
+                        lineLearnings.item = itemResult.success;
+                    }
+
+                    results.lineItemLearnings.push({
+                        index: i,
+                        description: description.substring(0, 50),
+                        learnings: lineLearnings
+                    });
+                }
+
+                log.audit('CorrectionLearner.learnFromApproval', {
+                    vendorId: vendorId,
+                    headerLearned: results.vendorDefaults?.success,
+                    linesLearned: results.lineItemLearnings.length
+                });
+
+                return results;
+            } catch (e) {
+                log.error('CorrectionLearner.learnFromApproval', e.message);
+                return { success: false, reason: e.message };
+            }
+        }
+
+        /**
+         * Learn vendor defaults from header fields
+         * Stores default department, class, location, payment terms for this vendor
+         */
+        learnVendorDefaults(vendorId, headerFields) {
+            if (!vendorId) {
+                return { success: false, reason: 'Missing vendor ID' };
+            }
+
+            const key = `vendor_${vendorId}`;
+            const existing = this.getConfig(LearningType.VENDOR_DEFAULTS, key);
+            const data = existing?.data || {
+                vendorId: vendorId,
+                defaults: {},
+                usageCount: 0
+            };
+
+            // Update defaults from header fields
+            const fieldsToLearn = ['department', 'class', 'location', 'terms', 'account'];
+            for (const field of fieldsToLearn) {
+                if (headerFields[field]) {
+                    if (!data.defaults[field]) {
+                        data.defaults[field] = { value: headerFields[field], count: 1 };
+                    } else if (data.defaults[field].value === headerFields[field]) {
+                        data.defaults[field].count++;
+                    } else {
+                        // Different value - update if new value is more common or recent
+                        data.defaults[field] = { value: headerFields[field], count: 1 };
+                    }
+                }
+            }
+
+            data.usageCount = (data.usageCount || 0) + 1;
+            data.lastUpdated = new Date().toISOString();
+
+            return this.storeConfig({
+                type: LearningType.VENDOR_DEFAULTS,
+                key: key,
+                data: data,
+                existingId: existing?.id
+            });
+        }
+
+        /**
+         * Get vendor defaults (department, class, location, etc.)
+         */
+        getVendorDefaults(vendorId) {
+            if (!vendorId) return null;
+
+            const config = this.getConfig(LearningType.VENDOR_DEFAULTS, `vendor_${vendorId}`);
+            if (!config?.data?.defaults) return null;
+
+            // Convert stored defaults to suggestion format
+            const suggestions = {};
+            const defaults = config.data.defaults;
+            const usageCount = config.data.usageCount || 1;
+
+            for (const [field, info] of Object.entries(defaults)) {
+                suggestions[field] = {
+                    value: info.value,
+                    confidence: Math.min(0.5 + (info.count / usageCount) * 0.4, 0.95),
+                    source: 'vendor_defaults',
+                    usageCount: info.count
+                };
+            }
+
+            return suggestions;
+        }
+
+        /**
+         * Get suggested segment (department, class, or location)
+         */
+        getSuggestedSegment(vendorId, description, segmentType) {
+            // Try vendor-specific first
+            if (vendorId) {
+                const vendorConfig = this.getConfig(segmentType, `vendor_${vendorId}`);
+                if (vendorConfig?.data?.segmentId) {
+                    return {
+                        id: vendorConfig.data.segmentId,
+                        confidence: Math.min(0.6 + (vendorConfig.data.usageCount || 0) * 0.05, 0.92),
+                        source: 'vendor_specific'
+                    };
+                }
+            }
+
+            // Try keyword-based global patterns
+            if (description) {
+                const keywords = this.extractKeywords(description);
+                for (const kw of keywords) {
+                    const globalConfig = this.getConfig(segmentType, `global_${kw}`);
+                    if (globalConfig?.data?.segmentId) {
+                        return {
+                            id: globalConfig.data.segmentId,
+                            confidence: Math.min(0.4 + (globalConfig.data.usageCount || 0) * 0.03, 0.75),
+                            source: 'global_keyword'
+                        };
+                    }
+                }
+            }
+
+            return null;
+        }
+
+        /**
+         * Get all coding suggestions for a document
+         * Returns header defaults and line item suggestions in one call
+         * @param {number} vendorId - Vendor ID
+         * @param {Array} lineItems - Array of line items with descriptions
+         * @returns {Object} All suggestions organized by header and line items
+         */
+        getSuggestedCoding(vendorId, lineItems = []) {
+            const result = {
+                headerDefaults: {},
+                lineItemSuggestions: [],
+                meta: {
+                    vendorId: vendorId,
+                    timestamp: new Date().toISOString(),
+                    hasLearning: false
+                }
+            };
+
+            try {
+                // 1. Get vendor defaults for header
+                const vendorDefaults = this.getVendorDefaults(vendorId);
+                if (vendorDefaults) {
+                    result.headerDefaults = vendorDefaults;
+                    result.meta.hasLearning = true;
+                }
+
+                // 2. Get suggestions for each line item
+                for (let i = 0; i < lineItems.length; i++) {
+                    const line = lineItems[i];
+                    const description = line.description || line.memo || '';
+
+                    const lineSuggestions = {
+                        index: i,
+                        description: description.substring(0, 100)
+                    };
+
+                    // Account suggestion
+                    const accountSuggestion = this.getSuggestedAccount(vendorId, description);
+                    if (accountSuggestion) {
+                        lineSuggestions.account = accountSuggestion;
+                        result.meta.hasLearning = true;
+                    }
+
+                    // Department suggestion
+                    const deptSuggestion = this.getSuggestedSegment(vendorId, description, LearningType.DEPARTMENT_MAPPING);
+                    if (deptSuggestion) {
+                        lineSuggestions.department = deptSuggestion;
+                        result.meta.hasLearning = true;
+                    }
+
+                    // Class suggestion
+                    const classSuggestion = this.getSuggestedSegment(vendorId, description, LearningType.CLASS_MAPPING);
+                    if (classSuggestion) {
+                        lineSuggestions.class = classSuggestion;
+                        result.meta.hasLearning = true;
+                    }
+
+                    // Location suggestion
+                    const locSuggestion = this.getSuggestedSegment(vendorId, description, LearningType.LOCATION_MAPPING);
+                    if (locSuggestion) {
+                        lineSuggestions.location = locSuggestion;
+                        result.meta.hasLearning = true;
+                    }
+
+                    // Item suggestion
+                    const itemSuggestion = this.getSuggestedItem(vendorId, description);
+                    if (itemSuggestion) {
+                        lineSuggestions.item = itemSuggestion;
+                        result.meta.hasLearning = true;
+                    }
+
+                    result.lineItemSuggestions.push(lineSuggestions);
+                }
+
+                return result;
+            } catch (e) {
+                log.error('CorrectionLearner.getSuggestedCoding', e.message);
+                result.error = e.message;
+                return result;
+            }
         }
 
         /**

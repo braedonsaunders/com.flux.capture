@@ -1599,6 +1599,42 @@ define([
         }
 
         /**
+         * Learn from an approved transaction
+         * Captures all coding data for future auto-suggestions
+         * @param {Object} approvalData - Data from the approved transaction
+         * @param {number} approvalData.vendorId - Vendor ID
+         * @param {Object} approvalData.headerFields - Header field values
+         * @param {Array} approvalData.lineItems - Line items with coding data
+         * @returns {Object} Learning results summary
+         */
+        learnFromApproval(approvalData) {
+            if (!this.enableLearning) {
+                return { success: false, reason: 'Learning disabled' };
+            }
+            return this.correctionLearner.learnFromApproval(approvalData);
+        }
+
+        /**
+         * Get all coding suggestions for a document
+         * Returns header defaults and line item suggestions in one call
+         * @param {number} vendorId - Vendor ID
+         * @param {Array} lineItems - Array of line items with descriptions
+         * @returns {Object} All suggestions organized by header and line items
+         */
+        getSuggestedCoding(vendorId, lineItems) {
+            return this.correctionLearner.getSuggestedCoding(vendorId, lineItems);
+        }
+
+        /**
+         * Get vendor defaults for header fields
+         * @param {number} vendorId - Vendor ID
+         * @returns {Object|null} Vendor default values
+         */
+        getVendorDefaults(vendorId) {
+            return this.correctionLearner.getVendorDefaults(vendorId);
+        }
+
+        /**
          * Check remaining usage for the current provider
          * @returns {Object|null} Usage info or null if unavailable
          */

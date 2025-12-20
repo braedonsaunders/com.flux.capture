@@ -60,6 +60,14 @@
         itemsData: [], // Cached items for sublist dropdowns
         settings: null, // General app settings (defaultLineSublist, etc.)
 
+        // Smart Auto-Coding suggestions
+        codingSuggestions: {
+            headerDefaults: {},
+            lineItemSuggestions: [],
+            meta: { hasLearning: false }
+        },
+        suggestionsApplied: false,
+
         // ==========================================
         // EXTRACTION POOL STATE
         // ==========================================
@@ -286,6 +294,11 @@
 
                     self.isLoading = false;
                     self.render();
+
+                    // Fetch coding suggestions if vendor is already set
+                    if (self.data && self.data.vendorId) {
+                        self.fetchCodingSuggestions(self.data.vendorId);
+                    }
                 })
                 .catch(function(err) {
                     console.error('[Review] Load error:', err);
@@ -3728,6 +3741,9 @@
                     ReviewController.changes.vendorId = id;
                     ReviewController.markUnsaved();
                     ReviewController.hideVendorDropdown();
+
+                    // Fetch coding suggestions for this vendor
+                    ReviewController.fetchCodingSuggestions(id);
                 });
             });
         },
@@ -3735,6 +3751,209 @@
         hideVendorDropdown: function() {
             var dropdown = el('#vendor-dropdown');
             if (dropdown) dropdown.style.display = 'none';
+        },
+
+        // ==========================================
+        // SMART AUTO-CODING SUGGESTIONS
+        // ==========================================
+
+        /**
+         * Fetch coding suggestions for a vendor based on learned patterns
+         * @param {string|number} vendorId - The vendor ID
+         */
+        fetchCodingSuggestions: function(vendorId) {
+            var self = this;
+            if (!vendorId) return;
+
+            // Build line items array from current form data
+            var lineItems = [];
+            if (this.formData && this.formData.sublists) {
+                var sublists = this.formData.sublists;
+                var lines = sublists.expense || sublists.item || [];
+                lines.forEach(function(line) {
+                    lineItems.push({
+                        description: line.memo || line.description || '',
+                        account: line.account || '',
+                        department: line.department || '',
+                        class: line.class || '',
+                        location: line.location || ''
+                    });
+                });
+            }
+
+            API.get('codingSuggestions', {
+                vendorId: vendorId,
+                lineItems: JSON.stringify(lineItems)
+            }).then(function(result) {
+                if (result && result.meta && result.meta.hasLearning) {
+                    self.codingSuggestions = result;
+                    self.suggestionsApplied = false;
+                    self.showSuggestionsIndicator();
+                    FCDebug.log('[AutoCoding] Suggestions loaded:', result);
+                } else {
+                    self.codingSuggestions = { headerDefaults: {}, lineItemSuggestions: [], meta: { hasLearning: false } };
+                }
+            }).catch(function(err) {
+                FCDebug.log('[AutoCoding] Error fetching suggestions:', err);
+            });
+        },
+
+        /**
+         * Show indicator that suggestions are available
+         */
+        showSuggestionsIndicator: function() {
+            // Remove existing indicator
+            var existing = el('#suggestions-indicator');
+            if (existing) existing.remove();
+
+            // Count available suggestions
+            var headerCount = Object.keys(this.codingSuggestions.headerDefaults || {}).length;
+            var lineCount = (this.codingSuggestions.lineItemSuggestions || []).filter(function(l) {
+                return l.account || l.department || l.class || l.location;
+            }).length;
+
+            if (headerCount === 0 && lineCount === 0) return;
+
+            // Add indicator after vendor section
+            var vendorSection = el('.vendor-field');
+            if (!vendorSection) return;
+
+            var indicator = document.createElement('div');
+            indicator.id = 'suggestions-indicator';
+            indicator.className = 'suggestions-indicator';
+            indicator.innerHTML =
+                '<div class="suggestions-banner">' +
+                    '<i class="fas fa-magic"></i>' +
+                    '<span class="suggestions-text">' +
+                        '<strong>Smart Coding Available</strong> - ' +
+                        (headerCount > 0 ? headerCount + ' header field' + (headerCount > 1 ? 's' : '') : '') +
+                        (headerCount > 0 && lineCount > 0 ? ', ' : '') +
+                        (lineCount > 0 ? lineCount + ' line suggestion' + (lineCount > 1 ? 's' : '') : '') +
+                    '</span>' +
+                    '<button type="button" class="btn btn-sm btn-primary" id="btn-apply-suggestions">' +
+                        '<i class="fas fa-check"></i> Apply All' +
+                    '</button>' +
+                    '<button type="button" class="btn btn-sm btn-ghost" id="btn-dismiss-suggestions">' +
+                        '<i class="fas fa-times"></i>' +
+                    '</button>' +
+                '</div>';
+
+            vendorSection.parentNode.insertBefore(indicator, vendorSection.nextSibling);
+
+            // Bind events
+            var applyBtn = el('#btn-apply-suggestions');
+            var dismissBtn = el('#btn-dismiss-suggestions');
+
+            if (applyBtn) {
+                applyBtn.addEventListener('click', function() {
+                    ReviewController.applySuggestions();
+                });
+            }
+            if (dismissBtn) {
+                dismissBtn.addEventListener('click', function() {
+                    indicator.remove();
+                });
+            }
+        },
+
+        /**
+         * Apply all coding suggestions to the form
+         */
+        applySuggestions: function() {
+            var self = this;
+            var applied = 0;
+
+            // Apply header defaults
+            var headerDefaults = this.codingSuggestions.headerDefaults || {};
+            Object.keys(headerDefaults).forEach(function(field) {
+                var suggestion = headerDefaults[field];
+                if (!suggestion || !suggestion.value) return;
+
+                // Find the field element
+                var fieldEl = el('#field-' + field) || el('[name="' + field + '"]');
+                if (fieldEl && !fieldEl.value) {
+                    fieldEl.value = suggestion.value;
+                    self.changes[field] = suggestion.value;
+
+                    // Update formData
+                    if (self.formData && self.formData.bodyFields) {
+                        self.formData.bodyFields[field] = suggestion.value;
+                    }
+
+                    // Add visual indicator
+                    fieldEl.classList.add('field-suggested');
+                    applied++;
+                }
+            });
+
+            // Apply line item suggestions
+            var lineSuggestions = this.codingSuggestions.lineItemSuggestions || [];
+            lineSuggestions.forEach(function(lineSugg, index) {
+                if (!lineSugg) return;
+
+                // Apply account suggestion
+                if (lineSugg.account && lineSugg.account.accountId) {
+                    var accountField = el('#line-account-' + index);
+                    if (accountField && !accountField.value) {
+                        accountField.value = lineSugg.account.accountId;
+                        accountField.classList.add('field-suggested');
+                        applied++;
+
+                        // Update formData
+                        if (self.formData && self.formData.sublists) {
+                            var sublists = self.formData.sublists;
+                            var lines = sublists.expense || sublists.item || [];
+                            if (lines[index]) {
+                                lines[index].account = lineSugg.account.accountId;
+                            }
+                        }
+                    }
+                }
+
+                // Apply department suggestion
+                if (lineSugg.department && lineSugg.department.id) {
+                    var deptField = el('#line-department-' + index);
+                    if (deptField && !deptField.value) {
+                        deptField.value = lineSugg.department.id;
+                        deptField.classList.add('field-suggested');
+                        applied++;
+                    }
+                }
+
+                // Apply class suggestion
+                if (lineSugg.class && lineSugg.class.id) {
+                    var classField = el('#line-class-' + index);
+                    if (classField && !classField.value) {
+                        classField.value = lineSugg.class.id;
+                        classField.classList.add('field-suggested');
+                        applied++;
+                    }
+                }
+
+                // Apply location suggestion
+                if (lineSugg.location && lineSugg.location.id) {
+                    var locField = el('#line-location-' + index);
+                    if (locField && !locField.value) {
+                        locField.value = lineSugg.location.id;
+                        locField.classList.add('field-suggested');
+                        applied++;
+                    }
+                }
+            });
+
+            this.suggestionsApplied = true;
+            this.markUnsaved();
+
+            // Remove the indicator
+            var indicator = el('#suggestions-indicator');
+            if (indicator) indicator.remove();
+
+            // Show success message
+            if (applied > 0) {
+                UI.toast('Applied ' + applied + ' coding suggestion' + (applied > 1 ? 's' : ''), 'success');
+            } else {
+                UI.toast('No empty fields to fill', 'info');
+            }
         },
 
         // ==========================================
@@ -5647,6 +5866,8 @@
             this.vendorSuggestions = [];
             this.queueIds = [];
             this.queueIndex = -1;
+            this.codingSuggestions = { headerDefaults: {}, lineItemSuggestions: [], meta: { hasLearning: false } };
+            this.suggestionsApplied = false;
         }
     };
 
