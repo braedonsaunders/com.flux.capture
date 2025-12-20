@@ -969,15 +969,7 @@
     color: var(--text-inverse);
 }
 
-.preview-viewport {
-    flex: 1;
-    overflow: hidden; /* Prevent scrollbars on the viewport itself */
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    position: relative;
-    min-height: 0; /* Allow flex item to shrink */
-}
+/* .preview-viewport styles moved to end of file for better specificity */
 
 .preview-viewport iframe {
     position: absolute;
@@ -7152,7 +7144,7 @@ tr.doc-row.approving { animation: compress-out 0.3s ease forwards; }
    PDF.js, Annotations, Pool, Quick Assign
    ========================================== */
 
-/* PDF.js Container */
+/* PDF.js Container - base styles overridden at end of file for review page */
 .pdf-container {
     position: relative;
     width: 100%;
@@ -7160,8 +7152,8 @@ tr.doc-row.approving { animation: compress-out 0.3s ease forwards; }
     display: flex;
     flex-direction: column;
     align-items: center;
-    overflow: auto;
-    background: var(--gray-100);
+    overflow: hidden; /* Prevent scrollbars - scrolling handled by preview-viewport */
+    background: var(--surface-body);
     padding: var(--space-md);
     /* Prevent text blur from transforms */
     -webkit-font-smoothing: antialiased;
@@ -7190,6 +7182,8 @@ tr.doc-row.approving { animation: compress-out 0.3s ease forwards; }
 #pdf-canvas {
     box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
     background: white;
+    max-width: 100%;
+    height: auto;
 }
 
 /* Annotation Overlay */
@@ -8356,30 +8350,55 @@ body.extraction-selecting .form-field:hover {
 
 .preview-viewport {
     flex: 1;
-    overflow-y: auto;
+    overflow-y: scroll;
     overflow-x: hidden;
-    display: flex;
-    align-items: flex-start;
-    justify-content: center;
+    display: block;
     position: relative;
     min-height: 0;
     padding: 0;
-    /* Hide scrollbars but allow scroll */
-    scrollbar-width: none; /* Firefox */
-    -ms-overflow-style: none; /* IE/Edge */
 }
 
+/* Subtle scrollbar - hidden by default, shows on hover */
 .preview-viewport::-webkit-scrollbar {
-    display: none; /* Chrome/Safari/Opera */
+    width: 6px;
+    background: transparent;
 }
 
-/* PDF container - floating paper effect */
+.preview-viewport::-webkit-scrollbar-thumb {
+    background: transparent;
+    border-radius: 3px;
+    transition: background 0.2s;
+}
+
+.preview-viewport:hover::-webkit-scrollbar-thumb {
+    background: rgba(0, 0, 0, 0.15);
+}
+
+.preview-viewport::-webkit-scrollbar-thumb:hover {
+    background: rgba(0, 0, 0, 0.25);
+}
+
+/* Firefox - thin scrollbar that's subtle */
+.preview-viewport {
+    scrollbar-width: thin;
+    scrollbar-color: transparent transparent;
+}
+
+.preview-viewport:hover {
+    scrollbar-color: rgba(0, 0, 0, 0.15) transparent;
+}
+
+/* PDF container - fills viewport height, no scrollbars */
 .pdf-container {
     display: flex;
     align-items: flex-start;
     justify-content: center;
     min-height: 100%;
+    height: auto;
     padding: var(--space-lg);
+    padding-bottom: calc(var(--space-lg) + 24px); /* Extra bottom padding for scroll room */
+    box-sizing: border-box;
+    overflow: visible; /* Let preview-viewport handle scrolling */
 }
 
 .pdf-page-wrapper {
@@ -8391,6 +8410,7 @@ body.extraction-selecting .form-field:hover {
         0 10px 20px -2px rgba(0, 0, 0, 0.15),
         0 25px 50px -12px rgba(0, 0, 0, 0.25);
     overflow: hidden;
+    max-width: 100%; /* Prevent horizontal overflow */
 }
 
 /* PDF loading spinner - hidden by default */
