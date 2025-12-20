@@ -1027,6 +1027,16 @@
     <!-- REVIEW TEMPLATE - Enhanced Queue Navigation -->
     <script type="text/template" id="tpl-review">
         <div class="view-review">
+            <!-- Premium Loading Overlay -->
+            <div class="review-loading-overlay" id="review-loading-overlay">
+                <div class="loading-pulse-ring"></div>
+                <div class="loading-pulse-ring delay-1"></div>
+                <div class="loading-pulse-ring delay-2"></div>
+                <div class="loading-orb">
+                    <div class="orb-inner"></div>
+                </div>
+            </div>
+
             <!-- Queue Progress Bar -->
             <div class="review-progress-bar" id="review-progress-bar">
                 <div class="progress-fill" id="review-progress-fill"></div>
@@ -1034,10 +1044,6 @@
 
             <div class="review-toolbar">
                 <div class="toolbar-left">
-                    <button class="btn btn-ghost" id="btn-back">
-                        <i class="fas fa-arrow-left"></i>
-                        <span class="btn-text">Documents</span>
-                    </button>
                     <div class="toolbar-nav">
                         <button class="btn btn-ghost btn-icon" id="btn-doc-prev" title="Previous (←)" disabled>
                             <i class="fas fa-chevron-left"></i>
@@ -1051,6 +1057,21 @@
                         <button class="btn btn-ghost btn-icon" id="btn-doc-next" title="Next (→)" disabled>
                             <i class="fas fa-chevron-right"></i>
                         </button>
+                    </div>
+                    <div class="toolbar-divider"></div>
+                    <!-- PDF Controls moved here -->
+                    <div class="toolbar-pdf-controls">
+                        <button class="btn btn-icon btn-ghost" id="btn-zoom-out" title="Zoom Out (-)">
+                            <i class="fas fa-minus"></i>
+                        </button>
+                        <span class="zoom-level" id="zoom-level">100%</span>
+                        <button class="btn btn-icon btn-ghost" id="btn-zoom-in" title="Zoom In (+)">
+                            <i class="fas fa-plus"></i>
+                        </button>
+                        <button class="btn btn-icon btn-ghost" id="btn-rotate" title="Rotate">
+                            <i class="fas fa-rotate-right"></i>
+                        </button>
+                        <span class="page-display" id="page-display">1 / 1</span>
                     </div>
                 </div>
                 <div class="toolbar-title">
@@ -1066,9 +1087,11 @@
                             <div class="doc-type-option" data-type="5">Purchase Order</div>
                         </div>
                     </div>
-                    <span id="doc-title">Document Review</span>
                 </div>
                 <div class="toolbar-actions">
+                    <button class="btn btn-ghost btn-icon" id="btn-download" title="Download">
+                        <i class="fas fa-download"></i>
+                    </button>
                     <button class="btn btn-ghost" id="btn-reprocess" title="Reprocess document (X)">
                         <i class="fas fa-rotate"></i>
                         <span class="btn-text">Reprocess</span>
@@ -1104,31 +1127,6 @@
 
             <div class="review-content" id="review-content">
                 <div class="preview-panel" id="preview-panel" style="flex: 0 0 40%;">
-                    <div class="preview-tools">
-                        <button class="btn btn-icon btn-ghost" id="btn-zoom-out" title="Zoom Out (-)">
-                            <i class="fas fa-minus"></i>
-                        </button>
-                        <span class="zoom-level" id="zoom-level">100%</span>
-                        <button class="btn btn-icon btn-ghost" id="btn-zoom-in" title="Zoom In (+)">
-                            <i class="fas fa-plus"></i>
-                        </button>
-                        <button class="btn btn-icon btn-ghost" id="btn-zoom-reset" title="Reset Zoom (Ctrl+0)">
-                            <i class="fas fa-compress-arrows-alt"></i>
-                        </button>
-                        <div class="preview-divider"></div>
-                        <button class="btn btn-icon btn-ghost" id="btn-rotate" title="Rotate">
-                            <i class="fas fa-rotate-right"></i>
-                        </button>
-                        <button class="btn btn-icon btn-ghost" id="btn-download" title="Download">
-                            <i class="fas fa-download"></i>
-                        </button>
-                        <div class="preview-divider"></div>
-                        <span class="page-display" id="page-display">1 / 1</span>
-                        <div class="preview-divider"></div>
-                        <button class="btn btn-sm" id="btn-view-mode" title="Toggle Split View (V)">
-                            <i class="fas fa-table-columns"></i> Split View
-                        </button>
-                    </div>
                     <div class="preview-viewport" id="preview-viewport">
                         <!-- Document preview renders here -->
                     </div>

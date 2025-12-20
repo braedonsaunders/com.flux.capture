@@ -364,233 +364,43 @@
         },
 
         // ==========================================
-        // SKELETON LOADERS - Premium Loading Experience
+        // LOADING OVERLAY - Premium Loading Experience
         // ==========================================
 
         /**
-         * Generate PDF skeleton loader HTML
-         * Mimics the layout of an invoice document
+         * Show the loading overlay with premium animation
          */
-        generatePdfSkeleton: function() {
-            return '<div class="pdf-skeleton-container">' +
-                '<div class="pdf-skeleton">' +
-                    // Header with logo and title
-                    '<div class="pdf-skeleton-header">' +
-                        '<div class="pdf-skeleton-logo skeleton-dark"></div>' +
-                        '<div class="pdf-skeleton-title-block">' +
-                            '<div class="pdf-skeleton-title skeleton-dark"></div>' +
-                            '<div class="pdf-skeleton-subtitle skeleton-dark"></div>' +
-                        '</div>' +
-                    '</div>' +
-                    // Address blocks
-                    '<div class="pdf-skeleton-addresses">' +
-                        '<div class="pdf-skeleton-address">' +
-                            '<div class="pdf-skeleton-address-line skeleton-dark"></div>' +
-                            '<div class="pdf-skeleton-address-line skeleton-dark"></div>' +
-                            '<div class="pdf-skeleton-address-line skeleton-dark"></div>' +
-                            '<div class="pdf-skeleton-address-line skeleton-dark"></div>' +
-                        '</div>' +
-                        '<div class="pdf-skeleton-address">' +
-                            '<div class="pdf-skeleton-address-line skeleton-dark"></div>' +
-                            '<div class="pdf-skeleton-address-line skeleton-dark"></div>' +
-                            '<div class="pdf-skeleton-address-line skeleton-dark"></div>' +
-                        '</div>' +
-                    '</div>' +
-                    // Table skeleton
-                    '<div class="pdf-skeleton-table">' +
-                        '<div class="pdf-skeleton-table-header">' +
-                            '<div class="skeleton-dark"></div>' +
-                            '<div class="skeleton-dark"></div>' +
-                            '<div class="skeleton-dark"></div>' +
-                            '<div class="skeleton-dark"></div>' +
-                        '</div>' +
-                        '<div class="pdf-skeleton-table-row">' +
-                            '<div class="skeleton-dark"></div>' +
-                            '<div class="skeleton-dark"></div>' +
-                            '<div class="skeleton-dark"></div>' +
-                            '<div class="skeleton-dark"></div>' +
-                        '</div>' +
-                        '<div class="pdf-skeleton-table-row">' +
-                            '<div class="skeleton-dark"></div>' +
-                            '<div class="skeleton-dark"></div>' +
-                            '<div class="skeleton-dark"></div>' +
-                            '<div class="skeleton-dark"></div>' +
-                        '</div>' +
-                        '<div class="pdf-skeleton-table-row">' +
-                            '<div class="skeleton-dark"></div>' +
-                            '<div class="skeleton-dark"></div>' +
-                            '<div class="skeleton-dark"></div>' +
-                            '<div class="skeleton-dark"></div>' +
-                        '</div>' +
-                        '<div class="pdf-skeleton-table-row">' +
-                            '<div class="skeleton-dark"></div>' +
-                            '<div class="skeleton-dark"></div>' +
-                            '<div class="skeleton-dark"></div>' +
-                            '<div class="skeleton-dark"></div>' +
-                        '</div>' +
-                    '</div>' +
-                    // Totals
-                    '<div class="pdf-skeleton-totals">' +
-                        '<div class="pdf-skeleton-total-row">' +
-                            '<div class="pdf-skeleton-total-label skeleton-dark"></div>' +
-                            '<div class="pdf-skeleton-total-value skeleton-dark"></div>' +
-                        '</div>' +
-                        '<div class="pdf-skeleton-total-row">' +
-                            '<div class="pdf-skeleton-total-label skeleton-dark"></div>' +
-                            '<div class="pdf-skeleton-total-value skeleton-dark"></div>' +
-                        '</div>' +
-                        '<div class="pdf-skeleton-total-row">' +
-                            '<div class="pdf-skeleton-total-label skeleton-dark"></div>' +
-                            '<div class="pdf-skeleton-total-value skeleton-dark"></div>' +
-                        '</div>' +
-                    '</div>' +
-                '</div>' +
-            '</div>';
-        },
+        showLoadingOverlay: function() {
+            var overlay = el('#review-loading-overlay');
+            var content = el('#review-content');
 
-        /**
-         * Generate form skeleton loader HTML
-         * Mimics the extraction form layout with status, tabs, fields, and table
-         */
-        generateFormSkeleton: function() {
-            return '<div class="form-skeleton-container">' +
-                '<div class="form-skeleton">' +
-                    // Status bar
-                    '<div class="form-skeleton-status">' +
-                        '<div class="form-skeleton-status-left">' +
-                            '<div class="form-skeleton-badge skeleton"></div>' +
-                            '<div class="form-skeleton-status-text skeleton"></div>' +
-                        '</div>' +
-                        '<div class="form-skeleton-status-right">' +
-                            '<div class="form-skeleton-icon skeleton"></div>' +
-                            '<div class="form-skeleton-icon skeleton"></div>' +
-                        '</div>' +
-                    '</div>' +
-                    // Tab bar
-                    '<div class="form-skeleton-tabs">' +
-                        '<div class="form-skeleton-tab skeleton"></div>' +
-                        '<div class="form-skeleton-tab skeleton"></div>' +
-                        '<div class="form-skeleton-tab skeleton"></div>' +
-                    '</div>' +
-                    // Primary fields section
-                    '<div class="form-skeleton-section">' +
-                        '<div class="form-skeleton-section-title skeleton"></div>' +
-                        '<div class="form-skeleton-fields">' +
-                            '<div class="form-skeleton-field">' +
-                                '<div class="form-skeleton-label skeleton"></div>' +
-                                '<div class="form-skeleton-input skeleton"></div>' +
-                            '</div>' +
-                            '<div class="form-skeleton-field">' +
-                                '<div class="form-skeleton-label skeleton"></div>' +
-                                '<div class="form-skeleton-input skeleton"></div>' +
-                            '</div>' +
-                            '<div class="form-skeleton-field">' +
-                                '<div class="form-skeleton-label skeleton"></div>' +
-                                '<div class="form-skeleton-input skeleton"></div>' +
-                            '</div>' +
-                            '<div class="form-skeleton-field">' +
-                                '<div class="form-skeleton-label skeleton"></div>' +
-                                '<div class="form-skeleton-input skeleton"></div>' +
-                            '</div>' +
-                            '<div class="form-skeleton-field full-width">' +
-                                '<div class="form-skeleton-label skeleton"></div>' +
-                                '<div class="form-skeleton-input skeleton"></div>' +
-                            '</div>' +
-                        '</div>' +
-                    '</div>' +
-                    // Line items table
-                    '<div class="form-skeleton-table-section">' +
-                        '<div class="form-skeleton-table-header">' +
-                            '<div class="skeleton"></div>' +
-                            '<div class="skeleton"></div>' +
-                            '<div class="skeleton"></div>' +
-                            '<div class="skeleton"></div>' +
-                            '<div class="skeleton"></div>' +
-                        '</div>' +
-                        '<div class="form-skeleton-table-body">' +
-                            '<div class="form-skeleton-table-row">' +
-                                '<div class="skeleton"></div>' +
-                                '<div class="skeleton"></div>' +
-                                '<div class="skeleton"></div>' +
-                                '<div class="skeleton"></div>' +
-                                '<div class="skeleton"></div>' +
-                            '</div>' +
-                            '<div class="form-skeleton-table-row">' +
-                                '<div class="skeleton"></div>' +
-                                '<div class="skeleton"></div>' +
-                                '<div class="skeleton"></div>' +
-                                '<div class="skeleton"></div>' +
-                                '<div class="skeleton"></div>' +
-                            '</div>' +
-                            '<div class="form-skeleton-table-row">' +
-                                '<div class="skeleton"></div>' +
-                                '<div class="skeleton"></div>' +
-                                '<div class="skeleton"></div>' +
-                                '<div class="skeleton"></div>' +
-                                '<div class="skeleton"></div>' +
-                            '</div>' +
-                        '</div>' +
-                    '</div>' +
-                '</div>' +
-            '</div>';
-        },
-
-        /**
-         * Show skeleton loaders in PDF and form panels
-         * Clears existing content and shows skeletons
-         */
-        showSkeletonLoaders: function() {
-            var viewport = el('#preview-viewport');
-            var panel = el('#extraction-panel');
-
-            // Clear existing content and show skeletons
-            if (viewport) {
-                viewport.innerHTML = this.generatePdfSkeleton();
+            if (overlay) {
+                overlay.classList.remove('hidden');
             }
-
-            if (panel) {
-                panel.innerHTML = this.generateFormSkeleton();
+            if (content) {
+                content.classList.remove('loaded');
+                content.classList.add('loading');
             }
         },
 
         /**
-         * Hide skeleton loaders with smooth exit animation, then render content
-         * @param {Function} renderCallback - Function that renders the new content
+         * Hide the loading overlay and animate content in
          */
-        hideSkeletonLoaders: function(renderCallback) {
-            var self = this;
-            var viewport = el('#preview-viewport');
-            var panel = el('#extraction-panel');
-            var pdfSkeleton = viewport ? viewport.querySelector('.pdf-skeleton-container') : null;
-            var formSkeleton = panel ? panel.querySelector('.form-skeleton-container') : null;
+        hideLoadingOverlay: function() {
+            var overlay = el('#review-loading-overlay');
+            var content = el('#review-content');
 
-            // Add exit animation class to skeletons
-            if (pdfSkeleton) pdfSkeleton.classList.add('skeleton-exiting');
-            if (formSkeleton) formSkeleton.classList.add('skeleton-exiting');
-
-            // After exit animation completes, render new content
-            setTimeout(function() {
-                // Render the new content (this replaces skeleton with actual content)
-                if (renderCallback) renderCallback();
-
-                // Add reveal animation to the new content
-                requestAnimationFrame(function() {
-                    if (viewport) {
-                        var pdfContent = viewport.querySelector('.pdf-container');
-                        if (pdfContent) pdfContent.classList.add('pdf-content-reveal');
-                    }
-                    if (panel) {
-                        // Find the first child that's the form content
-                        var formContent = panel.firstElementChild;
-                        if (formContent) formContent.classList.add('form-content-reveal');
-                    }
-                });
-            }, 250); // Match skeletonFadeOut duration
+            if (overlay) {
+                overlay.classList.add('hidden');
+            }
+            if (content) {
+                content.classList.remove('loading');
+                content.classList.add('loaded');
+            }
         },
 
         /**
-         * Internal document transition - keeps toolbar/divider static
-         * Shows skeleton loaders while loading new document
+         * Internal document transition - shows loading overlay while loading new document
          * @param {number} newDocId - Document ID to load
          */
         transitionToDocument: function(newDocId) {
@@ -605,8 +415,8 @@
                 window.history.replaceState({ docId: newDocId }, '', newUrl);
             }
 
-            // Show skeleton loaders over current content
-            this.showSkeletonLoaders();
+            // Show loading overlay
+            this.showLoadingOverlay();
 
             // Update state
             this.docId = newDocId;
@@ -672,24 +482,24 @@
 
                     self.isLoading = false;
 
-                    // Hide skeletons and render new content
-                    self.hideSkeletonLoaders(function() {
-                        self.renderToolbar();
-                        self.renderPreview();
-                        self.renderExtractionForm();
+                    // Render new content
+                    self.renderToolbar();
+                    self.renderPreview();
+                    self.renderExtractionForm();
 
-                        // Fetch coding suggestions if vendor is set
-                        if (self.data && self.data.vendorId) {
-                            self.fetchCodingSuggestions(self.data.vendorId);
-                        }
-                    });
+                    // Hide loading overlay and animate content in
+                    self.hideLoadingOverlay();
+
+                    // Fetch coding suggestions if vendor is set
+                    if (self.data && self.data.vendorId) {
+                        self.fetchCodingSuggestions(self.data.vendorId);
+                    }
                 })
                 .catch(function(err) {
                     console.error('[Review] Transition error:', err);
                     self.isLoading = false;
-                    self.hideSkeletonLoaders(function() {
-                        self.showError(err.message);
-                    });
+                    self.hideLoadingOverlay();
+                    self.showError(err.message);
                 });
         },
 
@@ -920,11 +730,6 @@
                         d.classList.remove('open');
                     });
                 }
-            });
-
-            // Back button
-            this.on('#btn-back', 'click', function() {
-                self.navigateBack();
             });
 
             // Approve button
@@ -1225,6 +1030,9 @@
             // Auto-select subsidiary if only one exists
             this.autoSelectSingleOptions();
 
+            // Hide loading overlay and animate content in
+            this.hideLoadingOverlay();
+
             // Focus first field
             setTimeout(function() {
                 var firstInput = document.querySelector('.extraction-panel input:not([type="hidden"])');
@@ -1308,10 +1116,8 @@
         renderToolbar: function() {
             var doc = this.data;
 
-            // Update title and badge
-            var titleEl = el('#doc-title');
+            // Update document type badge
             var badgeText = el('#doc-type-badge .badge-text');
-            if (titleEl) titleEl.textContent = doc.invoiceNumber || doc.name || 'Document Review';
             if (badgeText) badgeText.textContent = doc.documentTypeText || 'Invoice';
 
             // Mark current document type as selected

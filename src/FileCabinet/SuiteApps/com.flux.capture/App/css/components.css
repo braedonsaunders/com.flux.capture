@@ -8119,458 +8119,238 @@ body.extraction-selecting .form-field:hover {
 }
 
 /* ==========================================
-   PREMIUM SKELETON LOADERS - Review Page
-   World-class loading experience with
-   smooth shimmer animations
+   PREMIUM LOADING OVERLAY - Review Page
+   Stunning, rewarding loading experience
    ========================================== */
 
-/* Base skeleton shimmer animation */
-@keyframes skeletonShimmer {
-    0% {
-        background-position: -200% 0;
-    }
-    100% {
-        background-position: 200% 0;
-    }
-}
-
-/* Skeleton fade in/out animations */
-@keyframes skeletonFadeIn {
-    0% {
-        opacity: 0;
-        transform: scale(0.98);
-    }
-    100% {
-        opacity: 1;
-        transform: scale(1);
-    }
-}
-
-@keyframes skeletonFadeOut {
-    0% {
-        opacity: 1;
-        transform: scale(1);
-    }
-    100% {
-        opacity: 0;
-        transform: scale(1.02);
-    }
-}
-
-/* Subtle pulse for skeleton containers */
-@keyframes skeletonPulse {
-    0%, 100% {
-        opacity: 1;
-    }
-    50% {
-        opacity: 0.85;
-    }
-}
-
-/* Base skeleton element */
-.skeleton {
-    background: linear-gradient(
-        90deg,
-        var(--gray-200) 0%,
-        var(--gray-100) 20%,
-        var(--gray-50) 40%,
-        var(--gray-100) 60%,
-        var(--gray-200) 100%
-    );
-    background-size: 200% 100%;
-    animation: skeletonShimmer 1.8s ease-in-out infinite;
-    border-radius: var(--radius-sm);
-}
-
-/* Darker skeleton for dark backgrounds (PDF viewer) */
-.skeleton-dark {
-    background: linear-gradient(
-        90deg,
-        rgba(255, 255, 255, 0.05) 0%,
-        rgba(255, 255, 255, 0.12) 20%,
-        rgba(255, 255, 255, 0.18) 40%,
-        rgba(255, 255, 255, 0.12) 60%,
-        rgba(255, 255, 255, 0.05) 100%
-    );
-    background-size: 200% 100%;
-    animation: skeletonShimmer 1.8s ease-in-out infinite;
-    border-radius: var(--radius-sm);
-}
-
-/* ==========================================
-   PDF SKELETON LOADER
-   Mimics a document page layout
-   ========================================== */
-.pdf-skeleton-container {
+/* Loading overlay container */
+.review-loading-overlay {
     position: absolute;
     inset: 0;
+    z-index: 100;
     display: flex;
     align-items: center;
     justify-content: center;
-    padding: var(--space-lg);
-    animation: skeletonFadeIn 0.3s cubic-bezier(0.4, 0, 0.2, 1) forwards;
-    z-index: 10;
+    background: linear-gradient(
+        135deg,
+        rgba(15, 23, 42, 0.97) 0%,
+        rgba(30, 41, 59, 0.98) 50%,
+        rgba(15, 23, 42, 0.97) 100%
+    );
+    backdrop-filter: blur(8px);
+    opacity: 1;
+    transition: opacity 0.5s cubic-bezier(0.4, 0, 0.2, 1),
+                visibility 0.5s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
-.pdf-skeleton-container.skeleton-exiting {
-    animation: skeletonFadeOut 0.25s cubic-bezier(0.4, 0, 0.6, 1) forwards;
+.review-loading-overlay.hidden {
+    opacity: 0;
+    visibility: hidden;
+    pointer-events: none;
 }
 
-.pdf-skeleton {
-    width: 100%;
-    max-width: 520px;
-    aspect-ratio: 8.5 / 11;
-    background: rgba(255, 255, 255, 0.03);
-    border-radius: var(--radius-lg);
-    padding: var(--space-xl);
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-md);
-    box-shadow:
-        0 0 0 1px rgba(255, 255, 255, 0.06),
-        0 4px 24px rgba(0, 0, 0, 0.3);
-    animation: skeletonPulse 2.5s ease-in-out infinite;
-    overflow: hidden;
+/* Expanding pulse rings */
+@keyframes pulseRing {
+    0% {
+        transform: translate(-50%, -50%) scale(0.5);
+        opacity: 0.8;
+    }
+    100% {
+        transform: translate(-50%, -50%) scale(2.5);
+        opacity: 0;
+    }
 }
 
-/* Document header area */
-.pdf-skeleton-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: flex-start;
-    margin-bottom: var(--space-md);
-}
-
-.pdf-skeleton-logo {
+.loading-pulse-ring {
+    position: absolute;
+    top: 50%;
+    left: 50%;
     width: 80px;
-    height: 32px;
+    height: 80px;
+    border: 2px solid rgba(59, 130, 246, 0.4);
+    border-radius: 50%;
+    transform: translate(-50%, -50%);
+    animation: pulseRing 2s cubic-bezier(0.4, 0, 0.2, 1) infinite;
 }
 
-.pdf-skeleton-title-block {
-    text-align: right;
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-xs);
+.loading-pulse-ring.delay-1 {
+    animation-delay: 0.5s;
+    border-color: rgba(99, 102, 241, 0.35);
 }
 
-.pdf-skeleton-title {
-    width: 120px;
-    height: 20px;
-    margin-left: auto;
+.loading-pulse-ring.delay-2 {
+    animation-delay: 1s;
+    border-color: rgba(139, 92, 246, 0.3);
 }
 
-.pdf-skeleton-subtitle {
-    width: 80px;
-    height: 14px;
-    margin-left: auto;
+/* Central glowing orb */
+@keyframes orbPulse {
+    0%, 100% {
+        transform: translate(-50%, -50%) scale(1);
+        box-shadow:
+            0 0 20px rgba(59, 130, 246, 0.4),
+            0 0 40px rgba(99, 102, 241, 0.3),
+            0 0 60px rgba(139, 92, 246, 0.2);
+    }
+    50% {
+        transform: translate(-50%, -50%) scale(1.1);
+        box-shadow:
+            0 0 30px rgba(59, 130, 246, 0.6),
+            0 0 60px rgba(99, 102, 241, 0.4),
+            0 0 90px rgba(139, 92, 246, 0.3);
+    }
 }
 
-/* Address blocks */
-.pdf-skeleton-addresses {
-    display: flex;
-    justify-content: space-between;
-    margin-bottom: var(--space-lg);
+@keyframes orbInnerRotate {
+    0% {
+        transform: rotate(0deg);
+    }
+    100% {
+        transform: rotate(360deg);
+    }
 }
 
-.pdf-skeleton-address {
-    display: flex;
-    flex-direction: column;
-    gap: 6px;
-    flex: 0 0 45%;
+.loading-orb {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: 48px;
+    height: 48px;
+    background: linear-gradient(135deg, #3b82f6 0%, #6366f1 50%, #8b5cf6 100%);
+    border-radius: 50%;
+    transform: translate(-50%, -50%);
+    animation: orbPulse 2s ease-in-out infinite;
 }
 
-.pdf-skeleton-address-line {
-    height: 12px;
-    border-radius: 2px;
+.loading-orb .orb-inner {
+    position: absolute;
+    inset: 4px;
+    background: linear-gradient(135deg, rgba(15, 23, 42, 0.9) 0%, rgba(30, 41, 59, 0.8) 100%);
+    border-radius: 50%;
+    animation: orbInnerRotate 3s linear infinite;
 }
 
-.pdf-skeleton-address-line:nth-child(1) { width: 60%; }
-.pdf-skeleton-address-line:nth-child(2) { width: 90%; }
-.pdf-skeleton-address-line:nth-child(3) { width: 75%; }
-.pdf-skeleton-address-line:nth-child(4) { width: 50%; }
-
-/* Table skeleton */
-.pdf-skeleton-table {
-    flex: 1;
-    display: flex;
-    flex-direction: column;
-    gap: 2px;
-    margin-bottom: var(--space-md);
-}
-
-.pdf-skeleton-table-header {
-    display: flex;
-    gap: var(--space-sm);
-    padding-bottom: var(--space-sm);
-    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
-    margin-bottom: var(--space-sm);
-}
-
-.pdf-skeleton-table-header .skeleton-dark {
-    height: 14px;
-    flex: 1;
-}
-
-.pdf-skeleton-table-header .skeleton-dark:nth-child(1) { flex: 3; }
-.pdf-skeleton-table-header .skeleton-dark:nth-child(2) { flex: 1; }
-.pdf-skeleton-table-header .skeleton-dark:nth-child(3) { flex: 1.5; }
-.pdf-skeleton-table-header .skeleton-dark:nth-child(4) { flex: 1.5; }
-
-.pdf-skeleton-table-row {
-    display: flex;
-    gap: var(--space-sm);
-    padding: var(--space-xs) 0;
-}
-
-.pdf-skeleton-table-row .skeleton-dark {
-    height: 12px;
-    flex: 1;
-}
-
-.pdf-skeleton-table-row .skeleton-dark:nth-child(1) { flex: 3; }
-.pdf-skeleton-table-row .skeleton-dark:nth-child(2) { flex: 1; }
-.pdf-skeleton-table-row .skeleton-dark:nth-child(3) { flex: 1.5; }
-.pdf-skeleton-table-row .skeleton-dark:nth-child(4) { flex: 1.5; }
-
-/* Stagger row animations */
-.pdf-skeleton-table-row:nth-child(1) .skeleton-dark { animation-delay: 0.05s; }
-.pdf-skeleton-table-row:nth-child(2) .skeleton-dark { animation-delay: 0.1s; }
-.pdf-skeleton-table-row:nth-child(3) .skeleton-dark { animation-delay: 0.15s; }
-.pdf-skeleton-table-row:nth-child(4) .skeleton-dark { animation-delay: 0.2s; }
-.pdf-skeleton-table-row:nth-child(5) .skeleton-dark { animation-delay: 0.25s; }
-
-/* Totals section */
-.pdf-skeleton-totals {
-    display: flex;
-    flex-direction: column;
-    align-items: flex-end;
-    gap: var(--space-xs);
-    padding-top: var(--space-md);
-    border-top: 1px solid rgba(255, 255, 255, 0.08);
-}
-
-.pdf-skeleton-total-row {
-    display: flex;
-    gap: var(--space-lg);
-    align-items: center;
-}
-
-.pdf-skeleton-total-label {
-    width: 60px;
-    height: 12px;
-}
-
-.pdf-skeleton-total-value {
-    width: 80px;
-    height: 12px;
-}
-
-.pdf-skeleton-total-row:last-child .skeleton-dark {
-    height: 16px;
+.loading-orb .orb-inner::before {
+    content: '';
+    position: absolute;
+    top: 2px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 8px;
+    height: 8px;
+    background: linear-gradient(135deg, #60a5fa 0%, #a78bfa 100%);
+    border-radius: 50%;
+    box-shadow: 0 0 10px rgba(96, 165, 250, 0.8);
 }
 
 /* ==========================================
-   FORM SKELETON LOADER
-   Mimics the extraction form layout
+   TOOLBAR PDF CONTROLS
    ========================================== */
-.form-skeleton-container {
-    position: absolute;
-    inset: 0;
+.toolbar-divider {
+    width: 1px;
+    height: 20px;
+    background: var(--gray-300);
+    margin: 0 var(--space-sm);
+}
+
+.toolbar-pdf-controls {
+    display: flex;
+    align-items: center;
+    gap: 2px;
+}
+
+.toolbar-pdf-controls .zoom-level {
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--text-secondary);
+    min-width: 40px;
+    text-align: center;
+}
+
+.toolbar-pdf-controls .page-display {
+    font-size: 11px;
+    color: var(--text-tertiary);
+    margin-left: var(--space-xs);
+}
+
+.toolbar-pdf-controls .btn-icon {
+    width: 28px;
+    height: 28px;
+    padding: 4px;
+}
+
+/* ==========================================
+   FLOATING PAPER PDF VIEWER
+   Clean, borderless document display
+   ========================================== */
+.preview-panel {
+    background: transparent !important;
+    border: none !important;
+    display: flex;
+    flex-direction: column;
+    position: relative;
+}
+
+.preview-viewport {
+    flex: 1;
+    overflow: auto;
+    display: flex;
+    align-items: flex-start;
+    justify-content: center;
+    position: relative;
+    min-height: 0;
     padding: var(--space-lg);
-    overflow: hidden;
-    animation: skeletonFadeIn 0.3s cubic-bezier(0.4, 0, 0.2, 1) forwards;
-    z-index: 10;
-    background: var(--surface-body);
+    /* Hide scrollbars but allow scroll */
+    scrollbar-width: none; /* Firefox */
+    -ms-overflow-style: none; /* IE/Edge */
 }
 
-.form-skeleton-container.skeleton-exiting {
-    animation: skeletonFadeOut 0.25s cubic-bezier(0.4, 0, 0.6, 1) forwards;
+.preview-viewport::-webkit-scrollbar {
+    display: none; /* Chrome/Safari/Opera */
 }
 
-.form-skeleton {
+/* PDF container - floating paper effect */
+.pdf-container {
     display: flex;
-    flex-direction: column;
-    gap: var(--space-lg);
-    animation: skeletonPulse 2.5s ease-in-out infinite;
-    animation-delay: 0.1s;
+    align-items: flex-start;
+    justify-content: center;
+    min-height: 100%;
 }
 
-/* Status bar skeleton */
-.form-skeleton-status {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    padding: var(--space-sm) var(--space-md);
-    background: var(--surface-card);
-    border-radius: var(--radius-md);
-    border: 1px solid var(--border-color);
-}
-
-.form-skeleton-status-left {
-    display: flex;
-    align-items: center;
-    gap: var(--space-md);
-}
-
-.form-skeleton-badge {
-    width: 100px;
-    height: 24px;
-    border-radius: var(--radius-full);
-}
-
-.form-skeleton-status-text {
-    width: 150px;
-    height: 16px;
-}
-
-.form-skeleton-status-right {
-    display: flex;
-    gap: var(--space-sm);
-}
-
-.form-skeleton-icon {
-    width: 32px;
-    height: 32px;
-    border-radius: var(--radius-sm);
-}
-
-/* Tab bar skeleton */
-.form-skeleton-tabs {
-    display: flex;
-    gap: var(--space-xs);
-    padding: var(--space-xs);
-    background: var(--gray-100);
-    border-radius: var(--radius-md);
-}
-
-.form-skeleton-tab {
-    height: 32px;
-    border-radius: var(--radius-sm);
-    flex: 1;
-}
-
-.form-skeleton-tab:first-child {
-    background: var(--surface-card);
-    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
-}
-
-/* Field group skeleton */
-.form-skeleton-section {
-    background: var(--surface-card);
-    border-radius: var(--radius-lg);
-    border: 1px solid var(--border-color);
-    padding: var(--space-md);
-}
-
-.form-skeleton-section-title {
-    width: 120px;
-    height: 18px;
-    margin-bottom: var(--space-md);
-}
-
-.form-skeleton-fields {
-    display: grid;
-    grid-template-columns: repeat(2, 1fr);
-    gap: var(--space-md);
-}
-
-.form-skeleton-field {
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-xs);
-}
-
-.form-skeleton-label {
-    width: 80px;
-    height: 14px;
-}
-
-.form-skeleton-input {
-    height: 40px;
-    border-radius: var(--radius-md);
-}
-
-/* Full width fields */
-.form-skeleton-field.full-width {
-    grid-column: span 2;
-}
-
-.form-skeleton-field.full-width .form-skeleton-label {
-    width: 120px;
-}
-
-/* Line items table skeleton */
-.form-skeleton-table-section {
-    background: var(--surface-card);
-    border-radius: var(--radius-lg);
-    border: 1px solid var(--border-color);
+.pdf-page-wrapper {
+    position: relative;
+    background: white;
+    border-radius: 4px;
+    box-shadow:
+        0 4px 6px -1px rgba(0, 0, 0, 0.1),
+        0 10px 20px -2px rgba(0, 0, 0, 0.15),
+        0 25px 50px -12px rgba(0, 0, 0, 0.25);
     overflow: hidden;
 }
 
-.form-skeleton-table-header {
-    display: flex;
-    gap: var(--space-sm);
-    padding: var(--space-sm) var(--space-md);
-    background: var(--gray-50);
-    border-bottom: 1px solid var(--border-color);
+/* PDF loading spinner - hidden by default */
+.pdf-loading {
+    display: none;
 }
 
-.form-skeleton-table-header .skeleton {
-    height: 14px;
-    flex: 1;
+/* Extraction panel - hide scrollbar but allow scroll */
+.extraction-panel {
+    scrollbar-width: none; /* Firefox */
+    -ms-overflow-style: none; /* IE/Edge */
 }
 
-.form-skeleton-table-header .skeleton:nth-child(1) { flex: 0.5; }
-.form-skeleton-table-header .skeleton:nth-child(2) { flex: 3; }
-.form-skeleton-table-header .skeleton:nth-child(3) { flex: 1; }
-.form-skeleton-table-header .skeleton:nth-child(4) { flex: 1; }
-.form-skeleton-table-header .skeleton:nth-child(5) { flex: 1; }
-
-.form-skeleton-table-body {
-    padding: var(--space-sm) var(--space-md);
+.extraction-panel::-webkit-scrollbar {
+    display: none; /* Chrome/Safari/Opera */
 }
 
-.form-skeleton-table-row {
-    display: flex;
-    gap: var(--space-sm);
-    padding: var(--space-sm) 0;
-    border-bottom: 1px solid var(--gray-100);
-}
-
-.form-skeleton-table-row:last-child {
-    border-bottom: none;
-}
-
-.form-skeleton-table-row .skeleton {
-    height: 36px;
-    flex: 1;
-    border-radius: var(--radius-md);
-}
-
-.form-skeleton-table-row .skeleton:nth-child(1) { flex: 0.5; height: 20px; align-self: center; }
-.form-skeleton-table-row .skeleton:nth-child(2) { flex: 3; }
-.form-skeleton-table-row .skeleton:nth-child(3) { flex: 1; }
-.form-skeleton-table-row .skeleton:nth-child(4) { flex: 1; }
-.form-skeleton-table-row .skeleton:nth-child(5) { flex: 1; }
-
-/* Stagger form skeleton animations */
-.form-skeleton-section:nth-child(1) { animation-delay: 0s; }
-.form-skeleton-section:nth-child(2) { animation-delay: 0.08s; }
-.form-skeleton-section:nth-child(3) { animation-delay: 0.16s; }
-.form-skeleton-table-section { animation-delay: 0.24s; }
-
-.form-skeleton-field:nth-child(1) .skeleton { animation-delay: 0s; }
-.form-skeleton-field:nth-child(2) .skeleton { animation-delay: 0.03s; }
-.form-skeleton-field:nth-child(3) .skeleton { animation-delay: 0.06s; }
-.form-skeleton-field:nth-child(4) .skeleton { animation-delay: 0.09s; }
-.form-skeleton-field:nth-child(5) .skeleton { animation-delay: 0.12s; }
-.form-skeleton-field:nth-child(6) .skeleton { animation-delay: 0.15s; }
-
-/* Content reveal animation - smooth entrance after skeleton exits */
-@keyframes contentReveal {
+/* ==========================================
+   CONTENT REVEAL ANIMATIONS
+   Smooth entrance after loading
+   ========================================== */
+@keyframes contentSlideUp {
     0% {
         opacity: 0;
-        transform: translateY(12px);
+        transform: translateY(24px);
     }
     100% {
         opacity: 1;
@@ -8578,11 +8358,47 @@ body.extraction-selecting .form-field:hover {
     }
 }
 
-.pdf-content-reveal {
-    animation: contentReveal 0.4s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+@keyframes contentSlideIn {
+    0% {
+        opacity: 0;
+        transform: translateX(-24px);
+    }
+    100% {
+        opacity: 1;
+        transform: translateX(0);
+    }
 }
 
-.form-content-reveal {
-    animation: contentReveal 0.4s cubic-bezier(0.22, 1, 0.36, 1) forwards;
-    animation-delay: 0.03s;
+@keyframes contentSlideInRight {
+    0% {
+        opacity: 0;
+        transform: translateX(24px);
+    }
+    100% {
+        opacity: 1;
+        transform: translateX(0);
+    }
+}
+
+/* Content containers start hidden */
+.review-content.loading .preview-panel,
+.review-content.loading .extraction-panel,
+.review-content.loading .panel-resizer {
+    opacity: 0;
+}
+
+/* Animate in when ready */
+.review-content.loaded .preview-panel {
+    animation: contentSlideIn 0.6s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+}
+
+.review-content.loaded .panel-resizer {
+    animation: contentSlideUp 0.5s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+    animation-delay: 0.15s;
+    opacity: 0;
+}
+
+.review-content.loaded .extraction-panel {
+    animation: contentSlideInRight 0.6s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+    animation-delay: 0.1s;
 }
