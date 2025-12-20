@@ -6742,6 +6742,76 @@ tr.doc-row.approving { animation: compress-out 0.3s ease forwards; }
 }
 
 /* ====================================
+   DRAG AND DROP REORDERING
+   ==================================== */
+
+/* Drag handle */
+.drag-handle {
+    color: var(--text-tertiary);
+    cursor: grab;
+    padding: 4px 2px;
+    margin-right: 4px;
+    opacity: 0.4;
+    transition: all var(--transition);
+}
+
+.node-header:hover .drag-handle {
+    opacity: 1;
+    color: var(--text-secondary);
+}
+
+.drag-handle:hover {
+    color: var(--color-primary) !important;
+}
+
+.drag-handle:active {
+    cursor: grabbing;
+}
+
+/* Dragging state */
+.editor-node.dragging {
+    opacity: 0.5;
+    transform: scale(0.98);
+}
+
+.editor-node.dragging > .node-header {
+    background: var(--color-primary-bg);
+    border-color: var(--color-primary);
+    border-style: dashed;
+}
+
+/* Drop indicators */
+.editor-node.drop-indicator > .node-header {
+    transition: none;
+}
+
+.editor-node.drop-above > .node-header {
+    border-top: 3px solid var(--color-primary);
+    margin-top: -2px;
+}
+
+.editor-node.drop-below > .node-header {
+    border-bottom: 3px solid var(--color-primary);
+    margin-bottom: -2px;
+}
+
+/* Make field headers allow pointer events for drag handle */
+.editor-field > .node-header,
+.editor-column > .node-header {
+    cursor: default;
+}
+
+.editor-field[draggable="true"] > .node-header,
+.editor-column[draggable="true"] > .node-header {
+    cursor: grab;
+}
+
+.editor-field[draggable="true"] > .node-header:active,
+.editor-column[draggable="true"] > .node-header:active {
+    cursor: grabbing;
+}
+
+/* ====================================
    EXTRACTION PROVIDER SETTINGS
    ==================================== */
 
