@@ -946,6 +946,10 @@
         bindKeyboardShortcuts: function() {
             var self = this;
 
+            // Prevent binding keyboard shortcuts multiple times
+            if (this._keyboardShortcutsBound) return;
+            this._keyboardShortcutsBound = true;
+
             document.addEventListener('keydown', function(e) {
                 // Don't trigger shortcuts when typing in inputs
                 if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA' || e.target.tagName === 'SELECT') {
