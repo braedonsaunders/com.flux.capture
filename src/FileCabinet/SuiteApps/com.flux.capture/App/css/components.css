@@ -1667,7 +1667,8 @@
     border-bottom: none;
 }
 
-.vendor-option:hover {
+.vendor-option:hover,
+.vendor-option.highlighted {
     background: var(--color-primary-bg);
 }
 

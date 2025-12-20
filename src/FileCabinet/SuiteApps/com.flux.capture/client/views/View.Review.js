@@ -58,6 +58,7 @@
         typeaheadTimeout: null, // Debounce timeout for typeahead search
         accountsData: [], // Cached accounts for sublist dropdowns
         itemsData: [], // Cached items for sublist dropdowns
+        settings: null, // General app settings (defaultLineSublist, etc.)
 
         // ==========================================
         // EXTRACTION POOL STATE
@@ -254,12 +255,13 @@
                     // Derive transaction type from document's documentType
                     self.transactionType = self.getTransactionType(data.documentType);
 
-                    // Now load form schema for the correct transaction type, plus accounts and items
+                    // Now load form schema for the correct transaction type, plus accounts, items, and settings
                     return Promise.all([
                         API.get('formschema', { transactionType: self.transactionType }),
                         API.get('accounts', { accountType: 'Expense' }),
                         API.get('accounts', { accountType: 'COGS' }),
-                        API.get('items', {})
+                        API.get('items', {}),
+                        API.get('settings')
                     ]);
                 })
                 .then(function(results) {
@@ -267,11 +269,13 @@
                     var expenseAccountsData = results[1] || [];
                     var cogsAccountsData = results[2] || [];
                     var itemsData = results[3] || [];
+                    var settingsData = results[4] || {};
 
                     self.formFields = formSchemaData; // Now contains layout, config, etc.
                     self.expenseAccountsData = expenseAccountsData; // Expense accounts for expense sublist
                     self.cogsAccountsData = cogsAccountsData; // COGS accounts for item sublist
                     self.itemsData = itemsData; // Cache for document type changes
+                    self.settings = settingsData.data || settingsData; // General app settings
 
                     // Inject accounts into expense sublist 'account' field
                     // Inject items into item sublist 'item' field
@@ -406,14 +410,25 @@
             };
 
             // Parse existing line items into sublists
+            // Use defaultLineSublist setting: 'auto' (detect), 'expense', or 'item'
+            var defaultSublist = (this.settings && this.settings.defaultLineSublist) || 'auto';
             var lineItems = doc.lineItems || [];
             if (Array.isArray(lineItems) && lineItems.length > 0) {
                 lineItems.forEach(function(line) {
-                    // Determine which sublist based on line content
-                    if (line.item) {
+                    // Determine which sublist based on setting and line content
+                    if (defaultSublist === 'item') {
+                        // Force all lines to item sublist
                         sublists.item.push(line);
-                    } else {
+                    } else if (defaultSublist === 'expense') {
+                        // Force all lines to expense sublist
                         sublists.expense.push(line);
+                    } else {
+                        // Auto-detect: if line has 'item' field populated, use item sublist
+                        if (line.item) {
+                            sublists.item.push(line);
+                        } else {
+                            sublists.expense.push(line);
+                        }
                     }
                 });
             }
@@ -2623,6 +2638,38 @@
                     setTimeout(function() {
                         self.hideVendorDropdown();
                     }, 200);
+                });
+
+                // Keyboard navigation for vendor dropdown
+                vendorInput.addEventListener('keydown', function(e) {
+                    var dropdown = el('#vendor-dropdown');
+                    if (!dropdown || dropdown.style.display === 'none') return;
+
+                    var options = dropdown.querySelectorAll('.vendor-option');
+                    if (options.length === 0) return;
+
+                    var highlighted = dropdown.querySelector('.vendor-option.highlighted');
+                    var currentIdx = highlighted ? Array.prototype.indexOf.call(options, highlighted) : -1;
+
+                    if (e.key === 'ArrowDown') {
+                        e.preventDefault();
+                        if (highlighted) highlighted.classList.remove('highlighted');
+                        var nextIdx = currentIdx < options.length - 1 ? currentIdx + 1 : 0;
+                        options[nextIdx].classList.add('highlighted');
+                        options[nextIdx].scrollIntoView({ block: 'nearest' });
+                    } else if (e.key === 'ArrowUp') {
+                        e.preventDefault();
+                        if (highlighted) highlighted.classList.remove('highlighted');
+                        var prevIdx = currentIdx > 0 ? currentIdx - 1 : options.length - 1;
+                        options[prevIdx].classList.add('highlighted');
+                        options[prevIdx].scrollIntoView({ block: 'nearest' });
+                    } else if (e.key === 'Enter' && highlighted) {
+                        e.preventDefault();
+                        highlighted.click();
+                    } else if (e.key === 'Escape') {
+                        e.preventDefault();
+                        self.hideVendorDropdown();
+                    }
                 });
             }
 

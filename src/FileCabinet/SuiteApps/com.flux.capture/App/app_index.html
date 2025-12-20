@@ -1273,7 +1273,7 @@
                     <p>Flux Capture automatically extracts data from invoices and receipts, matching them to your NetSuite forms. Here's how to get the best results:</p>
                     <ul>
                         <li><strong>Form Layouts:</strong> Flux automatically captures your NetSuite form layouts. After customizing forms in NetSuite, click "Clear Cache" in System tab to refresh.</li>
-                        <li><strong>Auto-Approval:</strong> Set a confidence threshold to automatically approve high-confidence extractions, saving review time.</li>
+                        <li><strong>Line Items:</strong> Choose whether extracted line items default to Expense (account-based) or Item (inventory-based) sublists on vendor bills.</li>
                         <li><strong>Fraud Detection:</strong> Enable duplicate detection and amount validation to catch errors before they reach NetSuite.</li>
                     </ul>
                 </div>
@@ -1285,20 +1285,10 @@
                         <i class="fas fa-microchip"></i>
                         <div>
                             <h3>AI Processing</h3>
-                            <p>Configure extraction and approval settings</p>
+                            <p>Configure extraction and default settings</p>
                         </div>
                     </div>
                     <div class="settings-card-body">
-                        <div class="setting-row">
-                            <div class="setting-label">
-                                <span>Auto-approve Threshold</span>
-                                <small>Documents scoring above this confidence level are automatically approved for posting to NetSuite</small>
-                            </div>
-                            <div class="setting-control">
-                                <input type="range" min="70" max="100" value="85" id="auto-threshold">
-                                <span id="threshold-value" class="range-value">85%</span>
-                            </div>
-                        </div>
                         <div class="setting-row">
                             <div class="setting-label">
                                 <span>Default Document Type</span>
@@ -1309,6 +1299,19 @@
                                     <option value="auto">Auto-Detect</option>
                                     <option value="INVOICE">Vendor Bill</option>
                                     <option value="RECEIPT">Expense Report</option>
+                                </select>
+                            </div>
+                        </div>
+                        <div class="setting-row">
+                            <div class="setting-label">
+                                <span>Default Line Sublist</span>
+                                <small>Where extracted line items should be placed on vendor bills</small>
+                            </div>
+                            <div class="setting-control">
+                                <select id="default-line-sublist">
+                                    <option value="auto">Auto-Detect</option>
+                                    <option value="expense">Expense (Account-based)</option>
+                                    <option value="item">Item (Inventory-based)</option>
                                 </select>
                             </div>
                         </div>

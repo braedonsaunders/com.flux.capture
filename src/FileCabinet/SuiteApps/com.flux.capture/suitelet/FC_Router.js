@@ -2050,13 +2050,38 @@ define([
     }
 
     function getSettings() {
+        // Try to load saved settings from config record
+        var savedSettings = {};
+        try {
+            var configSearch = search.create({
+                type: 'customrecord_flux_config',
+                filters: [
+                    ['custrecord_flux_cfg_type', 'is', 'settings'],
+                    'AND',
+                    ['custrecord_flux_cfg_key', 'is', 'general'],
+                    'AND',
+                    ['custrecord_flux_cfg_active', 'is', 'T']
+                ],
+                columns: ['custrecord_flux_cfg_data']
+            });
+            var results = configSearch.run().getRange({ start: 0, end: 1 });
+            if (results.length > 0) {
+                var dataStr = results[0].getValue('custrecord_flux_cfg_data');
+                if (dataStr) {
+                    savedSettings = JSON.parse(dataStr);
+                }
+            }
+        } catch (e) {
+            log.debug('getSettings', 'No saved settings found, using defaults');
+        }
+
         var settings = {
-            autoApproveThreshold: 85,
-            defaultDocumentType: 'auto',
+            defaultDocumentType: savedSettings.defaultDocumentType || 'auto',
             emailImportEnabled: true,
             emailAddress: 'flux-' + runtime.accountId + '@netsuite.com',
-            duplicateDetection: true,
-            amountValidation: true,
+            duplicateDetection: savedSettings.duplicateDetection !== false,
+            amountValidation: savedSettings.amountValidation !== false,
+            defaultLineSublist: savedSettings.defaultLineSublist || 'auto',
             maxFileSize: 10485760,
             supportedFileTypes: ['pdf', 'png', 'jpg', 'jpeg', 'tiff', 'tif', 'gif', 'bmp']
         };
@@ -3112,7 +3137,57 @@ define([
     }
 
     function updateSettings(context) {
-        return Response.success({ message: 'Settings endpoint ready' });
+        try {
+            var settingsData = {
+                defaultDocumentType: context.defaultDocumentType || 'auto',
+                duplicateDetection: context.duplicateDetection !== false,
+                amountValidation: context.amountValidation !== false,
+                defaultLineSublist: context.defaultLineSublist || 'auto'
+            };
+
+            // Find existing settings record or create new one
+            var existingId = null;
+            var configSearch = search.create({
+                type: 'customrecord_flux_config',
+                filters: [
+                    ['custrecord_flux_cfg_type', 'is', 'settings'],
+                    'AND',
+                    ['custrecord_flux_cfg_key', 'is', 'general']
+                ],
+                columns: ['internalid']
+            });
+            var results = configSearch.run().getRange({ start: 0, end: 1 });
+            if (results.length > 0) {
+                existingId = results[0].id;
+            }
+
+            var configRecord;
+            if (existingId) {
+                configRecord = record.load({
+                    type: 'customrecord_flux_config',
+                    id: existingId
+                });
+            } else {
+                configRecord = record.create({
+                    type: 'customrecord_flux_config'
+                });
+                configRecord.setValue('custrecord_flux_cfg_type', 'settings');
+                configRecord.setValue('custrecord_flux_cfg_key', 'general');
+            }
+
+            configRecord.setValue('custrecord_flux_cfg_data', JSON.stringify(settingsData));
+            configRecord.setValue('custrecord_flux_cfg_active', true);
+            configRecord.setValue('custrecord_flux_cfg_modified', new Date());
+            configRecord.setValue('custrecord_flux_cfg_modified_by', runtime.getCurrentUser().id);
+
+            var savedId = configRecord.save();
+            log.audit('updateSettings', 'Settings saved to config record: ' + savedId);
+
+            return Response.success({ message: 'Settings saved', id: savedId });
+        } catch (e) {
+            log.error('updateSettings', e);
+            return Response.error('SETTINGS_SAVE_ERROR', e.message);
+        }
     }
 
     // ==================== DELETE Implementations ====================
