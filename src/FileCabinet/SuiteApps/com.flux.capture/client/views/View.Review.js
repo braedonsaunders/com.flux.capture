@@ -946,6 +946,10 @@
         bindKeyboardShortcuts: function() {
             var self = this;
 
+            // Prevent binding keyboard shortcuts multiple times
+            if (this._keyboardShortcutsBound) return;
+            this._keyboardShortcutsBound = true;
+
             document.addEventListener('keydown', function(e) {
                 // Don't trigger shortcuts when typing in inputs
                 if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA' || e.target.tagName === 'SELECT') {
@@ -1718,10 +1722,6 @@
                             '<span class="status-label">Alert' + (anomalies.length > 1 ? 's' : '') + '</span>' +
                             '<i class="fas fa-chevron-down alert-chevron"></i>' +
                         '</div>' : '') +
-                    '<div class="status-spacer"></div>' +
-                    '<button class="btn btn-ghost btn-sm" id="btn-shortcuts" title="Keyboard Shortcuts">' +
-                        '<i class="fas fa-keyboard"></i>' +
-                    '</button>' +
                 '</div>' +
                 (anomalies.length > 0 ?
                     '<div class="alert-details" id="alert-details" style="display:none;">' +
@@ -3123,11 +3123,6 @@
                         self.hideTypeaheadDropdown(wrapper);
                     }
                 });
-            });
-
-            // Shortcuts help
-            this.on('#btn-shortcuts', 'click', function() {
-                self.showShortcutsHelp();
             });
 
             // ========== BODY FIELD TYPEAHEAD HANDLERS ==========
