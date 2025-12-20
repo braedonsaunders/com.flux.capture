@@ -331,55 +331,23 @@ define(['N/log', '../FC_Debug'], function(log, fcDebug) {
                 return { columns: [], lineItems: [], confidence: 0, warnings: [], diagnostics: this.diagnostics };
             }
 
-            // ===== DIAGNOSTIC: Log raw table input =====
+            // ===== DIAGNOSTIC: Log minimal table input summary =====
             this.addDiagnostic('INPUT', 'Starting table analysis', {
-                hasHeaderRows: !!(table.headerRows && table.headerRows.length),
-                headerRowCount: table.headerRows?.length || 0,
-                hasBodyRows: !!(table.bodyRows && table.bodyRows.length),
-                bodyRowCount: table.bodyRows?.length || 0,
-                hasFooterRows: !!(table.footerRows && table.footerRows.length),
-                footerRowCount: table.footerRows?.length || 0,
-                tableConfidence: table.confidence
+                headerRows: table.headerRows?.length || 0,
+                bodyRows: table.bodyRows?.length || 0
             });
 
-            // Log first header row content
+            // Log header row content only (useful for column detection debugging)
             if (table.headerRows && table.headerRows.length > 0) {
                 const headerCells = this._extractCellTexts(table.headerRows[0]);
-                this.addDiagnostic('INPUT', `Header row content: [${headerCells.join(' | ')}]`);
-            }
-
-            // Log sample of body rows
-            if (table.bodyRows && table.bodyRows.length > 0) {
-                const sampleCount = Math.min(3, table.bodyRows.length);
-                for (let i = 0; i < sampleCount; i++) {
-                    const rowCells = this._extractCellTexts(table.bodyRows[i]);
-                    this.addDiagnostic('INPUT', `Body row[${i}]: [${rowCells.join(' | ')}]`);
-                }
-                if (table.bodyRows.length > 3) {
-                    this.addDiagnostic('INPUT', `... and ${table.bodyRows.length - 3} more body rows`);
-                }
+                this.addDiagnostic('INPUT', `Headers: [${headerCells.join(' | ')}]`);
             }
 
             // Step 1: Extract raw structure
             const structure = this.extractStructure(table);
-            this.addDiagnostic('STRUCTURE', 'Extracted table structure', {
-                headers: structure.headers.length,
-                body: structure.body.length,
-                footer: structure.footer.length
-            });
 
             // Step 2: Identify columns
             const columns = this.identifyColumns(structure);
-            this.addDiagnostic('COLUMNS', 'Column identification complete', {
-                columnCount: columns.length,
-                columns: columns.map(c => ({
-                    idx: c.index,
-                    type: c.type,
-                    conf: c.confidence?.toFixed(2),
-                    header: c.headerText?.substring(0, 20),
-                    positional: c._positionalGuess || false
-                }))
-            });
 
             // Check if we found key columns
             const hasDescriptionCol = columns.some(c => c.type === ColumnType.DESCRIPTION);
@@ -387,19 +355,14 @@ define(['N/log', '../FC_Debug'], function(log, fcDebug) {
             const hasQuantityCol = columns.some(c => c.type === ColumnType.QUANTITY);
             const hasMemoColumn = columns.some(c => c.type === ColumnType.MEMO);
 
-            this.addDiagnostic('COLUMNS', 'Key column detection', {
-                DESCRIPTION: hasDescriptionCol,
-                AMOUNT: hasAmountCol,
-                QUANTITY: hasQuantityCol,
-                MEMO: hasMemoColumn
+            // Single consolidated column log - focus on memo column detection
+            this.addDiagnostic('COLUMNS', 'Column detection', {
+                DESC: hasDescriptionCol,
+                AMT: hasAmountCol,
+                MEMO: hasMemoColumn,
+                QTY: hasQuantityCol,
+                cols: columns.filter(c => c.type !== 'UNKNOWN').map(c => `${c.type}[${c.index}]`).join(', ')
             });
-
-            if (!hasDescriptionCol) {
-                this.addDiagnostic('COLUMNS', 'WARNING: No DESCRIPTION column identified');
-            }
-            if (!hasAmountCol) {
-                this.addDiagnostic('COLUMNS', 'WARNING: No AMOUNT column identified');
-            }
 
             if (!hasMemoColumn) {
                 this.addWarning('memo_column_not_found',
@@ -409,51 +372,25 @@ define(['N/log', '../FC_Debug'], function(log, fcDebug) {
             }
 
             // Step 3: Extract line items using two-pass classification
-            this.addDiagnostic('EXTRACTION', 'Starting two-pass line item extraction');
             const lineItems = this.extractLineItemsTwoPass(structure, columns, context);
-            this.addDiagnostic('EXTRACTION', `Extracted ${lineItems.length} raw line items`);
 
-            // Log each raw line item
-            lineItems.forEach((item, i) => {
-                this.addDiagnostic('EXTRACTION', `Raw item[${i}]`, {
-                    desc: item.description?.substring(0, 40),
-                    code: item.itemCode,
-                    qty: item.quantity,
-                    rate: item.unitPrice,
-                    amt: item.amount,
-                    memo: item.memo?.substring(0, 30)
-                });
-            });
-
-            // Step 4: Post-process and validate (less aggressive filtering)
-            this.addDiagnostic('POSTPROCESS', 'Starting post-processing');
+            // Step 4: Post-process and validate
             const processed = this.postProcess(lineItems, columns);
-            this.addDiagnostic('POSTPROCESS', 'Post-processing complete', {
-                validItems: processed.lineItems.length,
-                skippedItems: processed.skippedItems.length,
-                totalFromItems: processed.totalFromItems,
-                confidence: processed.confidence?.toFixed(2)
-            });
 
-            // Log skipped items with reasons
-            if (processed.skippedItems.length > 0) {
-                processed.skippedItems.forEach((item, i) => {
-                    this.addDiagnostic('POSTPROCESS', `SKIPPED[${i}]: ${item.reason}`, {
-                        desc: item.description?.substring(0, 40),
-                        code: item.itemCode,
-                        amt: item.amount,
-                        qty: item.quantity
-                    });
-                });
-            }
+            // MEMO-FOCUSED: Log each item's memo status for debugging
+            const itemsWithMemo = processed.lineItems.filter(i => i.memo && i.memo.trim().length > 0);
+            const itemsNoMemo = processed.lineItems.filter(i => !i.memo || i.memo.trim().length === 0);
+
+            this.addDiagnostic('MEMO_RESULTS', `Memo extraction: ${itemsWithMemo.length}/${processed.lineItems.length} items have memo`, {
+                withMemo: itemsWithMemo.map(i => ({ desc: i.description?.substring(0, 25), memo: i.memo?.substring(0, 30) })),
+                noMemo: itemsNoMemo.map(i => ({ desc: i.description?.substring(0, 40), descLen: i.description?.length || 0 }))
+            });
 
             // Final summary
-            this.addDiagnostic('RESULT', '===== FINAL RESULT =====', {
-                lineItemCount: processed.lineItems.length,
-                skippedCount: processed.skippedItems.length,
-                warningCount: this.warnings.length,
-                confidence: processed.confidence?.toFixed(2),
-                totalFromItems: processed.totalFromItems
+            this.addDiagnostic('RESULT', 'Extraction complete', {
+                items: processed.lineItems.length,
+                withMemo: itemsWithMemo.length,
+                total: processed.totalFromItems
             });
 
             // Log all diagnostics
@@ -864,44 +801,20 @@ define(['N/log', '../FC_Debug'], function(log, fcDebug) {
                 const analysis = rowAnalysis[i];
                 const row = body[i];
 
-                // Log row analysis for diagnostics
-                this.addDiagnostic('ROW_ANALYSIS', `Row[${i}] analysis`, {
-                    desc: (analysis.descriptionText || '').substring(0, 30),
-                    hasDesc: analysis.hasDescription,
-                    hasCode: analysis.hasItemCode,
-                    hasAmt: analysis.hasAmount,
-                    amt: (analysis.amountText || '').substring(0, 15),
-                    hasQty: analysis.hasQuantity,
-                    qty: analysis.quantity,
-                    isSummary: analysis.isSummary,
-                    position: `${(analysis.rowPosition * 100).toFixed(0)}%`,
-                    inSummaryZone: analysis.isInSummaryZone
-                });
-
                 // v3.0: Position-aware summary detection
                 // Only skip as summary if: matches pattern AND (in summary zone OR has no quantity)
                 if (analysis.isSummary) {
                     // If has quantity, it's likely a real line item regardless of name
                     if (analysis.hasQuantity && analysis.quantity > 0) {
                         // NOT a summary - it's a line item named "Total", "Tax", etc.
-                        this.addDiagnostic('ROW_DECISION', `Row[${i}] KEEP: Summary-like name BUT has quantity=${analysis.quantity}`, {
-                            desc: analysis.descriptionText
-                        });
                         // Fall through to process as line item
                     }
                     // If NOT in summary zone (top 75% of table), keep it
                     else if (!analysis.isInSummaryZone) {
-                        this.addDiagnostic('ROW_DECISION', `Row[${i}] KEEP: Summary-like name BUT not in summary zone (${(analysis.rowPosition * 100).toFixed(0)}%)`, {
-                            desc: analysis.descriptionText
-                        });
                         // Fall through to process as line item
                     }
                     // Otherwise it's truly a summary row - skip it
                     else {
-                        this.addDiagnostic('ROW_DECISION', `Row[${i}] SKIP: Summary row (pattern + zone + no qty)`, {
-                            desc: analysis.descriptionText,
-                            amt: analysis.amountText
-                        });
                         continue;
                     }
                 }
@@ -913,11 +826,6 @@ define(['N/log', '../FC_Debug'], function(log, fcDebug) {
                         // Extract memo from description before saving
                         this.extractMemoFromDescription(currentItem);
                         items.push(currentItem);
-                        this.addDiagnostic('ITEM_CREATED', `Saved line item (before new anchor)`, {
-                            desc: currentItem.description?.substring(0, 40),
-                            amt: currentItem.amount,
-                            memo: currentItem.memo?.substring(0, 30) || '[empty]'
-                        });
                     }
 
                     // Start new item from this anchor row
@@ -925,12 +833,6 @@ define(['N/log', '../FC_Debug'], function(log, fcDebug) {
                     // v4.1: Enhanced memo extraction - scan row cells for text content
                     this.enhanceMemoExtraction(currentItem, row, columns);
                     itemStartIdx = i;
-                    this.addDiagnostic('ROW_DECISION', `Row[${i}] NEW_ANCHOR: Starting new line item`, {
-                        desc: currentItem.description?.substring(0, 40),
-                        amt: currentItem.amount,
-                        qty: currentItem.quantity,
-                        memo: currentItem.memo?.substring(0, 30)
-                    });
 
                     // v3.1: Always look backwards for orphan rows that may have item codes or descriptions
                     // This handles multi-row line items where first row has item code but no amount
@@ -955,7 +857,6 @@ define(['N/log', '../FC_Debug'], function(log, fcDebug) {
                                     currentItem.itemCode = prevItemCode;
                                     foundItemCode = true;
                                     gotItemCodeFromOrphan = true;
-                                    this.addDiagnostic('BACKWARD_MERGE', `Grabbed item code "${prevItemCode}" from orphan row[${j}]`);
                                 }
                             }
 
@@ -975,7 +876,6 @@ define(['N/log', '../FC_Debug'], function(log, fcDebug) {
                         // 2. We grabbed an item code from orphan row (descriptions are clearly related)
                         if (prependDesc && (gotItemCodeFromOrphan || !currentItem.description || currentItem.description.length < 3)) {
                             currentItem.description = prependDesc + (currentItem.description ? ' ' + currentItem.description : '');
-                            this.addDiagnostic('BACKWARD_MERGE', `Prepended description from orphan rows: "${prependDesc.substring(0, 40)}"`);
                         }
                     }
 
@@ -1003,7 +903,6 @@ define(['N/log', '../FC_Debug'], function(log, fcDebug) {
                                 if (nextItemCode) {
                                     currentItem.itemCode = nextItemCode;
                                     gotItemCodeForward = true;
-                                    this.addDiagnostic('FORWARD_MERGE', `Grabbed item code "${nextItemCode}" from forward row[${j}]`);
                                 }
                             }
 
@@ -1033,7 +932,6 @@ define(['N/log', '../FC_Debug'], function(log, fcDebug) {
                         // Append captured forward descriptions if we got any
                         if (appendDesc) {
                             currentItem.description = (currentItem.description || '') + ' ' + appendDesc;
-                            this.addDiagnostic('FORWARD_MERGE', `Appended description from forward rows: "${appendDesc.substring(0, 40)}"`);
                         }
                     }
                 }
@@ -1047,45 +945,23 @@ define(['N/log', '../FC_Debug'], function(log, fcDebug) {
                             ? currentItem.memo + ' ' + memoText
                             : memoText;
                         analysis.used = true;
-                        this.addDiagnostic('ROW_DECISION', `Row[${i}] MEMO: Appended as memo to current item`, {
-                            memo: memoText?.substring(0, 40)
-                        });
                     }
                     // Regular continuation - append to description
                     else if (analysis.hasDescription) {
                         this.appendToLineItem(currentItem, row, columns);
                         analysis.used = true;
-                        this.addDiagnostic('ROW_DECISION', `Row[${i}] CONTINUATION: Appended to current item`, {
-                            text: analysis.descriptionText?.substring(0, 40)
-                        });
-                    }
-                    else {
-                        this.addDiagnostic('ROW_DECISION', `Row[${i}] IGNORED: No amount, no description, has current item`);
                     }
                 }
                 // No current item and no amount - could be a line item missing amount
                 else if (analysis.hasDescription && analysis.hasQuantity) {
-                    // Has description and quantity but no amount - might be valid
                     currentItem = this.createLineItem(row, columns, context);
                     // v4.1: Enhanced memo extraction
                     this.enhanceMemoExtraction(currentItem, row, columns);
                     currentItem._needsAmountReview = true;
-                    this.addDiagnostic('ROW_DECISION', `Row[${i}] NEW_NO_AMOUNT: Has desc+qty but no amount`, {
-                        desc: analysis.descriptionText?.substring(0, 40),
-                        qty: analysis.quantity,
-                        memo: currentItem.memo?.substring(0, 30)
-                    });
                     this.addWarning('line_item_missing_amount',
                         `Line item "${analysis.descriptionText.substring(0, 50)}..." has quantity but no amount`,
                         { rowIndex: i, quantity: analysis.quantityText }
                     );
-                }
-                else {
-                    // Row has nothing useful or no current item to attach to
-                    this.addDiagnostic('ROW_DECISION', `Row[${i}] ORPHAN: No amount, no current item, insufficient data`, {
-                        hasDesc: analysis.hasDescription,
-                        hasQty: analysis.hasQuantity
-                    });
                 }
             }
 
@@ -1093,16 +969,7 @@ define(['N/log', '../FC_Debug'], function(log, fcDebug) {
             if (currentItem) {
                 this.extractMemoFromDescription(currentItem);
                 items.push(currentItem);
-                this.addDiagnostic('ITEM_CREATED', `Saved final line item`, {
-                    desc: currentItem.description?.substring(0, 40),
-                    amt: currentItem.amount,
-                    memo: currentItem.memo?.substring(0, 30) || '[empty]'
-                });
             }
-
-            // v4.1: Log memo extraction summary
-            const itemsWithMemo = items.filter(i => i.memo && i.memo.length > 0).length;
-            this.addDiagnostic('EXTRACTION', `Two-pass extraction complete: ${items.length} items created, ${itemsWithMemo} with memo`);
 
             return items;
         }
@@ -1208,11 +1075,6 @@ define(['N/log', '../FC_Debug'], function(log, fcDebug) {
                         .replace(/\s+/g, ' ')
                         .trim();
 
-                    fcDebug.debug('TableAnalyzer.extractMemoFromDescription', {
-                        extractedMemo: extractedMemo.substring(0, 50),
-                        remainingDesc: item.description.substring(0, 50)
-                    });
-
                     foundPatternMatch = true;
                     break; // Only extract once per pattern
                 }
@@ -1222,19 +1084,11 @@ define(['N/log', '../FC_Debug'], function(log, fcDebug) {
             // This ensures memo is ALWAYS populated when we have description text
             if (!item.memo && item.description && item.description.trim().length >= SUBSTANTIAL_DESC_LENGTH) {
                 item.memo = item.description.trim();
-                fcDebug.debug('TableAnalyzer.extractMemoFromDescription', {
-                    action: 'FALLBACK: Using full description as memo',
-                    memo: item.memo.substring(0, 50)
-                });
             }
 
             // v4.1: Even if description is short, use it as memo if we have nothing
             if (!item.memo && item.description && item.description.trim().length >= 5) {
                 item.memo = item.description.trim();
-                fcDebug.debug('TableAnalyzer.extractMemoFromDescription', {
-                    action: 'Using short description as memo',
-                    memo: item.memo
-                });
             }
         }
 
@@ -1315,7 +1169,6 @@ define(['N/log', '../FC_Debug'], function(log, fcDebug) {
                         // BUT: if description is substantial, use it as memo too
                         if (candidate.text.length >= LONG_TEXT_THRESHOLD) {
                             item.memo = candidate.text;
-                            fcDebug.debug('enhanceMemoExtraction', `Using description as memo: "${candidate.text.substring(0, 40)}..."`);
                         }
                         continue;
                     }
@@ -1323,10 +1176,6 @@ define(['N/log', '../FC_Debug'], function(log, fcDebug) {
                     // Use this candidate as memo
                     if (candidate.text.length >= MIN_MEMO_LENGTH) {
                         item.memo = candidate.text;
-                        this.addDiagnostic('MEMO_ENHANCED', `Extracted memo from ${candidate.columnType} column`, {
-                            memo: candidate.text.substring(0, 50),
-                            source: candidate.columnType
-                        });
                         break;
                     }
                 }
@@ -1336,9 +1185,6 @@ define(['N/log', '../FC_Debug'], function(log, fcDebug) {
             if ((!item.memo || item.memo.trim().length < MIN_MEMO_LENGTH) &&
                 item.description && item.description.trim().length >= LONG_TEXT_THRESHOLD) {
                 item.memo = item.description;
-                this.addDiagnostic('MEMO_FALLBACK', `Using description as memo (fallback)`, {
-                    memo: item.description.substring(0, 50)
-                });
             }
 
             // Clean up memo if extracted
@@ -1844,20 +1690,6 @@ define(['N/log', '../FC_Debug'], function(log, fcDebug) {
             const totalFromItems = validItems.reduce((sum, item) =>
                 sum + (item.amount || 0), 0
             );
-
-            // v4.1: Log memo extraction statistics
-            const itemsWithMemo = validItems.filter(i => i.memo && i.memo.trim().length > 0).length;
-            const avgMemoLength = itemsWithMemo > 0
-                ? Math.round(validItems.filter(i => i.memo).reduce((sum, i) => sum + i.memo.length, 0) / itemsWithMemo)
-                : 0;
-
-            this.addDiagnostic('MEMO_STATS', `Memo extraction summary`, {
-                totalItems: validItems.length,
-                withMemo: itemsWithMemo,
-                memoRate: validItems.length > 0 ? Math.round((itemsWithMemo / validItems.length) * 100) + '%' : '0%',
-                avgMemoLength: avgMemoLength,
-                hasMemoColumn: hasMemoCol
-            });
 
             return {
                 lineItems: validItems,

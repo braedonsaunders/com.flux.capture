@@ -338,35 +338,9 @@ define([
             const rawFields = [];
             const rawTables = [];
 
-            // ============= DEBUG: Log raw result structure =============
-            fcDebug.debugAudit('DEBUG.RawResult', '========== RAW N/documentCapture RESULT ==========');
-            fcDebug.debugAudit('DEBUG.RawResult.Keys', `Top-level keys: ${Object.keys(result || {}).join(', ')}`);
-            fcDebug.debugAudit('DEBUG.RawResult.PageCount', `Pages: ${result.pages ? result.pages.length : 'NO PAGES'}`);
-
-            // Log the entire raw result structure (truncated for large objects)
-            try {
-                const resultSummary = {
-                    hasPages: !!result.pages,
-                    pageCount: result.pages?.length || 0,
-                    mimeType: result.mimeType,
-                    topLevelKeys: Object.keys(result || {})
-                };
-                fcDebug.debugAudit('DEBUG.RawResult.Summary', JSON.stringify(resultSummary));
-            } catch (e) {
-                fcDebug.debug('DEBUG.RawResult.Summary', 'Could not stringify summary: ' + e.message);
-            }
-
+            // Process pages and extract data (verbose DEBUG logging removed for performance)
             if (result.pages && result.pages.length > 0) {
                 result.pages.forEach((page, pageIndex) => {
-                    // ============= DEBUG: Log page structure =============
-                    fcDebug.debugAudit(`DEBUG.Page[${pageIndex}]`, `Page ${pageIndex + 1} keys: ${Object.keys(page || {}).join(', ')}`);
-                    fcDebug.debugAudit(`DEBUG.Page[${pageIndex}].Counts`, JSON.stringify({
-                        fields: page.fields?.length || 0,
-                        tables: page.tables?.length || 0,
-                        lines: page.lines?.length || 0,
-                        hasGetText: typeof page.getText === 'function'
-                    }));
-
                     // Extract text
                     if (typeof page.getText === 'function') {
                         rawText += page.getText() + '\n';
@@ -377,33 +351,11 @@ define([
                         });
                     }
 
-                    // Collect raw fields with DEBUG logging
+                    // Collect raw fields
                     if (page.fields && page.fields.length > 0) {
-                        fcDebug.debugAudit(`DEBUG.Page[${pageIndex}].Fields`, `Processing ${page.fields.length} fields...`);
-
                         page.fields.forEach((field, fieldIndex) => {
-                            // ============= DEBUG: Log each field's raw structure =============
-                            const fieldDebug = {
-                                index: fieldIndex,
-                                fieldKeys: Object.keys(field || {}),
-                                labelType: typeof field.label,
-                                labelKeys: typeof field.label === 'object' ? Object.keys(field.label || {}) : null,
-                                labelRaw: this._safeStringify(field.label, 100),
-                                valueType: typeof field.value,
-                                valueKeys: typeof field.value === 'object' ? Object.keys(field.value || {}) : null,
-                                valueRaw: this._safeStringify(field.value, 100),
-                                confidence: field.confidence,
-                                type: field.type,
-                                boundingBox: field.boundingBox ? 'present' : 'absent'
-                            };
-                            fcDebug.debug(`DEBUG.Field[${pageIndex}][${fieldIndex}]`, JSON.stringify(fieldDebug));
-
                             const extractedLabel = this._extractText(field.label);
                             const extractedValue = this._extractText(field.value);
-
-                            // Log what we extracted
-                            fcDebug.debugAudit(`DEBUG.Field.Extracted[${fieldIndex}]`,
-                                `"${extractedLabel}" = "${extractedValue}" (conf: ${field.label?.confidence || field.confidence || 'N/A'})`);
 
                             rawFields.push({
                                 page: pageIndex,
@@ -412,7 +364,6 @@ define([
                                 value: extractedValue,
                                 valueConfidence: field.value?.confidence || field.confidence || 0.5,
                                 position: field.boundingBox || field.bbox || null,
-                                // Store raw for debugging
                                 _rawLabel: field.label,
                                 _rawValue: field.value,
                                 _rawType: field.type
@@ -420,48 +371,9 @@ define([
                         });
                     }
 
-                    // Collect raw tables with DEBUG logging
+                    // Collect raw tables
                     if (page.tables && page.tables.length > 0) {
-                        fcDebug.debugAudit(`DEBUG.Page[${pageIndex}].Tables`, `Processing ${page.tables.length} tables...`);
-
                         page.tables.forEach((table, tableIndex) => {
-                            // ============= DEBUG: Log table structure =============
-                            const tableDebug = {
-                                index: tableIndex,
-                                tableKeys: Object.keys(table || {}),
-                                headerRowCount: table.headerRows?.length || 0,
-                                bodyRowCount: table.bodyRows?.length || 0,
-                                footerRowCount: table.footerRows?.length || 0,
-                                confidence: table.confidence
-                            };
-                            fcDebug.debugAudit(`DEBUG.Table[${pageIndex}][${tableIndex}]`, JSON.stringify(tableDebug));
-
-                            // Log first header row structure if present
-                            if (table.headerRows && table.headerRows.length > 0) {
-                                const headerRow = table.headerRows[0];
-                                fcDebug.debug(`DEBUG.Table[${tableIndex}].HeaderRow`,
-                                    `Type: ${typeof headerRow}, IsArray: ${Array.isArray(headerRow)}, ` +
-                                    `Keys: ${typeof headerRow === 'object' ? Object.keys(headerRow).join(',') : 'N/A'}`);
-                                if (headerRow.cells || Array.isArray(headerRow)) {
-                                    const cells = headerRow.cells || headerRow;
-                                    fcDebug.debug(`DEBUG.Table[${tableIndex}].HeaderCells`,
-                                        `Count: ${cells.length}, Values: ${cells.slice(0, 5).map(c => this._safeStringify(c, 30)).join(' | ')}`);
-                                }
-                            }
-
-                            // Log first body row structure if present
-                            if (table.bodyRows && table.bodyRows.length > 0) {
-                                const bodyRow = table.bodyRows[0];
-                                fcDebug.debug(`DEBUG.Table[${tableIndex}].BodyRow[0]`,
-                                    `Type: ${typeof bodyRow}, IsArray: ${Array.isArray(bodyRow)}, ` +
-                                    `Keys: ${typeof bodyRow === 'object' ? Object.keys(bodyRow).join(',') : 'N/A'}`);
-                                if (bodyRow.cells || Array.isArray(bodyRow)) {
-                                    const cells = bodyRow.cells || bodyRow;
-                                    fcDebug.debug(`DEBUG.Table[${tableIndex}].BodyCells[0]`,
-                                        `Count: ${cells.length}, Values: ${cells.slice(0, 5).map(c => this._safeStringify(c, 30)).join(' | ')}`);
-                                }
-                            }
-
                             rawTables.push({
                                 page: pageIndex,
                                 index: tableIndex,
@@ -475,19 +387,8 @@ define([
                 });
             }
 
-            // ============= DEBUG: Log final extracted data summary =============
-            fcDebug.debugAudit('DEBUG.Extraction.Summary', JSON.stringify({
-                totalFields: rawFields.length,
-                totalTables: rawTables.length,
-                rawTextLength: rawText.length,
-                rawTextPreview: rawText.substring(0, 500)
-            }));
-
-            // Log all extracted field label/value pairs
-            fcDebug.debugAudit('DEBUG.AllFields', '---------- ALL EXTRACTED FIELDS ----------');
-            rawFields.forEach((f, i) => {
-                fcDebug.debugAudit(`DEBUG.AllFields[${i}]`, `"${f.label}" => "${f.value}"`);
-            });
+            // Minimal extraction summary
+            fcDebug.debugAudit('Extraction.Summary', `Fields: ${rawFields.length}, Tables: ${rawTables.length}`);
 
             return {
                 pages: result.pages,
@@ -627,15 +528,7 @@ define([
             let lineItemWarnings = [];
             let skippedLineItems = [];
             let tableDiagnostics = [];
-            let lineItemExtractionMethod = 'table_analyzer'; // Track how we extracted line items
-
-            // ========== LINE ITEM EXTRACTION DIAGNOSTICS ==========
-            fcDebug.debugAudit('FC_Engine.LINEITEM_START', JSON.stringify({
-                rawTableCount: rawResult.rawTables?.length || 0,
-                hasLayoutTable: !!layout.lineItemsTable,
-                hasAzureResult: !!rawResult._azureResult,
-                hasMindeeResult: !!rawResult._mindeeResult
-            }));
+            let lineItemExtractionMethod = 'table_analyzer';
 
             // v4.0: CHECK FOR PROVIDER-NATIVE STRUCTURED LINE ITEMS
             // Azure and Mindee already extract line items in a structured format
@@ -649,36 +542,10 @@ define([
                 lineItemWarnings = providerLineItems.warnings || [];
                 extractionWarnings.push(...lineItemWarnings);
 
-                fcDebug.debugAudit('FC_Engine.PROVIDER_NATIVE_LINEITEMS', JSON.stringify({
-                    method: lineItemExtractionMethod,
-                    itemCount: lineItems.length,
-                    confidence: providerLineItems.confidence
-                }));
-
-                // Log each provider-native line item
-                lineItems.forEach((item, idx) => {
-                    fcDebug.debugAudit(`FC_Engine.LINEITEM[${idx}]`, JSON.stringify({
-                        desc: (item.description || '').substring(0, 50),
-                        code: item.itemCode,
-                        qty: item.quantity,
-                        rate: item.unitPrice,
-                        amt: item.amount,
-                        source: 'provider_native'
-                    }));
-                });
+                fcDebug.debugAudit('LineItems.Provider', `${lineItems.length} items from ${lineItemExtractionMethod}`);
             }
             // Fall back to TableAnalyzer for OCI or when provider doesn't have structured items
             else if (rawResult.rawTables && rawResult.rawTables.length > 0) {
-                // Log all tables found
-                rawResult.rawTables.forEach((t, idx) => {
-                    fcDebug.debugAudit(`FC_Engine.TABLE[${idx}]`, JSON.stringify({
-                        headerRows: t.headerRows?.length || 0,
-                        bodyRows: t.bodyRows?.length || 0,
-                        footerRows: t.footerRows?.length || 0,
-                        confidence: t.confidence
-                    }));
-                });
-
                 // Find the line items table (usually the largest)
                 const lineItemsTable = layout.lineItemsTable?.raw ||
                     rawResult.rawTables.reduce((best, t) =>
@@ -687,12 +554,6 @@ define([
                     );
 
                 if (lineItemsTable) {
-                    fcDebug.debugAudit('FC_Engine.SELECTED_TABLE', JSON.stringify({
-                        bodyRows: lineItemsTable.bodyRows?.length || 0,
-                        headerRows: lineItemsTable.headerRows?.length || 0,
-                        reason: layout.lineItemsTable ? 'layout_detected' : 'largest_table'
-                    }));
-
                     // Pass table index for logging
                     extractionContext.tableIndex = 0;
                     const tableResult = this.tableAnalyzer.analyze(lineItemsTable, extractionContext);
@@ -703,31 +564,9 @@ define([
                         tableDiagnostics = tableResult.diagnostics;
                     }
 
-                    // Log extraction result summary
-                    fcDebug.debugAudit('FC_Engine.LINEITEM_RESULT', JSON.stringify({
-                        extractedCount: lineItems.length,
-                        skippedCount: tableResult.skippedItems?.length || 0,
-                        warningCount: tableResult.warnings?.length || 0,
-                        totalFromItems: tableResult.totalFromItems,
-                        confidence: tableResult.confidence?.toFixed(2)
-                    }));
-
-                    // Log each line item extracted
-                    lineItems.forEach((item, idx) => {
-                        fcDebug.debugAudit(`FC_Engine.LINEITEM[${idx}]`, JSON.stringify({
-                            desc: (item.description || '').substring(0, 50),
-                            code: item.itemCode,
-                            qty: item.quantity,
-                            rate: item.unitPrice,
-                            amt: item.amount,
-                            hasMemo: !!item.memo,
-                            flags: {
-                                needsDescReview: item._needsDescriptionReview,
-                                needsAmtReview: item._needsAmountReview,
-                                amtCalculated: item._amountCalculated
-                            }
-                        }));
-                    });
+                    // Memo-focused summary
+                    const withMemo = lineItems.filter(i => i.memo && i.memo.trim().length > 0).length;
+                    fcDebug.debugAudit('LineItems.Result', `${lineItems.length} items, ${withMemo} with memo`);
 
                     // Collect TableAnalyzer warnings
                     if (tableResult.warnings && tableResult.warnings.length > 0) {
@@ -777,14 +616,6 @@ define([
                     const diff = Math.abs(roundedSum - validationTarget);
                     const diffPercent = validationTarget > 0 ? (diff / validationTarget) * 100 : 0;
 
-                    fcDebug.debugAudit('FC_Engine.LINEITEM_SUM_VALIDATION', JSON.stringify({
-                        lineItemsSum: roundedSum,
-                        target: validationTarget,
-                        targetType: validationTargetName,
-                        diff: diff.toFixed(2),
-                        diffPercent: diffPercent.toFixed(1)
-                    }));
-
                     // If significant mismatch (>5%), flag for review
                     if (diffPercent > 5 && diff > 1) {
                         extractionWarnings.push({
@@ -800,12 +631,6 @@ define([
                     }
                 }
             }
-
-            fcDebug.debug('FluxCapture.intelligentExtraction', {
-                fieldsExtracted: Object.keys(fields).filter(k => fields[k]).length,
-                lineItems: lineItems.length,
-                documentType: DocumentTypeLabels[documentType]
-            });
 
             // Collect ALL extracted label/value pairs for flexible field mapping
             // This allows the UI to offer suggestions for any form field
@@ -1333,6 +1158,11 @@ define([
                         }
                     }
 
+                    // v4.1: Populate memo from description (provider-native items bypass TableAnalyzer)
+                    if (item.description && item.description.trim().length >= 5) {
+                        item.memo = item.description.trim();
+                    }
+
                     // Only include items with some meaningful data
                     if (item.description || item.itemCode || item.amount !== null) {
                         items.push(item);
@@ -1445,6 +1275,11 @@ define([
                         } else {
                             item._mathValidated = true;
                         }
+                    }
+
+                    // v4.1: Populate memo from description (provider-native items bypass TableAnalyzer)
+                    if (item.description && item.description.trim().length >= 5) {
+                        item.memo = item.description.trim();
                     }
 
                     // Only include items with some meaningful data
