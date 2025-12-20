@@ -87,6 +87,11 @@ function process(email) {
             'Imported: ' + importedCount + ', Skipped: ' + skippedCount +
             '. Processing triggered automatically via User Event.');
 
+        // Update persistent email stats in flux_config
+        if (importedCount > 0) {
+            updateEmailStats(importedCount);
+        }
+
     } catch (e) {
         nlapiLogExecution('ERROR', 'Flux Capture: Plugin Error', e.toString());
     }
@@ -204,6 +209,76 @@ function createFluxDocument(fileObj, originalFileName, senderEmail, subject) {
     }
 
     return nlapiSubmitRecord(doc);
+}
+
+/**
+ * Update email statistics in flux_config
+ * Increments documentsTotal and documentsToday counters
+ * @param {number} count - Number of documents imported
+ */
+function updateEmailStats(count) {
+    try {
+        var today = nlapiDateToString(new Date(), 'date');
+        var configId = null;
+        var currentStats = {
+            documentsTotal: 0,
+            documentsToday: 0,
+            lastDate: ''
+        };
+
+        // Search for existing stats config
+        var filters = [
+            ['custrecord_flux_cfg_type', 'is', 'email_capture'],
+            'AND',
+            ['custrecord_flux_cfg_key', 'is', 'stats']
+        ];
+        var columns = ['internalid', 'custrecord_flux_cfg_data'];
+        var results = nlapiSearchRecord('customrecord_flux_config', null, filters, columns);
+
+        if (results && results.length > 0) {
+            configId = results[0].getId();
+            var dataStr = results[0].getValue('custrecord_flux_cfg_data');
+            if (dataStr) {
+                try {
+                    currentStats = JSON.parse(dataStr);
+                } catch (parseErr) {
+                    // Use defaults if parse fails
+                }
+            }
+        }
+
+        // Reset documentsToday if it's a new day
+        if (currentStats.lastDate !== today) {
+            currentStats.documentsToday = 0;
+            currentStats.lastDate = today;
+        }
+
+        // Increment counters
+        currentStats.documentsTotal = (parseInt(currentStats.documentsTotal) || 0) + count;
+        currentStats.documentsToday = (parseInt(currentStats.documentsToday) || 0) + count;
+
+        // Save to flux_config
+        var configRecord;
+        if (configId) {
+            configRecord = nlapiLoadRecord('customrecord_flux_config', configId);
+        } else {
+            configRecord = nlapiCreateRecord('customrecord_flux_config');
+            configRecord.setFieldValue('name', 'Email Statistics');
+            configRecord.setFieldValue('custrecord_flux_cfg_type', 'email_capture');
+            configRecord.setFieldValue('custrecord_flux_cfg_key', 'stats');
+        }
+
+        configRecord.setFieldValue('custrecord_flux_cfg_data', JSON.stringify(currentStats));
+        configRecord.setFieldValue('custrecord_flux_cfg_active', 'T');
+        nlapiSubmitRecord(configRecord);
+
+        nlapiLogExecution('DEBUG', 'Flux Capture: Stats Updated',
+            'Today: ' + currentStats.documentsToday + ', Total: ' + currentStats.documentsTotal);
+
+    } catch (statsErr) {
+        nlapiLogExecution('ERROR', 'Flux Capture: Stats Error', statsErr.toString());
+        // Don't throw - stats update failure shouldn't break email processing
+    }
 }
 
 // Note: Document processing is triggered automatically by the User Event script

@@ -1270,17 +1270,6 @@
 
             <!-- TAB: General -->
             <div class="settings-tab-panel active" id="settings-panel-general">
-                <!-- Getting Started Instructions -->
-                <div class="settings-instructions">
-                    <h4><i class="fas fa-lightbulb"></i> Quick Start Guide</h4>
-                    <p>Flux Capture automatically extracts data from invoices and receipts, matching them to your NetSuite forms. Here's how to get the best results:</p>
-                    <ul>
-                        <li><strong>Form Layouts:</strong> Flux automatically captures your NetSuite form layouts. After customizing forms in NetSuite, click "Clear Cache" in System tab to refresh.</li>
-                        <li><strong>Line Items:</strong> Choose whether extracted line items default to Expense (account-based) or Item (inventory-based) sublists on vendor bills.</li>
-                        <li><strong>Fraud Detection:</strong> Enable duplicate detection and amount validation to catch errors before they reach NetSuite.</li>
-                    </ul>
-                </div>
-
                 <div class="settings-layout">
                     <!-- Processing Settings -->
                 <div class="settings-card">
@@ -1766,109 +1755,12 @@
                         </div>
                     </div>
 
-                    <!-- Email Processing Settings -->
-                    <div class="settings-card">
-                        <div class="settings-card-header">
-                            <i class="fas fa-sliders"></i>
-                            <div>
-                                <h3>Email Processing Options</h3>
-                                <p>Configure how email attachments are handled</p>
-                            </div>
-                        </div>
-                        <div class="settings-card-body">
-                            <div class="setting-row">
-                                <div class="setting-label">
-                                    <span>Auto-process attachments</span>
-                                    <small>Automatically start AI extraction when documents arrive via email</small>
-                                </div>
-                                <div class="setting-control">
-                                    <label class="toggle">
-                                        <input type="checkbox" id="email-auto-process" checked>
-                                        <span class="toggle-track"><span class="toggle-thumb"></span></span>
-                                    </label>
-                                </div>
-                            </div>
-                            <div class="setting-row">
-                                <div class="setting-label">
-                                    <span>Supported file types</span>
-                                    <small>File types that will be processed from email attachments</small>
-                                </div>
-                                <div class="setting-control setting-control-static">
-                                    <span class="file-type-badges">
-                                        <span class="badge">PDF</span>
-                                        <span class="badge">PNG</span>
-                                        <span class="badge">JPG</span>
-                                        <span class="badge">TIFF</span>
-                                    </span>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-
-                    <!-- Recent Email Imports -->
-                    <div class="settings-card">
-                        <div class="settings-card-header">
-                            <i class="fas fa-history"></i>
-                            <div>
-                                <h3>Recent Email Imports</h3>
-                                <p>Documents recently received via email</p>
-                            </div>
-                        </div>
-                        <div class="settings-card-body">
-                            <div id="recent-email-imports">
-                                <div class="empty-state-small">
-                                    <i class="fas fa-inbox"></i>
-                                    <span>No recent email imports</span>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
                 </div>
             </div>
 
             <!-- TAB: System -->
             <div class="settings-tab-panel" id="settings-panel-system" style="display:none;">
                 <div class="settings-layout">
-                    <!-- Cache Management -->
-                <div class="settings-card">
-                    <div class="settings-card-header">
-                        <i class="fas fa-database"></i>
-                        <div>
-                            <h3>Cache Management</h3>
-                            <p>Clear cached data to force refresh</p>
-                        </div>
-                    </div>
-                    <div class="settings-card-body">
-                        <div class="setting-row">
-                            <div class="setting-label">
-                                <span>Form Layout Cache</span>
-                                <small>Clear after making changes to NetSuite transaction forms. Layouts will be recaptured automatically.</small>
-                            </div>
-                            <div class="setting-control">
-                                <button class="btn btn-secondary" id="btn-clear-cache">
-                                    <i class="fas fa-trash-alt"></i> Clear Cache
-                                </button>
-                            </div>
-                        </div>
-                        <div class="setting-row" id="cache-status" style="display:none;">
-                            <div class="setting-label">
-                                <span id="cache-status-text"></span>
-                            </div>
-                        </div>
-                        <div class="setting-row">
-                            <div class="setting-label">
-                                <span>Datasource Cache</span>
-                                <small>Clear cached account lists, departments, classes, etc. Use if dropdown options appear outdated.</small>
-                            </div>
-                            <div class="setting-control">
-                                <button class="btn btn-secondary" id="btn-clear-datasource-cache">
-                                    <i class="fas fa-list"></i> Clear Lists
-                                </button>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-
                 <!-- Help & Support -->
                 <div class="settings-card">
                     <div class="settings-card-header">

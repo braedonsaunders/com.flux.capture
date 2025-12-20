@@ -2585,25 +2585,33 @@ define([
                 }
             }
 
-            // Get document stats for email source
-            var todayStart = new Date();
-            todayStart.setHours(0, 0, 0, 0);
-
+            // Get document stats from persistent flux_config
             var documentsToday = 0;
             var documentsTotal = 0;
+            var today = format.format({ value: new Date(), type: format.Type.DATE });
 
             try {
-                var statsQuery = query.runSuiteQL({
-                    query: "SELECT " +
-                        "COUNT(CASE WHEN custrecord_flux_email_received >= TO_DATE('" + format.format({ value: todayStart, type: format.Type.DATE }) + "', 'MM/DD/YYYY') THEN 1 END) as today, " +
-                        "COUNT(*) as total " +
-                        "FROM customrecord_flux_document " +
-                        "WHERE custrecord_flux_source = 2"
+                var statsConfigQuery = query.runSuiteQL({
+                    query: "SELECT custrecord_flux_cfg_data FROM customrecord_flux_config " +
+                           "WHERE custrecord_flux_cfg_type = 'email_capture' " +
+                           "AND custrecord_flux_cfg_key = 'stats' " +
+                           "AND custrecord_flux_cfg_active = 'T'"
                 });
 
-                if (statsQuery && statsQuery.results && statsQuery.results.length > 0) {
-                    documentsToday = parseInt(statsQuery.results[0].values[0]) || 0;
-                    documentsTotal = parseInt(statsQuery.results[0].values[1]) || 0;
+                if (statsConfigQuery && statsConfigQuery.results && statsConfigQuery.results.length > 0) {
+                    var statsData = statsConfigQuery.results[0].values[0];
+                    if (statsData) {
+                        try {
+                            var stats = JSON.parse(statsData);
+                            documentsTotal = parseInt(stats.documentsTotal) || 0;
+                            // Only show today's count if the date matches
+                            if (stats.lastDate === today) {
+                                documentsToday = parseInt(stats.documentsToday) || 0;
+                            }
+                        } catch (parseErr) {
+                            log.debug('Stats parse error', parseErr);
+                        }
+                    }
                 }
             } catch (statsErr) {
                 log.debug('Stats query error', statsErr);

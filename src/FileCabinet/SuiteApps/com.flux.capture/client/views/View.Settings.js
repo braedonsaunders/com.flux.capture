@@ -3110,9 +3110,6 @@
             if (docsTotal) {
                 docsTotal.textContent = config.documentsTotal !== undefined ? config.documentsTotal : '-';
             }
-
-            // Load recent email imports
-            this.loadRecentEmailImports();
         },
 
         showEmailSetupPanel: function() {
@@ -3198,45 +3195,6 @@
                         saveBtn.innerHTML = '<i class="fas fa-save"></i> Save';
                     }
                     UI.toast('Failed to save: ' + (err.message || 'Unknown error'), 'error');
-                });
-        },
-
-        loadRecentEmailImports: function() {
-            var container = el('#recent-email-imports');
-            if (!container) return;
-
-            API.get('recentEmailImports')
-                .then(function(result) {
-                    var imports = result.data || result || [];
-
-                    if (!imports.length) {
-                        container.innerHTML = '<div class="empty-state-small">' +
-                            '<i class="fas fa-inbox"></i>' +
-                            '<span>No recent email imports</span>' +
-                            '</div>';
-                        return;
-                    }
-
-                    var html = '<div class="recent-email-list">';
-                    imports.forEach(function(item) {
-                        html += '<div class="recent-email-item">' +
-                            '<div class="email-icon"><i class="fas fa-file-pdf"></i></div>' +
-                            '<div class="email-info">' +
-                            '<div class="email-filename">' + (item.filename || 'Unknown file') + '</div>' +
-                            '<div class="email-sender">' + (item.sender || 'Unknown sender') + '</div>' +
-                            '</div>' +
-                            '<div class="email-time">' + (item.timeAgo || '') + '</div>' +
-                            '</div>';
-                    });
-                    html += '</div>';
-                    container.innerHTML = html;
-                })
-                .catch(function(err) {
-                    console.error('Error loading recent email imports:', err);
-                    container.innerHTML = '<div class="empty-state-small">' +
-                        '<i class="fas fa-inbox"></i>' +
-                        '<span>No recent email imports</span>' +
-                        '</div>';
                 });
         },
 

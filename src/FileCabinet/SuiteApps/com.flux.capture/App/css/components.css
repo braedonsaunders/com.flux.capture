@@ -1001,6 +1001,35 @@
     flex: 1; /* Takes remaining space after preview-panel */
 }
 
+/* Extraction Info Alert */
+.extraction-info-alert {
+    display: flex;
+    align-items: flex-start;
+    gap: var(--space-sm);
+    padding: var(--space-sm) var(--space-md);
+    background: var(--info-bg, rgba(59, 130, 246, 0.08));
+    border: 1px solid var(--info-border, rgba(59, 130, 246, 0.2));
+    border-radius: var(--radius-md);
+    margin-bottom: var(--space-md);
+    font-size: var(--font-size-xs);
+    color: var(--text-secondary);
+}
+
+.extraction-info-alert > i {
+    color: var(--info-color, #3b82f6);
+    margin-top: 2px;
+    flex-shrink: 0;
+}
+
+.extraction-info-alert .info-content {
+    flex: 1;
+    line-height: 1.4;
+}
+
+.extraction-info-alert .info-content strong {
+    color: var(--text-primary);
+}
+
 /* ==========================================
    FORM COMPONENTS
    ========================================== */
