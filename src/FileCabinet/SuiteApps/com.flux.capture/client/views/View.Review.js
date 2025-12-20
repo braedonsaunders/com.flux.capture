@@ -696,6 +696,11 @@
         bindEvents: function() {
             var self = this;
 
+            // Check if events already bound to this DOM (prevents duplicate handlers)
+            var toolbar = el('.review-toolbar');
+            if (toolbar && toolbar._eventsBound) return;
+            if (toolbar) toolbar._eventsBound = true;
+
             // Document type dropdown
             this.on('#doc-type-badge', 'click', function(e) {
                 e.stopPropagation();
