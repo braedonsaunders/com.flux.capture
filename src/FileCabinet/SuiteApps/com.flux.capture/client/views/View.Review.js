@@ -1737,10 +1737,11 @@
             }
 
             // ========== VENDOR SECTION (entity field with search) ==========
+            // Vendor is always required (validated in validateRequiredFields)
             html += '<div class="form-section">' +
                 '<h4><i class="fas fa-building"></i> Vendor</h4>' +
-                '<div class="form-field vendor-field">' +
-                    '<label>Vendor Name ' + this.renderConfidenceBadge('vendorName') + (this.isFieldMandatory('entity', bodyFields) ? ' <span class="required">*</span>' : '') + '</label>' +
+                '<div class="form-field vendor-field is-required">' +
+                    '<label>Vendor Name ' + this.renderConfidenceBadge('vendorName') + ' <span class="required">*</span></label>' +
                     '<div class="vendor-search-wrapper">' +
                         '<input type="text" id="field-vendor" class="vendor-input" value="' + escapeHtml(doc.vendorName || '') + '" placeholder="Search or enter vendor name..." autocomplete="off">' +
                         '<div class="vendor-dropdown" id="vendor-dropdown" style="display:none;"></div>' +
@@ -1952,8 +1953,8 @@
                         '</div>' +
                     '</div>' +
                 '</div>' +
-                '<div class="form-field total-field">' +
-                    '<label>Total Amount ' + this.renderConfidenceBadge('totalAmount') + '</label>' +
+                '<div class="form-field total-field is-required">' +
+                    '<label>Total Amount ' + this.renderConfidenceBadge('totalAmount') + ' <span class="required">*</span></label>' +
                     '<div class="input-with-prefix total-input">' +
                         '<span class="input-prefix">$</span>' +
                         '<input type="number" step="0.01" id="field-totalAmount" value="' + (doc.totalAmount || 0).toFixed(2) + '">' +
