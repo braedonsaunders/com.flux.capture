@@ -180,8 +180,8 @@
         loadFirstDocument: function() {
             var self = this;
 
-            // Load documents needing review and start with the first one
-            API.get('list', { status: '4', pageSize: 100 }) // NEEDS_REVIEW
+            // Load documents needing review and start with the first one (oldest first)
+            API.get('list', { status: '4', pageSize: 100, sortDir: 'asc' }) // NEEDS_REVIEW
                 .then(function(data) {
                     if (data && data.length > 0) {
                         self.queueIds = data.map(function(d) { return d.id; });
@@ -310,8 +310,8 @@
 
         loadQueueContext: function() {
             var self = this;
-            // Load list of documents for prev/next navigation
-            API.get('list', { status: '4', pageSize: 100 }) // NEEDS_REVIEW
+            // Load list of documents for prev/next navigation (oldest first)
+            API.get('list', { status: '4', pageSize: 100, sortDir: 'asc' }) // NEEDS_REVIEW
                 .then(function(data) {
                     if (data && data.length > 0) {
                         self.queueIds = data.map(function(d) { return d.id; });
