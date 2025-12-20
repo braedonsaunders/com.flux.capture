@@ -497,7 +497,7 @@
                         self.animateContentEnter();
                         self.showError(err.message);
                     });
-            }, 350); // Match slideOut animation duration
+            }, 300); // Match slideOut animation duration
         },
 
         /**

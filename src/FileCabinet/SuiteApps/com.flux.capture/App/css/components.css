@@ -2329,14 +2329,7 @@
     gap: var(--space-xs);
 }
 
-#zoom-level,
-#page-display {
-    font-size: var(--font-size-sm);
-    font-weight: 500;
-    color: var(--text-inverse);
-    min-width: 50px;
-    text-align: center;
-}
+/* Legacy zoom/page styles - overridden by .toolbar-pdf-controls */
 
 .divider-vertical {
     width: 1px;
@@ -8169,7 +8162,8 @@ body.extraction-selecting .form-field:hover {
 
 .preview-viewport {
     flex: 1;
-    overflow: auto;
+    overflow-y: auto;
+    overflow-x: hidden;
     display: flex;
     align-items: flex-start;
     justify-content: center;
@@ -8224,15 +8218,19 @@ body.extraction-selecting .form-field:hover {
 /* ==========================================
    DOCUMENT TRANSITION ANIMATIONS
    Slide content in/out when navigating
+   Fade happens before going fully off screen
    ========================================== */
 @keyframes slideOutLeft {
     0% {
         opacity: 1;
         transform: translateX(0);
     }
+    60% {
+        opacity: 0;
+    }
     100% {
         opacity: 0;
-        transform: translateX(-100%);
+        transform: translateX(-40%);
     }
 }
 
@@ -8241,16 +8239,36 @@ body.extraction-selecting .form-field:hover {
         opacity: 1;
         transform: translateX(0);
     }
+    60% {
+        opacity: 0;
+    }
     100% {
         opacity: 0;
-        transform: translateX(100%);
+        transform: translateX(40%);
+    }
+}
+
+@keyframes slideOutDown {
+    0% {
+        opacity: 1;
+        transform: translateY(0);
+    }
+    60% {
+        opacity: 0;
+    }
+    100% {
+        opacity: 0;
+        transform: translateY(40%);
     }
 }
 
 @keyframes slideInFromLeft {
     0% {
         opacity: 0;
-        transform: translateX(-100%);
+        transform: translateX(-40%);
+    }
+    40% {
+        opacity: 0;
     }
     100% {
         opacity: 1;
@@ -8261,7 +8279,10 @@ body.extraction-selecting .form-field:hover {
 @keyframes slideInFromRight {
     0% {
         opacity: 0;
-        transform: translateX(100%);
+        transform: translateX(40%);
+    }
+    40% {
+        opacity: 0;
     }
     100% {
         opacity: 1;
@@ -8269,33 +8290,18 @@ body.extraction-selecting .form-field:hover {
     }
 }
 
-/* Exit animations */
-.review-content.exiting .preview-panel {
-    animation: slideOutLeft 0.35s cubic-bezier(0.4, 0, 0.6, 1) forwards;
-}
-
-.review-content.exiting .extraction-panel {
-    animation: slideOutRight 0.35s cubic-bezier(0.4, 0, 0.6, 1) forwards;
-}
-
-.review-content.exiting .panel-resizer {
-    opacity: 0;
-    transition: opacity 0.2s ease-out;
-}
-
-/* Enter animations */
-.review-content.entering .preview-panel {
-    animation: slideInFromLeft 0.4s cubic-bezier(0.22, 1, 0.36, 1) forwards;
-}
-
-.review-content.entering .extraction-panel {
-    animation: slideInFromRight 0.4s cubic-bezier(0.22, 1, 0.36, 1) forwards;
-}
-
-.review-content.entering .panel-resizer {
-    opacity: 0;
-    animation: fadeIn 0.3s ease-out forwards;
-    animation-delay: 0.2s;
+@keyframes slideInFromBottom {
+    0% {
+        opacity: 0;
+        transform: translateY(40%);
+    }
+    40% {
+        opacity: 0;
+    }
+    100% {
+        opacity: 1;
+        transform: translateY(0);
+    }
 }
 
 @keyframes fadeIn {
@@ -8303,17 +8309,77 @@ body.extraction-selecting .form-field:hover {
     100% { opacity: 1; }
 }
 
-/* Initial load animation - same as entering */
-.review-content.initial-load .preview-panel {
-    animation: slideInFromLeft 0.4s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+/* Exit animations */
+.review-content.exiting .preview-panel,
+.review-content.exiting .review-top-section .preview-panel {
+    animation: slideOutLeft 0.3s cubic-bezier(0.4, 0, 0.6, 1) forwards;
 }
 
-.review-content.initial-load .extraction-panel {
-    animation: slideInFromRight 0.4s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+.review-content.exiting .extraction-panel,
+.review-content.exiting .review-top-section .extraction-panel {
+    animation: slideOutRight 0.3s cubic-bezier(0.4, 0, 0.6, 1) forwards;
+}
+
+.review-content.exiting .panel-resizer,
+.review-content.exiting .split-view-v-resizer {
+    opacity: 0;
+    transition: opacity 0.15s ease-out;
+}
+
+.review-content.exiting .review-bottom-section {
+    animation: slideOutDown 0.3s cubic-bezier(0.4, 0, 0.6, 1) forwards;
+}
+
+/* Enter animations */
+.review-content.entering .preview-panel,
+.review-content.entering .review-top-section .preview-panel {
+    animation: slideInFromLeft 0.35s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+}
+
+.review-content.entering .extraction-panel,
+.review-content.entering .review-top-section .extraction-panel {
+    animation: slideInFromRight 0.35s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+}
+
+.review-content.entering .panel-resizer {
+    opacity: 0;
+    animation: fadeIn 0.25s ease-out forwards;
+    animation-delay: 0.15s;
+}
+
+.review-content.entering .review-bottom-section {
+    animation: slideInFromBottom 0.35s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+}
+
+.review-content.entering .split-view-v-resizer {
+    opacity: 0;
+    animation: fadeIn 0.25s ease-out forwards;
+    animation-delay: 0.15s;
+}
+
+/* Initial load animation - same as entering */
+.review-content.initial-load .preview-panel,
+.review-content.initial-load .review-top-section .preview-panel {
+    animation: slideInFromLeft 0.35s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+}
+
+.review-content.initial-load .extraction-panel,
+.review-content.initial-load .review-top-section .extraction-panel {
+    animation: slideInFromRight 0.35s cubic-bezier(0.22, 1, 0.36, 1) forwards;
 }
 
 .review-content.initial-load .panel-resizer {
     opacity: 0;
-    animation: fadeIn 0.3s ease-out forwards;
-    animation-delay: 0.2s;
+    animation: fadeIn 0.25s ease-out forwards;
+    animation-delay: 0.15s;
+}
+
+.review-content.initial-load .review-bottom-section {
+    animation: slideInFromBottom 0.35s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+}
+
+.review-content.initial-load .split-view-v-resizer {
+    opacity: 0;
+    animation: fadeIn 0.25s ease-out forwards;
+    animation-delay: 0.15s;
 }
