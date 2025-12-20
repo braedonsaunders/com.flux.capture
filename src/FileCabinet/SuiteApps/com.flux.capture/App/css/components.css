@@ -5621,30 +5621,6 @@ tr.doc-row.approving { animation: compress-out 0.3s ease forwards; }
     font-size: 10px;
 }
 
-/* Review Keyboard HUD - Hidden until hover near bottom */
-.keyboard-hover-zone {
-    position: fixed;
-    bottom: 0;
-    left: 0;
-    right: 0;
-    height: 60px;
-    z-index: 99;
-}
-/* Review Keyboard HUD - Extends .keyboard-hud base styles */
-.review-keyboard-hud {
-    transform: translateX(-50%) translateY(100%);
-    bottom: 0;
-    border-radius: var(--radius-lg) var(--radius-lg) 0 0;
-    box-shadow: 0 -4px 20px rgba(0, 0, 0, 0.3);
-    opacity: 0;
-    transition: transform 0.2s ease, opacity 0.2s ease;
-}
-.keyboard-hover-zone:hover + .review-keyboard-hud,
-.review-keyboard-hud:hover {
-    transform: translateX(-50%) translateY(0);
-    opacity: 1;
-}
-
 /* Approve & Next Button Enhancement */
 .btn-approve-next {
     position: relative;
@@ -5702,11 +5678,6 @@ tr.doc-row.approving { animation: compress-out 0.3s ease forwards; }
     }
     .toolbar-actions .btn {
         padding: var(--space-sm);
-    }
-    .review-keyboard-hud {
-        font-size: var(--font-size-xs);
-        gap: var(--space-md);
-        padding: var(--space-xs) var(--space-md);
     }
 }
 
