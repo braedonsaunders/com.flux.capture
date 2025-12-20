@@ -7389,10 +7389,29 @@ tr.doc-row.approving { animation: compress-out 0.3s ease forwards; }
     backface-visibility: hidden;
 }
 
+/* Container for all PDF pages - enables continuous scrolling */
+.pdf-pages-container {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: var(--space-lg);
+    padding-bottom: var(--space-xl);
+    width: 100%;
+}
+
 /* Wrapper to keep canvas and annotations aligned */
 .pdf-page-wrapper {
     position: relative;
     display: inline-block;
+    flex-shrink: 0;
+}
+
+/* Canvas styling for multi-page view */
+.pdf-page-canvas {
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
+    background: white;
+    max-width: 100%;
+    height: auto;
 }
 
 .pdf-loading {

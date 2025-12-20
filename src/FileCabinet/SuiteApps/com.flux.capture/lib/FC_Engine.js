@@ -549,9 +549,12 @@ define([
             }
             // Fall back to TableAnalyzer for OCI or when provider doesn't have structured items
             else if (rawResult.rawTables && rawResult.rawTables.length > 0) {
-                // Find the line items table (usually the largest)
+                // Merge tables that span multiple pages before selection
+                const mergedTables = this._mergeMultiPageTables(rawResult.rawTables);
+
+                // Find the line items table (usually the largest by body row count)
                 const lineItemsTable = layout.lineItemsTable?.raw ||
-                    rawResult.rawTables.reduce((best, t) =>
+                    mergedTables.reduce((best, t) =>
                         (t.bodyRows?.length || 0) > (best?.bodyRows?.length || 0) ? t : best,
                         null
                     );
@@ -818,6 +821,117 @@ define([
                     fields.taxAmount = Math.round(inferredTax * 100) / 100;
                 }
             }
+        }
+
+        /**
+         * Merge tables that span multiple pages into single logical tables
+         * Detects continuation tables on subsequent pages and combines their rows
+         * @param {Array} rawTables - Array of table objects with page, headerRows, bodyRows
+         * @returns {Array} Merged tables array
+         */
+        _mergeMultiPageTables(rawTables) {
+            if (!rawTables || rawTables.length <= 1) return rawTables;
+
+            // Sort by page then by vertical position (index on page)
+            const sorted = [...rawTables].sort((a, b) =>
+                ((a.page || 0) - (b.page || 0)) || ((a.index || 0) - (b.index || 0))
+            );
+
+            const merged = [];
+            let current = null;
+
+            for (const table of sorted) {
+                if (!current) {
+                    // Start with first table - deep copy to avoid mutation
+                    current = {
+                        ...table,
+                        headerRows: table.headerRows ? [...table.headerRows] : [],
+                        bodyRows: table.bodyRows ? [...table.bodyRows] : [],
+                        footerRows: table.footerRows ? [...table.footerRows] : [],
+                        mergedFromPages: [table.page || 0]
+                    };
+                    continue;
+                }
+
+                // Check if this table is a continuation of current
+                const isNextPage = (table.page || 0) === (current.page || 0) + 1 ||
+                    (current.mergedFromPages && (table.page || 0) === Math.max(...current.mergedFromPages) + 1);
+                const hasNoHeaders = !table.headerRows || table.headerRows.length === 0;
+                const hasMatchingHeaders = this._tableHeadersMatch(current.headerRows, table.headerRows);
+                const hasBodyRows = table.bodyRows && table.bodyRows.length > 0;
+
+                // A table is a continuation if:
+                // 1. It's on the next page
+                // 2. Either has no headers (continuation) or matching headers (repeated for readability)
+                // 3. Has body rows to contribute
+                const isContinuation = isNextPage && (hasNoHeaders || hasMatchingHeaders) && hasBodyRows;
+
+                if (isContinuation) {
+                    // Merge body rows from continuation table
+                    current.bodyRows.push(...(table.bodyRows || []));
+                    current.mergedFromPages.push(table.page || 0);
+
+                    // If continuation has footer rows, they become the merged table's footer
+                    if (table.footerRows && table.footerRows.length > 0) {
+                        current.footerRows = [...table.footerRows];
+                    }
+
+                    fcDebug.debugAudit('TableMerge', `Merged table from page ${table.page} into multi-page table (pages: ${current.mergedFromPages.join(', ')})`);
+                } else {
+                    // Not a continuation - save current and start fresh
+                    merged.push(current);
+                    current = {
+                        ...table,
+                        headerRows: table.headerRows ? [...table.headerRows] : [],
+                        bodyRows: table.bodyRows ? [...table.bodyRows] : [],
+                        footerRows: table.footerRows ? [...table.footerRows] : [],
+                        mergedFromPages: [table.page || 0]
+                    };
+                }
+            }
+
+            // Don't forget the last table
+            if (current) merged.push(current);
+
+            // Log merge results
+            const multiPageTables = merged.filter(t => t.mergedFromPages && t.mergedFromPages.length > 1);
+            if (multiPageTables.length > 0) {
+                fcDebug.debugAudit('TableMerge.Summary', `Created ${multiPageTables.length} multi-page table(s) from ${rawTables.length} raw tables`);
+            }
+
+            return merged;
+        }
+
+        /**
+         * Check if two tables have matching header structures
+         * Used to detect if a table on a new page is a continuation with repeated headers
+         * @param {Array} headers1 - Header rows from first table
+         * @param {Array} headers2 - Header rows from second table
+         * @returns {boolean} True if headers match
+         */
+        _tableHeadersMatch(headers1, headers2) {
+            if (!headers1?.length || !headers2?.length) return false;
+
+            // Compare first header row's cells
+            const h1 = headers1[0]?.cells || [];
+            const h2 = headers2[0]?.cells || [];
+
+            // Column count must match
+            if (h1.length !== h2.length) return false;
+
+            // Check if at least 70% of headers match
+            let matches = 0;
+            for (let i = 0; i < h1.length; i++) {
+                const t1 = (h1[i]?.text || '').toLowerCase().trim();
+                const t2 = (h2[i]?.text || '').toLowerCase().trim();
+
+                // Exact match or substring match
+                if (t1 === t2 || (t1.length > 2 && t2.length > 2 && (t1.includes(t2) || t2.includes(t1)))) {
+                    matches++;
+                }
+            }
+
+            return (matches / h1.length) >= 0.7;
         }
 
         /**

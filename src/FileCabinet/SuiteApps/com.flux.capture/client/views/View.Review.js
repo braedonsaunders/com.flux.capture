@@ -1210,24 +1210,21 @@
         renderPdfWithAnnotations: function(viewport, fileUrl) {
             var self = this;
 
-            // Create container structure - wrap canvas and overlay in a positioned wrapper
+            // Create container structure for continuous scrolling - all pages in one scrollable container
             viewport.innerHTML = '<div class="pdf-container" id="pdf-container">' +
                 '<div class="pdf-loading"><div class="loading-spinner"></div><span>Loading document...</span></div>' +
-                '<div class="pdf-page-wrapper" id="pdf-page-wrapper">' +
-                    '<canvas id="pdf-canvas"></canvas>' +
-                    '<div class="annotation-overlay" id="annotation-overlay"></div>' +
-                '</div>' +
+                '<div class="pdf-pages-container" id="pdf-pages-container"></div>' +
             '</div>';
 
             var container = el('#pdf-container');
-            var canvas = el('#pdf-canvas');
+            var pagesContainer = el('#pdf-pages-container');
             var loadingEl = viewport.querySelector('.pdf-loading');
 
-            if (!canvas) return;
+            if (!pagesContainer) return;
 
-            this.pdfCanvas = canvas;
-            this.pdfContext = canvas.getContext('2d');
-            this.annotationOverlay = el('#annotation-overlay');
+            // Store reference for scroll handling
+            this.pdfPagesContainer = pagesContainer;
+            this.pageElements = []; // Track page wrapper elements for scroll detection
 
             // Load the PDF
             var loadingTask = pdfjsLib.getDocument(fileUrl);
@@ -1241,11 +1238,14 @@
                     pageDisplay.textContent = self.currentPage + ' / ' + self.totalPages;
                 }
 
-                // Render the first page
-                self.renderPdfPage(self.currentPage);
+                // Render all pages
+                self.renderAllPdfPages().then(function() {
+                    // Hide loading after all pages rendered
+                    if (loadingEl) loadingEl.style.display = 'none';
 
-                // Hide loading
-                if (loadingEl) loadingEl.style.display = 'none';
+                    // Setup scroll listener to track current page
+                    self.setupPdfScrollListener();
+                });
 
             }).catch(function(error) {
                 console.error('[PDF.js] Error loading PDF:', error);
@@ -1255,13 +1255,26 @@
             });
         },
 
-        renderPdfPage: function(pageNum) {
+        renderAllPdfPages: function() {
             var self = this;
-            if (!this.pdfDoc) return;
+            var promises = [];
 
-            this.pdfDoc.getPage(pageNum).then(function(page) {
-                self.pdfPage = page;
+            // Clear existing pages
+            this.pdfPagesContainer.innerHTML = '';
+            this.pageElements = [];
 
+            for (var i = 1; i <= this.totalPages; i++) {
+                promises.push(this.renderSinglePdfPage(i));
+            }
+
+            return Promise.all(promises);
+        },
+
+        renderSinglePdfPage: function(pageNum) {
+            var self = this;
+            if (!this.pdfDoc) return Promise.resolve();
+
+            return this.pdfDoc.getPage(pageNum).then(function(page) {
                 // Calculate scale to fit container
                 var container = el('#pdf-container');
                 var containerWidth = container ? container.clientWidth - 40 : 600;
@@ -1270,50 +1283,146 @@
 
                 var viewport = page.getViewport({ scale: baseScale, rotation: self.rotation });
 
+                // Create page wrapper
+                var pageWrapper = document.createElement('div');
+                pageWrapper.className = 'pdf-page-wrapper';
+                pageWrapper.dataset.page = pageNum;
+
+                // Create canvas for this page
+                var canvas = document.createElement('canvas');
+                canvas.className = 'pdf-page-canvas';
+
+                // Create annotation overlay for this page
+                var annotationOverlay = document.createElement('div');
+                annotationOverlay.className = 'annotation-overlay';
+                annotationOverlay.dataset.page = pageNum;
+
                 // Handle high DPI displays (Retina, etc.) for crisp rendering
                 var dpr = window.devicePixelRatio || 1;
 
                 // Set canvas dimensions - scale up for DPI
-                self.pdfCanvas.width = Math.floor(viewport.width * dpr);
-                self.pdfCanvas.height = Math.floor(viewport.height * dpr);
+                canvas.width = Math.floor(viewport.width * dpr);
+                canvas.height = Math.floor(viewport.height * dpr);
 
                 // Set CSS dimensions to display at correct size
-                self.pdfCanvas.style.width = viewport.width + 'px';
-                self.pdfCanvas.style.height = viewport.height + 'px';
-
-                // Scale the context to match DPI
-                self.pdfContext.setTransform(dpr, 0, 0, dpr, 0, 0);
+                canvas.style.width = viewport.width + 'px';
+                canvas.style.height = viewport.height + 'px';
 
                 // Set annotation overlay dimensions
-                if (self.annotationOverlay) {
-                    self.annotationOverlay.style.width = viewport.width + 'px';
-                    self.annotationOverlay.style.height = viewport.height + 'px';
-                }
+                annotationOverlay.style.width = viewport.width + 'px';
+                annotationOverlay.style.height = viewport.height + 'px';
+
+                // Append elements
+                pageWrapper.appendChild(canvas);
+                pageWrapper.appendChild(annotationOverlay);
+                self.pdfPagesContainer.appendChild(pageWrapper);
+
+                // Store reference
+                self.pageElements.push({
+                    wrapper: pageWrapper,
+                    canvas: canvas,
+                    overlay: annotationOverlay,
+                    pageNum: pageNum,
+                    viewport: viewport
+                });
+
+                // Get context and scale for DPI
+                var ctx = canvas.getContext('2d');
+                ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
 
                 // Render the page
                 var renderContext = {
-                    canvasContext: self.pdfContext,
+                    canvasContext: ctx,
                     viewport: viewport
                 };
 
-                page.render(renderContext).promise.then(function() {
-                    // Render annotations after page is rendered
+                return page.render(renderContext).promise.then(function() {
+                    // Render annotations for this page if enabled
                     if (self.extractionPool.showAnnotations) {
-                        self.renderExtractionAnnotations(viewport);
+                        self.renderPageAnnotations(pageNum, annotationOverlay, viewport);
                     }
                 });
             });
         },
 
-        // ==========================================
-        // EXTRACTION ANNOTATIONS ON DOCUMENT
-        // ==========================================
-        renderExtractionAnnotations: function(pdfViewport) {
+        setupPdfScrollListener: function() {
             var self = this;
-            if (!this.annotationOverlay) return;
+            var previewViewport = el('#preview-viewport');
+            if (!previewViewport) return;
 
-            // Clear existing annotations
-            this.annotationOverlay.innerHTML = '';
+            // Debounce scroll events
+            var scrollTimeout = null;
+
+            previewViewport.addEventListener('scroll', function() {
+                if (scrollTimeout) clearTimeout(scrollTimeout);
+                scrollTimeout = setTimeout(function() {
+                    self.updateCurrentPageFromScroll();
+                }, 50);
+            });
+        },
+
+        updateCurrentPageFromScroll: function() {
+            var previewViewport = el('#preview-viewport');
+            if (!previewViewport || !this.pageElements.length) return;
+
+            var viewportRect = previewViewport.getBoundingClientRect();
+            var viewportMiddle = viewportRect.top + viewportRect.height / 2;
+
+            // Find which page is most visible (closest to viewport middle)
+            var closestPage = 1;
+            var closestDistance = Infinity;
+
+            for (var i = 0; i < this.pageElements.length; i++) {
+                var pageEl = this.pageElements[i];
+                var rect = pageEl.wrapper.getBoundingClientRect();
+                var pageMiddle = rect.top + rect.height / 2;
+                var distance = Math.abs(pageMiddle - viewportMiddle);
+
+                if (distance < closestDistance) {
+                    closestDistance = distance;
+                    closestPage = pageEl.pageNum;
+                }
+            }
+
+            // Update current page if changed
+            if (this.currentPage !== closestPage) {
+                this.currentPage = closestPage;
+                var pageDisplay = el('#page-display');
+                if (pageDisplay) {
+                    pageDisplay.textContent = this.currentPage + ' / ' + this.totalPages;
+                }
+            }
+        },
+
+        // Legacy single page render - kept for compatibility but now re-renders all pages
+        renderPdfPage: function(pageNum) {
+            var self = this;
+            if (!this.pdfDoc) return;
+
+            // For continuous scrolling, re-render all pages when zoom/rotation changes
+            if (this.pdfPagesContainer) {
+                this.renderAllPdfPages().then(function() {
+                    // Scroll to the current page after re-render
+                    self.scrollToPage(pageNum);
+                });
+            }
+        },
+
+        scrollToPage: function(pageNum) {
+            if (!this.pageElements || pageNum < 1 || pageNum > this.pageElements.length) return;
+
+            var pageEl = this.pageElements[pageNum - 1];
+            if (pageEl && pageEl.wrapper) {
+                pageEl.wrapper.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            }
+        },
+
+        renderPageAnnotations: function(pageNum, overlayEl, pdfViewport) {
+            var self = this;
+            if (!overlayEl) return;
+
+            // Clear existing annotations on this page
+            overlayEl.innerHTML = '';
 
             var extractedData = this.data.extractedData || {};
             var allFields = extractedData._allExtractedFields || {};
@@ -1330,6 +1439,12 @@
                 if (!field.position) return;
 
                 var pos = field.position;
+
+                // Check if this annotation belongs to this page
+                // Default to page 1 if no page specified
+                var fieldPage = pos.page || 1;
+                if (fieldPage !== pageNum) return;
+
                 var isMatched = matchedFieldIds.indexOf(key) !== -1;
 
                 // Create annotation box
@@ -1346,13 +1461,10 @@
                 var rawH = pos.height || pos.h || 0.1;
 
                 // Detect coordinate system and convert to pixel coordinates
-                // If values > 1, they're likely in inches (Azure) or points (PDF)
-                // If values <= 1, they're normalized (0-1)
                 var x, y, w, h;
 
                 if (rawX > 1 || rawY > 1 || rawW > 1 || rawH > 1) {
                     // Coordinates are in inches - convert to viewport pixels
-                    // Scale: viewport pixels / page inches
                     var scaleX = pdfViewport.width / PAGE_WIDTH_INCHES;
                     var scaleY = pdfViewport.height / PAGE_HEIGHT_INCHES;
 
@@ -1415,8 +1527,28 @@
                     });
                 }
 
-                self.annotationOverlay.appendChild(box);
+                overlayEl.appendChild(box);
             });
+        },
+
+        // ==========================================
+        // EXTRACTION ANNOTATIONS ON DOCUMENT
+        // ==========================================
+        renderExtractionAnnotations: function(pdfViewport) {
+            var self = this;
+
+            // For multi-page continuous scrolling, render annotations on each page
+            if (this.pageElements && this.pageElements.length > 0) {
+                this.pageElements.forEach(function(pageEl) {
+                    self.renderPageAnnotations(pageEl.pageNum, pageEl.overlay, pageEl.viewport);
+                });
+                return;
+            }
+
+            // Fallback for legacy single-page mode
+            if (!this.annotationOverlay) return;
+            this.annotationOverlay.innerHTML = '';
+            this.renderPageAnnotations(1, this.annotationOverlay, pdfViewport);
         },
 
         showAnnotationAssignPopover: function(box, field, key) {
@@ -5508,9 +5640,9 @@
                 pageDisplay.textContent = this.currentPage + ' / ' + this.totalPages;
             }
 
-            // If using PDF.js, render the new page
-            if (this.pdfDoc) {
-                this.renderPdfPage(this.currentPage);
+            // For continuous scrolling, scroll to the page
+            if (this.pdfDoc && this.pageElements) {
+                this.scrollToPage(this.currentPage);
             }
         },
 
