@@ -3228,13 +3228,15 @@
 
             line[fieldId] = value;
 
-            // Auto-calculate amount for item lines
-            if ((fieldId === 'quantity' || fieldId === 'rate') && sublistId === 'item') {
+            // Auto-calculate amount when quantity or rate changes, but only if all three columns are visible
+            // This allows the feature to work on any sublist that displays quantity, rate, and amount
+            // Amount can still be manually overridden by directly editing the amount field
+            if ((fieldId === 'quantity' || fieldId === 'rate') && this.hasAutoCalculateColumns(sublistId)) {
                 var qty = parseFloat(line.quantity) || 0;
                 var rate = parseFloat(line.rate) || 0;
                 line.amount = qty * rate;
 
-                // Update the amount input
+                // Update the amount input in the DOM
                 var amountInput = el('#line-' + sublistId + '-' + idx + '-amount');
                 if (amountInput) amountInput.value = line.amount.toFixed(2);
             }
@@ -3294,6 +3296,19 @@
             return sublists.find(function(sl) {
                 return (sl.id || '').toLowerCase() === normalizedId;
             }) || { fields: [] };
+        },
+
+        // Check if sublist has quantity, rate, and amount columns all visible
+        // Used for smart auto-calculation of amount = quantity * rate
+        hasAutoCalculateColumns: function(sublistId) {
+            var schema = this.getSublistSchema(sublistId);
+            var visibleFields = this.getVisibleSublistFields(schema);
+            var visibleIds = visibleFields.map(function(f) {
+                return (f.id || '').toLowerCase();
+            });
+            return visibleIds.indexOf('quantity') !== -1 &&
+                   visibleIds.indexOf('rate') !== -1 &&
+                   visibleIds.indexOf('amount') !== -1;
         },
 
         // Check if field is numeric (currency or integer type)
