@@ -5624,6 +5624,11 @@
                 return;
             }
 
+            // Sort options alphabetically by text
+            options = options.slice().sort(function(a, b) {
+                return (a.text || '').localeCompare(b.text || '');
+            });
+
             var html = options.map(function(r) {
                 var dataAttrs = 'data-value="' + escapeHtml(r.value) + '" data-text="' + escapeHtml(r.text) + '"';
                 // Include employeeData as JSON data attribute for employee/nextapprover fields
