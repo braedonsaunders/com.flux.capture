@@ -5495,42 +5495,40 @@ body.dark-mode #btn-dark-mode i::before {
     border-radius: 50%;
     opacity: 0;
 }
-.view-flow.fullpage-mode .dropzone-particles .particle {
-    animation: particleDrift 12s ease-in-out infinite;
+/* Each particle has unique duration + delay for organic feel */
+.view-flow.fullpage-mode .dropzone-particles .particle:nth-child(1) { left: 8%; animation: particleDrift1 14s ease-in-out infinite; animation-delay: -2s; }
+.view-flow.fullpage-mode .dropzone-particles .particle:nth-child(2) { left: 18%; animation: particleDrift2 11s ease-in-out infinite; animation-delay: -7s; }
+.view-flow.fullpage-mode .dropzone-particles .particle:nth-child(3) { left: 28%; animation: particleDrift1 16s ease-in-out infinite; animation-delay: -4s; }
+.view-flow.fullpage-mode .dropzone-particles .particle:nth-child(4) { left: 42%; animation: particleDrift3 13s ease-in-out infinite; animation-delay: -11s; }
+.view-flow.fullpage-mode .dropzone-particles .particle:nth-child(5) { left: 52%; animation: particleDrift2 15s ease-in-out infinite; animation-delay: -1s; }
+.view-flow.fullpage-mode .dropzone-particles .particle:nth-child(6) { left: 62%; animation: particleDrift1 12s ease-in-out infinite; animation-delay: -9s; }
+.view-flow.fullpage-mode .dropzone-particles .particle:nth-child(7) { left: 72%; animation: particleDrift3 17s ease-in-out infinite; animation-delay: -5s; }
+.view-flow.fullpage-mode .dropzone-particles .particle:nth-child(8) { left: 82%; animation: particleDrift2 14s ease-in-out infinite; animation-delay: -12s; }
+.view-flow.fullpage-mode .dropzone-particles .particle:nth-child(9) { left: 92%; animation: particleDrift1 13s ease-in-out infinite; animation-delay: -3s; }
+.view-flow.fullpage-mode .dropzone-particles .particle:nth-child(10) { left: 15%; animation: particleDrift3 15s ease-in-out infinite; animation-delay: -8s; }
+.view-flow.fullpage-mode .dropzone-particles .particle:nth-child(11) { left: 48%; animation: particleDrift2 16s ease-in-out infinite; animation-delay: -6s; }
+.view-flow.fullpage-mode .dropzone-particles .particle:nth-child(12) { left: 78%; animation: particleDrift1 12s ease-in-out infinite; animation-delay: -10s; }
+
+@keyframes particleDrift1 {
+    0% { bottom: -10px; opacity: 0; transform: translateX(0); }
+    8% { opacity: 0.3; }
+    50% { opacity: 0.2; transform: translateX(10px); }
+    92% { opacity: 0.15; }
+    100% { bottom: 100%; opacity: 0; transform: translateX(-5px); }
 }
-.dropzone-particles .particle:nth-child(1) { left: 8%; animation-delay: 0s; }
-.dropzone-particles .particle:nth-child(2) { left: 18%; animation-delay: 1s; }
-.dropzone-particles .particle:nth-child(3) { left: 28%; animation-delay: 2s; }
-.dropzone-particles .particle:nth-child(4) { left: 38%; animation-delay: 3s; }
-.dropzone-particles .particle:nth-child(5) { left: 48%; animation-delay: 4s; }
-.dropzone-particles .particle:nth-child(6) { left: 58%; animation-delay: 5s; }
-.dropzone-particles .particle:nth-child(7) { left: 68%; animation-delay: 6s; }
-.dropzone-particles .particle:nth-child(8) { left: 78%; animation-delay: 7s; }
-.dropzone-particles .particle:nth-child(9) { left: 88%; animation-delay: 8s; }
-.dropzone-particles .particle:nth-child(10) { left: 25%; animation-delay: 9s; }
-.dropzone-particles .particle:nth-child(11) { left: 55%; animation-delay: 10s; }
-.dropzone-particles .particle:nth-child(12) { left: 75%; animation-delay: 11s; }
-@keyframes particleDrift {
-    0% {
-        bottom: -10px;
-        opacity: 0;
-        transform: translateX(0);
-    }
-    8% {
-        opacity: 0.35;
-    }
-    50% {
-        opacity: 0.25;
-        transform: translateX(6px);
-    }
-    92% {
-        opacity: 0.15;
-    }
-    100% {
-        bottom: 100%;
-        opacity: 0;
-        transform: translateX(-3px);
-    }
+@keyframes particleDrift2 {
+    0% { bottom: -10px; opacity: 0; transform: translateX(0); }
+    10% { opacity: 0.25; }
+    45% { opacity: 0.2; transform: translateX(-8px); }
+    90% { opacity: 0.1; }
+    100% { bottom: 100%; opacity: 0; transform: translateX(4px); }
+}
+@keyframes particleDrift3 {
+    0% { bottom: -10px; opacity: 0; transform: translateX(0); }
+    6% { opacity: 0.35; }
+    55% { opacity: 0.15; transform: translateX(6px); }
+    88% { opacity: 0.1; }
+    100% { bottom: 100%; opacity: 0; transform: translateX(-8px); }
 }
 
 /* Dropzone Content */
