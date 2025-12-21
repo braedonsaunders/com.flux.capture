@@ -2610,31 +2610,7 @@
         // ==========================================
 
         showShortcutsHelp: function() {
-            var shortcuts = [
-                { key: 'A', desc: 'Approve document and go to next' },
-                { key: 'R', desc: 'Reject document' },
-                { key: 'S', desc: 'Skip to next document' },
-                { key: '←/→', desc: 'Navigate between documents' },
-                { key: 'Tab', desc: 'Move to next field' },
-                { key: 'Ctrl+S', desc: 'Save changes' },
-                { key: '+/-', desc: 'Zoom in/out on document' },
-                { key: 'Esc', desc: 'Back to document list' },
-                { key: '/', desc: 'Show keyboard shortcuts' }
-            ];
-
-            var html = shortcuts.map(function(s) {
-                return '<div style="display:flex;align-items:center;gap:var(--space-md);padding:var(--space-xs) 0;">' +
-                    '<kbd style="min-width:60px;text-align:center;">' + s.key + '</kbd>' +
-                    '<span>' + s.desc + '</span>' +
-                    '</div>';
-            }).join('');
-
-            UI.confirm({
-                title: 'Keyboard Shortcuts',
-                message: '<div style="font-size:var(--font-size-sm);">' + html + '</div>',
-                confirmText: 'Got it',
-                showCancel: false
-            });
+            UI.showKeyboardShortcuts();
         },
 
         // ==========================================

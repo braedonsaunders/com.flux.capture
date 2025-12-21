@@ -1328,6 +1328,28 @@
     gap: var(--space-sm);
 }
 
+.setting-control select {
+    padding: var(--space-sm) var(--space-md);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-sm);
+    font-size: var(--font-size-sm);
+    font-family: var(--font-family);
+    background: var(--surface-card);
+    cursor: pointer;
+    min-width: 160px;
+    transition: border-color var(--transition), box-shadow var(--transition);
+}
+
+.setting-control select:hover {
+    border-color: var(--gray-400);
+}
+
+.setting-control select:focus {
+    outline: none;
+    border-color: var(--color-primary);
+    box-shadow: 0 0 0 3px var(--color-primary-bg);
+}
+
 .range-value {
     min-width: 40px;
     text-align: right;
