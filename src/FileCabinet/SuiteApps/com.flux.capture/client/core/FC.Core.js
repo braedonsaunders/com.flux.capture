@@ -677,6 +677,51 @@
                     input.select();
                 });
             });
+        },
+
+        /**
+         * Show keyboard shortcuts help modal
+         * Shared modal used across views
+         */
+        showKeyboardShortcuts: function() {
+            var html = '<div class="shortcuts-modal">' +
+                '<div class="shortcuts-content">' +
+                    '<h3><i class="fas fa-keyboard"></i> Keyboard Shortcuts</h3>' +
+                    '<div class="shortcuts-grid">' +
+                        '<div class="shortcut-section">' +
+                            '<div class="shortcut-section-title">Actions</div>' +
+                            '<div class="shortcut-item"><kbd>A</kbd> <span>Approve & next</span></div>' +
+                            '<div class="shortcut-item"><kbd>R</kbd> <span>Reject document</span></div>' +
+                            '<div class="shortcut-item"><kbd>S</kbd> <span>Skip to next</span></div>' +
+                            '<div class="shortcut-item"><kbd>Esc</kbd> <span>Back to documents</span></div>' +
+                        '</div>' +
+                        '<div class="shortcut-section">' +
+                            '<div class="shortcut-section-title">Navigation</div>' +
+                            '<div class="shortcut-item"><kbd>←</kbd> <span>Previous document</span></div>' +
+                            '<div class="shortcut-item"><kbd>→</kbd> <span>Next document</span></div>' +
+                            '<div class="shortcut-item"><kbd>Tab</kbd> <span>Next field</span></div>' +
+                            '<div class="shortcut-item"><kbd>Shift+Tab</kbd> <span>Previous field</span></div>' +
+                        '</div>' +
+                        '<div class="shortcut-section">' +
+                            '<div class="shortcut-section-title">Preview</div>' +
+                            '<div class="shortcut-item"><kbd>+</kbd> <span>Zoom in</span></div>' +
+                            '<div class="shortcut-item"><kbd>-</kbd> <span>Zoom out</span></div>' +
+                            '<div class="shortcut-item"><kbd>Ctrl+0</kbd> <span>Reset zoom</span></div>' +
+                        '</div>' +
+                        '<div class="shortcut-section">' +
+                            '<div class="shortcut-section-title">Other</div>' +
+                            '<div class="shortcut-item"><kbd>Ctrl+S</kbd> <span>Save changes</span></div>' +
+                            '<div class="shortcut-item"><kbd>Ctrl+Shift+V</kbd> <span>Quick assign palette</span></div>' +
+                            '<div class="shortcut-item"><kbd>?</kbd> <span>Show this help</span></div>' +
+                        '</div>' +
+                    '</div>' +
+                    '<button class="btn btn-primary btn-block" onclick="this.closest(\'.shortcuts-modal\').remove()">Got it!</button>' +
+                '</div>' +
+            '</div>';
+
+            var modal = document.createElement('div');
+            modal.innerHTML = html;
+            document.body.appendChild(modal.firstChild);
         }
     };
 
