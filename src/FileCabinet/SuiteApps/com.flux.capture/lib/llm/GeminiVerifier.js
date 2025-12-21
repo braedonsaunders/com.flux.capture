@@ -136,13 +136,18 @@ define([
                     };
                 }
 
-                // Get file content as base64
+                // Get file content as base64 (NetSuite binary files return base64)
                 const fileContents = fileObj.getContents();
-                const pdfBase64 = encode.convert({
-                    string: fileContents,
-                    inputEncoding: encode.Encoding.UTF_8,
-                    outputEncoding: encode.Encoding.BASE_64
-                });
+
+                // Avoid double-encoding when contents are already base64 (PDF/Image files)
+                const looksBase64 = /^[A-Za-z0-9+/=\s]+$/.test(fileContents);
+                const pdfBase64 = looksBase64
+                    ? fileContents
+                    : encode.convert({
+                        string: fileContents,
+                        inputEncoding: encode.Encoding.UTF_8,
+                        outputEncoding: encode.Encoding.BASE_64
+                    });
 
                 // Determine MIME type
                 const fileName = fileObj.name.toLowerCase();
