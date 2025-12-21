@@ -2266,7 +2266,7 @@
         },
 
         fetchTypeaheadOptions: function(lookupType, query, callback) {
-            API.get('datasource', { type: lookupType, query: query, limit: 20 }).then(function(response) {
+            API.get('datasource', { type: lookupType, query: query, limit: 100 }).then(function(response) {
                 var data = response.data || response;
                 var options = Array.isArray(data) ? data : (data.options || data.results || []);
                 // Normalize to { value, text, employeeData } format
@@ -2285,7 +2285,7 @@
                 normalized.sort(function(a, b) {
                     return (a.text || '').localeCompare(b.text || '');
                 });
-                callback(normalized.slice(0, 10));
+                callback(normalized);
             }).catch(function() {
                 callback([]);
             });
