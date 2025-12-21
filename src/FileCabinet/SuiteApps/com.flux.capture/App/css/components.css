@@ -1350,6 +1350,29 @@
     box-shadow: 0 0 0 3px var(--color-primary-bg);
 }
 
+.setting-control input[type="number"],
+.setting-control input[type="text"] {
+    padding: var(--space-sm) var(--space-md);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-sm);
+    font-size: var(--font-size-sm);
+    font-family: var(--font-family);
+    background: var(--surface-card);
+    transition: border-color var(--transition), box-shadow var(--transition);
+}
+
+.setting-control input[type="number"]:hover,
+.setting-control input[type="text"]:hover {
+    border-color: var(--gray-400);
+}
+
+.setting-control input[type="number"]:focus,
+.setting-control input[type="text"]:focus {
+    outline: none;
+    border-color: var(--color-primary);
+    box-shadow: 0 0 0 3px var(--color-primary-bg);
+}
+
 /* Settings Category (for grouping related settings) */
 .settings-category {
     margin-bottom: var(--space-lg);
