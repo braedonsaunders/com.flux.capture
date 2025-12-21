@@ -974,9 +974,35 @@
                 var deleted = 0;
                 var errors = 0;
                 var idsToDelete = self.selectedIds.slice();
+                var bar = el('#bulk-actions-bar');
+                var countEl = bar ? bar.querySelector('.bulk-count') : null;
+
+                // Show loading state on bulk actions bar
+                if (bar) {
+                    bar.classList.add('deleting');
+                }
+
+                // Add deleting class to all selected rows
+                idsToDelete.forEach(function(id) {
+                    var row = document.querySelector('.doc-row[data-doc-id="' + id + '"]');
+                    if (row) {
+                        row.classList.add('deleting');
+                    }
+                });
+
+                // Update progress display
+                function updateProgress(current, total) {
+                    if (countEl) {
+                        countEl.innerHTML = '<div class="bulk-delete-progress"><span class="progress-spinner"></span> Deleting ' + current + ' of ' + total + '...</div>';
+                    }
+                }
 
                 function deleteNext(index) {
                     if (index >= idsToDelete.length) {
+                        // Remove loading state
+                        if (bar) {
+                            bar.classList.remove('deleting');
+                        }
                         self.selectedIds = [];
                         if (deleted > 0) {
                             UI.toast('Deleted ' + deleted + ' document' + (deleted > 1 ? 's' : ''), 'success');
@@ -988,6 +1014,9 @@
                         return;
                     }
 
+                    // Update progress
+                    updateProgress(index + 1, idsToDelete.length);
+
                     API.delete('document', { id: idsToDelete[index] })
                         .then(function() {
                             deleted++;
@@ -995,6 +1024,11 @@
                         })
                         .catch(function() {
                             errors++;
+                            // Remove deleting class from failed row
+                            var row = document.querySelector('.doc-row[data-doc-id="' + idsToDelete[index] + '"]');
+                            if (row) {
+                                row.classList.remove('deleting');
+                            }
                             deleteNext(index + 1);
                         });
                 }
@@ -1088,6 +1122,12 @@
             }).then(function(confirmed) {
                 if (!confirmed) return;
 
+                // Show loading state on the row
+                var row = document.querySelector('.doc-row[data-doc-id="' + docId + '"]');
+                if (row) {
+                    row.classList.add('deleting');
+                }
+
                 API.delete('document', { id: docId })
                     .then(function() {
                         self.streak = 0;
@@ -1098,6 +1138,10 @@
                         self.loadData();
                     })
                     .catch(function(err) {
+                        // Remove loading state on error
+                        if (row) {
+                            row.classList.remove('deleting');
+                        }
                         UI.toast('Error: ' + err.message, 'error');
                     });
             });

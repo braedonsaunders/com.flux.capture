@@ -6424,6 +6424,69 @@ tr.doc-row:hover .row-action.btn-delete:hover { background: var(--color-danger);
 tr.doc-row.approving { animation: compress-out 0.3s ease forwards; }
 @keyframes compress-out { 0% { transform: scaleY(1); opacity: 1; } 100% { transform: scaleY(0); opacity: 0; height: 0; padding: 0; margin: 0; border: 0; } }
 
+/* Delete loading state */
+tr.doc-row.deleting {
+    position: relative;
+    pointer-events: none;
+    opacity: 0.6;
+}
+tr.doc-row.deleting td { position: relative; }
+tr.doc-row.deleting .row-actions { visibility: hidden; }
+tr.doc-row.deleting::after {
+    content: '';
+    position: absolute;
+    right: 16px;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 18px;
+    height: 18px;
+    border: 2px solid var(--gray-300);
+    border-top-color: var(--color-danger);
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+}
+@keyframes spin { to { transform: translateY(-50%) rotate(360deg); } }
+
+/* Bulk delete loading overlay */
+.bulk-actions-bar.deleting {
+    pointer-events: none;
+}
+.bulk-actions-bar.deleting .bulk-buttons .btn-danger {
+    position: relative;
+    padding-left: 32px;
+}
+.bulk-actions-bar.deleting .bulk-buttons .btn-danger::before {
+    content: '';
+    position: absolute;
+    left: 10px;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 14px;
+    height: 14px;
+    border: 2px solid rgba(255, 255, 255, 0.3);
+    border-top-color: white;
+    border-radius: 50%;
+    animation: spin-white 0.8s linear infinite;
+}
+.bulk-actions-bar.deleting .bulk-buttons .btn-danger i { display: none; }
+@keyframes spin-white { to { transform: translateY(-50%) rotate(360deg); } }
+
+.bulk-delete-progress {
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
+    font-size: var(--font-size-sm);
+    font-weight: 500;
+}
+.bulk-delete-progress .progress-spinner {
+    width: 16px;
+    height: 16px;
+    border: 2px solid rgba(255, 255, 255, 0.3);
+    border-top-color: white;
+    border-radius: 50%;
+    animation: spin-white 0.8s linear infinite;
+}
+
 /* Inbox Zero State */
 .inbox-zero {
     display: flex;
