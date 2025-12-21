@@ -5599,7 +5599,7 @@
             dropdown.style.display = 'block';
 
             // Build API params
-            var params = { type: type, query: query, limit: 20 };
+            var params = { type: type, query: query, limit: 100 };
             if (options && options.accountType) {
                 params.accountType = options.accountType;
             }
