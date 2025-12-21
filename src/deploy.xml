@@ -7,5 +7,7 @@
         <path>~/Objects/customscript_fc_suitelet.xml</path>
         <path>~/Objects/customscript_fc_email_capture.xml</path>
         <path>~/Objects/customscript_fc_document_ue.xml</path>
+        <path>~/Objects/customscript_fc_process_docs_mr.xml</path>
+        <path>~/Objects/customscript_fc_continue_polling.xml</path>
     </objects>
 </deploy>

@@ -607,36 +607,36 @@ define([
             return true;
         });
 
-        // Chain another MR run if any documents need continued polling
+        // Chain to Scheduled Script if any documents need continued polling
+        // Using SS instead of self-chaining avoids "no idle deployment" errors
         if (needsContinuation > 0) {
-            log.audit('FC_ProcessDocuments.summarize.chain', {
+            log.audit('FC_ProcessDocuments.summarize.triggerSS', {
                 needsContinuation: needsContinuation,
-                schedulingNextRun: true
+                triggeringScheduledScript: true
             });
 
             try {
-                // Get the current script's deployment
-                const scriptId = runtime.getCurrentScript().id;
-
-                // Create a new task to run this same script
-                const mrTask = task.create({
-                    taskType: task.TaskType.MAP_REDUCE,
-                    scriptId: scriptId
+                // Create a task for the continuation polling Scheduled Script
+                // This is a DIFFERENT script, so no deployment conflict
+                const ssTask = task.create({
+                    taskType: task.TaskType.SCHEDULED_SCRIPT,
+                    scriptId: 'customscript_fc_continue_polling',
+                    deploymentId: 'customdeploy_fc_continue_polling'
                 });
 
-                const taskId = mrTask.submit();
+                const taskId = ssTask.submit();
 
-                log.audit('FC_ProcessDocuments.summarize.chained', {
+                log.audit('FC_ProcessDocuments.summarize.ssTriggered', {
                     taskId: taskId,
                     forDocuments: needsContinuation
                 });
 
             } catch (chainErr) {
-                // If we can't chain (e.g., task already queued), that's OK
-                // The documents will be picked up on the next scheduled run
-                log.error('FC_ProcessDocuments.summarize.chainError', {
+                // If we can't trigger SS (e.g., task already queued), that's OK
+                // The SS can be triggered again later or manually
+                log.error('FC_ProcessDocuments.summarize.ssError', {
                     message: chainErr.message,
-                    note: 'Documents will be processed on next scheduled run'
+                    note: 'Continuation polling will resume when SS is next triggered'
                 });
             }
         }
