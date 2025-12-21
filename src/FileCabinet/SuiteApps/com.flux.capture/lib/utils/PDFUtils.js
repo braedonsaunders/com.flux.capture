@@ -8,7 +8,7 @@
  * to avoid timeout issues with large documents.
  */
 
-define(['N/log', 'N/encode'], function(log, encode) {
+define(['N/log'], function(log) {
     'use strict';
 
     /**
@@ -27,21 +27,38 @@ define(['N/log', 'N/encode'], function(log, encode) {
                 const pdfBytes = PDFUtils._base64ToBytes(base64Content);
                 const pdfString = PDFUtils._bytesToString(pdfBytes);
 
+                log.debug('PDFUtils.countPages', {
+                    pdfSize: pdfBytes.length,
+                    stringLength: pdfString.length
+                });
+
                 // Method 1: Look for /Type /Page entries (most reliable)
                 const pageMatches = pdfString.match(/\/Type\s*\/Page[^s]/g);
                 if (pageMatches) {
+                    log.debug('PDFUtils.countPages', {
+                        method: 'Type/Page regex',
+                        count: pageMatches.length
+                    });
                     return pageMatches.length;
                 }
 
                 // Method 2: Look for /Count in the page tree
                 const countMatch = pdfString.match(/\/Count\s+(\d+)/);
                 if (countMatch) {
+                    log.debug('PDFUtils.countPages', {
+                        method: '/Count in page tree',
+                        count: parseInt(countMatch[1], 10)
+                    });
                     return parseInt(countMatch[1], 10);
                 }
 
                 // Method 3: Count page objects with /Parent
                 const pageObjMatches = pdfString.match(/\/Type\s*\/Page\b/g);
                 if (pageObjMatches) {
+                    log.debug('PDFUtils.countPages', {
+                        method: 'Type/Page boundary',
+                        count: pageObjMatches.length
+                    });
                     return pageObjMatches.length;
                 }
 
@@ -116,51 +133,83 @@ define(['N/log', 'N/encode'], function(log, encode) {
         static isPDF(base64Content) {
             try {
                 // PDF magic bytes: %PDF
+                // Take enough base64 chars to get at least 8 bytes for header check
                 const bytes = PDFUtils._base64ToBytes(base64Content.substring(0, 20));
                 const header = PDFUtils._bytesToString(bytes);
-                return header.startsWith('%PDF');
+                const isPdf = header.startsWith('%PDF');
+
+                log.debug('PDFUtils.isPDF', {
+                    headerBytes: header.substring(0, 10),
+                    isPdf: isPdf
+                });
+
+                return isPdf;
             } catch (e) {
+                log.error('PDFUtils.isPDF', { error: e.message });
                 return false;
             }
         }
 
         // ============================================
         // Encoding/Decoding Utilities
-        // Uses N/encode for SuiteScript compatibility
+        // Uses manual base64 decoding for binary data compatibility
+        // N/encode with UTF-8 corrupts binary data, so we use raw decoding
         // ============================================
 
         static _base64ToBytes(base64) {
             // Handle both URL-safe and standard base64
             const normalized = base64.replace(/-/g, '+').replace(/_/g, '/');
 
-            // Use N/encode to decode base64 to string, then convert to bytes
-            const decodedString = encode.convert({
-                string: normalized,
-                inputEncoding: encode.Encoding.BASE_64,
-                outputEncoding: encode.Encoding.UTF_8
-            });
+            // Pad if necessary
+            const padded = normalized + '=='.slice(0, (4 - normalized.length % 4) % 4);
 
-            // Convert string to byte array
-            const bytes = new Uint8Array(decodedString.length);
-            for (let i = 0; i < decodedString.length; i++) {
-                bytes[i] = decodedString.charCodeAt(i);
+            // Base64 character set
+            const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
+            const lookup = new Uint8Array(256);
+            for (let i = 0; i < chars.length; i++) {
+                lookup[chars.charCodeAt(i)] = i;
             }
+
+            // Calculate output length
+            let outputLen = (padded.length / 4) * 3;
+            if (padded[padded.length - 1] === '=') outputLen--;
+            if (padded[padded.length - 2] === '=') outputLen--;
+
+            // Decode
+            const bytes = new Uint8Array(outputLen);
+            let p = 0;
+
+            for (let i = 0; i < padded.length; i += 4) {
+                const a = lookup[padded.charCodeAt(i)];
+                const b = lookup[padded.charCodeAt(i + 1)];
+                const c = lookup[padded.charCodeAt(i + 2)];
+                const d = lookup[padded.charCodeAt(i + 3)];
+
+                bytes[p++] = (a << 2) | (b >> 4);
+                if (p < outputLen) bytes[p++] = ((b & 15) << 4) | (c >> 2);
+                if (p < outputLen) bytes[p++] = ((c & 3) << 6) | d;
+            }
+
             return bytes;
         }
 
         static _bytesToBase64(bytes) {
-            // Convert bytes to string
-            let binaryString = '';
-            for (let i = 0; i < bytes.length; i++) {
-                binaryString += String.fromCharCode(bytes[i]);
+            // Base64 character set
+            const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
+            let result = '';
+
+            for (let i = 0; i < bytes.length; i += 3) {
+                const a = bytes[i];
+                const b = i + 1 < bytes.length ? bytes[i + 1] : 0;
+                const c = i + 2 < bytes.length ? bytes[i + 2] : 0;
+
+                result += chars[a >> 2];
+                result += chars[((a & 3) << 4) | (b >> 4)];
+                result += i + 1 < bytes.length ? chars[((b & 15) << 2) | (c >> 6)] : '=';
+                result += i + 2 < bytes.length ? chars[c & 63] : '=';
             }
 
-            // Use N/encode to convert to base64
-            return encode.convert({
-                string: binaryString,
-                inputEncoding: encode.Encoding.UTF_8,
-                outputEncoding: encode.Encoding.BASE_64
-            });
+            return result;
         }
 
         static _bytesToString(bytes) {
