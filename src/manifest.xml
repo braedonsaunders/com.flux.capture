@@ -26,10 +26,23 @@
             <file>/SuiteApps/com.flux.capture/client/views/View.Documents.js</file>
             <!-- Libraries -->
             <file>/SuiteApps/com.flux.capture/lib/FC_Engine.js</file>
+            <file>/SuiteApps/com.flux.capture/lib/FC_Debug.js</file>
+            <!-- Providers -->
+            <file>/SuiteApps/com.flux.capture/lib/providers/ExtractionProvider.js</file>
+            <file>/SuiteApps/com.flux.capture/lib/providers/ProviderFactory.js</file>
+            <file>/SuiteApps/com.flux.capture/lib/providers/AzureFormRecognizerProvider.js</file>
+            <file>/SuiteApps/com.flux.capture/lib/providers/OCIProvider.js</file>
+            <file>/SuiteApps/com.flux.capture/lib/providers/MindeeProvider.js</file>
+            <!-- Utilities -->
+            <file>/SuiteApps/com.flux.capture/lib/utils/PDFUtils.js</file>
             <!-- Email Capture Plugin -->
             <file>/SuiteApps/com.flux.capture/scripts/FC_EmailCapture_Plugin.js</file>
             <!-- User Event Script for Document Processing Trigger -->
             <file>/SuiteApps/com.flux.capture/scripts/FC_Document_UE.js</file>
+            <!-- Map/Reduce Script for Document Processing -->
+            <file>/SuiteApps/com.flux.capture/scripts/FC_ProcessDocuments_MR.js</file>
+            <!-- Scheduled Script for Continuation Polling -->
+            <file>/SuiteApps/com.flux.capture/scripts/FC_ContinuePolling_SS.js</file>
         </files>
     </dependencies>
 </manifest>
