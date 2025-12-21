@@ -5401,13 +5401,6 @@ body.dark-mode #btn-dark-mode i::before {
 .flow-drop-container.compact .dropzone-rings,
 .flow-drop-container.compact .dropzone-particles,
 .flow-drop-container.compact .dropzone-glow,
-.flow-drop-container.compact .dropzone-grid,
-.flow-drop-container.compact .dropzone-streams,
-.flow-drop-container.compact .dropzone-docs,
-.flow-drop-container.compact .dropzone-orbit,
-.flow-drop-container.compact .dropzone-nodes,
-.flow-drop-container.compact .dropzone-scanner,
-.flow-drop-container.compact .dropzone-pulses,
 .flow-drop-container.compact .dropzone-icon-bg,
 .flow-drop-container.compact .dropzone-icon-wrapper { display: contents; }
 .flow-drop-container.compact .dropzone-icon-wrapper .dropzone-icon-bg { display: none; }
@@ -5478,7 +5471,7 @@ body.dark-mode #btn-dark-mode i::before {
 }
 .flow-dropzone.dragover .dropzone-glow {
     opacity: 1;
-    transform: scale(1.3);
+    transform: translate(-50%, -50%) scale(1.15);
 }
 .flow-dropzone.dragover .dropzone-icon {
     transform: translateY(-12px) scale(1.1);
@@ -5490,104 +5483,34 @@ body.dark-mode #btn-dark-mode i::before {
 }
 
 /* ==========================================
-   STUNNING INGEST BACKGROUND ANIMATION
-   World-Class Document Processing Visualization
+   REFINED AMBIENT BACKGROUND
+   Enterprise-Grade Minimal Animation
    ========================================== */
 
-/* Subtle Grid Pattern */
-.dropzone-grid {
-    position: absolute;
-    inset: 0;
-    background-image:
-        linear-gradient(rgba(37, 99, 235, 0.03) 1px, transparent 1px),
-        linear-gradient(90deg, rgba(37, 99, 235, 0.03) 1px, transparent 1px);
-    background-size: 40px 40px;
-    opacity: 0;
-    pointer-events: none;
-}
-.view-flow.fullpage-mode .dropzone-grid {
-    opacity: 1;
-    animation: gridPulse 8s ease-in-out infinite;
-}
-@keyframes gridPulse {
-    0%, 100% { opacity: 0.4; }
-    50% { opacity: 0.8; }
-}
-
-/* Animated Background Glows - Multi-layered */
+/* Soft center glow - barely visible, gentle breathing */
 .dropzone-glow {
     position: absolute;
     top: 50%;
     left: 50%;
-    width: 300px;
-    height: 300px;
-    background: radial-gradient(circle, rgba(37, 99, 235, 0.25) 0%, transparent 70%);
+    width: 400px;
+    height: 400px;
+    background: radial-gradient(circle, rgba(37, 99, 235, 0.08) 0%, transparent 70%);
     border-radius: 50%;
     transform: translate(-50%, -50%);
-    opacity: 0.6;
-    transition: all 0.4s ease;
-    pointer-events: none;
-    animation: glowPulse 4s ease-in-out infinite;
-}
-.dropzone-glow-2 {
-    width: 500px;
-    height: 500px;
-    background: radial-gradient(circle, rgba(99, 102, 241, 0.15) 0%, transparent 70%);
-    animation: glowPulse 6s ease-in-out infinite reverse;
-    animation-delay: 1s;
-}
-.dropzone-glow-3 {
-    width: 700px;
-    height: 700px;
-    background: radial-gradient(circle, rgba(37, 99, 235, 0.08) 0%, transparent 60%);
-    animation: glowDrift 12s ease-in-out infinite;
-}
-@keyframes glowPulse {
-    0%, 100% { transform: translate(-50%, -50%) scale(1); opacity: 0.5; }
-    50% { transform: translate(-50%, -50%) scale(1.15); opacity: 0.8; }
-}
-@keyframes glowDrift {
-    0%, 100% { transform: translate(-50%, -50%) scale(1) rotate(0deg); }
-    25% { transform: translate(-45%, -55%) scale(1.1) rotate(5deg); }
-    50% { transform: translate(-50%, -50%) scale(1.2) rotate(0deg); }
-    75% { transform: translate(-55%, -45%) scale(1.1) rotate(-5deg); }
-}
-
-/* Data Stream Lines - Flowing toward center */
-.dropzone-streams {
-    position: absolute;
-    inset: 0;
-    overflow: hidden;
-    pointer-events: none;
     opacity: 0;
+    transition: opacity 0.6s ease;
+    pointer-events: none;
 }
-.view-flow.fullpage-mode .dropzone-streams {
+.view-flow.fullpage-mode .dropzone-glow {
     opacity: 1;
+    animation: ambientGlow 8s ease-in-out infinite;
 }
-.stream {
-    position: absolute;
-    width: 2px;
-    height: 60px;
-    background: linear-gradient(to bottom, transparent, var(--color-primary), transparent);
-    opacity: 0;
-    animation: streamFlow 3s ease-in-out infinite;
-}
-.stream-1 { left: 10%; top: 0; animation-delay: 0s; transform: rotate(25deg); }
-.stream-2 { left: 25%; top: 0; animation-delay: 0.4s; transform: rotate(15deg); }
-.stream-3 { right: 25%; top: 0; animation-delay: 0.8s; transform: rotate(-15deg); }
-.stream-4 { right: 10%; top: 0; animation-delay: 1.2s; transform: rotate(-25deg); }
-.stream-5 { left: 0; top: 30%; animation-delay: 0.2s; transform: rotate(60deg); width: 80px; }
-.stream-6 { right: 0; top: 30%; animation-delay: 0.6s; transform: rotate(-60deg); width: 80px; }
-.stream-7 { left: 0; bottom: 30%; animation-delay: 1s; transform: rotate(45deg); width: 80px; }
-.stream-8 { right: 0; bottom: 30%; animation-delay: 1.4s; transform: rotate(-45deg); width: 80px; }
-@keyframes streamFlow {
-    0% { opacity: 0; transform: translateY(-100%) rotate(var(--rotation, 0deg)); }
-    20% { opacity: 0.6; }
-    80% { opacity: 0.6; }
-    100% { opacity: 0; transform: translateY(calc(50vh)) rotate(var(--rotation, 0deg)); }
+@keyframes ambientGlow {
+    0%, 100% { transform: translate(-50%, -50%) scale(1); opacity: 0.6; }
+    50% { transform: translate(-50%, -50%) scale(1.05); opacity: 1; }
 }
 
-/* Enhanced Animated Rings - More rings with varied animations */
+/* Elegant concentric rings - subtle, slow rotation */
 .dropzone-rings {
     position: absolute;
     top: 50%;
@@ -5597,225 +5520,44 @@ body.dark-mode #btn-dark-mode i::before {
 }
 .ring {
     position: absolute;
-    border: 1px solid rgba(37, 99, 235, 0.15);
+    border: 1px solid rgba(37, 99, 235, 0.06);
     border-radius: 50%;
-    opacity: 0.3;
+    opacity: 0;
+}
+.view-flow.fullpage-mode .ring {
+    opacity: 1;
 }
 .ring-1 {
-    width: 140px;
-    height: 140px;
-    top: -70px;
-    left: -70px;
-    animation: ringExpand 4s ease-in-out infinite;
-    animation-delay: 0s;
+    width: 200px;
+    height: 200px;
+    top: -100px;
+    left: -100px;
+    animation: ringRotate 60s linear infinite, ringFade 8s ease-in-out infinite;
 }
 .ring-2 {
-    width: 220px;
-    height: 220px;
-    top: -110px;
-    left: -110px;
-    animation: ringExpand 4s ease-in-out infinite;
-    animation-delay: 0.8s;
+    width: 340px;
+    height: 340px;
+    top: -170px;
+    left: -170px;
+    animation: ringRotate 90s linear infinite reverse, ringFade 8s ease-in-out infinite 2s;
 }
 .ring-3 {
-    width: 320px;
-    height: 320px;
-    top: -160px;
-    left: -160px;
-    animation: ringExpand 4s ease-in-out infinite;
-    animation-delay: 1.6s;
+    width: 500px;
+    height: 500px;
+    top: -250px;
+    left: -250px;
+    animation: ringRotate 120s linear infinite, ringFade 8s ease-in-out infinite 4s;
 }
-.ring-4 {
-    width: 440px;
-    height: 440px;
-    top: -220px;
-    left: -220px;
-    animation: ringExpand 4s ease-in-out infinite;
-    animation-delay: 2.4s;
-    border-style: dashed;
-}
-.ring-5 {
-    width: 580px;
-    height: 580px;
-    top: -290px;
-    left: -290px;
-    animation: ringExpand 4s ease-in-out infinite;
-    animation-delay: 3.2s;
-    border-style: dotted;
-}
-@keyframes ringExpand {
-    0%, 100% { transform: scale(1); opacity: 0.2; }
-    50% { transform: scale(1.08); opacity: 0.5; }
-}
-
-/* Floating Document Icons */
-.dropzone-docs {
-    position: absolute;
-    inset: 0;
-    overflow: hidden;
-    pointer-events: none;
-    opacity: 0;
-}
-.view-flow.fullpage-mode .dropzone-docs {
-    opacity: 1;
-}
-.floating-doc {
-    position: absolute;
-    font-size: 1.5rem;
-    color: var(--color-primary);
-    opacity: 0;
-    filter: drop-shadow(0 2px 8px rgba(37, 99, 235, 0.3));
-    animation: docFloat 8s ease-in-out infinite;
-}
-.doc-1 { left: 8%; animation-delay: 0s; }
-.doc-2 { left: 18%; animation-delay: 1s; }
-.doc-3 { left: 78%; animation-delay: 2s; }
-.doc-4 { left: 88%; animation-delay: 3s; }
-.doc-5 { left: 12%; animation-delay: 4s; }
-.doc-6 { left: 82%; animation-delay: 5s; }
-.doc-7 { left: 22%; animation-delay: 6s; }
-.doc-8 { left: 72%; animation-delay: 7s; }
-@keyframes docFloat {
-    0% {
-        bottom: -50px;
-        opacity: 0;
-        transform: scale(0.5) rotate(-10deg);
-    }
-    10% {
-        opacity: 0.7;
-        transform: scale(1) rotate(0deg);
-    }
-    50% {
-        opacity: 0.5;
-        transform: scale(0.9) rotate(5deg) translateX(20px);
-    }
-    90% {
-        opacity: 0.3;
-        transform: scale(0.7) rotate(-5deg);
-    }
-    100% {
-        bottom: 100%;
-        opacity: 0;
-        transform: scale(0.5) rotate(10deg);
-    }
-}
-
-/* Orbital Documents - Circling the center */
-.dropzone-orbit {
-    position: absolute;
-    top: 50%;
-    left: 50%;
-    transform: translate(-50%, -50%);
-    pointer-events: none;
-    opacity: 0;
-}
-.view-flow.fullpage-mode .dropzone-orbit {
-    opacity: 1;
-}
-.orbit-track {
-    position: absolute;
-    border: 1px dashed rgba(37, 99, 235, 0.1);
-    border-radius: 50%;
-    animation: orbitSpin linear infinite;
-}
-.orbit-track-1 {
-    width: 400px;
-    height: 400px;
-    top: -200px;
-    left: -200px;
-    animation-duration: 20s;
-}
-.orbit-track-2 {
-    width: 550px;
-    height: 550px;
-    top: -275px;
-    left: -275px;
-    animation-duration: 28s;
-    animation-direction: reverse;
-}
-.orbit-track-3 {
-    width: 700px;
-    height: 700px;
-    top: -350px;
-    left: -350px;
-    animation-duration: 36s;
-}
-.orbit-doc {
-    position: absolute;
-    top: -12px;
-    left: 50%;
-    transform: translateX(-50%);
-    width: 32px;
-    height: 32px;
-    background: linear-gradient(135deg, rgba(37, 99, 235, 0.15), rgba(99, 102, 241, 0.1));
-    border: 1px solid rgba(37, 99, 235, 0.3);
-    border-radius: 8px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-size: 0.9rem;
-    color: var(--color-primary);
-    animation: orbitDocSpin linear infinite;
-    box-shadow: 0 4px 16px rgba(37, 99, 235, 0.2);
-}
-.orbit-track-1 .orbit-doc { animation-duration: 20s; animation-direction: reverse; }
-.orbit-track-2 .orbit-doc { animation-duration: 28s; }
-.orbit-track-3 .orbit-doc { animation-duration: 36s; animation-direction: reverse; }
-@keyframes orbitSpin {
+@keyframes ringRotate {
     from { transform: rotate(0deg); }
     to { transform: rotate(360deg); }
 }
-@keyframes orbitDocSpin {
-    from { transform: translateX(-50%) rotate(0deg); }
-    to { transform: translateX(-50%) rotate(360deg); }
+@keyframes ringFade {
+    0%, 100% { opacity: 0.4; border-color: rgba(37, 99, 235, 0.06); }
+    50% { opacity: 0.8; border-color: rgba(37, 99, 235, 0.12); }
 }
 
-/* Connection Nodes - Network visualization */
-.dropzone-nodes {
-    position: absolute;
-    inset: 0;
-    pointer-events: none;
-    opacity: 0;
-}
-.view-flow.fullpage-mode .dropzone-nodes {
-    opacity: 1;
-}
-.node {
-    position: absolute;
-    width: 8px;
-    height: 8px;
-    background: var(--color-primary);
-    border-radius: 50%;
-    opacity: 0;
-    animation: nodePulse 3s ease-in-out infinite;
-    box-shadow: 0 0 20px rgba(37, 99, 235, 0.5);
-}
-.node::after {
-    content: '';
-    position: absolute;
-    inset: -4px;
-    border: 1px solid rgba(37, 99, 235, 0.3);
-    border-radius: 50%;
-    animation: nodeRing 3s ease-in-out infinite;
-}
-.node-1 { top: 15%; left: 20%; animation-delay: 0s; }
-.node-2 { top: 25%; right: 25%; animation-delay: 0.4s; }
-.node-3 { top: 50%; left: 10%; animation-delay: 0.8s; }
-.node-4 { top: 45%; right: 12%; animation-delay: 1.2s; }
-.node-5 { bottom: 30%; left: 18%; animation-delay: 1.6s; }
-.node-6 { bottom: 25%; right: 20%; animation-delay: 2s; }
-.node-7 { bottom: 15%; left: 35%; animation-delay: 2.4s; }
-.node-8 { bottom: 18%; right: 32%; animation-delay: 2.8s; }
-@keyframes nodePulse {
-    0%, 100% { opacity: 0.3; transform: scale(1); }
-    50% { opacity: 0.8; transform: scale(1.5); }
-}
-@keyframes nodeRing {
-    0%, 100% { transform: scale(1); opacity: 0.5; }
-    50% { transform: scale(2); opacity: 0; }
-}
-
-/* Enhanced Floating Particles - More varied */
+/* Minimal floating particles - slow, sparse, elegant */
 .dropzone-particles {
     position: absolute;
     inset: 0;
@@ -5824,124 +5566,42 @@ body.dark-mode #btn-dark-mode i::before {
 }
 .dropzone-particles .particle {
     position: absolute;
-    width: 4px;
-    height: 4px;
-    background: var(--color-primary);
-    border-radius: 50%;
-    opacity: 0;
-    animation: particleRise 5s ease-in-out infinite;
-}
-.dropzone-particles .particle.particle-lg {
-    width: 8px;
-    height: 8px;
-    animation: particleRiseLg 7s ease-in-out infinite;
-}
-.dropzone-particles .particle:nth-child(1) { left: 8%; animation-delay: 0s; }
-.dropzone-particles .particle:nth-child(2) { left: 16%; animation-delay: 0.5s; }
-.dropzone-particles .particle:nth-child(3) { left: 24%; animation-delay: 1s; }
-.dropzone-particles .particle:nth-child(4) { left: 32%; animation-delay: 1.5s; }
-.dropzone-particles .particle:nth-child(5) { left: 40%; animation-delay: 2s; }
-.dropzone-particles .particle:nth-child(6) { left: 48%; animation-delay: 2.5s; }
-.dropzone-particles .particle:nth-child(7) { left: 56%; animation-delay: 3s; }
-.dropzone-particles .particle:nth-child(8) { left: 64%; animation-delay: 3.5s; }
-.dropzone-particles .particle:nth-child(9) { left: 72%; animation-delay: 4s; }
-.dropzone-particles .particle:nth-child(10) { left: 80%; animation-delay: 4.5s; }
-.dropzone-particles .particle:nth-child(11) { left: 88%; animation-delay: 0.3s; }
-.dropzone-particles .particle:nth-child(12) { left: 96%; animation-delay: 0.8s; }
-.dropzone-particles .particle:nth-child(13) { left: 20%; animation-delay: 1.3s; }
-.dropzone-particles .particle:nth-child(14) { left: 45%; animation-delay: 2.8s; }
-.dropzone-particles .particle:nth-child(15) { left: 70%; animation-delay: 3.8s; }
-.dropzone-particles .particle:nth-child(16) { left: 85%; animation-delay: 1.8s; }
-@keyframes particleRise {
-    0% { bottom: -10px; opacity: 0; transform: scale(0) translateX(0); }
-    15% { opacity: 0.7; transform: scale(1) translateX(0); }
-    50% { opacity: 0.5; transform: scale(0.8) translateX(15px); }
-    85% { opacity: 0.3; transform: scale(0.6) translateX(-10px); }
-    100% { bottom: 100%; opacity: 0; transform: scale(0.3) translateX(5px); }
-}
-@keyframes particleRiseLg {
-    0% { bottom: -20px; opacity: 0; transform: scale(0) translateX(0); }
-    10% { opacity: 0.5; transform: scale(1) translateX(0); }
-    30% { opacity: 0.6; transform: scale(1.2) translateX(-20px); }
-    60% { opacity: 0.4; transform: scale(0.9) translateX(25px); }
-    100% { bottom: 100%; opacity: 0; transform: scale(0.5) translateX(-15px); }
-}
-
-/* Scanning Beam Effect */
-.dropzone-scanner {
-    position: absolute;
-    top: 0;
-    left: 0;
-    right: 0;
+    width: 3px;
     height: 3px;
-    background: linear-gradient(90deg,
-        transparent 0%,
-        rgba(37, 99, 235, 0.1) 20%,
-        rgba(37, 99, 235, 0.6) 50%,
-        rgba(37, 99, 235, 0.1) 80%,
-        transparent 100%
-    );
-    opacity: 0;
-    pointer-events: none;
-    animation: scannerSweep 4s ease-in-out infinite;
-}
-.view-flow.fullpage-mode .dropzone-scanner {
-    opacity: 1;
-}
-@keyframes scannerSweep {
-    0% { top: 0; opacity: 0; }
-    10% { opacity: 0.8; }
-    90% { opacity: 0.8; }
-    100% { top: 100%; opacity: 0; }
-}
-
-/* Data Pulse Waves - Emanating from center */
-.dropzone-pulses {
-    position: absolute;
-    top: 50%;
-    left: 50%;
-    transform: translate(-50%, -50%);
-    pointer-events: none;
-    opacity: 0;
-}
-.view-flow.fullpage-mode .dropzone-pulses {
-    opacity: 1;
-}
-.pulse {
-    position: absolute;
-    width: 100px;
-    height: 100px;
-    top: -50px;
-    left: -50px;
-    border: 2px solid rgba(37, 99, 235, 0.4);
+    background: rgba(37, 99, 235, 0.4);
     border-radius: 50%;
-    animation: pulseExpand 3s ease-out infinite;
+    opacity: 0;
 }
-.pulse-1 { animation-delay: 0s; }
-.pulse-2 { animation-delay: 1s; }
-.pulse-3 { animation-delay: 2s; }
-@keyframes pulseExpand {
+.view-flow.fullpage-mode .dropzone-particles .particle {
+    animation: particleDrift 12s ease-in-out infinite;
+}
+.dropzone-particles .particle:nth-child(1) { left: 20%; animation-delay: 0s; }
+.dropzone-particles .particle:nth-child(2) { left: 35%; animation-delay: 2s; }
+.dropzone-particles .particle:nth-child(3) { left: 50%; animation-delay: 4s; }
+.dropzone-particles .particle:nth-child(4) { left: 65%; animation-delay: 6s; }
+.dropzone-particles .particle:nth-child(5) { left: 80%; animation-delay: 8s; }
+.dropzone-particles .particle:nth-child(6) { left: 42%; animation-delay: 10s; }
+@keyframes particleDrift {
     0% {
-        transform: scale(0.5);
-        opacity: 0.8;
+        bottom: -20px;
+        opacity: 0;
+        transform: translateX(0);
+    }
+    10% {
+        opacity: 0.3;
+    }
+    50% {
+        opacity: 0.2;
+        transform: translateX(8px);
+    }
+    90% {
+        opacity: 0.15;
     }
     100% {
-        transform: scale(4);
+        bottom: 100%;
         opacity: 0;
+        transform: translateX(-4px);
     }
-}
-
-/* Hide all effects in compact mode */
-.flow-drop-container.compact .dropzone-grid,
-.flow-drop-container.compact .dropzone-streams,
-.flow-drop-container.compact .dropzone-docs,
-.flow-drop-container.compact .dropzone-orbit,
-.flow-drop-container.compact .dropzone-nodes,
-.flow-drop-container.compact .dropzone-scanner,
-.flow-drop-container.compact .dropzone-pulses,
-.flow-drop-container.compact .ring-4,
-.flow-drop-container.compact .ring-5 {
-    display: none !important;
 }
 
 /* Dropzone Content */
