@@ -24,8 +24,9 @@ define([
     'N/task',
     '/SuiteApps/com.flux.capture/lib/FC_Engine',
     '/SuiteApps/com.flux.capture/lib/FC_Debug',
-    '/SuiteApps/com.flux.capture/suitelet/FC_FormSchemaExtractor'
-], function(file, record, search, query, runtime, errorModule, log, encode, email, format, task, FC_Engine, fcDebug, FormSchemaExtractor) {
+    '/SuiteApps/com.flux.capture/suitelet/FC_FormSchemaExtractor',
+    '/SuiteApps/com.flux.capture/lib/llm/GeminiVerifier'
+], function(file, record, search, query, runtime, errorModule, log, encode, email, format, task, FC_Engine, fcDebug, FormSchemaExtractor, GeminiVerifierModule) {
 
     const API_VERSION = '2.0.0';
 
@@ -220,6 +221,9 @@ define([
                 case 'providers':
                     result = getAvailableProviders();
                     break;
+                case 'llmconfig':
+                    result = getLLMConfig();
+                    break;
                 case 'emailInboxStatus':
                     result = getEmailInboxStatus();
                     break;
@@ -259,6 +263,9 @@ define([
                     break;
                 case 'testprovider':
                     result = testProviderConnection(context.providerType, context.config);
+                    break;
+                case 'testllm':
+                    result = testLLMConnection(context.apiKey);
                     break;
                 case 'triggerProcessing':
                     // Deprecated - User Event script now triggers processing automatically
@@ -316,6 +323,9 @@ define([
                     break;
                 case 'settings':
                     result = saveSettings(context);
+                    break;
+                case 'llmconfig':
+                    result = saveLLMConfig(context);
                     break;
                 default:
                     result = Response.error('INVALID_ACTION', 'Unknown action: ' + action);
@@ -2204,6 +2214,104 @@ define([
         } catch (e) {
             log.error('saveSettings', e);
             return Response.error('SAVE_SETTINGS_ERROR', e.message);
+        }
+    }
+
+    // ==================== LLM Configuration ====================
+
+    /**
+     * Get LLM (Gemini) configuration for UI
+     * Returns config with masked API key
+     */
+    function getLLMConfig() {
+        try {
+            if (!GeminiVerifierModule || !GeminiVerifierModule.getConfigForUI) {
+                return Response.success({
+                    enabled: false,
+                    _available: false,
+                    _message: 'LLM module not available'
+                });
+            }
+
+            var config = GeminiVerifierModule.getConfigForUI();
+            config._available = true;
+
+            return Response.success(config);
+        } catch (e) {
+            log.error('getLLMConfig', e);
+            return Response.error('LLM_CONFIG_ERROR', e.message);
+        }
+    }
+
+    /**
+     * Save LLM (Gemini) configuration
+     */
+    function saveLLMConfig(context) {
+        try {
+            if (!GeminiVerifierModule || !GeminiVerifierModule.saveConfig) {
+                return Response.error('LLM_NOT_AVAILABLE', 'LLM module not available');
+            }
+
+            var config = {
+                enabled: context.enabled === true || context.enabled === 'true',
+                model: context.model || GeminiVerifierModule.DEFAULT_MODEL,
+                triggerMode: context.triggerMode || 'smart',
+                smartThreshold: parseFloat(context.smartThreshold) || 0.70,
+                maxPages: parseInt(context.maxPages, 10) || 20,
+                skipFileSizeMB: parseInt(context.skipFileSizeMB, 10) || 25
+            };
+
+            // Only update API key if a new one was provided (not masked)
+            if (context.apiKey && !context.apiKey.startsWith('••••')) {
+                config.apiKey = context.apiKey;
+            } else if (context._preserveApiKey) {
+                // Load existing API key if preserving
+                var existingConfig = GeminiVerifierModule.loadConfig();
+                config.apiKey = existingConfig.apiKey;
+            }
+
+            var result = GeminiVerifierModule.saveConfig(config);
+
+            if (result.success) {
+                log.audit('saveLLMConfig', 'LLM config saved, enabled: ' + config.enabled);
+                return Response.success({ saved: true, message: result.message });
+            } else {
+                return Response.error('LLM_SAVE_ERROR', result.message);
+            }
+        } catch (e) {
+            log.error('saveLLMConfig', e);
+            return Response.error('LLM_SAVE_ERROR', e.message);
+        }
+    }
+
+    /**
+     * Test LLM (Gemini) connection
+     */
+    function testLLMConnection(apiKey) {
+        try {
+            if (!GeminiVerifierModule || !GeminiVerifierModule.testConnection) {
+                return Response.error('LLM_NOT_AVAILABLE', 'LLM module not available');
+            }
+
+            if (!apiKey) {
+                return Response.error('MISSING_API_KEY', 'API key is required');
+            }
+
+            var result = GeminiVerifierModule.testConnection(apiKey);
+
+            if (result.success) {
+                return Response.success({
+                    connected: true,
+                    message: result.message,
+                    availableModels: result.availableModels,
+                    models: result.models
+                });
+            } else {
+                return Response.error('LLM_CONNECTION_FAILED', result.message);
+            }
+        } catch (e) {
+            log.error('testLLMConnection', e);
+            return Response.error('LLM_TEST_ERROR', e.message);
         }
     }
 

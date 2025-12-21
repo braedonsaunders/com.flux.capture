@@ -41,7 +41,9 @@ define([
     // Validation modules
     './validation/CrossFieldValidator',
     // Vendor modules
-    './vendors/VendorDataLoader'
+    './vendors/VendorDataLoader',
+    // LLM Verification (optional)
+    './llm/GeminiVerifier'
 ], function(
     file, record, search, query, runtime, log, format, encode,
     fcDebug,
@@ -51,7 +53,8 @@ define([
     VendorMatcherModule, TaxIdExtractorModule,
     CorrectionLearnerModule, AliasManagerModule,
     CrossFieldValidatorModule,
-    VendorDataLoaderModule
+    VendorDataLoaderModule,
+    GeminiVerifierModule
 ) {
 
     'use strict';
@@ -125,6 +128,32 @@ define([
             // Extraction provider (lazy loaded)
             this._extractionProvider = null;
             this._providerConfig = options.providerConfig || null;
+
+            // v4.0: Gemini LLM Verification (lazy loaded, optional)
+            this._geminiVerifier = null;
+            this._geminiVerifierLoaded = false;
+        }
+
+        /**
+         * Get the Gemini verifier instance (lazy loaded)
+         * @returns {Object|null} GeminiVerifier instance or null if not configured
+         */
+        _getGeminiVerifier() {
+            if (!this._geminiVerifierLoaded) {
+                this._geminiVerifierLoaded = true;
+                try {
+                    if (GeminiVerifierModule && GeminiVerifierModule.createVerifier) {
+                        this._geminiVerifier = GeminiVerifierModule.createVerifier();
+                        if (this._geminiVerifier && this._geminiVerifier.enabled) {
+                            log.audit('FluxCaptureEngine', 'Gemini AI Verification enabled');
+                        }
+                    }
+                } catch (e) {
+                    log.error('FluxCaptureEngine', `Failed to load Gemini verifier: ${e.message}`);
+                    this._geminiVerifier = null;
+                }
+            }
+            return this._geminiVerifier;
         }
 
         /**
@@ -233,10 +262,8 @@ define([
                 // Stage 7: Calculate confidence scores
                 const confidence = this._calculateConfidence(extractionResult, vendorMatch, validation);
 
-                const processingTime = Date.now() - startTime;
-                log.audit('FluxCapture.processDocument', `Completed in ${processingTime}ms. Confidence: ${confidence.overall}%`);
-
-                return {
+                // Build initial result
+                let result = {
                     success: true,
                     extraction: {
                         documentType: extractionResult.documentType || options.documentType || DocumentType.INVOICE,
@@ -251,7 +278,6 @@ define([
                         pageCount: extractionResult.pageCount,
                         totalDocumentPages: extractionResult.totalDocumentPages || extractionResult.pageCount,
                         pagesLimited: extractionResult.pagesLimited || false,
-                        processingTime: processingTime,
                         allExtractedFields: extractionResult.allExtractedFields || {},
                         extractionMeta: {
                             layout: {
@@ -270,6 +296,48 @@ define([
                         customFieldMatches: customFieldMatches
                     }
                 };
+
+                // Stage 8: Gemini AI Verification (if enabled)
+                const geminiVerifier = this._getGeminiVerifier();
+                if (geminiVerifier && geminiVerifier.shouldVerify(result, options)) {
+                    log.audit('FluxCapture.processDocument', 'Running Gemini AI verification...');
+
+                    try {
+                        const verificationResult = geminiVerifier.verify(
+                            fileId,
+                            result,
+                            options.formSchema || null
+                        );
+
+                        if (verificationResult.success) {
+                            // Apply verification results
+                            result = geminiVerifier.applyVerification(result, verificationResult);
+                            log.audit('FluxCapture.processDocument',
+                                `Gemini verification complete: ${verificationResult.verification?.accuracy * 100 || 0}% accuracy`);
+                        } else if (!verificationResult.skipped) {
+                            // Log error but don't fail the extraction
+                            log.error('FluxCapture.processDocument',
+                                `Gemini verification failed: ${verificationResult.error}`);
+                            result.extraction.aiVerification = {
+                                verified: false,
+                                error: verificationResult.error
+                            };
+                        }
+                    } catch (geminiError) {
+                        log.error('FluxCapture.processDocument', `Gemini error: ${geminiError.message}`);
+                        result.extraction.aiVerification = {
+                            verified: false,
+                            error: geminiError.message
+                        };
+                    }
+                }
+
+                const processingTime = Date.now() - startTime;
+                result.extraction.processingTime = processingTime;
+
+                log.audit('FluxCapture.processDocument', `Completed in ${processingTime}ms. Confidence: ${confidence.overall}%`);
+
+                return result;
 
             } catch (error) {
                 log.error('FluxCaptureEngine.processDocument', { message: error.message, stack: error.stack });
@@ -339,10 +407,8 @@ define([
                 // Stage 7: Calculate confidence scores
                 const confidence = this._calculateConfidence(extractionResult, vendorMatch, validation);
 
-                const processingTime = Date.now() - startTime;
-                log.audit('FluxCapture.processWithRawResult', `Completed in ${processingTime}ms. Confidence: ${confidence.overall}%`);
-
-                return {
+                // Build initial result
+                let result = {
                     success: true,
                     extraction: {
                         documentType: extractionResult.documentType || options.documentType || DocumentType.INVOICE,
@@ -355,7 +421,6 @@ define([
                         validation: validation,
                         rawText: extractionResult.rawText,
                         pageCount: extractionResult.pageCount,
-                        processingTime: processingTime,
                         allExtractedFields: extractionResult.allExtractedFields || {},
                         extractionMeta: {
                             layout: {
@@ -371,6 +436,48 @@ define([
                         customFieldMatches: customFieldMatches
                     }
                 };
+
+                // Stage 8: Gemini AI Verification (if enabled and fileId provided)
+                if (options.fileId) {
+                    const geminiVerifier = this._getGeminiVerifier();
+                    if (geminiVerifier && geminiVerifier.shouldVerify(result, options)) {
+                        log.audit('FluxCapture.processWithRawResult', 'Running Gemini AI verification...');
+
+                        try {
+                            const verificationResult = geminiVerifier.verify(
+                                options.fileId,
+                                result,
+                                options.formSchema || null
+                            );
+
+                            if (verificationResult.success) {
+                                result = geminiVerifier.applyVerification(result, verificationResult);
+                                log.audit('FluxCapture.processWithRawResult',
+                                    `Gemini verification complete: ${verificationResult.verification?.accuracy * 100 || 0}% accuracy`);
+                            } else if (!verificationResult.skipped) {
+                                log.error('FluxCapture.processWithRawResult',
+                                    `Gemini verification failed: ${verificationResult.error}`);
+                                result.extraction.aiVerification = {
+                                    verified: false,
+                                    error: verificationResult.error
+                                };
+                            }
+                        } catch (geminiError) {
+                            log.error('FluxCapture.processWithRawResult', `Gemini error: ${geminiError.message}`);
+                            result.extraction.aiVerification = {
+                                verified: false,
+                                error: geminiError.message
+                            };
+                        }
+                    }
+                }
+
+                const processingTime = Date.now() - startTime;
+                result.extraction.processingTime = processingTime;
+
+                log.audit('FluxCapture.processWithRawResult', `Completed in ${processingTime}ms. Confidence: ${confidence.overall}%`);
+
+                return result;
 
             } catch (error) {
                 log.error('FluxCaptureEngine.processWithRawResult', { message: error.message, stack: error.stack });
