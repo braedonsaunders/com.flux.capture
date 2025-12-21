@@ -3414,15 +3414,13 @@
             var resultEl = el('#llm-test-result');
             var apiKey = (el('#llm-api-key').value || '').trim();
 
-            // If no API key entered, check if one exists
+            // Determine if we should use the saved key
+            var useSavedKey = false;
             if (!apiKey && self.llmConfig && self.llmConfig._hasApiKey) {
-                if (resultEl) {
-                    resultEl.innerHTML = '<i class="fas fa-info-circle" style="color:var(--color-info);"></i> Enter a new API key to test';
-                }
-                return;
+                useSavedKey = true;
             }
 
-            if (!apiKey) {
+            if (!apiKey && !useSavedKey) {
                 if (resultEl) {
                     resultEl.innerHTML = '<i class="fas fa-times-circle" style="color:var(--color-danger);"></i> Please enter an API key';
                 }
@@ -3438,22 +3436,32 @@
                 resultEl.innerHTML = '';
             }
 
-            API.post('testllm', { apiKey: apiKey })
+            var requestData = useSavedKey ? { useSavedKey: true } : { apiKey: apiKey };
+
+            API.post('testllm', requestData)
                 .then(function(result) {
                     if (btn) {
                         btn.disabled = false;
                         btn.innerHTML = '<i class="fas fa-plug"></i> Test Connection';
                     }
 
-                    if (result.success && result.data && result.data.connected) {
+                    // Check for successful connection
+                    if (result && result.success === true && result.data && result.data.connected === true) {
                         if (resultEl) {
-                            resultEl.innerHTML = '<i class="fas fa-check-circle" style="color:var(--color-success);"></i> Connected! ' +
-                                (result.data.availableModels ? result.data.availableModels + ' models available' : '');
+                            var modelInfo = result.data.availableModels ? result.data.availableModels + ' models available' : '';
+                            resultEl.innerHTML = '<i class="fas fa-check-circle" style="color:var(--color-success);"></i> Connected' +
+                                (modelInfo ? ' - ' + modelInfo : '');
                         }
                     } else {
+                        // Handle error response
+                        var errorMsg = 'Connection failed';
+                        if (result && result.error && result.error.message) {
+                            errorMsg = result.error.message;
+                        } else if (result && result.message) {
+                            errorMsg = result.message;
+                        }
                         if (resultEl) {
-                            resultEl.innerHTML = '<i class="fas fa-times-circle" style="color:var(--color-danger);"></i> ' +
-                                (result.message || 'Connection failed');
+                            resultEl.innerHTML = '<i class="fas fa-times-circle" style="color:var(--color-danger);"></i> ' + errorMsg;
                         }
                     }
                 })
