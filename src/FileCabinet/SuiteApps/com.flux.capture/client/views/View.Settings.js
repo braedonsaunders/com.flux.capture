@@ -30,6 +30,7 @@
             API.get('settings')
                 .then(function(result) {
                     var settings = result.data || result;
+                    var anomaly = settings.anomalyDetection || {};
 
                     // Populate form controls with saved values
                     var defaultTypeEl = el('#default-type');
@@ -47,15 +48,41 @@
                         maxPagesEl.value = settings.maxExtractionPages;
                     }
 
-                    var duplicateEl = el('#duplicate-detection');
-                    if (duplicateEl) {
-                        duplicateEl.checked = settings.duplicateDetection !== false;
-                    }
+                    // Anomaly Detection Settings - Duplicate Detection
+                    var setCheckbox = function(id, value) {
+                        var elem = el(id);
+                        if (elem) elem.checked = value !== false;
+                    };
+                    var setCheckboxOff = function(id, value) {
+                        var elem = el(id);
+                        if (elem) elem.checked = value === true;
+                    };
 
-                    var amountEl = el('#amount-validation');
-                    if (amountEl) {
-                        amountEl.checked = settings.amountValidation !== false;
-                    }
+                    // Duplicate Detection
+                    setCheckbox('#detect-duplicate-invoice', anomaly.detectDuplicateInvoice);
+                    setCheckbox('#detect-duplicate-payment', anomaly.detectDuplicatePayment);
+
+                    // Amount Validation
+                    setCheckbox('#validate-line-items-total', anomaly.validateLineItemsTotal);
+                    setCheckbox('#validate-subtotal-tax', anomaly.validateSubtotalTax);
+                    setCheckbox('#validate-positive-amounts', anomaly.validatePositiveAmounts);
+                    setCheckboxOff('#detect-round-amounts', anomaly.detectRoundAmounts); // Default OFF
+                    setCheckbox('#detect-amount-outlier', anomaly.detectAmountOutlier);
+
+                    // Date Validation
+                    setCheckbox('#validate-future-date', anomaly.validateFutureDate);
+                    setCheckbox('#validate-due-date-sequence', anomaly.validateDueDateSequence);
+                    setCheckbox('#validate-stale-date', anomaly.validateStaleDate);
+                    setCheckbox('#detect-unusual-terms', anomaly.detectUnusualTerms);
+
+                    // Vendor Validation
+                    setCheckbox('#detect-vendor-not-found', anomaly.detectVendorNotFound);
+                    setCheckbox('#detect-low-vendor-confidence', anomaly.detectLowVendorConfidence);
+                    setCheckbox('#detect-invoice-format-change', anomaly.detectInvoiceFormatChange);
+
+                    // Required Fields
+                    setCheckbox('#require-invoice-number', anomaly.requireInvoiceNumber);
+                    setCheckbox('#require-total-amount', anomaly.requireTotalAmount);
                 })
                 .catch(function(err) {
                     console.warn('Could not load settings:', err);
@@ -2574,13 +2601,40 @@
             var self = this;
             var btn = el('#btn-save-settings');
 
+            var getChecked = function(id) {
+                var elem = el(id);
+                return elem ? elem.checked : true;
+            };
+
             var maxPagesVal = el('#max-extraction-pages') ? parseInt(el('#max-extraction-pages').value, 10) : 0;
             var settings = {
                 defaultDocumentType: el('#default-type').value || 'auto',
-                duplicateDetection: el('#duplicate-detection').checked,
-                amountValidation: el('#amount-validation').checked,
                 defaultLineSublist: el('#default-line-sublist') ? el('#default-line-sublist').value : 'auto',
-                maxExtractionPages: isNaN(maxPagesVal) ? 0 : maxPagesVal
+                maxExtractionPages: isNaN(maxPagesVal) ? 0 : maxPagesVal,
+                // Anomaly Detection Settings (grouped)
+                anomalyDetection: {
+                    // Duplicate Detection
+                    detectDuplicateInvoice: getChecked('#detect-duplicate-invoice'),
+                    detectDuplicatePayment: getChecked('#detect-duplicate-payment'),
+                    // Amount Validation
+                    validateLineItemsTotal: getChecked('#validate-line-items-total'),
+                    validateSubtotalTax: getChecked('#validate-subtotal-tax'),
+                    validatePositiveAmounts: getChecked('#validate-positive-amounts'),
+                    detectRoundAmounts: getChecked('#detect-round-amounts'),
+                    detectAmountOutlier: getChecked('#detect-amount-outlier'),
+                    // Date Validation
+                    validateFutureDate: getChecked('#validate-future-date'),
+                    validateDueDateSequence: getChecked('#validate-due-date-sequence'),
+                    validateStaleDate: getChecked('#validate-stale-date'),
+                    detectUnusualTerms: getChecked('#detect-unusual-terms'),
+                    // Vendor Validation
+                    detectVendorNotFound: getChecked('#detect-vendor-not-found'),
+                    detectLowVendorConfidence: getChecked('#detect-low-vendor-confidence'),
+                    detectInvoiceFormatChange: getChecked('#detect-invoice-format-change'),
+                    // Required Fields
+                    requireInvoiceNumber: getChecked('#require-invoice-number'),
+                    requireTotalAmount: getChecked('#require-total-amount')
+                }
             };
 
             if (btn) {

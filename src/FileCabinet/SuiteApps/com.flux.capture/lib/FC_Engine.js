@@ -102,11 +102,32 @@ define([
     class FluxCaptureEngine {
         constructor(options = {}) {
             this.enableLearning = options.enableLearning !== false;
-            // Support both old name (enableFraudDetection) and new name (enableAnomalyDetection)
-            this.enableAnomalyDetection = (options.enableAnomalyDetection !== false) && (options.enableFraudDetection !== false);
-            // Specific detection settings (default to true if anomaly detection is enabled)
-            this.enableDuplicateDetection = options.duplicateDetection !== false;
-            this.enableAmountValidation = options.amountValidation !== false;
+
+            // Anomaly detection settings (all default to true except detectRoundAmounts)
+            const ad = options.anomalyDetection || {};
+            this.anomalySettings = {
+                // Duplicate Detection
+                detectDuplicateInvoice: ad.detectDuplicateInvoice !== false,
+                detectDuplicatePayment: ad.detectDuplicatePayment !== false,
+                // Amount Validation
+                validateLineItemsTotal: ad.validateLineItemsTotal !== false,
+                validateSubtotalTax: ad.validateSubtotalTax !== false,
+                validatePositiveAmounts: ad.validatePositiveAmounts !== false,
+                detectRoundAmounts: ad.detectRoundAmounts === true, // Default OFF
+                detectAmountOutlier: ad.detectAmountOutlier !== false,
+                // Date Validation
+                validateFutureDate: ad.validateFutureDate !== false,
+                validateDueDateSequence: ad.validateDueDateSequence !== false,
+                validateStaleDate: ad.validateStaleDate !== false,
+                detectUnusualTerms: ad.detectUnusualTerms !== false,
+                // Vendor Validation
+                detectVendorNotFound: ad.detectVendorNotFound !== false,
+                detectLowVendorConfidence: ad.detectLowVendorConfidence !== false,
+                detectInvoiceFormatChange: ad.detectInvoiceFormatChange !== false,
+                // Required Fields
+                requireInvoiceNumber: ad.requireInvoiceNumber !== false,
+                requireTotalAmount: ad.requireTotalAmount !== false
+            };
 
             // Initialize intelligent modules
             this.aliasManager = new AliasManagerModule.AliasManager();
@@ -225,16 +246,11 @@ define([
                     );
                 }
 
-                // Stage 5: Cross-field validation (respects amountValidation setting)
-                const validation = this.crossFieldValidator.validate(extractionResult, {
-                    enableAmountValidation: this.enableAmountValidation
-                });
+                // Stage 5: Cross-field validation (respects anomaly settings)
+                const validation = this.crossFieldValidator.validate(extractionResult, this.anomalySettings);
 
-                // Stage 6: Anomaly detection if enabled
-                let anomalies = [];
-                if (this.enableAnomalyDetection) {
-                    anomalies = this._detectAnomalies(extractionResult, vendorMatch, validation);
-                }
+                // Stage 6: Anomaly detection
+                const anomalies = this._detectAnomalies(extractionResult, vendorMatch, validation);
 
                 // Stage 7: Calculate confidence scores
                 const confidence = this._calculateConfidence(extractionResult, vendorMatch, validation);
@@ -333,16 +349,11 @@ define([
                     );
                 }
 
-                // Stage 5: Cross-field validation (respects amountValidation setting)
-                const validation = this.crossFieldValidator.validate(extractionResult, {
-                    enableAmountValidation: this.enableAmountValidation
-                });
+                // Stage 5: Cross-field validation (respects anomaly settings)
+                const validation = this.crossFieldValidator.validate(extractionResult, this.anomalySettings);
 
-                // Stage 6: Anomaly detection if enabled
-                let anomalies = [];
-                if (this.enableAnomalyDetection) {
-                    anomalies = this._detectAnomalies(extractionResult, vendorMatch, validation);
-                }
+                // Stage 6: Anomaly detection
+                const anomalies = this._detectAnomalies(extractionResult, vendorMatch, validation);
 
                 // Stage 7: Calculate confidence scores
                 const confidence = this._calculateConfidence(extractionResult, vendorMatch, validation);
@@ -1092,8 +1103,9 @@ define([
         _detectAnomalies(extraction, vendorMatch, validation) {
             const anomalies = [];
             const fields = extraction.fields;
+            const settings = this.anomalySettings;
 
-            // Add validation issues as anomalies
+            // Add validation issues as anomalies (these are already filtered by CrossFieldValidator)
             if (validation && validation.issues) {
                 validation.issues.forEach(issue => {
                     anomalies.push({
@@ -1108,7 +1120,7 @@ define([
             }
 
             // Vendor not found
-            if (!vendorMatch.vendorId) {
+            if (settings.detectVendorNotFound && !vendorMatch.vendorId) {
                 anomalies.push({
                     type: 'vendor_not_found',
                     field: 'vendorName',
@@ -1118,7 +1130,7 @@ define([
                         `Did you mean: ${vendorMatch.suggestions[0].companyName}?` :
                         'Add vendor to system or select from suggestions'
                 });
-            } else if (vendorMatch.confidence < 0.8) {
+            } else if (settings.detectLowVendorConfidence && vendorMatch.vendorId && vendorMatch.confidence < 0.8) {
                 anomalies.push({
                     type: 'low_vendor_confidence',
                     field: 'vendorName',
@@ -1127,8 +1139,8 @@ define([
                 });
             }
 
-            // Duplicate invoice check (respects enableDuplicateDetection setting)
-            if (this.enableDuplicateDetection && vendorMatch.vendorId && fields.invoiceNumber) {
+            // Duplicate invoice number check
+            if (settings.detectDuplicateInvoice && vendorMatch.vendorId && fields.invoiceNumber) {
                 const isDuplicate = this._checkDuplicateInvoice(vendorMatch.vendorId, fields.invoiceNumber);
                 if (isDuplicate) {
                     anomalies.push({
@@ -1140,11 +1152,75 @@ define([
                 }
             }
 
+            // Duplicate payment check (vendor + amount + date)
+            if (settings.detectDuplicatePayment && vendorMatch.vendorId && fields.totalAmount && fields.invoiceDate) {
+                const isDuplicatePayment = this._checkDuplicatePayment(
+                    vendorMatch.vendorId,
+                    fields.totalAmount,
+                    fields.invoiceDate
+                );
+                if (isDuplicatePayment) {
+                    anomalies.push({
+                        type: 'duplicate_payment',
+                        field: 'totalAmount',
+                        severity: 'high',
+                        message: 'Another invoice with same vendor, amount, and date exists (potential duplicate payment)',
+                        suggestion: 'Verify this is not a duplicate submission'
+                    });
+                }
+            }
+
+            // Amount outlier detection (compare to vendor historical average)
+            if (settings.detectAmountOutlier && vendorMatch.vendorId && fields.totalAmount > 0) {
+                const outlierResult = this._checkAmountOutlier(vendorMatch.vendorId, fields.totalAmount);
+                if (outlierResult.isOutlier) {
+                    anomalies.push({
+                        type: 'amount_outlier',
+                        field: 'totalAmount',
+                        severity: 'medium',
+                        message: `Amount $${fields.totalAmount.toFixed(2)} is ${outlierResult.multiplier.toFixed(1)}x higher than vendor's average ($${outlierResult.average.toFixed(2)})`,
+                        suggestion: 'Verify amount is correct for this invoice'
+                    });
+                }
+            }
+
+            // Invoice number format change detection
+            if (settings.detectInvoiceFormatChange && vendorMatch.vendorId && fields.invoiceNumber) {
+                const formatChanged = this._checkInvoiceFormatChange(vendorMatch.vendorId, fields.invoiceNumber);
+                if (formatChanged.changed) {
+                    anomalies.push({
+                        type: 'invoice_format_change',
+                        field: 'invoiceNumber',
+                        severity: 'low',
+                        message: `Invoice number format differs from vendor's typical pattern`,
+                        suggestion: `Expected pattern like: ${formatChanged.expectedPattern || 'N/A'}`
+                    });
+                }
+            }
+
+            // Unusual payment terms detection
+            if (settings.detectUnusualTerms && vendorMatch.vendorId && fields.invoiceDate && fields.dueDate) {
+                const termsResult = this._checkUnusualPaymentTerms(
+                    vendorMatch.vendorId,
+                    fields.invoiceDate,
+                    fields.dueDate
+                );
+                if (termsResult.isUnusual) {
+                    anomalies.push({
+                        type: 'unusual_payment_terms',
+                        field: 'dueDate',
+                        severity: 'low',
+                        message: `Payment terms (${termsResult.days} days) differ significantly from vendor's typical terms (${termsResult.averageDays} days)`,
+                        suggestion: 'Verify due date is correct'
+                    });
+                }
+            }
+
             return anomalies;
         }
 
         /**
-         * Check for duplicate invoice
+         * Check for duplicate invoice by invoice number
          */
         _checkDuplicateInvoice(vendorId, invoiceNumber) {
             try {
@@ -1160,6 +1236,181 @@ define([
             } catch (e) {
                 fcDebug.debug('FluxCapture._checkDuplicateInvoice', e.message);
                 return false;
+            }
+        }
+
+        /**
+         * Check for duplicate payment (same vendor + amount + date)
+         */
+        _checkDuplicatePayment(vendorId, amount, invoiceDate) {
+            try {
+                // Parse the date to get just the date portion
+                const dateObj = new Date(invoiceDate);
+                const dateStr = dateObj.toISOString().split('T')[0];
+
+                const sql = `
+                    SELECT COUNT(*) as cnt
+                    FROM customrecord_flux_document
+                    WHERE custrecord_flux_vendor = ?
+                    AND ABS(custrecord_flux_total_amount - ?) < 0.01
+                    AND TO_CHAR(custrecord_flux_invoice_date, 'YYYY-MM-DD') = ?
+                    AND custrecord_flux_status IN (${DocStatus.EXTRACTED}, ${DocStatus.NEEDS_REVIEW}, ${DocStatus.COMPLETED})
+                `;
+                const result = query.runSuiteQL({ query: sql, params: [vendorId, amount, dateStr] });
+                return result.results[0].values[0] > 0;
+            } catch (e) {
+                fcDebug.debug('FluxCapture._checkDuplicatePayment', e.message);
+                return false;
+            }
+        }
+
+        /**
+         * Check if amount is an outlier compared to vendor's historical average
+         */
+        _checkAmountOutlier(vendorId, amount) {
+            try {
+                const sql = `
+                    SELECT AVG(custrecord_flux_total_amount) as avg_amount,
+                           STDDEV(custrecord_flux_total_amount) as std_dev,
+                           COUNT(*) as cnt
+                    FROM customrecord_flux_document
+                    WHERE custrecord_flux_vendor = ?
+                    AND custrecord_flux_total_amount > 0
+                    AND custrecord_flux_status IN (${DocStatus.NEEDS_REVIEW}, ${DocStatus.COMPLETED})
+                `;
+                const result = query.runSuiteQL({ query: sql, params: [vendorId] });
+                const row = result.results[0];
+
+                if (!row || row.values[2] < 3) {
+                    // Not enough historical data (need at least 3 invoices)
+                    return { isOutlier: false };
+                }
+
+                const avgAmount = row.values[0] || 0;
+                const stdDev = row.values[1] || 0;
+
+                // Consider it an outlier if it's more than 3x the average or 2 std deviations above
+                const multiplier = avgAmount > 0 ? amount / avgAmount : 0;
+                const isOutlier = multiplier > 3 || (stdDev > 0 && amount > avgAmount + 2 * stdDev);
+
+                return {
+                    isOutlier: isOutlier,
+                    average: avgAmount,
+                    multiplier: multiplier
+                };
+            } catch (e) {
+                fcDebug.debug('FluxCapture._checkAmountOutlier', e.message);
+                return { isOutlier: false };
+            }
+        }
+
+        /**
+         * Check if invoice number format differs from vendor's historical pattern
+         */
+        _checkInvoiceFormatChange(vendorId, invoiceNumber) {
+            try {
+                // Get recent invoice numbers for this vendor
+                const sql = `
+                    SELECT custrecord_flux_invoice_number
+                    FROM customrecord_flux_document
+                    WHERE custrecord_flux_vendor = ?
+                    AND custrecord_flux_invoice_number IS NOT NULL
+                    AND custrecord_flux_status IN (${DocStatus.NEEDS_REVIEW}, ${DocStatus.COMPLETED})
+                    ORDER BY custrecord_flux_created_date DESC
+                    FETCH FIRST 10 ROWS ONLY
+                `;
+                const result = query.runSuiteQL({ query: sql, params: [vendorId] });
+
+                if (result.results.length < 3) {
+                    // Not enough historical data
+                    return { changed: false };
+                }
+
+                // Analyze the format pattern (digits, letters, separators)
+                const getPattern = (inv) => {
+                    return String(inv)
+                        .replace(/[0-9]+/g, 'N')
+                        .replace(/[A-Za-z]+/g, 'A')
+                        .replace(/[-_./]+/g, '-');
+                };
+
+                const currentPattern = getPattern(invoiceNumber);
+                const historicalPatterns = result.results.map(r => getPattern(r.values[0]));
+
+                // Find most common pattern
+                const patternCounts = {};
+                historicalPatterns.forEach(p => {
+                    patternCounts[p] = (patternCounts[p] || 0) + 1;
+                });
+
+                const mostCommonPattern = Object.entries(patternCounts)
+                    .sort((a, b) => b[1] - a[1])[0];
+
+                if (mostCommonPattern && mostCommonPattern[1] >= 2) {
+                    // At least 2 invoices have the same pattern
+                    const expectedPattern = mostCommonPattern[0];
+                    if (currentPattern !== expectedPattern) {
+                        return {
+                            changed: true,
+                            expectedPattern: result.results[0].values[0] // Show an example
+                        };
+                    }
+                }
+
+                return { changed: false };
+            } catch (e) {
+                fcDebug.debug('FluxCapture._checkInvoiceFormatChange', e.message);
+                return { changed: false };
+            }
+        }
+
+        /**
+         * Check if payment terms differ significantly from vendor's norm
+         */
+        _checkUnusualPaymentTerms(vendorId, invoiceDate, dueDate) {
+            try {
+                const invDate = new Date(invoiceDate);
+                const dueDateObj = new Date(dueDate);
+                const daysDiff = Math.round((dueDateObj - invDate) / (1000 * 60 * 60 * 24));
+
+                if (daysDiff < 0) {
+                    // Due date before invoice date is handled by CrossFieldValidator
+                    return { isUnusual: false };
+                }
+
+                // Get average payment terms for this vendor
+                const sql = `
+                    SELECT AVG(custrecord_flux_due_date - custrecord_flux_invoice_date) as avg_days,
+                           COUNT(*) as cnt
+                    FROM customrecord_flux_document
+                    WHERE custrecord_flux_vendor = ?
+                    AND custrecord_flux_due_date IS NOT NULL
+                    AND custrecord_flux_invoice_date IS NOT NULL
+                    AND custrecord_flux_due_date >= custrecord_flux_invoice_date
+                    AND custrecord_flux_status IN (${DocStatus.NEEDS_REVIEW}, ${DocStatus.COMPLETED})
+                `;
+                const result = query.runSuiteQL({ query: sql, params: [vendorId] });
+                const row = result.results[0];
+
+                if (!row || row.values[1] < 3) {
+                    // Not enough historical data
+                    return { isUnusual: false, days: daysDiff };
+                }
+
+                const avgDays = row.values[0] || 30;
+
+                // Consider it unusual if it differs by more than 15 days or 50%
+                const difference = Math.abs(daysDiff - avgDays);
+                const isUnusual = difference > 15 || (avgDays > 0 && difference / avgDays > 0.5);
+
+                return {
+                    isUnusual: isUnusual,
+                    days: daysDiff,
+                    averageDays: Math.round(avgDays)
+                };
+            } catch (e) {
+                fcDebug.debug('FluxCapture._checkUnusualPaymentTerms', e.message);
+                return { isUnusual: false };
             }
         }
 

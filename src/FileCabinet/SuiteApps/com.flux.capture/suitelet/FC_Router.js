@@ -2139,16 +2139,41 @@ define([
             log.debug('getSettings', 'No saved settings found, using defaults');
         }
 
+        // Build anomaly detection settings with defaults (all on except detectRoundAmounts)
+        var savedAnomaly = savedSettings.anomalyDetection || {};
+        var anomalyDefaults = {
+            // Duplicate Detection
+            detectDuplicateInvoice: savedAnomaly.detectDuplicateInvoice !== false,
+            detectDuplicatePayment: savedAnomaly.detectDuplicatePayment !== false,
+            // Amount Validation
+            validateLineItemsTotal: savedAnomaly.validateLineItemsTotal !== false,
+            validateSubtotalTax: savedAnomaly.validateSubtotalTax !== false,
+            validatePositiveAmounts: savedAnomaly.validatePositiveAmounts !== false,
+            detectRoundAmounts: savedAnomaly.detectRoundAmounts === true, // Default OFF
+            detectAmountOutlier: savedAnomaly.detectAmountOutlier !== false,
+            // Date Validation
+            validateFutureDate: savedAnomaly.validateFutureDate !== false,
+            validateDueDateSequence: savedAnomaly.validateDueDateSequence !== false,
+            validateStaleDate: savedAnomaly.validateStaleDate !== false,
+            detectUnusualTerms: savedAnomaly.detectUnusualTerms !== false,
+            // Vendor Validation
+            detectVendorNotFound: savedAnomaly.detectVendorNotFound !== false,
+            detectLowVendorConfidence: savedAnomaly.detectLowVendorConfidence !== false,
+            detectInvoiceFormatChange: savedAnomaly.detectInvoiceFormatChange !== false,
+            // Required Fields
+            requireInvoiceNumber: savedAnomaly.requireInvoiceNumber !== false,
+            requireTotalAmount: savedAnomaly.requireTotalAmount !== false
+        };
+
         var settings = {
             defaultDocumentType: savedSettings.defaultDocumentType || 'auto',
             emailImportEnabled: true,
             emailAddress: 'flux-' + runtime.accountId + '@netsuite.com',
-            duplicateDetection: savedSettings.duplicateDetection !== false,
-            amountValidation: savedSettings.amountValidation !== false,
             defaultLineSublist: savedSettings.defaultLineSublist || 'auto',
             maxExtractionPages: savedSettings.maxExtractionPages || 0,
             maxFileSize: 10485760,
-            supportedFileTypes: ['pdf', 'png', 'jpg', 'jpeg', 'tiff', 'tif', 'gif', 'bmp']
+            supportedFileTypes: ['pdf', 'png', 'jpg', 'jpeg', 'tiff', 'tif', 'gif', 'bmp'],
+            anomalyDetection: anomalyDefaults
         };
 
         return Response.success(settings);
@@ -2156,12 +2181,34 @@ define([
 
     function saveSettings(context) {
         try {
+            var anomaly = context.anomalyDetection || {};
             var settingsData = {
                 defaultDocumentType: context.defaultDocumentType || 'auto',
-                duplicateDetection: context.duplicateDetection !== false,
-                amountValidation: context.amountValidation !== false,
                 defaultLineSublist: context.defaultLineSublist || 'auto',
-                maxExtractionPages: parseInt(context.maxExtractionPages, 10) || 0
+                maxExtractionPages: parseInt(context.maxExtractionPages, 10) || 0,
+                anomalyDetection: {
+                    // Duplicate Detection
+                    detectDuplicateInvoice: anomaly.detectDuplicateInvoice !== false,
+                    detectDuplicatePayment: anomaly.detectDuplicatePayment !== false,
+                    // Amount Validation
+                    validateLineItemsTotal: anomaly.validateLineItemsTotal !== false,
+                    validateSubtotalTax: anomaly.validateSubtotalTax !== false,
+                    validatePositiveAmounts: anomaly.validatePositiveAmounts !== false,
+                    detectRoundAmounts: anomaly.detectRoundAmounts === true,
+                    detectAmountOutlier: anomaly.detectAmountOutlier !== false,
+                    // Date Validation
+                    validateFutureDate: anomaly.validateFutureDate !== false,
+                    validateDueDateSequence: anomaly.validateDueDateSequence !== false,
+                    validateStaleDate: anomaly.validateStaleDate !== false,
+                    detectUnusualTerms: anomaly.detectUnusualTerms !== false,
+                    // Vendor Validation
+                    detectVendorNotFound: anomaly.detectVendorNotFound !== false,
+                    detectLowVendorConfidence: anomaly.detectLowVendorConfidence !== false,
+                    detectInvoiceFormatChange: anomaly.detectInvoiceFormatChange !== false,
+                    // Required Fields
+                    requireInvoiceNumber: anomaly.requireInvoiceNumber !== false,
+                    requireTotalAmount: anomaly.requireTotalAmount !== false
+                }
             };
 
             // Find existing config record or create new one
@@ -2378,8 +2425,7 @@ define([
             var settings = settingsResult.success ? settingsResult.data : {};
 
             var engine = new EngineModule.FluxCaptureEngine({
-                duplicateDetection: settings.duplicateDetection !== false,
-                amountValidation: settings.amountValidation !== false
+                anomalyDetection: settings.anomalyDetection || {}
             });
             var startTime = Date.now();
 

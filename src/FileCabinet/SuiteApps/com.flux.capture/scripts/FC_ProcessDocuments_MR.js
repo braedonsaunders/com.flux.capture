@@ -163,10 +163,9 @@ define([
             const settings = loadSettings();
             const maxExtractionPages = settings.maxExtractionPages || 0;
 
-            // Initialize engine with settings
+            // Initialize engine with anomaly detection settings
             const engine = new FC_Engine.FluxCaptureEngine({
-                duplicateDetection: settings.duplicateDetection !== false,
-                amountValidation: settings.amountValidation !== false
+                anomalyDetection: settings.anomalyDetection || {}
             });
             const provider = engine.getExtractionProvider();
 

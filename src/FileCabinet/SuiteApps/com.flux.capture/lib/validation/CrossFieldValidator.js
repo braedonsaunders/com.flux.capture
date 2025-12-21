@@ -39,88 +39,18 @@ define(['N/log'], function(log) {
      */
     class CrossFieldValidator {
         constructor() {
-            this.validationRules = this.initializeRules();
-        }
-
-        /**
-         * Initialize validation rules
-         */
-        initializeRules() {
-            return [
-                // Amount validation rules
-                {
-                    name: 'subtotal_tax_total',
-                    fields: ['subtotal', 'taxAmount', 'totalAmount'],
-                    validate: (fields) => this.validateSubtotalTaxTotal(fields),
-                    severity: Severity.WARNING
-                },
-                {
-                    name: 'line_items_total',
-                    fields: ['lineItems', 'subtotal', 'totalAmount'],
-                    validate: (fields, context) => this.validateLineItemsTotal(fields, context),
-                    severity: Severity.WARNING
-                },
-                {
-                    name: 'positive_amounts',
-                    fields: ['totalAmount', 'subtotal'],
-                    validate: (fields) => this.validatePositiveAmounts(fields),
-                    severity: Severity.WARNING
-                },
-
-                // Date validation rules
-                {
-                    name: 'due_after_invoice',
-                    fields: ['invoiceDate', 'dueDate'],
-                    validate: (fields) => this.validateDueDateAfterInvoice(fields),
-                    severity: Severity.WARNING
-                },
-                {
-                    name: 'invoice_not_future',
-                    fields: ['invoiceDate'],
-                    validate: (fields) => this.validateInvoiceDateNotFuture(fields),
-                    severity: Severity.ERROR
-                },
-                {
-                    name: 'reasonable_date_range',
-                    fields: ['invoiceDate'],
-                    validate: (fields) => this.validateReasonableDateRange(fields),
-                    severity: Severity.WARNING
-                },
-
-                // Required field validation
-                {
-                    name: 'required_for_invoice',
-                    fields: ['invoiceNumber', 'totalAmount'],
-                    validate: (fields, context) => this.validateRequiredFields(fields, context),
-                    severity: Severity.ERROR
-                },
-
-                // Suspicious value detection
-                {
-                    name: 'benford_law',
-                    fields: ['totalAmount'],
-                    validate: (fields) => this.validateBenfordLaw(fields),
-                    severity: Severity.INFO
-                },
-                {
-                    name: 'round_number_check',
-                    fields: ['totalAmount', 'taxAmount'],
-                    validate: (fields) => this.validateRoundNumbers(fields),
-                    severity: Severity.INFO
-                }
-            ];
+            // Rules are now dynamically filtered based on settings
         }
 
         /**
          * Validate all fields
          * @param {Object} extraction - Extracted document data
-         * @param {Object} context - Validation context (enableAmountValidation, etc.)
+         * @param {Object} settings - Anomaly detection settings from FC_Engine
          * @returns {Object} Validation result
          */
-        validate(extraction, context = {}) {
+        validate(extraction, settings = {}) {
             const issues = [];
             const fields = extraction.fields || {};
-            const enableAmountValidation = context.enableAmountValidation !== false;
 
             // Add line items to fields for validation
             const allFields = {
@@ -128,34 +58,46 @@ define(['N/log'], function(log) {
                 lineItems: extraction.lineItems || []
             };
 
-            // Amount validation rules that can be disabled
-            const amountRules = ['subtotal_tax_total', 'line_items_total', 'positive_amounts'];
-
-            // Run all validation rules
-            for (const rule of this.validationRules) {
-                // Skip amount validation rules if disabled
-                if (!enableAmountValidation && amountRules.includes(rule.name)) {
-                    continue;
-                }
-
-                // Check if required fields exist
-                const hasRequiredFields = rule.fields.some(f =>
-                    allFields[f] !== null && allFields[f] !== undefined
-                );
-
-                if (hasRequiredFields) {
-                    const ruleIssues = rule.validate(allFields, context);
-                    if (ruleIssues && ruleIssues.length > 0) {
-                        ruleIssues.forEach(issue => {
-                            issues.push({
-                                ...issue,
-                                rule: rule.name,
-                                severity: issue.severity || rule.severity
-                            });
-                        });
-                    }
-                }
+            // Amount validation rules
+            if (settings.validateSubtotalTax !== false) {
+                const subtotalIssues = this.validateSubtotalTaxTotal(allFields);
+                issues.push(...subtotalIssues);
             }
+
+            if (settings.validateLineItemsTotal !== false) {
+                const lineItemIssues = this.validateLineItemsTotal(allFields);
+                issues.push(...lineItemIssues);
+            }
+
+            if (settings.validatePositiveAmounts !== false) {
+                const positiveIssues = this.validatePositiveAmounts(allFields);
+                issues.push(...positiveIssues);
+            }
+
+            if (settings.detectRoundAmounts === true) { // Default OFF
+                const roundIssues = this.validateRoundNumbers(allFields);
+                issues.push(...roundIssues);
+            }
+
+            // Date validation rules
+            if (settings.validateFutureDate !== false) {
+                const futureIssues = this.validateInvoiceDateNotFuture(allFields);
+                issues.push(...futureIssues);
+            }
+
+            if (settings.validateDueDateSequence !== false) {
+                const sequenceIssues = this.validateDueDateAfterInvoice(allFields);
+                issues.push(...sequenceIssues);
+            }
+
+            if (settings.validateStaleDate !== false) {
+                const staleIssues = this.validateReasonableDateRange(allFields);
+                issues.push(...staleIssues);
+            }
+
+            // Required fields validation
+            const requiredIssues = this.validateRequiredFields(allFields, settings);
+            issues.push(...requiredIssues);
 
             // Calculate overall validity
             const errors = issues.filter(i => i.severity === Severity.ERROR);
@@ -209,6 +151,7 @@ define(['N/log'], function(log) {
                     actual: totalAmount,
                     difference: diff,
                     differencePercent: diffPercent.toFixed(2),
+                    severity: Severity.WARNING,
                     suggestion: diffPercent < 10 ?
                         'May be rounding or additional fees' :
                         'Likely extraction error - verify amounts'
@@ -221,7 +164,7 @@ define(['N/log'], function(log) {
         /**
          * Validate line items sum matches subtotal/total
          */
-        validateLineItemsTotal(fields, context) {
+        validateLineItemsTotal(fields) {
             const issues = [];
 
             const lineItems = fields.lineItems || [];
@@ -286,6 +229,7 @@ define(['N/log'], function(log) {
                     message: 'Total amount is negative - may be a credit memo',
                     field: 'totalAmount',
                     value: fields.totalAmount,
+                    severity: Severity.WARNING,
                     suggestion: 'Verify document type (invoice vs credit memo)'
                 });
             }
@@ -295,7 +239,8 @@ define(['N/log'], function(log) {
                     type: IssueType.VALUE_SUSPICIOUS,
                     message: 'Subtotal is negative',
                     field: 'subtotal',
-                    value: fields.subtotal
+                    value: fields.subtotal,
+                    severity: Severity.WARNING
                 });
             }
 
@@ -318,6 +263,7 @@ define(['N/log'], function(log) {
                     type: IssueType.DATE_SEQUENCE,
                     message: `Due date (${this.formatDate(dueDate)}) is before invoice date (${this.formatDate(invoiceDate)})`,
                     fields: ['invoiceDate', 'dueDate'],
+                    severity: Severity.WARNING,
                     suggestion: 'Dates may be swapped or in wrong format'
                 });
             }
@@ -356,6 +302,7 @@ define(['N/log'], function(log) {
                     type: IssueType.DATE_INVALID,
                     message: `Invoice date (${this.formatDate(invoiceDate)}) is in the future`,
                     field: 'invoiceDate',
+                    severity: Severity.ERROR,
                     suggestion: 'Date format may be incorrect (MM/DD vs DD/MM)'
                 });
             }
@@ -364,7 +311,7 @@ define(['N/log'], function(log) {
         }
 
         /**
-         * Validate date is within reasonable range
+         * Validate date is within reasonable range (not stale)
          */
         validateReasonableDateRange(fields) {
             const issues = [];
@@ -373,15 +320,15 @@ define(['N/log'], function(log) {
             if (!invoiceDate) return issues;
 
             const today = new Date();
-            const fiveYearsAgo = new Date(today.getFullYear() - 5, 0, 1);
+            const oneYearAgo = new Date(today.getFullYear() - 1, today.getMonth(), today.getDate());
 
-            if (invoiceDate < fiveYearsAgo) {
+            if (invoiceDate < oneYearAgo) {
                 issues.push({
                     type: IssueType.DATE_INVALID,
-                    message: `Invoice date (${this.formatDate(invoiceDate)}) is more than 5 years old`,
+                    message: `Invoice date (${this.formatDate(invoiceDate)}) is more than 1 year old`,
                     field: 'invoiceDate',
                     severity: Severity.WARNING,
-                    suggestion: 'Verify year is correct'
+                    suggestion: 'Verify date is correct - invoice may be stale'
                 });
             }
 
@@ -389,13 +336,13 @@ define(['N/log'], function(log) {
         }
 
         /**
-         * Validate required fields
+         * Validate required fields (respects settings)
          */
-        validateRequiredFields(fields, context) {
+        validateRequiredFields(fields, settings) {
             const issues = [];
 
-            // Invoice number is required
-            if (!fields.invoiceNumber) {
+            // Invoice number is required (if setting enabled)
+            if (settings.requireInvoiceNumber !== false && !fields.invoiceNumber) {
                 issues.push({
                     type: IssueType.MISSING_REQUIRED,
                     message: 'Invoice number not detected',
@@ -404,40 +351,13 @@ define(['N/log'], function(log) {
                 });
             }
 
-            // Total amount is required
-            if (!fields.totalAmount || fields.totalAmount === 0) {
+            // Total amount is required (if setting enabled)
+            if (settings.requireTotalAmount !== false && (!fields.totalAmount || fields.totalAmount === 0)) {
                 issues.push({
                     type: IssueType.MISSING_REQUIRED,
                     message: 'Total amount not detected or is zero',
                     field: 'totalAmount',
                     severity: Severity.ERROR
-                });
-            }
-
-            return issues;
-        }
-
-        /**
-         * Benford's Law check for suspicious amounts
-         */
-        validateBenfordLaw(fields) {
-            const issues = [];
-
-            const amount = fields.totalAmount;
-            if (!amount || amount < 1000) return issues;
-
-            const firstDigit = parseInt(String(Math.floor(Math.abs(amount)))[0]);
-
-            // Benford's Law: smaller digits (1-3) should be more common as first digits
-            // Digits 7, 8, 9 as first digit occur only ~12% of the time naturally
-            if (firstDigit >= 7 && amount > 10000) {
-                issues.push({
-                    type: IssueType.VALUE_SUSPICIOUS,
-                    message: `Amount ${amount.toFixed(2)} has unusual first digit pattern (Benford's Law check)`,
-                    field: 'totalAmount',
-                    severity: Severity.INFO,
-                    firstDigit: firstDigit,
-                    suggestion: 'Statistically unusual but not necessarily wrong'
                 });
             }
 
@@ -462,7 +382,7 @@ define(['N/log'], function(log) {
                         message: `${fieldName} of ${value.toFixed(2)} is a round number`,
                         field: fieldName,
                         severity: Severity.INFO,
-                        suggestion: 'Round amounts may indicate estimates or potential fraud'
+                        suggestion: 'Round amounts may indicate estimates'
                     });
                 }
             };

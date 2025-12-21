@@ -126,10 +126,9 @@ define([
             documentsFound: docsToProcess.length
         });
 
-        // Initialize engine for processing results with settings
+        // Initialize engine for processing results with anomaly detection settings
         const engine = new FC_Engine.FluxCaptureEngine({
-            duplicateDetection: settings.duplicateDetection !== false,
-            amountValidation: settings.amountValidation !== false
+            anomalyDetection: settings.anomalyDetection || {}
         });
         const provider = engine.getExtractionProvider();
 
