@@ -299,11 +299,33 @@ define([
                         updateValues['custrecord_flux_operation_url'] = '';
                         updateValues['custrecord_flux_poll_count'] = 0;
 
-                        record.submitFields({
-                            type: 'customrecord_flux_document',
-                            id: doc.id,
-                            values: updateValues
+                        log.debug('FC_ContinuePolling.updateValues', {
+                            documentId: doc.id,
+                            status: updateValues['custrecord_flux_status'],
+                            vendor: updateValues['custrecord_flux_vendor'],
+                            invoiceNumber: updateValues['custrecord_flux_invoice_number']
                         });
+
+                        try {
+                            const updatedId = record.submitFields({
+                                type: 'customrecord_flux_document',
+                                id: doc.id,
+                                values: updateValues
+                            });
+                            log.audit('FC_ContinuePolling.updated', {
+                                documentId: doc.id,
+                                updatedId: updatedId,
+                                newStatus: updateValues['custrecord_flux_status']
+                            });
+                        } catch (updateErr) {
+                            log.error('FC_ContinuePolling.updateFailed', {
+                                documentId: doc.id,
+                                error: updateErr.message,
+                                values: JSON.stringify(updateValues).substring(0, 500)
+                            });
+                            // Re-throw to be caught by outer handler
+                            throw updateErr;
+                        }
 
                         return { completed: true };
                     } else {
