@@ -3560,11 +3560,11 @@
     overflow: hidden;
 }
 
-/* Table wrapper is the scrollable area */
+/* Table wrapper is the scrollable area - !important needed to override line ~6878 */
 .view-review.split-view .review-bottom-section .sublist-table-wrapper {
     flex: 1;
-    overflow-y: auto;
-    overflow-x: auto;
+    overflow-y: auto !important;
+    overflow-x: auto !important;
     min-height: 0;
 }
 
