@@ -265,7 +265,7 @@ define([
                     result = testProviderConnection(context.providerType, context.config);
                     break;
                 case 'testllm':
-                    result = testLLMConnection(context.apiKey);
+                    result = testLLMConnection(context.apiKey, context.useSavedKey);
                     break;
                 case 'triggerProcessing':
                     // Deprecated - User Event script now triggers processing automatically
@@ -2287,17 +2287,27 @@ define([
     /**
      * Test LLM (Gemini) connection
      */
-    function testLLMConnection(apiKey) {
+    function testLLMConnection(apiKey, useSavedKey) {
         try {
             if (!GeminiVerifierModule || !GeminiVerifierModule.testConnection) {
                 return Response.error('LLM_NOT_AVAILABLE', 'LLM module not available');
             }
 
-            if (!apiKey) {
+            var keyToTest = apiKey;
+
+            // If no API key provided and useSavedKey is true, load from config
+            if (!keyToTest && useSavedKey) {
+                var savedConfig = GeminiVerifierModule.loadConfig();
+                if (savedConfig && savedConfig.apiKey) {
+                    keyToTest = savedConfig.apiKey;
+                }
+            }
+
+            if (!keyToTest) {
                 return Response.error('MISSING_API_KEY', 'API key is required');
             }
 
-            var result = GeminiVerifierModule.testConnection(apiKey);
+            var result = GeminiVerifierModule.testConnection(keyToTest);
 
             if (result.success) {
                 return Response.success({
