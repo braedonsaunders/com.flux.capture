@@ -645,10 +645,15 @@ define([
         // Check for new PENDING documents that arrived while we were processing
         // This handles the race condition where uploads complete after getInputData runs
         const pendingCount = checkForNewPendingDocuments();
-        if (pendingCount > 0) {
+
+        // Guard against infinite self-chaining: only requeue when we actually processed work
+        // (i.e., this MR run produced output). If nothing was processed, skip chaining so
+        // a single stuck/queued document does not trigger endless MR runs.
+        if (pendingCount > 0 && processed > 0) {
             log.audit('FC_ProcessDocuments.summarize.newPending', {
                 pendingDocuments: pendingCount,
-                triggeringAnotherMRRun: true
+                triggeringAnotherMRRun: true,
+                processedThisRun: processed
             });
 
             try {
@@ -672,6 +677,13 @@ define([
                     note: 'MR already queued or will be triggered by next upload'
                 });
             }
+        } else if (pendingCount > 0) {
+            // Log that we intentionally skipped chaining to avoid a zero-work loop
+            log.audit('FC_ProcessDocuments.summarize.newPending.noChain', {
+                pendingDocuments: pendingCount,
+                processedThisRun: processed,
+                note: 'Skipping MR chain because no records were processed in this run'
+            });
         }
     }
 
