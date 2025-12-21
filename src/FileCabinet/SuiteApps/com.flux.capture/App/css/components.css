@@ -5784,9 +5784,9 @@ body.dark-mode #btn-dark-mode i::before {
 }
 .dropzone-particles .particle {
     position: absolute;
-    width: 3px;
-    height: 3px;
-    background: rgba(37, 99, 235, 0.4);
+    width: 6px;
+    height: 6px;
+    background: var(--color-primary);
     border-radius: 50%;
     opacity: 0;
 }
@@ -5806,24 +5806,24 @@ body.dark-mode #btn-dark-mode i::before {
 
 @keyframes particleDrift1 {
     0% { bottom: -10px; opacity: 0; transform: translateX(0); }
-    8% { opacity: 0.3; }
-    50% { opacity: 0.2; transform: translateX(10px); }
-    92% { opacity: 0.15; }
-    100% { bottom: 100%; opacity: 0; transform: translateX(-5px); }
+    8% { opacity: 0.7; }
+    50% { opacity: 0.5; transform: translateX(12px); }
+    92% { opacity: 0.4; }
+    100% { bottom: 100%; opacity: 0; transform: translateX(-6px); }
 }
 @keyframes particleDrift2 {
     0% { bottom: -10px; opacity: 0; transform: translateX(0); }
-    10% { opacity: 0.25; }
-    45% { opacity: 0.2; transform: translateX(-8px); }
-    90% { opacity: 0.1; }
-    100% { bottom: 100%; opacity: 0; transform: translateX(4px); }
+    10% { opacity: 0.6; }
+    45% { opacity: 0.5; transform: translateX(-10px); }
+    90% { opacity: 0.35; }
+    100% { bottom: 100%; opacity: 0; transform: translateX(5px); }
 }
 @keyframes particleDrift3 {
     0% { bottom: -10px; opacity: 0; transform: translateX(0); }
-    6% { opacity: 0.35; }
-    55% { opacity: 0.15; transform: translateX(6px); }
-    88% { opacity: 0.1; }
-    100% { bottom: 100%; opacity: 0; transform: translateX(-8px); }
+    6% { opacity: 0.75; }
+    55% { opacity: 0.45; transform: translateX(8px); }
+    88% { opacity: 0.3; }
+    100% { bottom: 100%; opacity: 0; transform: translateX(-10px); }
 }
 
 /* Dropzone Content */
