@@ -638,6 +638,59 @@ define([
                 });
             }
         }
+
+        // Check for new PENDING documents that arrived while we were processing
+        // This handles the race condition where uploads complete after getInputData runs
+        const pendingCount = checkForNewPendingDocuments();
+        if (pendingCount > 0) {
+            log.audit('FC_ProcessDocuments.summarize.newPending', {
+                pendingDocuments: pendingCount,
+                triggeringAnotherMRRun: true
+            });
+
+            try {
+                const mrTask = task.create({
+                    taskType: task.TaskType.MAP_REDUCE,
+                    scriptId: runtime.getCurrentScript().id,
+                    deploymentId: runtime.getCurrentScript().deploymentId
+                });
+
+                const taskId = mrTask.submit();
+
+                log.audit('FC_ProcessDocuments.summarize.mrChained', {
+                    taskId: taskId,
+                    forPendingDocuments: pendingCount
+                });
+
+            } catch (chainErr) {
+                // Expected if MR deployment is queued - that's fine, docs will be picked up
+                log.debug('FC_ProcessDocuments.summarize.mrChainSkipped', {
+                    message: chainErr.message,
+                    note: 'MR already queued or will be triggered by next upload'
+                });
+            }
+        }
+    }
+
+    /**
+     * Check if there are new PENDING documents that need processing
+     */
+    function checkForNewPendingDocuments() {
+        const pendingSearch = search.create({
+            type: 'customrecord_flux_document',
+            filters: [
+                ['custrecord_flux_status', 'is', DocStatus.PENDING]
+            ],
+            columns: ['internalid']
+        });
+
+        let count = 0;
+        pendingSearch.run().each(function() {
+            count++;
+            return count < 100; // Cap at 100 for performance
+        });
+
+        return count;
     }
 
     /**
