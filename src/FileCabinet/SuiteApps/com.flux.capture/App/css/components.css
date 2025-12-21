@@ -5498,32 +5498,38 @@ body.dark-mode #btn-dark-mode i::before {
 .view-flow.fullpage-mode .dropzone-particles .particle {
     animation: particleDrift 12s ease-in-out infinite;
 }
-.dropzone-particles .particle:nth-child(1) { left: 20%; animation-delay: 0s; }
-.dropzone-particles .particle:nth-child(2) { left: 35%; animation-delay: 2s; }
-.dropzone-particles .particle:nth-child(3) { left: 50%; animation-delay: 4s; }
-.dropzone-particles .particle:nth-child(4) { left: 65%; animation-delay: 6s; }
-.dropzone-particles .particle:nth-child(5) { left: 80%; animation-delay: 8s; }
-.dropzone-particles .particle:nth-child(6) { left: 42%; animation-delay: 10s; }
+.dropzone-particles .particle:nth-child(1) { left: 8%; animation-delay: 0s; }
+.dropzone-particles .particle:nth-child(2) { left: 18%; animation-delay: 1s; }
+.dropzone-particles .particle:nth-child(3) { left: 28%; animation-delay: 2s; }
+.dropzone-particles .particle:nth-child(4) { left: 38%; animation-delay: 3s; }
+.dropzone-particles .particle:nth-child(5) { left: 48%; animation-delay: 4s; }
+.dropzone-particles .particle:nth-child(6) { left: 58%; animation-delay: 5s; }
+.dropzone-particles .particle:nth-child(7) { left: 68%; animation-delay: 6s; }
+.dropzone-particles .particle:nth-child(8) { left: 78%; animation-delay: 7s; }
+.dropzone-particles .particle:nth-child(9) { left: 88%; animation-delay: 8s; }
+.dropzone-particles .particle:nth-child(10) { left: 25%; animation-delay: 9s; }
+.dropzone-particles .particle:nth-child(11) { left: 55%; animation-delay: 10s; }
+.dropzone-particles .particle:nth-child(12) { left: 75%; animation-delay: 11s; }
 @keyframes particleDrift {
     0% {
-        bottom: -20px;
+        bottom: -10px;
         opacity: 0;
         transform: translateX(0);
     }
-    10% {
-        opacity: 0.3;
+    8% {
+        opacity: 0.35;
     }
     50% {
-        opacity: 0.2;
-        transform: translateX(8px);
+        opacity: 0.25;
+        transform: translateX(6px);
     }
-    90% {
+    92% {
         opacity: 0.15;
     }
     100% {
         bottom: 100%;
         opacity: 0;
-        transform: translateX(-4px);
+        transform: translateX(-3px);
     }
 }
 
