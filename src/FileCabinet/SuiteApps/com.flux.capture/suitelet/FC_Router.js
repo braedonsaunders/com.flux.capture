@@ -3501,19 +3501,35 @@ define([
                     'AND',
                     ['custrecord_flux_modified_date', 'before', 'daysago' + olderThanDays]
                 ],
-                columns: ['internalid']
+                columns: ['internalid', 'custrecord_flux_source_file']
             });
 
             var deletedCount = 0;
+            var deletedFiles = 0;
 
             docSearch.run().each(function(result) {
+                var fileId = result.getValue('custrecord_flux_source_file');
+
+                // Delete the document record
                 record.delete({ type: 'customrecord_flux_document', id: result.id });
                 deletedCount++;
+
+                // Delete the associated cabinet file
+                if (fileId) {
+                    try {
+                        file.delete({ id: fileId });
+                        deletedFiles++;
+                    } catch (e) {
+                        fcDebug.debug('File delete skipped during clear', e.message);
+                    }
+                }
+
                 return true;
             });
 
             return Response.success({
                 deletedDocuments: deletedCount,
+                deletedFiles: deletedFiles,
                 olderThanDays: olderThanDays
             }, 'Completed documents cleared');
         } catch (e) {
