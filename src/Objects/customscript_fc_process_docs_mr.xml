@@ -10,7 +10,7 @@
     <isinactive>F</isinactive>
     <scriptdeployments>
         <scriptdeployment scriptid="customdeploy_fc_process_docs_mr">
-            <status>RELEASED</status>
+            <status>NOTSCHEDULED</status>
             <title>Flux Capture - Process Documents</title>
             <isdeployed>T</isdeployed>
             <loglevel>DEBUG</loglevel>
