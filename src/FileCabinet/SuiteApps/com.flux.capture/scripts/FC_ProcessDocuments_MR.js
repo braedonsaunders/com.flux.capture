@@ -345,6 +345,41 @@ define([
             }
 
             // Phase 2: Poll for results (with limited attempts)
+            // Guard: If operation URL is empty (possible race condition where another
+            // MR execution completed this document), skip polling and let it be picked up
+            // on next scheduled run or mark as needing attention
+            if (!currentOperationUrl || currentOperationUrl.trim() === '') {
+                log.error('FC_ProcessDocuments.map.poll', {
+                    documentId: documentId,
+                    error: 'Operation URL is empty - possible race condition or document already processed',
+                    isNewDocument: isNewDocument,
+                    isContinuation: isContinuation
+                });
+
+                // Re-check document status from database
+                const currentDoc = record.load({ type: 'customrecord_flux_document', id: documentId });
+                const currentDocStatus = parseInt(currentDoc.getValue('custrecord_flux_status'), 10);
+
+                if (currentDocStatus === DocStatus.NEEDS_REVIEW || currentDocStatus === DocStatus.COMPLETED) {
+                    // Already processed by another execution - skip
+                    log.audit('FC_ProcessDocuments.map.poll', 'Document already processed, skipping');
+                    return;
+                }
+
+                // Still in processing but URL is gone - mark as error
+                record.submitFields({
+                    type: 'customrecord_flux_document',
+                    id: documentId,
+                    values: {
+                        'custrecord_flux_status': DocStatus.ERROR,
+                        'custrecord_flux_error_message': 'Processing interrupted - operation URL lost',
+                        'custrecord_flux_operation_url': '',
+                        'custrecord_flux_poll_count': 0
+                    }
+                });
+                return;
+            }
+
             log.audit('FC_ProcessDocuments.map.poll', {
                 documentId: documentId,
                 operationUrl: currentOperationUrl.substring(0, 50) + '...',
