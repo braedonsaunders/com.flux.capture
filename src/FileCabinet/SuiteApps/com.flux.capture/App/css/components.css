@@ -3527,6 +3527,40 @@
     margin-top: 0;
 }
 
+/* Make bottom section and children expand to fill available height */
+.view-review.split-view .review-bottom-section {
+    display: flex;
+    flex-direction: column;
+}
+
+.view-review.split-view .review-bottom-section .line-section {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    min-height: 0; /* Allow shrinking below content height */
+}
+
+.view-review.split-view .review-bottom-section .sublist-container.active {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+}
+
+.view-review.split-view .review-bottom-section .line-items-table {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+    overflow: hidden;
+}
+
+.view-review.split-view .review-bottom-section .sublist-table-wrapper {
+    flex: 1;
+    overflow-y: auto;
+    min-height: 0;
+}
+
 /* Hide sublists from extraction panel when in split view - they're moved to bottom */
 .view-review.split-view .extraction-panel .line-section,
 .view-review.split-view .extraction-panel .sublist-section {
