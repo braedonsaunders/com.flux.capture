@@ -126,8 +126,10 @@ define([
             documentsFound: docsToProcess.length
         });
 
-        // Initialize engine for processing results
-        const engine = new FC_Engine.FluxCaptureEngine();
+        // Initialize engine for processing results with anomaly detection settings
+        const engine = new FC_Engine.FluxCaptureEngine({
+            anomalyDetection: settings.anomalyDetection || {}
+        });
         const provider = engine.getExtractionProvider();
 
         let processedCount = 0;
@@ -288,8 +290,6 @@ define([
                     const processed = engine.processWithRawResult(normalizedResult, {
                         documentType: doc.documentType,
                         enableVendorMatching: true,
-                        enableAnomalyDetection: true,
-                        enableFraudDetection: true,
                         maxExtractionPages: maxExtractionPages
                     });
 

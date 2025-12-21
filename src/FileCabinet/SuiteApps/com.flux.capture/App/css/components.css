@@ -1350,6 +1350,45 @@
     box-shadow: 0 0 0 3px var(--color-primary-bg);
 }
 
+/* Settings Category (for grouping related settings) */
+.settings-category {
+    margin-bottom: var(--space-lg);
+    padding-bottom: var(--space-md);
+    border-bottom: 1px solid var(--border-color);
+}
+
+.settings-category:last-child {
+    margin-bottom: 0;
+    padding-bottom: 0;
+    border-bottom: none;
+}
+
+.settings-category-header {
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
+    margin-bottom: var(--space-md);
+    padding-bottom: var(--space-sm);
+    color: var(--text-secondary);
+    font-weight: 600;
+    font-size: var(--font-size-sm);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+}
+
+.settings-category-header i {
+    font-size: var(--font-size-sm);
+    color: var(--color-primary);
+}
+
+.settings-category .setting-row {
+    padding-left: var(--space-md);
+}
+
+.settings-category .setting-row:last-child {
+    border-bottom: none;
+}
+
 .range-value {
     min-width: 40px;
     text-align: right;

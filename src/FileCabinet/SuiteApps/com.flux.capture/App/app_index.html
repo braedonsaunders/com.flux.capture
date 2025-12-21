@@ -1309,38 +1309,245 @@
                     </div>
                 </div>
 
-                <!-- Fraud Detection -->
-                <div class="settings-card">
+                <!-- Anomaly Detection -->
+                <div class="settings-card settings-card-large">
                     <div class="settings-card-header">
                         <i class="fas fa-shield-halved"></i>
                         <div>
-                            <h3>Fraud Detection</h3>
-                            <p>Anomaly detection and validation rules</p>
+                            <h3>Anomaly Detection</h3>
+                            <p>Configure validation rules and duplicate detection</p>
                         </div>
                     </div>
                     <div class="settings-card-body">
-                        <div class="setting-row">
-                            <div class="setting-label">
+                        <!-- Duplicate Detection Category -->
+                        <div class="settings-category">
+                            <div class="settings-category-header">
+                                <i class="fas fa-copy"></i>
                                 <span>Duplicate Detection</span>
-                                <small>Flag invoices with matching vendor, amount, and date combinations</small>
                             </div>
-                            <div class="setting-control">
-                                <label class="toggle">
-                                    <input type="checkbox" id="duplicate-detection" checked>
-                                    <span class="toggle-track"><span class="toggle-thumb"></span></span>
-                                </label>
+                            <div class="setting-row">
+                                <div class="setting-label">
+                                    <span>Duplicate Invoice Number</span>
+                                    <small>Flag invoices with matching vendor and invoice number</small>
+                                </div>
+                                <div class="setting-control">
+                                    <label class="toggle">
+                                        <input type="checkbox" id="detect-duplicate-invoice" checked>
+                                        <span class="toggle-track"><span class="toggle-thumb"></span></span>
+                                    </label>
+                                </div>
+                            </div>
+                            <div class="setting-row">
+                                <div class="setting-label">
+                                    <span>Duplicate Payment</span>
+                                    <small>Flag invoices with matching vendor, amount, and date (potential double payment)</small>
+                                </div>
+                                <div class="setting-control">
+                                    <label class="toggle">
+                                        <input type="checkbox" id="detect-duplicate-payment" checked>
+                                        <span class="toggle-track"><span class="toggle-thumb"></span></span>
+                                    </label>
+                                </div>
                             </div>
                         </div>
-                        <div class="setting-row">
-                            <div class="setting-label">
+
+                        <!-- Amount Validation Category -->
+                        <div class="settings-category">
+                            <div class="settings-category-header">
+                                <i class="fas fa-calculator"></i>
                                 <span>Amount Validation</span>
-                                <small>Verify line items sum to the total amount</small>
                             </div>
-                            <div class="setting-control">
-                                <label class="toggle">
-                                    <input type="checkbox" id="amount-validation" checked>
-                                    <span class="toggle-track"><span class="toggle-thumb"></span></span>
-                                </label>
+                            <div class="setting-row">
+                                <div class="setting-label">
+                                    <span>Line Items Total</span>
+                                    <small>Verify line items sum matches the invoice total</small>
+                                </div>
+                                <div class="setting-control">
+                                    <label class="toggle">
+                                        <input type="checkbox" id="validate-line-items-total" checked>
+                                        <span class="toggle-track"><span class="toggle-thumb"></span></span>
+                                    </label>
+                                </div>
+                            </div>
+                            <div class="setting-row">
+                                <div class="setting-label">
+                                    <span>Subtotal + Tax = Total</span>
+                                    <small>Verify subtotal plus tax equals the total amount</small>
+                                </div>
+                                <div class="setting-control">
+                                    <label class="toggle">
+                                        <input type="checkbox" id="validate-subtotal-tax" checked>
+                                        <span class="toggle-track"><span class="toggle-thumb"></span></span>
+                                    </label>
+                                </div>
+                            </div>
+                            <div class="setting-row">
+                                <div class="setting-label">
+                                    <span>Positive Amounts</span>
+                                    <small>Flag negative amounts on invoices (may indicate credit memo)</small>
+                                </div>
+                                <div class="setting-control">
+                                    <label class="toggle">
+                                        <input type="checkbox" id="validate-positive-amounts" checked>
+                                        <span class="toggle-track"><span class="toggle-thumb"></span></span>
+                                    </label>
+                                </div>
+                            </div>
+                            <div class="setting-row">
+                                <div class="setting-label">
+                                    <span>Round Number Detection</span>
+                                    <small>Flag suspiciously round amounts (e.g., exactly $5,000.00)</small>
+                                </div>
+                                <div class="setting-control">
+                                    <label class="toggle">
+                                        <input type="checkbox" id="detect-round-amounts">
+                                        <span class="toggle-track"><span class="toggle-thumb"></span></span>
+                                    </label>
+                                </div>
+                            </div>
+                            <div class="setting-row">
+                                <div class="setting-label">
+                                    <span>Amount Outlier Detection</span>
+                                    <small>Flag amounts significantly higher than vendor's historical average</small>
+                                </div>
+                                <div class="setting-control">
+                                    <label class="toggle">
+                                        <input type="checkbox" id="detect-amount-outlier" checked>
+                                        <span class="toggle-track"><span class="toggle-thumb"></span></span>
+                                    </label>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Date Validation Category -->
+                        <div class="settings-category">
+                            <div class="settings-category-header">
+                                <i class="fas fa-calendar-check"></i>
+                                <span>Date Validation</span>
+                            </div>
+                            <div class="setting-row">
+                                <div class="setting-label">
+                                    <span>Future Invoice Date</span>
+                                    <small>Flag invoices dated in the future</small>
+                                </div>
+                                <div class="setting-control">
+                                    <label class="toggle">
+                                        <input type="checkbox" id="validate-future-date" checked>
+                                        <span class="toggle-track"><span class="toggle-thumb"></span></span>
+                                    </label>
+                                </div>
+                            </div>
+                            <div class="setting-row">
+                                <div class="setting-label">
+                                    <span>Due Date Sequence</span>
+                                    <small>Flag when due date is before invoice date</small>
+                                </div>
+                                <div class="setting-control">
+                                    <label class="toggle">
+                                        <input type="checkbox" id="validate-due-date-sequence" checked>
+                                        <span class="toggle-track"><span class="toggle-thumb"></span></span>
+                                    </label>
+                                </div>
+                            </div>
+                            <div class="setting-row">
+                                <div class="setting-label">
+                                    <span>Stale Invoice Date</span>
+                                    <small>Flag invoices more than 1 year old</small>
+                                </div>
+                                <div class="setting-control">
+                                    <label class="toggle">
+                                        <input type="checkbox" id="validate-stale-date" checked>
+                                        <span class="toggle-track"><span class="toggle-thumb"></span></span>
+                                    </label>
+                                </div>
+                            </div>
+                            <div class="setting-row">
+                                <div class="setting-label">
+                                    <span>Unusual Payment Terms</span>
+                                    <small>Flag payment terms that differ significantly from vendor's norm</small>
+                                </div>
+                                <div class="setting-control">
+                                    <label class="toggle">
+                                        <input type="checkbox" id="detect-unusual-terms" checked>
+                                        <span class="toggle-track"><span class="toggle-thumb"></span></span>
+                                    </label>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Vendor Validation Category -->
+                        <div class="settings-category">
+                            <div class="settings-category-header">
+                                <i class="fas fa-building"></i>
+                                <span>Vendor Validation</span>
+                            </div>
+                            <div class="setting-row">
+                                <div class="setting-label">
+                                    <span>Vendor Not Found</span>
+                                    <small>Flag when vendor cannot be matched to NetSuite records</small>
+                                </div>
+                                <div class="setting-control">
+                                    <label class="toggle">
+                                        <input type="checkbox" id="detect-vendor-not-found" checked>
+                                        <span class="toggle-track"><span class="toggle-thumb"></span></span>
+                                    </label>
+                                </div>
+                            </div>
+                            <div class="setting-row">
+                                <div class="setting-label">
+                                    <span>Low Vendor Confidence</span>
+                                    <small>Flag when vendor match confidence is below 80%</small>
+                                </div>
+                                <div class="setting-control">
+                                    <label class="toggle">
+                                        <input type="checkbox" id="detect-low-vendor-confidence" checked>
+                                        <span class="toggle-track"><span class="toggle-thumb"></span></span>
+                                    </label>
+                                </div>
+                            </div>
+                            <div class="setting-row">
+                                <div class="setting-label">
+                                    <span>Invoice Number Format Change</span>
+                                    <small>Flag when invoice number format differs from vendor's historical pattern</small>
+                                </div>
+                                <div class="setting-control">
+                                    <label class="toggle">
+                                        <input type="checkbox" id="detect-invoice-format-change" checked>
+                                        <span class="toggle-track"><span class="toggle-thumb"></span></span>
+                                    </label>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Required Fields Category -->
+                        <div class="settings-category">
+                            <div class="settings-category-header">
+                                <i class="fas fa-asterisk"></i>
+                                <span>Required Fields</span>
+                            </div>
+                            <div class="setting-row">
+                                <div class="setting-label">
+                                    <span>Invoice Number Required</span>
+                                    <small>Flag when invoice number is missing</small>
+                                </div>
+                                <div class="setting-control">
+                                    <label class="toggle">
+                                        <input type="checkbox" id="require-invoice-number" checked>
+                                        <span class="toggle-track"><span class="toggle-thumb"></span></span>
+                                    </label>
+                                </div>
+                            </div>
+                            <div class="setting-row">
+                                <div class="setting-label">
+                                    <span>Total Amount Required</span>
+                                    <small>Flag when total amount is missing or zero</small>
+                                </div>
+                                <div class="setting-control">
+                                    <label class="toggle">
+                                        <input type="checkbox" id="require-total-amount" checked>
+                                        <span class="toggle-track"><span class="toggle-thumb"></span></span>
+                                    </label>
+                                </div>
                             </div>
                         </div>
                     </div>
