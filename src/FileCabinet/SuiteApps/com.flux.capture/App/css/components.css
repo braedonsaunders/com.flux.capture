@@ -2150,6 +2150,60 @@
     color: var(--text-tertiary);
 }
 
+/* Entity field styles (vendor/employee search) */
+.entity-field {
+    position: relative;
+}
+
+.entity-search-wrapper {
+    position: relative;
+}
+
+.entity-input {
+    padding-right: 40px !important;
+}
+
+.entity-dropdown {
+    position: absolute;
+    top: 100%;
+    left: 0;
+    right: 0;
+    background: var(--surface-card);
+    border: 1px solid var(--border-color);
+    border-top: none;
+    border-radius: 0 0 var(--radius-md) var(--radius-md);
+    max-height: 240px;
+    overflow-y: auto;
+    z-index: 100;
+    box-shadow: var(--shadow-lg);
+}
+
+.entity-option {
+    padding: var(--space-sm) var(--space-md);
+    cursor: pointer;
+    transition: background var(--transition);
+    border-bottom: 1px solid var(--border-color);
+}
+
+.entity-option:last-child {
+    border-bottom: none;
+}
+
+.entity-option:hover,
+.entity-option.highlighted {
+    background: var(--color-primary-bg);
+}
+
+.entity-option-name {
+    font-weight: 500;
+    color: var(--text-primary);
+}
+
+.entity-option-email {
+    font-size: var(--font-size-xs);
+    color: var(--text-tertiary);
+}
+
 /* Editable Line Items Table */
 .line-items-table {
     border: 1px solid var(--border-color);
