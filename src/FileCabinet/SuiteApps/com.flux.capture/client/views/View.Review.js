@@ -49,6 +49,7 @@
         totalPages: 1,
         lineItems: [],
         vendorSuggestions: [],
+        entitySuggestions: [],
         queueIds: [],
         queueIndex: -1,
         isLoading: false,
@@ -643,14 +644,14 @@
                     }
                 });
 
-                // Collect vendor field (special handling - no data-field attribute)
-                var vendorInput = el('#field-vendor');
-                var vendorIdInput = el('#field-vendorId');
-                if (vendorInput) {
-                    bodyFields.entity_display = vendorInput.value || '';
+                // Collect entity field (vendor/employee - special handling - no data-field attribute)
+                var entityInput = el('#field-entity');
+                var entityIdInput = el('#field-entityId');
+                if (entityInput) {
+                    bodyFields.entity_display = entityInput.value || '';
                 }
-                if (vendorIdInput) {
-                    bodyFields.entity = vendorIdInput.value || '';
+                if (entityIdInput) {
+                    bodyFields.entity = entityIdInput.value || '';
                 }
             }
 
@@ -1976,20 +1977,36 @@
                 (unmatchedCount > 0 ? this.renderExtractionPoolDropdown() : '') +
             '</div>';
 
-            // ========== VENDOR SECTION (entity field with search) ==========
-            var isVendorRequired = this.isFieldMandatory('entity', bodyFields);
-            html += '<div class="form-section">' +
-                '<h4><i class="fas fa-building"></i> Vendor</h4>' +
-                '<div class="form-field vendor-field' + (isVendorRequired ? ' is-required' : '') + '">' +
-                    '<label>Vendor Name ' + this.renderConfidenceBadge('vendorName') + (isVendorRequired ? ' <span class="required">*</span>' : '') + '</label>' +
-                    '<div class="vendor-search-wrapper">' +
-                        '<input type="text" id="field-vendor" class="vendor-input" value="' + escapeHtml(doc.vendorName || '') + '" placeholder="Search or enter vendor name..." autocomplete="off">' +
-                        '<div class="vendor-dropdown" id="vendor-dropdown" style="display:none;"></div>' +
+            // ========== ENTITY SECTION (vendor for bills, employee for expense reports) ==========
+            var isEntityRequired = this.isFieldMandatory('entity', bodyFields);
+            var isExpenseReport = this.transactionType === 'expensereport';
+
+            if (isExpenseReport) {
+                // Employee field for expense reports
+                html += '<div class="form-section">' +
+                    '<div class="form-field entity-field employee-field' + (isEntityRequired ? ' is-required' : '') + '">' +
+                        '<label>Employee Name ' + (isEntityRequired ? ' <span class="required">*</span>' : '') + '</label>' +
+                        '<div class="entity-search-wrapper">' +
+                            '<input type="text" id="field-entity" class="entity-input" value="' + escapeHtml(doc.employeeName || '') + '" placeholder="Search or enter employee name..." autocomplete="off">' +
+                            '<div class="entity-dropdown" id="entity-dropdown" style="display:none;"></div>' +
+                        '</div>' +
+                        (doc.employeeId ? '<input type="hidden" id="field-entityId" value="' + doc.employeeId + '">' : '') +
                     '</div>' +
-                    (doc.vendorId ? '<input type="hidden" id="field-vendorId" value="' + doc.vendorId + '">' : '') +
-                    (doc.vendorMatchConfidence ? '<div class="field-match-info"><i class="fas fa-check-circle"></i> Matched with ' + Math.round(doc.vendorMatchConfidence * 100) + '% confidence</div>' : '') +
-                '</div>' +
-            '</div>';
+                '</div>';
+            } else {
+                // Vendor field for vendor bills, credits, POs
+                html += '<div class="form-section">' +
+                    '<div class="form-field entity-field vendor-field' + (isEntityRequired ? ' is-required' : '') + '">' +
+                        '<label>Vendor Name ' + this.renderConfidenceBadge('vendorName') + (isEntityRequired ? ' <span class="required">*</span>' : '') + '</label>' +
+                        '<div class="entity-search-wrapper">' +
+                            '<input type="text" id="field-entity" class="entity-input" value="' + escapeHtml(doc.vendorName || '') + '" placeholder="Search or enter vendor name..." autocomplete="off">' +
+                            '<div class="entity-dropdown" id="entity-dropdown" style="display:none;"></div>' +
+                        '</div>' +
+                        (doc.vendorId ? '<input type="hidden" id="field-entityId" value="' + doc.vendorId + '">' : '') +
+                        (doc.vendorMatchConfidence ? '<div class="field-match-info"><i class="fas fa-check-circle"></i> Matched with ' + Math.round(doc.vendorMatchConfidence * 100) + '% confidence</div>' : '') +
+                    '</div>' +
+                '</div>';
+            }
 
             // ========== RENDER FORM CONTENT ==========
             // If we have tabs (from user config/XML or cached layout), use tabs/groups
@@ -3178,46 +3195,51 @@
                 });
             });
 
-            // Vendor search
-            var vendorInput = el('#field-vendor');
-            if (vendorInput) {
+            // Entity search (vendors for bills, employees for expense reports)
+            var entityInput = el('#field-entity');
+            var isExpenseReport = self.transactionType === 'expensereport';
+            if (entityInput) {
                 var searchTimeout;
-                vendorInput.addEventListener('input', function() {
+                entityInput.addEventListener('input', function() {
                     var query = this.value.trim();
                     clearTimeout(searchTimeout);
                     if (query.length >= 2) {
                         searchTimeout = setTimeout(function() {
-                            self.searchVendors(query);
+                            self.searchEntity(query);
                         }, 300);
                     } else {
-                        self.hideVendorDropdown();
+                        self.hideEntityDropdown();
                     }
-                    self.changes.vendorName = query;
+                    if (isExpenseReport) {
+                        self.changes.employeeName = query;
+                    } else {
+                        self.changes.vendorName = query;
+                    }
                     self.markUnsaved();
                 });
 
-                vendorInput.addEventListener('focus', function() {
-                    if (self.vendorSuggestions.length > 0) {
-                        self.showVendorDropdown();
+                entityInput.addEventListener('focus', function() {
+                    if (self.entitySuggestions && self.entitySuggestions.length > 0) {
+                        self.showEntityDropdown();
                     }
                 });
 
-                vendorInput.addEventListener('blur', function() {
+                entityInput.addEventListener('blur', function() {
                     // Delay hide to allow click on dropdown
                     setTimeout(function() {
-                        self.hideVendorDropdown();
+                        self.hideEntityDropdown();
                     }, 200);
                 });
 
-                // Keyboard navigation for vendor dropdown
-                vendorInput.addEventListener('keydown', function(e) {
-                    var dropdown = el('#vendor-dropdown');
+                // Keyboard navigation for entity dropdown
+                entityInput.addEventListener('keydown', function(e) {
+                    var dropdown = el('#entity-dropdown');
                     if (!dropdown || dropdown.style.display === 'none') return;
 
-                    var options = dropdown.querySelectorAll('.vendor-option');
+                    var options = dropdown.querySelectorAll('.entity-option');
                     if (options.length === 0) return;
 
-                    var highlighted = dropdown.querySelector('.vendor-option.highlighted');
+                    var highlighted = dropdown.querySelector('.entity-option.highlighted');
                     var currentIdx = highlighted ? Array.prototype.indexOf.call(options, highlighted) : -1;
 
                     if (e.key === 'ArrowDown') {
@@ -3237,7 +3259,7 @@
                         highlighted.click();
                     } else if (e.key === 'Escape') {
                         e.preventDefault();
-                        self.hideVendorDropdown();
+                        self.hideEntityDropdown();
                     }
                 });
             }
@@ -4632,33 +4654,60 @@
         },
 
         // ==========================================
-        // VENDOR SEARCH
+        // ENTITY SEARCH (vendors for bills, employees for expense reports)
         // ==========================================
-        searchVendors: function(query) {
+        searchEntity: function(query) {
             var self = this;
+            var isExpenseReport = this.transactionType === 'expensereport';
 
-            API.get('vendors', { query: query })
-                .then(function(vendors) {
-                    self.vendorSuggestions = vendors || [];
-                    if (self.vendorSuggestions.length > 0) {
-                        self.showVendorDropdown();
-                    } else {
-                        self.hideVendorDropdown();
-                    }
-                })
-                .catch(function() {
-                    self.hideVendorDropdown();
-                });
+            if (isExpenseReport) {
+                // Search employees
+                API.get('datasource', { type: 'employees', query: query })
+                    .then(function(response) {
+                        var data = response.data || response;
+                        self.entitySuggestions = data.options || data || [];
+                        if (self.entitySuggestions.length > 0) {
+                            self.showEntityDropdown();
+                        } else {
+                            self.hideEntityDropdown();
+                        }
+                    })
+                    .catch(function() {
+                        self.hideEntityDropdown();
+                    });
+            } else {
+                // Search vendors
+                API.get('vendors', { query: query })
+                    .then(function(vendors) {
+                        self.entitySuggestions = (vendors || []).map(function(v) {
+                            return {
+                                value: v.id,
+                                text: v.companyName || v.entityId,
+                                email: v.email
+                            };
+                        });
+                        if (self.entitySuggestions.length > 0) {
+                            self.showEntityDropdown();
+                        } else {
+                            self.hideEntityDropdown();
+                        }
+                    })
+                    .catch(function() {
+                        self.hideEntityDropdown();
+                    });
+            }
         },
 
-        showVendorDropdown: function() {
-            var dropdown = el('#vendor-dropdown');
+        showEntityDropdown: function() {
+            var dropdown = el('#entity-dropdown');
             if (!dropdown) return;
 
-            var html = this.vendorSuggestions.map(function(v) {
-                return '<div class="vendor-option" data-id="' + v.id + '" data-name="' + escapeHtml(v.companyName || v.entityId) + '">' +
-                    '<div class="vendor-option-name">' + escapeHtml(v.companyName || v.entityId) + '</div>' +
-                    (v.email ? '<div class="vendor-option-email">' + escapeHtml(v.email) + '</div>' : '') +
+            var isExpenseReport = this.transactionType === 'expensereport';
+
+            var html = this.entitySuggestions.map(function(e) {
+                return '<div class="entity-option" data-id="' + e.value + '" data-name="' + escapeHtml(e.text) + '">' +
+                    '<div class="entity-option-name">' + escapeHtml(e.text) + '</div>' +
+                    (e.email ? '<div class="entity-option-email">' + escapeHtml(e.email) + '</div>' : '') +
                 '</div>';
             }).join('');
 
@@ -4666,12 +4715,13 @@
             dropdown.style.display = 'block';
 
             // Bind click handlers
-            dropdown.querySelectorAll('.vendor-option').forEach(function(opt) {
+            var self = this;
+            dropdown.querySelectorAll('.entity-option').forEach(function(opt) {
                 opt.addEventListener('click', function() {
                     var id = this.dataset.id;
                     var name = this.dataset.name;
-                    var input = el('#field-vendor');
-                    var hiddenInput = el('#field-vendorId');
+                    var input = el('#field-entity');
+                    var hiddenInput = el('#field-entityId');
 
                     if (input) input.value = name;
                     if (hiddenInput) {
@@ -4679,24 +4729,28 @@
                     } else {
                         var hidden = document.createElement('input');
                         hidden.type = 'hidden';
-                        hidden.id = 'field-vendorId';
+                        hidden.id = 'field-entityId';
                         hidden.value = id;
                         input.parentNode.appendChild(hidden);
                     }
 
-                    ReviewController.changes.vendorName = name;
-                    ReviewController.changes.vendorId = id;
+                    if (isExpenseReport) {
+                        ReviewController.changes.employeeName = name;
+                        ReviewController.changes.employeeId = id;
+                    } else {
+                        ReviewController.changes.vendorName = name;
+                        ReviewController.changes.vendorId = id;
+                        // Fetch coding suggestions for this vendor
+                        ReviewController.fetchCodingSuggestions(id);
+                    }
                     ReviewController.markUnsaved();
-                    ReviewController.hideVendorDropdown();
-
-                    // Fetch coding suggestions for this vendor
-                    ReviewController.fetchCodingSuggestions(id);
+                    ReviewController.hideEntityDropdown();
                 });
             });
         },
 
-        hideVendorDropdown: function() {
-            var dropdown = el('#vendor-dropdown');
+        hideEntityDropdown: function() {
+            var dropdown = el('#entity-dropdown');
             if (dropdown) dropdown.style.display = 'none';
         },
 
@@ -4761,9 +4815,9 @@
 
             if (headerCount === 0 && lineCount === 0) return;
 
-            // Add indicator after vendor section
-            var vendorSection = el('.vendor-field');
-            if (!vendorSection) return;
+            // Add indicator after entity section
+            var entitySection = el('.entity-field');
+            if (!entitySection) return;
 
             var indicator = document.createElement('div');
             indicator.id = 'suggestions-indicator';
@@ -4785,7 +4839,7 @@
                     '</button>' +
                 '</div>';
 
-            vendorSection.parentNode.insertBefore(indicator, vendorSection.nextSibling);
+            entitySection.parentNode.insertBefore(indicator, entitySection.nextSibling);
 
             // Bind events
             var applyBtn = el('#btn-apply-suggestions');
@@ -5060,11 +5114,13 @@
         // Validate all required fields before approval
         validateRequiredFields: function() {
             var result = { valid: true, message: '', focusElement: null };
+            var isExpenseReport = this.transactionType === 'expensereport';
 
-            // Core required fields - always required
-            var vendorName = el('#field-vendor');
-            if (!vendorName || !vendorName.value.trim()) {
-                return { valid: false, message: 'Vendor name is required', focusElement: vendorName };
+            // Core required fields - always required (vendor for bills, employee for expense reports)
+            var entityName = el('#field-entity');
+            if (!entityName || !entityName.value.trim()) {
+                var entityLabel = isExpenseReport ? 'Employee' : 'Vendor';
+                return { valid: false, message: entityLabel + ' name is required', focusElement: entityName };
             }
 
             var totalAmount = el('#field-totalAmount');
@@ -7174,6 +7230,7 @@
             this.rotation = 0;
             this.lineItems = [];
             this.vendorSuggestions = [];
+            this.entitySuggestions = [];
             this.queueIds = [];
             this.queueIndex = -1;
             this.codingSuggestions = { headerDefaults: {}, lineItemSuggestions: [], meta: { hasLearning: false } };
