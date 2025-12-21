@@ -6097,15 +6097,15 @@ tr.doc-row.deleting::after {
     position: absolute;
     right: 16px;
     top: 50%;
-    transform: translateY(-50%);
+    margin-top: -9px;
     width: 18px;
     height: 18px;
     border: 2px solid var(--gray-300);
     border-top-color: var(--color-danger);
     border-radius: 50%;
-    animation: spin 0.8s linear infinite;
+    animation: delete-spin 0.8s linear infinite;
 }
-@keyframes spin { to { transform: translateY(-50%) rotate(360deg); } }
+@keyframes delete-spin { to { transform: rotate(360deg); } }
 
 /* Bulk delete loading overlay */
 .bulk-actions-bar.deleting {
@@ -6120,16 +6120,15 @@ tr.doc-row.deleting::after {
     position: absolute;
     left: 10px;
     top: 50%;
-    transform: translateY(-50%);
+    margin-top: -7px;
     width: 14px;
     height: 14px;
     border: 2px solid rgba(255, 255, 255, 0.3);
     border-top-color: white;
     border-radius: 50%;
-    animation: spin-white 0.8s linear infinite;
+    animation: delete-spin 0.8s linear infinite;
 }
 .bulk-actions-bar.deleting .bulk-buttons .btn-danger i { display: none; }
-@keyframes spin-white { to { transform: translateY(-50%) rotate(360deg); } }
 
 .bulk-delete-progress {
     display: flex;
@@ -6144,7 +6143,7 @@ tr.doc-row.deleting::after {
     border: 2px solid rgba(255, 255, 255, 0.3);
     border-top-color: white;
     border-radius: 50%;
-    animation: spin-white 0.8s linear infinite;
+    animation: delete-spin 0.8s linear infinite;
 }
 
 /* Inbox Zero State */
