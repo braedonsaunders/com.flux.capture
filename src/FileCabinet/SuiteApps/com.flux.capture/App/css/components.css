@@ -3505,13 +3505,14 @@
     transform: scaleX(1.5);
 }
 
-/* Bottom section: Sublists full width (1/3 height) */
+/* Bottom section: Sublists full width - flex container for proper height distribution */
 .view-review.split-view .review-bottom-section {
     min-height: 200px;
-    max-height: 40%;
     border-top: none;
     background: var(--surface-card);
-    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden; /* Prevent overflow, children will scroll */
 }
 
 .view-review.split-view .review-bottom-section .line-section,
@@ -3527,26 +3528,30 @@
     margin-top: 0;
 }
 
-/* Make bottom section and children expand to fill available height */
-.view-review.split-view .review-bottom-section {
-    display: flex;
-    flex-direction: column;
-}
-
+/* Make line-section expand to fill available height */
 .view-review.split-view .review-bottom-section .line-section {
     flex: 1;
     display: flex;
     flex-direction: column;
-    min-height: 0; /* Allow shrinking below content height */
+    min-height: 0;
+    overflow: hidden;
 }
 
+/* Sublist tabs should not shrink */
+.view-review.split-view .review-bottom-section .sublist-tabs {
+    flex-shrink: 0;
+}
+
+/* Active sublist container expands to fill space */
 .view-review.split-view .review-bottom-section .sublist-container.active {
     flex: 1;
     display: flex;
     flex-direction: column;
     min-height: 0;
+    overflow: hidden;
 }
 
+/* Line items table expands, footer stays at bottom */
 .view-review.split-view .review-bottom-section .line-items-table {
     flex: 1;
     display: flex;
@@ -3555,10 +3560,23 @@
     overflow: hidden;
 }
 
+/* Table wrapper is the scrollable area */
 .view-review.split-view .review-bottom-section .sublist-table-wrapper {
     flex: 1;
     overflow-y: auto;
+    overflow-x: auto;
     min-height: 0;
+}
+
+/* Total line stays at bottom of line-items-table */
+.view-review.split-view .review-bottom-section .line-items-total {
+    flex-shrink: 0;
+    padding: var(--space-xs) 0;
+}
+
+/* Footer stays at bottom of sublist-container */
+.view-review.split-view .review-bottom-section .sublist-footer {
+    flex-shrink: 0;
 }
 
 /* Hide sublists from extraction panel when in split view - they're moved to bottom */
