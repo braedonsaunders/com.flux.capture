@@ -2835,53 +2835,64 @@
             }
             var inputId = 'line-' + sublistId + '-' + idx + '-' + fieldId;
 
+            // Fill handle element - appears on cell hover/focus
+            var fillHandle = '<div class="fill-handle" title="Drag to fill cells below"></div>' +
+                '<button type="button" class="fill-menu-btn" title="Fill options"><i class="fas fa-ellipsis-v"></i></button>';
+
             // Detect if this is a select field (by type or by known field ID)
             var isSelectField = field.type === 'select' || this.isSelectField(normalizedFieldId);
 
             // Select field with inline options - render simple select dropdown
             if (isSelectField && field.options && field.options.length > 0) {
-                var html = '<td class="select-cell">' +
+                var html = '<td class="select-cell fill-cell" data-field="' + fieldId + '" data-row="' + idx + '" data-sublist="' + sublistId + '">' +
                     '<select class="line-input" id="' + inputId + '" data-field="' + fieldId + '">' +
                     '<option value="">--</option>';
                 field.options.forEach(function(opt) {
                     var selected = (String(value) === String(opt.value)) ? ' selected' : '';
                     html += '<option value="' + escapeHtml(opt.value) + '"' + selected + '>' + escapeHtml(opt.text) + '</option>';
                 });
-                html += '</select></td>';
+                html += '</select>' + fillHandle + '</td>';
                 return html;
             }
             // Select field requiring API lookup (large list like account, customer, item)
             else if (isSelectField) {
                 var lookupType = this.getLookupType(field.id, sublistId);
-                var html = '<td class="select-cell">' +
+                var html = '<td class="select-cell fill-cell" data-field="' + field.id + '" data-row="' + idx + '" data-sublist="' + sublistId + '">' +
                     '<div class="typeahead-select" data-field="' + field.id + '" data-lookup="' + lookupType + '">' +
                     '<input type="hidden" class="line-input" id="' + inputId + '" value="' + escapeHtml(value) + '" data-field="' + field.id + '">' +
                     '<input type="text" class="typeahead-input line-input" id="' + inputId + '-display" ' +
                         'value="' + escapeHtml(displayValue || value) + '" placeholder="Search ' + escapeHtml(field.label) + '..." ' +
                         'data-field="' + field.id + '" data-lookup="' + lookupType + '" autocomplete="off">' +
                     '<div class="typeahead-dropdown"></div>' +
-                    '</div></td>';
+                    '</div>' + fillHandle + '</td>';
                 return html;
             }
             // Currency/amount fields
             else if (field.type === 'currency' || field.id === 'amount' || field.id === 'rate') {
-                return '<td><input type="number" step="0.01" class="line-input line-amount" id="' + inputId + '" value="' + (parseFloat(value) || 0).toFixed(2) + '" data-field="' + field.id + '"></td>';
+                return '<td class="fill-cell" data-field="' + field.id + '" data-row="' + idx + '" data-sublist="' + sublistId + '">' +
+                    '<input type="number" step="0.01" class="line-input line-amount" id="' + inputId + '" value="' + (parseFloat(value) || 0).toFixed(2) + '" data-field="' + field.id + '">' +
+                    fillHandle + '</td>';
             }
             // Integer/quantity fields
             else if (field.type === 'integer' || field.id === 'quantity') {
-                return '<td><input type="number" step="1" class="line-input line-qty" id="' + inputId + '" value="' + (parseInt(value) || 0) + '" data-field="' + field.id + '"></td>';
+                return '<td class="fill-cell" data-field="' + field.id + '" data-row="' + idx + '" data-sublist="' + sublistId + '">' +
+                    '<input type="number" step="1" class="line-input line-qty" id="' + inputId + '" value="' + (parseInt(value) || 0) + '" data-field="' + field.id + '">' +
+                    fillHandle + '</td>';
             }
             // Checkbox fields - handle same as header-level checkboxes
             else if (field.type === 'checkbox' || this.isCheckboxField(normalizedFieldId, field.type)) {
                 var isChecked = value === 'T' || value === true || value === 'true' || value === '1';
-                return '<td class="checkbox-cell"><label class="checkbox-label">' +
+                return '<td class="checkbox-cell fill-cell" data-field="' + fieldId + '" data-row="' + idx + '" data-sublist="' + sublistId + '">' +
+                    '<label class="checkbox-label">' +
                     '<input type="checkbox" class="line-input line-checkbox" id="' + inputId + '" ' +
                     'data-field="' + fieldId + '"' + (isChecked ? ' checked' : '') + '>' +
-                    '</label></td>';
+                    '</label>' + fillHandle + '</td>';
             }
             // Default text input
             else {
-                return '<td><input type="text" class="line-input" id="' + inputId + '" value="' + escapeHtml(value) + '" data-field="' + field.id + '"></td>';
+                return '<td class="fill-cell" data-field="' + field.id + '" data-row="' + idx + '" data-sublist="' + sublistId + '">' +
+                    '<input type="text" class="line-input" id="' + inputId + '" value="' + escapeHtml(value) + '" data-field="' + field.id + '">' +
+                    fillHandle + '</td>';
             }
         },
 
@@ -3499,6 +3510,9 @@
 
             // ========== BODY FIELD TYPEAHEAD HANDLERS ==========
             this.bindBodyFieldTypeahead();
+
+            // ========== SMART FILL (Column Copy) HANDLERS ==========
+            this.bindSmartFill();
         },
 
         // Bind typeahead handlers for body field selects
@@ -3652,6 +3666,621 @@
                 }
                 this.markUnsaved();
             }
+        },
+
+        // ==========================================
+        // SMART FILL - Column Value Copy Feature
+        // ==========================================
+
+        // Undo state for fill operations
+        fillUndoState: null,
+
+        // Active fill state during drag
+        fillDragState: null,
+
+        // Bind Smart Fill event handlers
+        bindSmartFill: function() {
+            var self = this;
+            var lineSections = document.querySelectorAll('.line-section');
+
+            lineSections.forEach(function(lineSection) {
+                // ========== FILL HANDLE DOUBLE-CLICK (auto-fill all below) ==========
+                lineSection.addEventListener('dblclick', function(e) {
+                    var fillHandle = e.target.closest('.fill-handle');
+                    if (!fillHandle) return;
+
+                    e.preventDefault();
+                    var cell = fillHandle.closest('.fill-cell');
+                    if (!cell) return;
+
+                    self.fillDown(cell, true);
+                });
+
+                // ========== FILL HANDLE DRAG ==========
+                lineSection.addEventListener('mousedown', function(e) {
+                    var fillHandle = e.target.closest('.fill-handle');
+                    if (!fillHandle) return;
+
+                    e.preventDefault();
+                    var cell = fillHandle.closest('.fill-cell');
+                    if (!cell) return;
+
+                    self.startFillDrag(cell, e);
+                });
+
+                // ========== FILL MENU BUTTON ==========
+                lineSection.addEventListener('click', function(e) {
+                    var menuBtn = e.target.closest('.fill-menu-btn');
+                    if (!menuBtn) return;
+
+                    e.preventDefault();
+                    e.stopPropagation();
+                    var cell = menuBtn.closest('.fill-cell');
+                    if (!cell) return;
+
+                    self.showFillPopover(cell);
+                });
+
+                // ========== KEYBOARD SHORTCUTS ==========
+                lineSection.addEventListener('keydown', function(e) {
+                    // Only handle when focused on a line input
+                    var input = e.target.closest('.line-input');
+                    if (!input) return;
+
+                    var cell = input.closest('.fill-cell');
+                    if (!cell) return;
+
+                    // Ctrl+D - Fill down to next row
+                    if (e.ctrlKey && e.key === 'd') {
+                        e.preventDefault();
+                        self.fillDown(cell, false);
+                        return;
+                    }
+
+                    // Ctrl+Shift+D - Fill down to all rows
+                    if (e.ctrlKey && e.shiftKey && e.key === 'D') {
+                        e.preventDefault();
+                        self.fillDown(cell, true);
+                        return;
+                    }
+                });
+            });
+
+            // Global mouse move/up for fill drag
+            document.addEventListener('mousemove', function(e) {
+                if (!self.fillDragState) return;
+                self.updateFillDrag(e);
+            });
+
+            document.addEventListener('mouseup', function(e) {
+                if (!self.fillDragState) return;
+                self.endFillDrag(e);
+            });
+
+            // Close popover on outside click
+            document.addEventListener('click', function(e) {
+                if (!e.target.closest('.fill-popover') && !e.target.closest('.fill-menu-btn')) {
+                    self.hideFillPopover();
+                }
+            });
+
+            // Close popover on Escape
+            document.addEventListener('keydown', function(e) {
+                if (e.key === 'Escape') {
+                    self.hideFillPopover();
+                }
+            });
+        },
+
+        // Start fill drag operation
+        startFillDrag: function(sourceCell, e) {
+            var sublistId = sourceCell.dataset.sublist;
+            var fieldId = sourceCell.dataset.field;
+            var sourceRow = parseInt(sourceCell.dataset.row, 10);
+
+            // Get the source value
+            var valueData = this.getCellValue(sourceCell);
+
+            this.fillDragState = {
+                sourceCell: sourceCell,
+                sublistId: sublistId,
+                fieldId: fieldId,
+                sourceRow: sourceRow,
+                valueData: valueData,
+                targetRows: [],
+                indicator: null
+            };
+
+            // Mark source cell
+            sourceCell.classList.add('fill-source');
+
+            // Create indicator element
+            var indicator = document.createElement('div');
+            indicator.className = 'fill-indicator';
+            indicator.style.left = (e.clientX + 12) + 'px';
+            indicator.style.top = (e.clientY + 12) + 'px';
+            indicator.textContent = '0 rows';
+            document.body.appendChild(indicator);
+            this.fillDragState.indicator = indicator;
+
+            // Prevent text selection during drag
+            document.body.style.userSelect = 'none';
+        },
+
+        // Update fill drag (mouse move)
+        updateFillDrag: function(e) {
+            var state = this.fillDragState;
+            if (!state) return;
+
+            // Update indicator position
+            if (state.indicator) {
+                state.indicator.style.left = (e.clientX + 12) + 'px';
+                state.indicator.style.top = (e.clientY + 12) + 'px';
+            }
+
+            // Find the cell under cursor
+            var elemUnder = document.elementFromPoint(e.clientX, e.clientY);
+            var cellUnder = elemUnder ? elemUnder.closest('.fill-cell') : null;
+
+            // Clear previous targets
+            document.querySelectorAll('.fill-target').forEach(function(el) {
+                el.classList.remove('fill-target');
+            });
+            document.querySelectorAll('.fill-target-row').forEach(function(el) {
+                el.classList.remove('fill-target-row');
+            });
+
+            state.targetRows = [];
+
+            if (!cellUnder) {
+                if (state.indicator) state.indicator.textContent = '0 rows';
+                return;
+            }
+
+            // Must be same sublist and same field
+            if (cellUnder.dataset.sublist !== state.sublistId ||
+                cellUnder.dataset.field !== state.fieldId) {
+                if (state.indicator) state.indicator.textContent = '0 rows';
+                return;
+            }
+
+            var targetRow = parseInt(cellUnder.dataset.row, 10);
+            if (isNaN(targetRow) || targetRow <= state.sourceRow) {
+                if (state.indicator) state.indicator.textContent = '0 rows';
+                return;
+            }
+
+            // Highlight all rows from source+1 to target
+            var container = document.querySelector('#sublist-' + state.sublistId);
+            if (!container) return;
+
+            for (var i = state.sourceRow + 1; i <= targetRow; i++) {
+                var row = container.querySelector('tr[data-idx="' + i + '"]');
+                if (row) {
+                    row.classList.add('fill-target-row');
+                    var cell = row.querySelector('.fill-cell[data-field="' + state.fieldId + '"]');
+                    if (cell) {
+                        cell.classList.add('fill-target');
+                        state.targetRows.push(i);
+                    }
+                }
+            }
+
+            // Update indicator
+            var count = state.targetRows.length;
+            if (state.indicator) {
+                state.indicator.textContent = count + ' row' + (count === 1 ? '' : 's');
+            }
+        },
+
+        // End fill drag (mouse up)
+        endFillDrag: function(e) {
+            var state = this.fillDragState;
+            if (!state) return;
+
+            // Remove indicator
+            if (state.indicator) {
+                state.indicator.remove();
+            }
+
+            // Remove visual states
+            document.body.style.userSelect = '';
+            state.sourceCell.classList.remove('fill-source');
+            document.querySelectorAll('.fill-target').forEach(function(el) {
+                el.classList.remove('fill-target');
+            });
+            document.querySelectorAll('.fill-target-row').forEach(function(el) {
+                el.classList.remove('fill-target-row');
+            });
+
+            // Apply fill if we have targets
+            if (state.targetRows.length > 0) {
+                this.applyFill(state.sublistId, state.fieldId, state.valueData, state.targetRows);
+            }
+
+            this.fillDragState = null;
+        },
+
+        // Get value data from a cell (handles all types)
+        getCellValue: function(cell) {
+            var result = { value: '', display: '', isCheckbox: false, employeeData: null };
+
+            // Check for checkbox
+            var checkbox = cell.querySelector('.line-checkbox');
+            if (checkbox) {
+                result.value = checkbox.checked ? 'T' : 'F';
+                result.isCheckbox = true;
+                return result;
+            }
+
+            // Check for typeahead (select with API lookup)
+            var typeahead = cell.querySelector('.typeahead-select');
+            if (typeahead) {
+                var hiddenInput = typeahead.querySelector('input[type="hidden"]');
+                var displayInput = typeahead.querySelector('.typeahead-input');
+                result.value = hiddenInput ? hiddenInput.value : '';
+                result.display = displayInput ? displayInput.value : '';
+
+                // Check for employee data
+                var fieldId = cell.dataset.field;
+                var row = cell.closest('tr');
+                var sublistId = cell.dataset.sublist;
+                if (row && this.sublistData && this.sublistData[sublistId]) {
+                    var idx = parseInt(row.dataset.idx, 10);
+                    var lineData = this.sublistData[sublistId][idx];
+                    if (lineData && lineData[fieldId + '_employeeData']) {
+                        result.employeeData = lineData[fieldId + '_employeeData'];
+                    }
+                }
+                return result;
+            }
+
+            // Check for regular select
+            var select = cell.querySelector('select.line-input');
+            if (select) {
+                result.value = select.value;
+                result.display = select.options[select.selectedIndex] ?
+                    select.options[select.selectedIndex].text : '';
+                return result;
+            }
+
+            // Default: regular input
+            var input = cell.querySelector('.line-input');
+            if (input) {
+                result.value = input.value;
+            }
+
+            return result;
+        },
+
+        // Set value in a cell (handles all types)
+        setCellValue: function(cell, valueData) {
+            var fieldId = cell.dataset.field;
+            var row = cell.closest('tr');
+            var sublistId = cell.dataset.sublist;
+            var idx = row ? parseInt(row.dataset.idx, 10) : -1;
+
+            // Handle checkbox
+            var checkbox = cell.querySelector('.line-checkbox');
+            if (checkbox) {
+                checkbox.checked = valueData.value === 'T';
+                this.updateSublistLine(sublistId, idx, fieldId, valueData.value === 'T', true);
+                return;
+            }
+
+            // Handle typeahead
+            var typeahead = cell.querySelector('.typeahead-select');
+            if (typeahead) {
+                var hiddenInput = typeahead.querySelector('input[type="hidden"]');
+                var displayInput = typeahead.querySelector('.typeahead-input');
+                if (hiddenInput) hiddenInput.value = valueData.value;
+                if (displayInput) displayInput.value = valueData.display || valueData.value;
+
+                // Update sublist data
+                if (this.sublistData && this.sublistData[sublistId] && this.sublistData[sublistId][idx]) {
+                    this.sublistData[sublistId][idx][fieldId] = valueData.value;
+                    this.sublistData[sublistId][idx][fieldId + '_display'] = valueData.display || valueData.value;
+                    if (valueData.employeeData) {
+                        this.sublistData[sublistId][idx][fieldId + '_employeeData'] = valueData.employeeData;
+                    }
+                }
+                this.changes[sublistId + 'Lines'] = this.sublistData[sublistId];
+                this.markUnsaved();
+                return;
+            }
+
+            // Handle select
+            var select = cell.querySelector('select.line-input');
+            if (select) {
+                select.value = valueData.value;
+                this.updateSublistLine(sublistId, idx, fieldId, valueData.value);
+                return;
+            }
+
+            // Handle regular input
+            var input = cell.querySelector('.line-input');
+            if (input) {
+                input.value = valueData.value;
+                this.updateSublistLine(sublistId, idx, fieldId, valueData.value);
+            }
+        },
+
+        // Apply fill to target rows
+        applyFill: function(sublistId, fieldId, valueData, targetRows) {
+            var self = this;
+
+            // Store undo state
+            var prevValues = [];
+            var container = document.querySelector('#sublist-' + sublistId);
+            if (!container) return;
+
+            targetRows.forEach(function(rowIdx) {
+                var cell = container.querySelector('.fill-cell[data-field="' + fieldId + '"][data-row="' + rowIdx + '"]');
+                if (cell) {
+                    prevValues.push({
+                        row: rowIdx,
+                        value: self.getCellValue(cell)
+                    });
+                }
+            });
+
+            this.fillUndoState = {
+                sublistId: sublistId,
+                fieldId: fieldId,
+                prevValues: prevValues,
+                newValue: valueData
+            };
+
+            // Apply the fill
+            targetRows.forEach(function(rowIdx) {
+                var cell = container.querySelector('.fill-cell[data-field="' + fieldId + '"][data-row="' + rowIdx + '"]');
+                if (cell) {
+                    self.setCellValue(cell, valueData);
+
+                    // Brief highlight animation
+                    cell.style.transition = 'background 0.3s ease';
+                    cell.style.background = 'rgba(99, 102, 241, 0.15)';
+                    setTimeout(function() {
+                        cell.style.background = '';
+                        cell.style.transition = '';
+                    }, 300);
+                }
+            });
+
+            // Show toast with undo
+            var count = targetRows.length;
+            this.showFillToast('Filled ' + count + ' row' + (count === 1 ? '' : 's'));
+        },
+
+        // Fill down from current cell
+        fillDown: function(sourceCell, fillAll) {
+            var sublistId = sourceCell.dataset.sublist;
+            var fieldId = sourceCell.dataset.field;
+            var sourceRow = parseInt(sourceCell.dataset.row, 10);
+            var valueData = this.getCellValue(sourceCell);
+
+            if (!this.sublistData || !this.sublistData[sublistId]) return;
+
+            var totalRows = this.sublistData[sublistId].length;
+            var targetRows = [];
+
+            if (fillAll) {
+                // Fill to all rows below
+                for (var i = sourceRow + 1; i < totalRows; i++) {
+                    targetRows.push(i);
+                }
+            } else {
+                // Fill to next row only
+                if (sourceRow + 1 < totalRows) {
+                    targetRows.push(sourceRow + 1);
+                }
+            }
+
+            if (targetRows.length > 0) {
+                this.applyFill(sublistId, fieldId, valueData, targetRows);
+            }
+        },
+
+        // Fill all rows in column
+        fillAllRows: function(cell) {
+            var sublistId = cell.dataset.sublist;
+            var fieldId = cell.dataset.field;
+            var sourceRow = parseInt(cell.dataset.row, 10);
+            var valueData = this.getCellValue(cell);
+
+            if (!this.sublistData || !this.sublistData[sublistId]) return;
+
+            var totalRows = this.sublistData[sublistId].length;
+            var targetRows = [];
+
+            for (var i = 0; i < totalRows; i++) {
+                if (i !== sourceRow) {
+                    targetRows.push(i);
+                }
+            }
+
+            if (targetRows.length > 0) {
+                this.applyFill(sublistId, fieldId, valueData, targetRows);
+            }
+            this.hideFillPopover();
+        },
+
+        // Fill rows below current cell
+        fillRowsBelow: function(cell) {
+            this.fillDown(cell, true);
+            this.hideFillPopover();
+        },
+
+        // Fill empty cells only
+        fillEmptyCells: function(cell) {
+            var self = this;
+            var sublistId = cell.dataset.sublist;
+            var fieldId = cell.dataset.field;
+            var valueData = this.getCellValue(cell);
+
+            if (!this.sublistData || !this.sublistData[sublistId]) return;
+
+            var container = document.querySelector('#sublist-' + sublistId);
+            if (!container) return;
+
+            var totalRows = this.sublistData[sublistId].length;
+            var targetRows = [];
+            var sourceRow = parseInt(cell.dataset.row, 10);
+
+            for (var i = 0; i < totalRows; i++) {
+                if (i === sourceRow) continue;
+
+                var targetCell = container.querySelector('.fill-cell[data-field="' + fieldId + '"][data-row="' + i + '"]');
+                if (targetCell) {
+                    var cellValue = this.getCellValue(targetCell);
+                    if (!cellValue.value || cellValue.value === '' || cellValue.value === '0' || cellValue.value === '0.00') {
+                        targetRows.push(i);
+                    }
+                }
+            }
+
+            if (targetRows.length > 0) {
+                this.applyFill(sublistId, fieldId, valueData, targetRows);
+            } else {
+                UI.toast('No empty cells to fill', 'info');
+            }
+            this.hideFillPopover();
+        },
+
+        // Undo last fill operation
+        undoFill: function() {
+            var self = this;
+            var state = this.fillUndoState;
+            if (!state) {
+                UI.toast('Nothing to undo', 'info');
+                return;
+            }
+
+            var container = document.querySelector('#sublist-' + state.sublistId);
+            if (!container) return;
+
+            state.prevValues.forEach(function(pv) {
+                var cell = container.querySelector('.fill-cell[data-field="' + state.fieldId + '"][data-row="' + pv.row + '"]');
+                if (cell) {
+                    self.setCellValue(cell, pv.value);
+                }
+            });
+
+            UI.toast('Fill undone', 'success');
+            this.fillUndoState = null;
+        },
+
+        // Show fill popover menu
+        showFillPopover: function(cell) {
+            var self = this;
+
+            // Remove any existing popover
+            this.hideFillPopover();
+
+            var popover = document.createElement('div');
+            popover.className = 'fill-popover';
+            popover.innerHTML =
+                '<div class="fill-popover-header">Fill Options</div>' +
+                '<button type="button" class="fill-popover-option" data-action="all">' +
+                    '<i class="fas fa-arrows-alt-v"></i> Apply to all rows' +
+                '</button>' +
+                '<button type="button" class="fill-popover-option" data-action="below">' +
+                    '<i class="fas fa-arrow-down"></i> Apply to rows below' +
+                    '<span class="shortcut">Ctrl+Shift+D</span>' +
+                '</button>' +
+                '<button type="button" class="fill-popover-option" data-action="empty">' +
+                    '<i class="fas fa-border-none"></i> Apply to empty cells only' +
+                '</button>' +
+                '<div class="fill-popover-divider"></div>' +
+                '<button type="button" class="fill-popover-option" data-action="undo">' +
+                    '<i class="fas fa-undo"></i> Undo last fill' +
+                '</button>';
+
+            cell.appendChild(popover);
+
+            // Position adjustment if needed
+            requestAnimationFrame(function() {
+                popover.classList.add('visible');
+            });
+
+            // Handle clicks
+            popover.addEventListener('click', function(e) {
+                var option = e.target.closest('.fill-popover-option');
+                if (!option) return;
+
+                var action = option.dataset.action;
+                switch (action) {
+                    case 'all':
+                        self.fillAllRows(cell);
+                        break;
+                    case 'below':
+                        self.fillRowsBelow(cell);
+                        break;
+                    case 'empty':
+                        self.fillEmptyCells(cell);
+                        break;
+                    case 'undo':
+                        self.undoFill();
+                        self.hideFillPopover();
+                        break;
+                }
+            });
+        },
+
+        // Hide fill popover
+        hideFillPopover: function() {
+            var existing = document.querySelector('.fill-popover');
+            if (existing) {
+                existing.classList.remove('visible');
+                setTimeout(function() {
+                    if (existing.parentNode) {
+                        existing.parentNode.removeChild(existing);
+                    }
+                }, 150);
+            }
+        },
+
+        // Show toast with undo button for fill operations
+        showFillToast: function(message) {
+            var self = this;
+
+            // Create custom toast with undo
+            var toastContainer = document.querySelector('.toast-container');
+            if (!toastContainer) {
+                toastContainer = document.createElement('div');
+                toastContainer.className = 'toast-container';
+                document.body.appendChild(toastContainer);
+            }
+
+            var toast = document.createElement('div');
+            toast.className = 'toast toast-success';
+            toast.innerHTML =
+                '<span>' + message + '</span>' +
+                '<button type="button" class="toast-undo">Undo</button>';
+
+            toastContainer.appendChild(toast);
+
+            // Handle undo click
+            var undoBtn = toast.querySelector('.toast-undo');
+            undoBtn.addEventListener('click', function() {
+                self.undoFill();
+                toast.remove();
+            });
+
+            // Auto-remove after 5 seconds
+            setTimeout(function() {
+                toast.style.opacity = '0';
+                toast.style.transform = 'translateX(100%)';
+                setTimeout(function() {
+                    if (toast.parentNode) toast.remove();
+                }, 300);
+            }, 5000);
+
+            // Animate in
+            requestAnimationFrame(function() {
+                toast.style.opacity = '1';
+                toast.style.transform = 'translateX(0)';
+            });
         },
 
         // Apply AI suggestion to a field
@@ -7235,6 +7864,10 @@
             this.queueIndex = -1;
             this.codingSuggestions = { headerDefaults: {}, lineItemSuggestions: [], meta: { hasLearning: false } };
             this.suggestionsApplied = false;
+            // Smart Fill cleanup
+            this.fillUndoState = null;
+            this.fillDragState = null;
+            this.hideFillPopover();
         }
     };
 
