@@ -24,12 +24,11 @@ define([
     'N/record',
     'N/file',
     'N/search',
-    'N/log',
     'N/runtime',
     'N/task',
     '/SuiteApps/com.flux.capture/lib/FC_Engine',
     '/SuiteApps/com.flux.capture/lib/utils/PDFUtils'
-], function(record, file, search, log, runtime, task, FC_Engine, PDFUtils) {
+], function(record, file, search, runtime, task, FC_Engine, PDFUtils) {
 
     'use strict';
 
@@ -74,7 +73,6 @@ define([
                 }
             }
         } catch (e) {
-            log.debug('loadSettings', 'No saved settings found: ' + e.message);
         }
         return {};
     }
@@ -84,8 +82,6 @@ define([
      * Includes both new PENDING docs and PROCESSING docs that need continued polling.
      */
     function getInputData() {
-        log.audit('FC_ProcessDocuments', 'Starting document processing job');
-
         // Search for:
         // 1. PENDING documents (new, need Azure submission)
         // 2. PROCESSING documents with operation URL (need continued polling)
@@ -169,11 +165,6 @@ define([
 
             // For synchronous providers (Mindee, OCI), use the traditional flow
             if (!supportsAsyncPolling) {
-                log.audit('FC_ProcessDocuments.map.sync', {
-                    documentId: documentId,
-                    provider: provider.getProviderName ? provider.getProviderName() : 'unknown'
-                });
-
                 // Mark as processing
                 record.submitFields({
                     type: 'customrecord_flux_document',
@@ -261,13 +252,6 @@ define([
                 const fileName = fileObj.name.toLowerCase();
                 const isPDF = fileName.endsWith('.pdf');
 
-                log.audit('FC_ProcessDocuments.map.submit', {
-                    documentId: documentId,
-                    fileName: fileObj.name,
-                    isPDF: isPDF,
-                    maxExtractionPages: maxExtractionPages
-                });
-
                 // For PDFs with page limit, chunk before sending to Azure
                 let contentToSubmit = null;
                 let wasChunked = false;
@@ -280,12 +264,6 @@ define([
                     if (PDFUtils.isPDF(fileContent)) {
                         const pageCount = PDFUtils.countPages(fileContent);
 
-                        log.audit('FC_ProcessDocuments.map.pdfAnalysis', {
-                            documentId: documentId,
-                            pageCount: pageCount,
-                            maxExtractionPages: maxExtractionPages
-                        });
-
                         if (pageCount > maxExtractionPages) {
                             // Chunk the PDF to first N pages
                             const chunkResult = PDFUtils.extractFirstPages(fileContent, maxExtractionPages);
@@ -295,16 +273,7 @@ define([
                                 wasChunked = true;
                                 originalPageCount = chunkResult.originalPageCount;
 
-                                log.audit('FC_ProcessDocuments.map.pdfChunked', {
-                                    documentId: documentId,
-                                    originalPages: originalPageCount,
-                                    chunkedTo: maxExtractionPages
-                                });
                             } else if (!chunkResult.success) {
-                                log.error('FC_ProcessDocuments.map.chunkError', {
-                                    documentId: documentId,
-                                    error: chunkResult.error
-                                });
                                 // Fall through to submit original file
                             }
                         }
@@ -356,18 +325,14 @@ define([
 
             if (pollResult.status === 'succeeded') {
                 // Phase 3: Process the extraction result
-                log.audit('FC_ProcessDocuments.map.succeeded', {
-                    documentId: documentId,
-                    totalAttempts: newPollCount
-                });
-
                 const startTime = Date.now();
 
                 // Use FC_Engine to process the raw result
                 const result = engine.processWithRawResult(pollResult.result, {
                     documentType: documentType,
                     enableVendorMatching: true,
-                    maxExtractionPages: maxExtractionPages
+                    maxExtractionPages: maxExtractionPages,
+                    fileId: fileId
                 });
 
                 const processingTime = Date.now() - startTime;
@@ -419,12 +384,6 @@ define([
 
             } else if (pollResult.status === 'running') {
                 // Still running - save state for next MR run
-                log.audit('FC_ProcessDocuments.map.stillRunning', {
-                    documentId: documentId,
-                    pollCount: newPollCount,
-                    needsContinuation: true
-                });
-
                 record.submitFields({
                     type: 'customrecord_flux_document',
                     id: documentId,
@@ -444,12 +403,6 @@ define([
 
             } else {
                 // Failed (timeout or error)
-                log.error('FC_ProcessDocuments.map.failed', {
-                    documentId: documentId,
-                    error: pollResult.error,
-                    totalAttempts: newPollCount
-                });
-
                 record.submitFields({
                     type: 'customrecord_flux_document',
                     id: documentId,
@@ -468,12 +421,6 @@ define([
             }
 
         } catch (e) {
-            log.error('FC_ProcessDocuments.map.exception', {
-                documentId: documentId,
-                error: e.message,
-                stack: e.stack
-            });
-
             try {
                 record.submitFields({
                     type: 'customrecord_flux_document',
@@ -486,7 +433,6 @@ define([
                     }
                 });
             } catch (updateErr) {
-                log.error('FC_ProcessDocuments.map.updateError', updateErr);
             }
 
             context.write({
@@ -566,9 +512,6 @@ define([
      * NOTE: This function does NOT self-trigger another MR run!
      */
     function summarize(summary) {
-        // VERSION CHECK: If you see this in logs, correct code is deployed
-        log.audit('FC_ProcessDocuments.summarize.version', 'v4.3.0 - NO SELF-TRIGGER');
-
         let processed = 0;
         let succeeded = 0;
         let failed = 0;
@@ -589,33 +532,9 @@ define([
             }
             return true;
         });
-
-        log.audit('FC_ProcessDocuments.summarize', {
-            totalProcessed: processed,
-            succeeded: succeeded,
-            failed: failed,
-            skipped: skipped,
-            needsContinuation: needsContinuation,
-            totalTime: summary.seconds + 's'
-        });
-
-        // Log any errors
-        summary.mapSummary.errors.iterator().each(function(key, error) {
-            log.error('FC_ProcessDocuments.mapError', {
-                documentId: key,
-                error: error
-            });
-            return true;
-        });
-
         // Chain to Scheduled Script if any documents need continued polling
         // Using SS instead of self-chaining avoids "no idle deployment" errors
         if (needsContinuation > 0) {
-            log.audit('FC_ProcessDocuments.summarize.triggerSS', {
-                needsContinuation: needsContinuation,
-                triggeringScheduledScript: true
-            });
-
             try {
                 // Create a task for the continuation polling Scheduled Script
                 // This is a DIFFERENT script, so no deployment conflict
@@ -626,19 +545,9 @@ define([
                 });
 
                 const taskId = ssTask.submit();
-
-                log.audit('FC_ProcessDocuments.summarize.ssTriggered', {
-                    taskId: taskId,
-                    forDocuments: needsContinuation
-                });
-
             } catch (chainErr) {
                 // If we can't trigger SS (e.g., task already queued), that's OK
                 // The SS can be triggered again later or manually
-                log.error('FC_ProcessDocuments.summarize.ssError', {
-                    message: chainErr.message,
-                    note: 'Continuation polling will resume when SS is next triggered'
-                });
             }
         }
 
@@ -650,12 +559,6 @@ define([
         // (i.e., this MR run produced output). If nothing was processed, skip chaining so
         // a single stuck/queued document does not trigger endless MR runs.
         if (pendingCount > 0 && processed > 0) {
-            log.audit('FC_ProcessDocuments.summarize.newPending', {
-                pendingDocuments: pendingCount,
-                triggeringAnotherMRRun: true,
-                processedThisRun: processed
-            });
-
             try {
                 const mrTask = task.create({
                     taskType: task.TaskType.MAP_REDUCE,
@@ -665,25 +568,10 @@ define([
 
                 const taskId = mrTask.submit();
 
-                log.audit('FC_ProcessDocuments.summarize.mrChained', {
-                    taskId: taskId,
-                    forPendingDocuments: pendingCount
-                });
-
             } catch (chainErr) {
                 // Expected if MR deployment is queued - that's fine, docs will be picked up
-                log.debug('FC_ProcessDocuments.summarize.mrChainSkipped', {
-                    message: chainErr.message,
-                    note: 'MR already queued or will be triggered by next upload'
-                });
             }
         } else if (pendingCount > 0) {
-            // Log that we intentionally skipped chaining to avoid a zero-work loop
-            log.audit('FC_ProcessDocuments.summarize.newPending.noChain', {
-                pendingDocuments: pendingCount,
-                processedThisRun: processed,
-                note: 'Skipping MR chain because no records were processed in this run'
-            });
         }
     }
 
