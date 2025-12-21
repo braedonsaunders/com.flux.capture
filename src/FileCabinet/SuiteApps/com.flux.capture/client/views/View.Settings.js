@@ -2281,6 +2281,10 @@
                     }
                     return result;
                 });
+                // Sort options alphabetically by text
+                normalized.sort(function(a, b) {
+                    return (a.text || '').localeCompare(b.text || '');
+                });
                 callback(normalized.slice(0, 10));
             }).catch(function() {
                 callback([]);
