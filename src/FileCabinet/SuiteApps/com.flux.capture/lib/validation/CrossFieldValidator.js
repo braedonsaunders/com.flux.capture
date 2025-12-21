@@ -114,12 +114,13 @@ define(['N/log'], function(log) {
         /**
          * Validate all fields
          * @param {Object} extraction - Extracted document data
-         * @param {Object} context - Validation context
+         * @param {Object} context - Validation context (enableAmountValidation, etc.)
          * @returns {Object} Validation result
          */
         validate(extraction, context = {}) {
             const issues = [];
             const fields = extraction.fields || {};
+            const enableAmountValidation = context.enableAmountValidation !== false;
 
             // Add line items to fields for validation
             const allFields = {
@@ -127,8 +128,16 @@ define(['N/log'], function(log) {
                 lineItems: extraction.lineItems || []
             };
 
+            // Amount validation rules that can be disabled
+            const amountRules = ['subtotal_tax_total', 'line_items_total', 'positive_amounts'];
+
             // Run all validation rules
             for (const rule of this.validationRules) {
+                // Skip amount validation rules if disabled
+                if (!enableAmountValidation && amountRules.includes(rule.name)) {
+                    continue;
+                }
+
                 // Check if required fields exist
                 const hasRequiredFields = rule.fields.some(f =>
                     allFields[f] !== null && allFields[f] !== undefined

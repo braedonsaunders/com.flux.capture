@@ -2372,12 +2372,19 @@ define([
             if (!EngineModule.FluxCaptureEngine) {
                 throw new Error('Document processing engine not available');
             }
-            var engine = new EngineModule.FluxCaptureEngine();
+
+            // Load settings for anomaly detection options
+            var settingsResult = getSettings();
+            var settings = settingsResult.success ? settingsResult.data : {};
+
+            var engine = new EngineModule.FluxCaptureEngine({
+                duplicateDetection: settings.duplicateDetection !== false,
+                amountValidation: settings.amountValidation !== false
+            });
             var startTime = Date.now();
 
             var result = engine.processDocument(fileId, {
                 documentType: documentType,
-                enableFraudDetection: true,
                 enableLearning: true
             });
 

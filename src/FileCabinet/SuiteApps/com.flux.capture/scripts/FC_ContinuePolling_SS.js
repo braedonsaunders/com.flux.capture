@@ -126,8 +126,11 @@ define([
             documentsFound: docsToProcess.length
         });
 
-        // Initialize engine for processing results
-        const engine = new FC_Engine.FluxCaptureEngine();
+        // Initialize engine for processing results with settings
+        const engine = new FC_Engine.FluxCaptureEngine({
+            duplicateDetection: settings.duplicateDetection !== false,
+            amountValidation: settings.amountValidation !== false
+        });
         const provider = engine.getExtractionProvider();
 
         let processedCount = 0;
@@ -288,8 +291,6 @@ define([
                     const processed = engine.processWithRawResult(normalizedResult, {
                         documentType: doc.documentType,
                         enableVendorMatching: true,
-                        enableAnomalyDetection: true,
-                        enableFraudDetection: true,
                         maxExtractionPages: maxExtractionPages
                     });
 

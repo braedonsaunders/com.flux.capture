@@ -102,7 +102,11 @@ define([
     class FluxCaptureEngine {
         constructor(options = {}) {
             this.enableLearning = options.enableLearning !== false;
-            this.enableFraudDetection = options.enableFraudDetection !== false;
+            // Support both old name (enableFraudDetection) and new name (enableAnomalyDetection)
+            this.enableAnomalyDetection = (options.enableAnomalyDetection !== false) && (options.enableFraudDetection !== false);
+            // Specific detection settings (default to true if anomaly detection is enabled)
+            this.enableDuplicateDetection = options.duplicateDetection !== false;
+            this.enableAmountValidation = options.amountValidation !== false;
 
             // Initialize intelligent modules
             this.aliasManager = new AliasManagerModule.AliasManager();
@@ -221,12 +225,14 @@ define([
                     );
                 }
 
-                // Stage 5: Cross-field validation
-                const validation = this.crossFieldValidator.validate(extractionResult);
+                // Stage 5: Cross-field validation (respects amountValidation setting)
+                const validation = this.crossFieldValidator.validate(extractionResult, {
+                    enableAmountValidation: this.enableAmountValidation
+                });
 
                 // Stage 6: Anomaly detection if enabled
                 let anomalies = [];
-                if (this.enableFraudDetection) {
+                if (this.enableAnomalyDetection) {
                     anomalies = this._detectAnomalies(extractionResult, vendorMatch, validation);
                 }
 
@@ -327,12 +333,14 @@ define([
                     );
                 }
 
-                // Stage 5: Cross-field validation
-                const validation = this.crossFieldValidator.validate(extractionResult);
+                // Stage 5: Cross-field validation (respects amountValidation setting)
+                const validation = this.crossFieldValidator.validate(extractionResult, {
+                    enableAmountValidation: this.enableAmountValidation
+                });
 
                 // Stage 6: Anomaly detection if enabled
                 let anomalies = [];
-                if (this.enableFraudDetection) {
+                if (this.enableAnomalyDetection) {
                     anomalies = this._detectAnomalies(extractionResult, vendorMatch, validation);
                 }
 
@@ -1119,8 +1127,8 @@ define([
                 });
             }
 
-            // Duplicate invoice check
-            if (vendorMatch.vendorId && fields.invoiceNumber) {
+            // Duplicate invoice check (respects enableDuplicateDetection setting)
+            if (this.enableDuplicateDetection && vendorMatch.vendorId && fields.invoiceNumber) {
                 const isDuplicate = this._checkDuplicateInvoice(vendorMatch.vendorId, fields.invoiceNumber);
                 if (isDuplicate) {
                     anomalies.push({

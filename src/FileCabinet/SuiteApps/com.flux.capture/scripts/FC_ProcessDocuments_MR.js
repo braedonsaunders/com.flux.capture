@@ -159,12 +159,15 @@ define([
                 }
             }
 
-            // Load settings to get maxExtractionPages
+            // Load settings for processing options
             const settings = loadSettings();
             const maxExtractionPages = settings.maxExtractionPages || 0;
 
-            // Initialize engine and get provider
-            const engine = new FC_Engine.FluxCaptureEngine();
+            // Initialize engine with settings
+            const engine = new FC_Engine.FluxCaptureEngine({
+                duplicateDetection: settings.duplicateDetection !== false,
+                amountValidation: settings.amountValidation !== false
+            });
             const provider = engine.getExtractionProvider();
 
             // Check if provider supports async polling (Azure) or is synchronous (Mindee, OCI)
@@ -193,8 +196,6 @@ define([
                 const result = engine.processDocument(fileId, {
                     documentType: documentType,
                     enableVendorMatching: true,
-                    enableAnomalyDetection: true,
-                    enableFraudDetection: true,
                     enableLearning: true,
                     maxExtractionPages: maxExtractionPages
                 });
@@ -373,8 +374,6 @@ define([
                 const result = engine.processWithRawResult(pollResult.result, {
                     documentType: documentType,
                     enableVendorMatching: true,
-                    enableAnomalyDetection: true,
-                    enableFraudDetection: true,
                     maxExtractionPages: maxExtractionPages
                 });
 
