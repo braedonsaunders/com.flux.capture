@@ -6,12 +6,18 @@
  * Flux Capture - Document Processing Map/Reduce
  * Processes documents asynchronously with self-chaining for long-running extractions.
  *
+ * VERSION: 4.3.0 - 2024-12-21 - NO SELF-TRIGGER
+ * IMPORTANT: This version does NOT self-trigger MR runs.
+ * summarize() only chains to FC_ContinuePolling_SS (Scheduled Script).
+ *
+ * v4.3: Fixed infinite loop bug - removed self-triggering MR logic.
+ *       summarize() ONLY triggers Scheduled Script for continuation.
  * v4.2: Implements async polling architecture to handle batch uploads without
- * exceeding governance limits. Documents are processed in phases:
- * 1. PENDING → Submit to Azure, poll with limit, save state if still running
- * 2. PROCESSING (with operation URL) → Continue polling from saved state
- * 3. When complete → Process with FC_Engine, set to NEEDS_REVIEW
- * 4. summarize() chains another MR run if any docs still need polling
+ *       exceeding governance limits. Documents are processed in phases:
+ *       1. PENDING → Submit to Azure, poll with limit, save state if still running
+ *       2. PROCESSING (with operation URL) → Continue polling from saved state
+ *       3. When complete → Process with FC_Engine, set to NEEDS_REVIEW
+ *       4. summarize() chains to SS if any docs still need polling (NOT MR!)
  */
 
 define([
@@ -556,9 +562,13 @@ define([
     }
 
     /**
-     * Summarize results and chain another MR run if needed
+     * Summarize results and chain to Scheduled Script if needed
+     * NOTE: This function does NOT self-trigger another MR run!
      */
     function summarize(summary) {
+        // VERSION CHECK: If you see this in logs, correct code is deployed
+        log.audit('FC_ProcessDocuments.summarize.version', 'v4.3.0 - NO SELF-TRIGGER');
+
         let processed = 0;
         let succeeded = 0;
         let failed = 0;
