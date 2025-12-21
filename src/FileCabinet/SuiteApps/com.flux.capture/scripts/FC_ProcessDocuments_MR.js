@@ -551,6 +551,11 @@ define([
         extractedDataObj._vendorMatch = extraction.vendorMatch;
         extractedDataObj._extractedAt = new Date().toISOString();
 
+        // Include AI verification data if present
+        if (extraction.aiVerification) {
+            extractedDataObj.aiVerification = extraction.aiVerification;
+        }
+
         updateValues['custrecord_flux_extracted_data'] = JSON.stringify(extractedDataObj);
 
         // Currency

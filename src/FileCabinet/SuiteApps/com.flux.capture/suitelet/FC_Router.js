@@ -473,6 +473,8 @@ define([
             anomalies: anomalies,
             extractedData: extractedData,
             formData: formData,
+            // Extract aiVerification from extractedData for easy access by Review UI
+            aiVerification: extractedData.aiVerification || null,
             amountValidated: docRecord.getValue('custrecord_flux_amount_validated'),
             createdTransaction: docRecord.getValue('custrecord_flux_created_transaction'),
             source: docRecord.getValue('custrecord_flux_source'),
