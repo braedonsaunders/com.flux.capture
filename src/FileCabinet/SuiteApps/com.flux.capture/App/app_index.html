@@ -1705,6 +1705,101 @@
                             </div>
                         </div>
                     </div>
+
+                    <!-- AI Verification Settings -->
+                    <div class="settings-card settings-card-large">
+                        <div class="settings-card-header">
+                            <i class="fas fa-wand-magic-sparkles"></i>
+                            <div>
+                                <h3>AI Verification <span class="provider-badge badge-pro">Beta</span></h3>
+                                <p>Use Gemini 3 Flash to verify and enhance OCR extraction accuracy</p>
+                            </div>
+                        </div>
+                        <div class="settings-card-body">
+                            <div class="ai-verification-intro">
+                                <p>AI Verification analyzes the actual PDF document and compares it against OCR extraction to catch errors, find missed fields, and validate amounts.</p>
+                            </div>
+
+                            <div class="setting-row">
+                                <div class="setting-label">
+                                    <span>Enable AI Verification</span>
+                                    <small>When enabled, Gemini 3 Flash will verify extractions based on trigger settings</small>
+                                </div>
+                                <div class="setting-control">
+                                    <label class="toggle">
+                                        <input type="checkbox" id="llm-enabled">
+                                        <span class="toggle-track"><span class="toggle-thumb"></span></span>
+                                    </label>
+                                </div>
+                            </div>
+
+                            <!-- LLM Config Panel (shown when enabled) -->
+                            <div class="llm-config-panel" id="llm-config-panel" style="display:none;">
+                                <div class="form-field">
+                                    <label for="llm-api-key">
+                                        Gemini API Key <span class="required">*</span>
+                                    </label>
+                                    <div class="input-with-icon">
+                                        <input type="password" id="llm-api-key" placeholder="Enter your Gemini API key" autocomplete="new-password">
+                                        <button type="button" class="btn-icon btn-toggle-password" id="btn-toggle-llm-api-key" title="Show/Hide">
+                                            <i class="fas fa-eye"></i>
+                                        </button>
+                                    </div>
+                                    <small>Get your API key from <a href="https://aistudio.google.com/apikey" target="_blank">Google AI Studio</a>. Key is encrypted before storage.</small>
+                                </div>
+
+                                <div class="provider-config-actions" style="margin-bottom: 16px;">
+                                    <button class="btn btn-secondary" id="btn-test-llm">
+                                        <i class="fas fa-plug"></i> Test Connection
+                                    </button>
+                                    <span class="test-result" id="llm-test-result"></span>
+                                </div>
+
+                                <div class="setting-row">
+                                    <div class="setting-label">
+                                        <span>When to Verify</span>
+                                        <small>Control when AI verification runs on documents</small>
+                                    </div>
+                                    <div class="setting-control">
+                                        <select id="llm-trigger-mode">
+                                            <option value="smart">Smart - Only low-confidence extractions</option>
+                                            <option value="always">Always - Every document</option>
+                                            <option value="manual">Manual - Only when requested</option>
+                                        </select>
+                                    </div>
+                                </div>
+
+                                <div class="setting-row" id="llm-threshold-row">
+                                    <div class="setting-label">
+                                        <span>Confidence Threshold</span>
+                                        <small>Run AI verification when OCR confidence is below this value</small>
+                                    </div>
+                                    <div class="setting-control">
+                                        <div class="input-with-suffix">
+                                            <input type="number" id="llm-smart-threshold" min="0" max="100" value="70" style="width: 80px; text-align: center;">
+                                            <span class="input-suffix">%</span>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div class="setting-row">
+                                    <div class="setting-label">
+                                        <span>Max Pages per Document</span>
+                                        <small>Limit pages sent to AI (reduces cost for large documents)</small>
+                                    </div>
+                                    <div class="setting-control">
+                                        <input type="number" id="llm-max-pages" min="1" max="100" value="20" style="width: 80px; text-align: center;">
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="provider-save-row">
+                                <button class="btn btn-primary" id="btn-save-llm">
+                                    <i class="fas fa-save"></i> Save AI Verification Settings
+                                </button>
+                            </div>
+                        </div>
+                    </div>
                 </div>
             </div>
 

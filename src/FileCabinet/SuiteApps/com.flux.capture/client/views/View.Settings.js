@@ -416,6 +416,66 @@
                     self.saveEmailAddress();
                 });
             }
+
+            // ==========================================
+            // LLM (AI VERIFICATION) EVENT BINDINGS
+            // ==========================================
+
+            // LLM Enable toggle
+            var llmEnabledToggle = el('#llm-enabled');
+            if (llmEnabledToggle) {
+                llmEnabledToggle.addEventListener('change', function() {
+                    self.toggleLLMPanel(this.checked);
+                });
+            }
+
+            // Toggle LLM API key visibility
+            var toggleLlmApiKeyBtn = el('#btn-toggle-llm-api-key');
+            if (toggleLlmApiKeyBtn) {
+                toggleLlmApiKeyBtn.addEventListener('click', function() {
+                    var input = el('#llm-api-key');
+                    var icon = this.querySelector('i');
+                    if (input.type === 'password') {
+                        input.type = 'text';
+                        icon.classList.remove('fa-eye');
+                        icon.classList.add('fa-eye-slash');
+                    } else {
+                        input.type = 'password';
+                        icon.classList.remove('fa-eye-slash');
+                        icon.classList.add('fa-eye');
+                    }
+                });
+            }
+
+            // LLM Trigger mode change - show/hide threshold row
+            var llmTriggerMode = el('#llm-trigger-mode');
+            if (llmTriggerMode) {
+                llmTriggerMode.addEventListener('change', function() {
+                    var thresholdRow = el('#llm-threshold-row');
+                    if (thresholdRow) {
+                        thresholdRow.style.display = this.value === 'smart' ? 'flex' : 'none';
+                    }
+                });
+            }
+
+            // Test LLM connection
+            var testLlmBtn = el('#btn-test-llm');
+            if (testLlmBtn) {
+                testLlmBtn.addEventListener('click', function() {
+                    self.testLLMConnection();
+                });
+            }
+
+            // Save LLM settings
+            var saveLlmBtn = el('#btn-save-llm');
+            if (saveLlmBtn) {
+                saveLlmBtn.addEventListener('click', function() {
+                    self.saveLLMSettings();
+                });
+            }
+
+            // Load LLM config on init
+            this.loadLLMConfig();
         },
 
         // ==========================================
@@ -3274,12 +3334,217 @@
                 });
         },
 
+        // ==========================================
+        // LLM (AI VERIFICATION) SETTINGS
+        // ==========================================
+
+        llmConfig: null,
+
+        loadLLMConfig: function() {
+            var self = this;
+
+            API.get('llmconfig')
+                .then(function(result) {
+                    var config = result.data || result;
+                    self.llmConfig = config;
+
+                    // Update UI with loaded config
+                    var enabledToggle = el('#llm-enabled');
+                    var apiKeyInput = el('#llm-api-key');
+                    var triggerModeSelect = el('#llm-trigger-mode');
+                    var thresholdInput = el('#llm-smart-threshold');
+                    var maxPagesInput = el('#llm-max-pages');
+                    var thresholdRow = el('#llm-threshold-row');
+                    var configPanel = el('#llm-config-panel');
+
+                    if (enabledToggle) {
+                        enabledToggle.checked = config.enabled === true;
+                    }
+
+                    if (configPanel) {
+                        configPanel.style.display = config.enabled ? 'block' : 'none';
+                    }
+
+                    if (apiKeyInput && config._hasApiKey) {
+                        apiKeyInput.placeholder = 'API key configured (enter new to replace)';
+                    }
+
+                    if (triggerModeSelect && config.triggerMode) {
+                        triggerModeSelect.value = config.triggerMode;
+                    }
+
+                    if (thresholdRow) {
+                        thresholdRow.style.display = config.triggerMode === 'smart' ? 'flex' : 'none';
+                    }
+
+                    if (thresholdInput && config.smartThreshold) {
+                        thresholdInput.value = Math.round(config.smartThreshold * 100);
+                    }
+
+                    if (maxPagesInput && config.maxPages) {
+                        maxPagesInput.value = config.maxPages;
+                    }
+                })
+                .catch(function(err) {
+                    console.warn('Could not load LLM config:', err);
+                });
+        },
+
+        toggleLLMPanel: function(enabled) {
+            var configPanel = el('#llm-config-panel');
+            if (configPanel) {
+                if (enabled) {
+                    configPanel.style.display = 'block';
+                    configPanel.style.opacity = '0';
+                    configPanel.style.transform = 'translateY(-10px)';
+                    requestAnimationFrame(function() {
+                        configPanel.style.transition = 'opacity 0.3s ease, transform 0.3s ease';
+                        configPanel.style.opacity = '1';
+                        configPanel.style.transform = 'translateY(0)';
+                    });
+                } else {
+                    configPanel.style.display = 'none';
+                }
+            }
+        },
+
+        testLLMConnection: function() {
+            var self = this;
+            var btn = el('#btn-test-llm');
+            var resultEl = el('#llm-test-result');
+            var apiKey = (el('#llm-api-key').value || '').trim();
+
+            // If no API key entered, check if one exists
+            if (!apiKey && self.llmConfig && self.llmConfig._hasApiKey) {
+                if (resultEl) {
+                    resultEl.innerHTML = '<i class="fas fa-info-circle" style="color:var(--color-info);"></i> Enter a new API key to test';
+                }
+                return;
+            }
+
+            if (!apiKey) {
+                if (resultEl) {
+                    resultEl.innerHTML = '<i class="fas fa-times-circle" style="color:var(--color-danger);"></i> Please enter an API key';
+                }
+                return;
+            }
+
+            // Show loading state
+            if (btn) {
+                btn.disabled = true;
+                btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Testing...';
+            }
+            if (resultEl) {
+                resultEl.innerHTML = '';
+            }
+
+            API.post('testllm', { apiKey: apiKey })
+                .then(function(result) {
+                    if (btn) {
+                        btn.disabled = false;
+                        btn.innerHTML = '<i class="fas fa-plug"></i> Test Connection';
+                    }
+
+                    if (result.success && result.data && result.data.connected) {
+                        if (resultEl) {
+                            resultEl.innerHTML = '<i class="fas fa-check-circle" style="color:var(--color-success);"></i> Connected! ' +
+                                (result.data.availableModels ? result.data.availableModels + ' models available' : '');
+                        }
+                    } else {
+                        if (resultEl) {
+                            resultEl.innerHTML = '<i class="fas fa-times-circle" style="color:var(--color-danger);"></i> ' +
+                                (result.message || 'Connection failed');
+                        }
+                    }
+                })
+                .catch(function(err) {
+                    if (btn) {
+                        btn.disabled = false;
+                        btn.innerHTML = '<i class="fas fa-plug"></i> Test Connection';
+                    }
+                    if (resultEl) {
+                        resultEl.innerHTML = '<i class="fas fa-times-circle" style="color:var(--color-danger);"></i> ' +
+                            (err.message || 'Connection failed');
+                    }
+                });
+        },
+
+        saveLLMSettings: function() {
+            var self = this;
+            var btn = el('#btn-save-llm');
+
+            var enabled = el('#llm-enabled')?.checked || false;
+            var apiKey = (el('#llm-api-key')?.value || '').trim();
+            var triggerMode = el('#llm-trigger-mode')?.value || 'smart';
+            var smartThreshold = parseInt(el('#llm-smart-threshold')?.value || '70', 10) / 100;
+            var maxPages = parseInt(el('#llm-max-pages')?.value || '20', 10);
+
+            // Validate if enabling
+            if (enabled && !apiKey && !(self.llmConfig && self.llmConfig._hasApiKey)) {
+                UI.toast('API key is required to enable AI Verification', 'warning');
+                return;
+            }
+
+            // Disable button during save
+            if (btn) {
+                btn.disabled = true;
+                btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Saving...';
+            }
+
+            var configData = {
+                enabled: enabled,
+                triggerMode: triggerMode,
+                smartThreshold: smartThreshold,
+                maxPages: maxPages,
+                _preserveApiKey: !apiKey && self.llmConfig && self.llmConfig._hasApiKey
+            };
+
+            // Only include API key if a new one was entered
+            if (apiKey) {
+                configData.apiKey = apiKey;
+            }
+
+            API.put('llmconfig', configData)
+                .then(function(result) {
+                    if (btn) {
+                        btn.disabled = false;
+                        btn.innerHTML = '<i class="fas fa-save"></i> Save AI Verification Settings';
+                    }
+
+                    UI.toast('AI Verification settings saved', 'success');
+
+                    // Clear API key input after save
+                    var apiKeyInput = el('#llm-api-key');
+                    if (apiKeyInput && apiKey) {
+                        apiKeyInput.value = '';
+                        apiKeyInput.placeholder = 'API key configured (enter new to replace)';
+                    }
+
+                    // Update local config
+                    self.llmConfig = {
+                        enabled: enabled,
+                        triggerMode: triggerMode,
+                        smartThreshold: smartThreshold,
+                        maxPages: maxPages,
+                        _hasApiKey: !!(apiKey || (self.llmConfig && self.llmConfig._hasApiKey))
+                    };
+                })
+                .catch(function(err) {
+                    if (btn) {
+                        btn.disabled = false;
+                        btn.innerHTML = '<i class="fas fa-save"></i> Save AI Verification Settings';
+                    }
+                    UI.toast('Failed to save: ' + (err.message || 'Unknown error'), 'error');
+                });
+        },
+
         cleanup: function() {
             this.formConfig = null;
             this.editedConfig = null;
             this.parsedXml = null;
             this.xmlSelections = {};
             this.emailInboxConfig = null;
+            this.llmConfig = null;
         }
     };
 
