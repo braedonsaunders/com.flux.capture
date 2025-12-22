@@ -53,6 +53,8 @@ define([
          * @param {string} config.triggerMode - When to run: 'always', 'smart', 'manual'
          * @param {number} config.smartThreshold - Confidence threshold for smart mode (0-1)
          * @param {number} config.maxPages - Maximum pages to send to API
+         * @param {boolean} config.autoApplyCorrections - Auto-apply high-confidence corrections
+         * @param {number} config.autoApplyThreshold - Confidence threshold for auto-apply (0-1)
          */
         constructor(config = {}) {
             this.enabled = config.enabled || false;
@@ -62,6 +64,9 @@ define([
             this.smartThreshold = config.smartThreshold || 0.70;
             this.maxPages = config.maxPages || 20;
             this.skipFileSizeMB = config.skipFileSizeMB || 25;
+            // Auto-apply settings - AI can directly update fields
+            this.autoApplyCorrections = config.autoApplyCorrections !== false; // Default: true
+            this.autoApplyThreshold = config.autoApplyThreshold || 0.85; // High confidence threshold
 
             // Build endpoint URL
             this.endpoint = `${GEMINI_API_BASE}/models/${this.model}:generateContent`;
@@ -488,6 +493,68 @@ ${formFieldsSection}${vendorHistorySection}
             const enhanced = JSON.parse(JSON.stringify(originalResult));
             const extraction = enhanced.extraction || enhanced;
             const verification = verificationResult.verification || {};
+            const corrections = verificationResult.corrections || [];
+            const missedFields = verificationResult.missedFields || [];
+
+            // Separate corrections into auto-applied and suggestions based on confidence
+            const autoApplied = [];
+            const suggestedCorrections = [];
+            const suggestedMissedFields = [];
+
+            // Auto-apply high-confidence corrections
+            if (this.autoApplyCorrections) {
+                extraction.fields = extraction.fields || {};
+
+                for (const correction of corrections) {
+                    const confidence = correction.confidence || 0;
+                    if (confidence >= this.autoApplyThreshold) {
+                        // Auto-apply this correction
+                        const fieldKey = this._normalizeFieldKey(correction.field);
+                        const oldValue = extraction.fields[fieldKey];
+                        extraction.fields[fieldKey] = correction.correct;
+                        autoApplied.push({
+                            field: correction.field,
+                            oldValue: oldValue || correction.extracted,
+                            value: correction.correct,
+                            confidence: confidence,
+                            reason: correction.reason || 'AI verification detected discrepancy'
+                        });
+                        log.audit('GeminiVerifier', `Auto-applied correction: ${correction.field} = ${correction.correct} (confidence: ${confidence})`);
+                    } else {
+                        // Keep as suggestion
+                        suggestedCorrections.push(correction);
+                    }
+                }
+
+                // Auto-apply high-confidence missed fields
+                for (const missed of missedFields) {
+                    const confidence = missed.confidence || 0;
+                    const importance = missed.importance || 'optional';
+                    // Auto-apply if high confidence AND critical/important
+                    if (confidence >= this.autoApplyThreshold && (importance === 'critical' || importance === 'important')) {
+                        const fieldKey = this._normalizeFieldKey(missed.field);
+                        if (!extraction.fields[fieldKey]) {
+                            extraction.fields[fieldKey] = missed.value;
+                            autoApplied.push({
+                                field: missed.field,
+                                oldValue: null,
+                                value: missed.value,
+                                confidence: confidence,
+                                reason: missed.location ? `Found at: ${missed.location}` : 'AI detected missing field'
+                            });
+                            log.audit('GeminiVerifier', `Auto-added missed field: ${missed.field} = ${missed.value} (confidence: ${confidence})`);
+                        } else {
+                            suggestedMissedFields.push(missed);
+                        }
+                    } else {
+                        suggestedMissedFields.push(missed);
+                    }
+                }
+            } else {
+                // If auto-apply is disabled, all corrections become suggestions
+                suggestedCorrections.push(...corrections);
+                suggestedMissedFields.push(...missedFields);
+            }
 
             // Add AI verification metadata with enhanced fields
             extraction.aiVerification = {
@@ -498,9 +565,11 @@ ${formFieldsSection}${vendorHistorySection}
                 riskScore: verification.riskScore || 'low',
                 recommendation: verification.recommendation || 'review',
                 summary: verification.summary || null,
-                // Actionable items
-                corrections: verificationResult.corrections || [],
-                missedFields: verificationResult.missedFields || [],
+                // Auto-applied items (already applied to fields)
+                autoApplied: autoApplied,
+                // Suggested items (require user action)
+                corrections: suggestedCorrections,
+                missedFields: suggestedMissedFields,
                 lineItemIssues: verificationResult.lineItemIssues || [],
                 validationFlags: verificationResult.validationFlags || [],
                 // Enhanced data
@@ -516,7 +585,6 @@ ${formFieldsSection}${vendorHistorySection}
                 if (terms.dueDate && !extraction.fields?.dueDate) {
                     extraction.fields = extraction.fields || {};
                     extraction.fields.dueDate = terms.dueDate;
-                    extraction.aiVerification.autoApplied = extraction.aiVerification.autoApplied || [];
                     extraction.aiVerification.autoApplied.push({
                         field: 'dueDate',
                         value: terms.dueDate,
@@ -548,6 +616,54 @@ ${formFieldsSection}${vendorHistorySection}
             }
 
             return enhanced;
+        }
+
+        /**
+         * Normalize field key from AI response to extraction field format
+         * @private
+         */
+        _normalizeFieldKey(field) {
+            if (!field) return field;
+            // Map common AI field names to extraction field keys
+            const fieldMap = {
+                'invoiceNumber': 'invoiceNumber',
+                'invoice_number': 'invoiceNumber',
+                'Invoice Number': 'invoiceNumber',
+                'invoiceDate': 'invoiceDate',
+                'invoice_date': 'invoiceDate',
+                'Invoice Date': 'invoiceDate',
+                'dueDate': 'dueDate',
+                'due_date': 'dueDate',
+                'Due Date': 'dueDate',
+                'totalAmount': 'totalAmount',
+                'total_amount': 'totalAmount',
+                'Total': 'totalAmount',
+                'Total Amount': 'totalAmount',
+                'subtotal': 'subtotal',
+                'Subtotal': 'subtotal',
+                'taxAmount': 'taxAmount',
+                'tax_amount': 'taxAmount',
+                'Tax': 'taxAmount',
+                'Tax Amount': 'taxAmount',
+                'poNumber': 'poNumber',
+                'po_number': 'poNumber',
+                'PO Number': 'poNumber',
+                'Purchase Order': 'poNumber',
+                'vendorName': 'vendorName',
+                'vendor_name': 'vendorName',
+                'Vendor': 'vendorName',
+                'Vendor Name': 'vendorName',
+                'currency': 'currency',
+                'Currency': 'currency',
+                'paymentTerms': 'paymentTerms',
+                'payment_terms': 'paymentTerms',
+                'Payment Terms': 'paymentTerms',
+                'Terms': 'paymentTerms',
+                'memo': 'memo',
+                'Memo': 'memo',
+                'Description': 'memo'
+            };
+            return fieldMap[field] || field;
         }
     }
 
