@@ -5927,26 +5927,6 @@
                 }
             }
 
-            // Validate at least one line item exists
-            // Use collectFormData to get filtered sublists (same logic used for saving)
-            var formData = this.collectFormData();
-            var hasLineItems = false;
-            if (formData.sublists) {
-                Object.keys(formData.sublists).forEach(function(key) {
-                    if (formData.sublists[key] && formData.sublists[key].length > 0) {
-                        hasLineItems = true;
-                    }
-                });
-            }
-            if (!hasLineItems) {
-                var sublistSection = el('.line-section');
-                return {
-                    valid: false,
-                    message: 'At least one line item is required',
-                    focusElement: sublistSection
-                };
-            }
-
             return result;
         },
 
