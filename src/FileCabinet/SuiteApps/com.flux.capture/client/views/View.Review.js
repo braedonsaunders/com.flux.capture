@@ -5928,16 +5928,12 @@
             }
 
             // Validate at least one line item exists
+            // Use collectFormData to get filtered sublists (same logic used for saving)
+            var formData = this.collectFormData();
             var hasLineItems = false;
-            var self = this;
-            if (this.sublistData) {
-                Object.keys(this.sublistData).forEach(function(sublistId) {
-                    var lines = self.sublistData[sublistId] || [];
-                    var normalizedId = sublistId.toLowerCase();
-                    var populatedLines = lines.filter(function(line) {
-                        return self.isSublistLinePopulated(normalizedId, line);
-                    });
-                    if (populatedLines.length > 0) {
+            if (formData.sublists) {
+                Object.keys(formData.sublists).forEach(function(key) {
+                    if (formData.sublists[key] && formData.sublists[key].length > 0) {
                         hasLineItems = true;
                     }
                 });
@@ -6112,106 +6108,126 @@
         },
 
         /**
-         * Show validation errors in a persistent modal dialog
+         * Show validation errors in the header bar (expandable section)
          * @param {Array} errors - Array of error objects with field and message
          * @param {Array} warnings - Array of warning objects with field and message
          */
         showValidationErrorsModal: function(errors, warnings) {
             var self = this;
+            var headerBar = el('.review-header-bar');
+            if (!headerBar) return;
+
+            // Remove any existing errors section
+            var existingToggle = el('#error-status-toggle');
+            var existingDropdown = el('#error-details');
+            if (existingToggle) existingToggle.remove();
+            if (existingDropdown) existingDropdown.remove();
 
             // Build error list HTML
             var errorListHtml = errors.map(function(err) {
-                return '<li class="validation-error-item">' +
-                    '<i class="fas fa-times-circle text-danger"></i> ' +
-                    '<span>' + escapeHtml(err.message) + '</span>' +
+                return '<div class="alert-item error-item">' +
+                    '<i class="fas fa-times-circle"></i>' +
+                    '<span class="alert-message">' + escapeHtml(err.message) + '</span>' +
                     (err.field ? '<button class="btn-goto-field" data-field="' + escapeHtml(err.field) + '">Go to field</button>' : '') +
-                    '</li>';
+                '</div>';
             }).join('');
 
             var warningListHtml = warnings && warnings.length > 0 ? warnings.map(function(warn) {
-                return '<li class="validation-warning-item">' +
-                    '<i class="fas fa-exclamation-triangle text-warning"></i> ' +
-                    '<span>' + escapeHtml(warn.message) + '</span>' +
-                    '</li>';
+                return '<div class="alert-item warning-item">' +
+                    '<i class="fas fa-exclamation-triangle"></i>' +
+                    '<span class="alert-message">' + escapeHtml(warn.message) + '</span>' +
+                '</div>';
             }).join('') : '';
 
-            var modalHtml = '<div class="modal-overlay validation-errors-modal" id="validation-errors-modal">' +
-                '<div class="modal-dialog">' +
-                    '<div class="modal-header modal-header-danger">' +
-                        '<h3><i class="fas fa-exclamation-circle"></i> Validation Failed</h3>' +
-                        '<button class="modal-close" id="validation-modal-close"><i class="fas fa-times"></i></button>' +
+            var totalCount = errors.length + (warnings ? warnings.length : 0);
+
+            // Create the error toggle (insert after alerts or at start)
+            var errorToggleHtml = '<div class="header-metric error-metric has-errors" id="error-status-toggle">' +
+                '<div class="metric-icon error-icon">' +
+                    '<i class="fas fa-times-circle"></i>' +
+                    '<span class="metric-badge">' + totalCount + '</span>' +
+                '</div>' +
+                '<span class="metric-label">Error' + (totalCount > 1 ? 's' : '') + '</span>' +
+                '<i class="fas fa-chevron-up metric-chevron"></i>' +
+            '</div>';
+
+            // Create the dropdown
+            var dropdownHtml = '<div class="header-dropdown error-dropdown" id="error-details">' +
+                '<div class="alerts-section">' +
+                    '<div class="alert-category">' +
+                        '<div class="category-header"><i class="fas fa-times-circle text-danger"></i> Validation Errors</div>' +
+                        errorListHtml +
                     '</div>' +
-                    '<div class="modal-body">' +
-                        '<p class="validation-intro">Please fix the following errors before creating a transaction:</p>' +
-                        '<ul class="validation-error-list">' + errorListHtml + '</ul>' +
-                        (warningListHtml ? '<p class="validation-warnings-title"><i class="fas fa-exclamation-triangle"></i> Warnings:</p><ul class="validation-warning-list">' + warningListHtml + '</ul>' : '') +
-                    '</div>' +
-                    '<div class="modal-footer">' +
-                        '<button class="btn btn-primary" id="validation-modal-ok">OK, I\'ll fix these</button>' +
-                    '</div>' +
+                    (warningListHtml ? '<div class="alert-category">' +
+                        '<div class="category-header"><i class="fas fa-exclamation-triangle text-warning"></i> Warnings</div>' +
+                        warningListHtml +
+                    '</div>' : '') +
                 '</div>' +
             '</div>';
 
-            // Remove any existing modal
-            var existingModal = el('#validation-errors-modal');
-            if (existingModal) existingModal.remove();
-
-            // Add modal to DOM
-            document.body.insertAdjacentHTML('beforeend', modalHtml);
-
-            // Bind events
-            var modal = el('#validation-errors-modal');
-            var closeBtn = el('#validation-modal-close');
-            var okBtn = el('#validation-modal-ok');
-
-            var closeModal = function() {
-                if (modal) modal.remove();
-            };
-
-            if (closeBtn) closeBtn.addEventListener('click', closeModal);
-            if (okBtn) okBtn.addEventListener('click', closeModal);
-
-            // Close on overlay click
-            if (modal) {
-                modal.addEventListener('click', function(e) {
-                    if (e.target === modal) closeModal();
-                });
+            // Insert after alert toggle or at beginning of header bar
+            var alertToggle = el('#alert-status-toggle');
+            if (alertToggle) {
+                alertToggle.insertAdjacentHTML('afterend', errorToggleHtml);
+            } else {
+                var confidenceMetric = headerBar.querySelector('.confidence-metric');
+                if (confidenceMetric) {
+                    confidenceMetric.insertAdjacentHTML('afterend', errorToggleHtml);
+                } else {
+                    headerBar.insertAdjacentHTML('afterbegin', errorToggleHtml);
+                }
             }
 
-            // Close on Escape key
-            var escHandler = function(e) {
-                if (e.key === 'Escape') {
-                    closeModal();
-                    document.removeEventListener('keydown', escHandler);
-                }
-            };
-            document.addEventListener('keydown', escHandler);
+            // Insert dropdown after header bar
+            headerBar.insertAdjacentHTML('afterend', dropdownHtml);
 
-            // Bind go-to-field buttons
-            modal.querySelectorAll('.btn-goto-field').forEach(function(btn) {
-                btn.addEventListener('click', function() {
-                    var fieldId = this.dataset.field;
-                    closeModal();
+            // Bind toggle
+            var errorToggle = el('#error-status-toggle');
+            var errorDetails = el('#error-details');
 
-                    // Handle sublist field references like "expense[0].account"
-                    if (fieldId.indexOf('[') !== -1) {
-                        // Focus on the sublist section
-                        var sublistMatch = fieldId.match(/^(\w+)\[/);
-                        if (sublistMatch) {
-                            var sublistSection = el('.line-section[data-sublist="' + sublistMatch[1] + '"]');
-                            if (sublistSection) {
-                                sublistSection.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                            }
+            if (errorToggle && errorDetails) {
+                errorToggle.onclick = function(e) {
+                    e.stopPropagation();
+                    var chevron = errorToggle.querySelector('.metric-chevron');
+                    if (errorDetails.style.display === 'none') {
+                        errorDetails.style.display = 'block';
+                        if (chevron) {
+                            chevron.classList.remove('fa-chevron-down');
+                            chevron.classList.add('fa-chevron-up');
                         }
                     } else {
-                        var fieldEl = el('#field-' + fieldId);
-                        if (fieldEl) {
-                            fieldEl.focus();
-                            fieldEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                        errorDetails.style.display = 'none';
+                        if (chevron) {
+                            chevron.classList.remove('fa-chevron-up');
+                            chevron.classList.add('fa-chevron-down');
                         }
                     }
+                };
+            }
+
+            // Bind go-to-field buttons
+            if (errorDetails) {
+                errorDetails.querySelectorAll('.btn-goto-field').forEach(function(btn) {
+                    btn.addEventListener('click', function() {
+                        var fieldId = this.dataset.field;
+                        if (fieldId.indexOf('[') !== -1) {
+                            var sublistMatch = fieldId.match(/^(\w+)\[/);
+                            if (sublistMatch) {
+                                var sublistSection = el('.line-section[data-sublist="' + sublistMatch[1] + '"]');
+                                if (sublistSection) {
+                                    sublistSection.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                                }
+                            }
+                        } else {
+                            var fieldEl = el('#field-' + fieldId);
+                            if (fieldEl) {
+                                fieldEl.focus();
+                                fieldEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                            }
+                        }
+                    });
                 });
-            });
+            }
         },
 
         // ==========================================
