@@ -227,6 +227,9 @@ define([
                 case 'recentEmailImports':
                     result = getRecentEmailImports();
                     break;
+                case 'dashboardPrefs':
+                    result = getDashboardPrefs(context.userId);
+                    break;
                 default:
                     result = Response.error('INVALID_ACTION', 'Unknown action: ' + action);
             }
@@ -317,6 +320,9 @@ define([
                     break;
                 case 'llmconfig':
                     result = saveLLMConfig(context);
+                    break;
+                case 'dashboardPrefs':
+                    result = saveDashboardPrefs(context);
                     break;
                 default:
                     result = Response.error('INVALID_ACTION', 'Unknown action: ' + action);
@@ -2195,6 +2201,114 @@ define([
         } catch (e) {
             log.error('saveLLMConfig', e);
             return Response.error('LLM_SAVE_ERROR', e.message);
+        }
+    }
+
+    /**
+     * Get dashboard preferences for a user
+     * Stores per-user settings like skipped documents, layout preferences, etc.
+     */
+    function getDashboardPrefs(userId) {
+        try {
+            // If no userId provided, try to get current user
+            var effectiveUserId = userId || runtime.getCurrentUser().id;
+            var key = 'user_' + effectiveUserId;
+
+            var configSearch = search.create({
+                type: 'customrecord_flux_config',
+                filters: [
+                    ['custrecord_flux_cfg_type', 'is', 'dashboard_prefs'],
+                    'AND',
+                    ['custrecord_flux_cfg_key', 'is', key],
+                    'AND',
+                    ['custrecord_flux_cfg_active', 'is', 'T']
+                ],
+                columns: ['custrecord_flux_cfg_data', 'custrecord_flux_cfg_modified']
+            });
+
+            var results = configSearch.run().getRange({ start: 0, end: 1 });
+
+            if (results.length > 0) {
+                var dataStr = results[0].getValue('custrecord_flux_cfg_data');
+                var prefs = dataStr ? JSON.parse(dataStr) : {};
+                return Response.success({
+                    userId: effectiveUserId,
+                    prefs: prefs,
+                    lastModified: results[0].getValue('custrecord_flux_cfg_modified')
+                });
+            }
+
+            // Return default preferences if none saved
+            return Response.success({
+                userId: effectiveUserId,
+                prefs: {
+                    skippedDocIds: [],
+                    defaultFilter: 'all',
+                    showKeyboardHints: true
+                },
+                lastModified: null
+            });
+        } catch (e) {
+            log.error('getDashboardPrefs', e);
+            return Response.error('PREFS_LOAD_ERROR', e.message);
+        }
+    }
+
+    /**
+     * Save dashboard preferences for a user
+     */
+    function saveDashboardPrefs(context) {
+        try {
+            var userId = context.userId || runtime.getCurrentUser().id;
+            var key = 'user_' + userId;
+            var prefs = context.prefs || {};
+
+            // Find existing config record
+            var configSearch = search.create({
+                type: 'customrecord_flux_config',
+                filters: [
+                    ['custrecord_flux_cfg_type', 'is', 'dashboard_prefs'],
+                    'AND',
+                    ['custrecord_flux_cfg_key', 'is', key]
+                ],
+                columns: ['internalid']
+            });
+
+            var results = configSearch.run().getRange({ start: 0, end: 1 });
+            var recordId;
+
+            if (results.length > 0) {
+                // Update existing
+                recordId = results[0].id;
+                record.submitFields({
+                    type: 'customrecord_flux_config',
+                    id: recordId,
+                    values: {
+                        'custrecord_flux_cfg_data': JSON.stringify(prefs),
+                        'custrecord_flux_cfg_active': true,
+                        'custrecord_flux_cfg_modified': new Date(),
+                        'custrecord_flux_cfg_modified_by': userId
+                    }
+                });
+            } else {
+                // Create new
+                var configRec = record.create({
+                    type: 'customrecord_flux_config'
+                });
+                configRec.setValue('custrecord_flux_cfg_type', 'dashboard_prefs');
+                configRec.setValue('custrecord_flux_cfg_key', key);
+                configRec.setValue('custrecord_flux_cfg_data', JSON.stringify(prefs));
+                configRec.setValue('custrecord_flux_cfg_active', true);
+                configRec.setValue('custrecord_flux_cfg_modified', new Date());
+                configRec.setValue('custrecord_flux_cfg_modified_by', userId);
+                recordId = configRec.save();
+            }
+
+            log.audit('saveDashboardPrefs', 'Saved prefs for user ' + userId);
+            return Response.success({ saved: true, recordId: recordId });
+        } catch (e) {
+            log.error('saveDashboardPrefs', e);
+            return Response.error('PREFS_SAVE_ERROR', e.message);
         }
     }
 
