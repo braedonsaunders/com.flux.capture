@@ -5927,17 +5927,36 @@
                 }
             }
 
-            // Validate at least one line item exists
-            // Use collectFormData to get filtered sublists (same logic used for saving)
-            var formData = this.collectFormData();
+            // Validate at least one line item exists by checking the DOM
             var hasLineItems = false;
-            if (formData.sublists) {
-                Object.keys(formData.sublists).forEach(function(key) {
-                    if (formData.sublists[key] && formData.sublists[key].length > 0) {
+            var sublistRows = document.querySelectorAll('.sublist-table tbody tr[data-sublist]');
+            for (var k = 0; k < sublistRows.length; k++) {
+                var row = sublistRows[k];
+                // Check if row has any meaningful data (non-empty selects or inputs)
+                var selects = row.querySelectorAll('select');
+                var inputs = row.querySelectorAll('input[type="text"], input[type="hidden"]');
+
+                // Check selects for values (account, item, category, etc.)
+                for (var s = 0; s < selects.length; s++) {
+                    if (selects[s].value && selects[s].value.trim() !== '') {
                         hasLineItems = true;
+                        break;
                     }
-                });
+                }
+                if (hasLineItems) break;
+
+                // Check typeahead hidden inputs for values
+                for (var t = 0; t < inputs.length; t++) {
+                    var input = inputs[t];
+                    // Skip display inputs - check hidden ID inputs
+                    if (input.type === 'hidden' && input.value && input.value.trim() !== '') {
+                        hasLineItems = true;
+                        break;
+                    }
+                }
+                if (hasLineItems) break;
             }
+
             if (!hasLineItems) {
                 var sublistSection = el('.line-section');
                 return {
