@@ -5973,8 +5973,10 @@
             // Log collected form data for debugging
             console.log('[Flux] Collected formData for approval:', JSON.stringify(formData, null, 2));
 
+            console.log('[Flux] Starting approveDocument - calling update API');
             API.put('update', { documentId: this.docId, formData: formData })
-                .then(function() {
+                .then(function(updateResult) {
+                    console.log('[Flux] Update API succeeded, now calling approve API');
                     return API.put('approve', {
                         documentId: self.docId,
                         createTransaction: true,
@@ -5982,6 +5984,8 @@
                     });
                 })
                 .then(function(result) {
+                    console.log('[Flux] approveDocument SUCCESS - result:', result);
+
                     // Trigger confetti celebration
                     self.triggerConfetti();
 
@@ -6018,6 +6022,10 @@
                     }
                 })
                 .catch(function(err) {
+                    console.log('[Flux] approveDocument caught error:', err);
+                    console.log('[Flux] Error details:', err.details);
+                    console.log('[Flux] Error code:', err.code);
+
                     // Reset button state
                     if (approveBtn) {
                         approveBtn.disabled = false;
@@ -6030,9 +6038,14 @@
                     var errors = (err.details && err.details.errors) || err.errors;
                     var warnings = (err.details && err.details.warnings) || err.warnings;
 
+                    console.log('[Flux] Parsed errors:', errors);
+                    console.log('[Flux] Parsed warnings:', warnings);
+
                     if (errors && Array.isArray(errors) && errors.length > 0) {
+                        console.log('[Flux] Showing validation errors modal');
                         self.showValidationErrorsModal(errors, warnings || []);
                     } else {
+                        console.log('[Flux] No validation errors, showing toast');
                         UI.toast('Error: ' + err.message, 'error');
                     }
                 });
@@ -6126,9 +6139,13 @@
 
             // Remove any existing modal
             var existingModal = el('#validation-errors-modal');
-            if (existingModal) existingModal.remove();
+            if (existingModal) {
+                console.log('[Flux] Removing existing validation modal');
+                existingModal.remove();
+            }
 
             // Add modal to DOM
+            console.log('[Flux] Creating validation errors modal with', errors.length, 'errors');
             document.body.insertAdjacentHTML('beforeend', modalHtml);
 
             // Bind events
@@ -6136,34 +6153,53 @@
             var closeBtn = el('#validation-modal-close');
             var okBtn = el('#validation-modal-ok');
 
-            var closeModal = function() {
-                if (modal) modal.remove();
+            // Track if modal is already closed to prevent double-close
+            var isClosed = false;
+
+            // Close on Escape key - define handler first so we can reference it in closeModal
+            var escHandler = function(e) {
+                if (e.key === 'Escape') {
+                    closeModal('escape-key');
+                }
             };
 
-            if (closeBtn) closeBtn.addEventListener('click', closeModal);
-            if (okBtn) okBtn.addEventListener('click', closeModal);
+            var closeModal = function(source) {
+                // Prevent double-close
+                if (isClosed) {
+                    console.log('[Flux] Validation modal already closed, ignoring close from:', source || 'unknown');
+                    return;
+                }
+                isClosed = true;
+                console.log('[Flux] Closing validation modal, triggered by:', source || 'unknown');
+                console.trace('[Flux] Close modal stack trace');
+
+                // Always remove escape handler
+                document.removeEventListener('keydown', escHandler);
+
+                // Remove modal from DOM
+                var modalEl = el('#validation-errors-modal');
+                if (modalEl) {
+                    modalEl.remove();
+                }
+            };
+
+            if (closeBtn) closeBtn.addEventListener('click', function() { closeModal('close-button'); });
+            if (okBtn) okBtn.addEventListener('click', function() { closeModal('ok-button'); });
 
             // Close on overlay click
             if (modal) {
                 modal.addEventListener('click', function(e) {
-                    if (e.target === modal) closeModal();
+                    if (e.target === modal) closeModal('overlay-click');
                 });
             }
 
-            // Close on Escape key
-            var escHandler = function(e) {
-                if (e.key === 'Escape') {
-                    closeModal();
-                    document.removeEventListener('keydown', escHandler);
-                }
-            };
             document.addEventListener('keydown', escHandler);
 
             // Bind go-to-field buttons
             modal.querySelectorAll('.btn-goto-field').forEach(function(btn) {
                 btn.addEventListener('click', function() {
                     var fieldId = this.dataset.field;
-                    closeModal();
+                    closeModal('goto-field-' + fieldId);
 
                     // Handle sublist field references like "expense[0].account"
                     if (fieldId.indexOf('[') !== -1) {

@@ -6506,7 +6506,8 @@ tr.doc-row.deleting::after {
     align-items: center;
     justify-content: center;
     z-index: 10000;
-    animation: modal-fade-in 0.2s ease-out;
+    opacity: 1;
+    animation: modal-fade-in 0.2s ease-out forwards;
 }
 @keyframes modal-fade-in {
     from { opacity: 0; }
@@ -6522,7 +6523,8 @@ tr.doc-row.deleting::after {
     overflow: hidden;
     display: flex;
     flex-direction: column;
-    animation: modal-slide-in 0.2s ease-out;
+    opacity: 1;
+    animation: modal-slide-in 0.2s ease-out forwards;
 }
 @keyframes modal-slide-in {
     from { transform: translateY(-20px); opacity: 0; }
