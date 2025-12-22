@@ -10080,46 +10080,40 @@ textarea.ai-corrected {
     display: inline-flex;
     align-items: center;
     gap: 4px;
-    padding: 3px 8px;
+    padding: 4px 10px;
     border-radius: 12px;
     font-size: 11px;
     font-weight: 600;
+    color: white;
 }
 
 .summary-badge.accuracy {
-    background: var(--color-primary-light, #eff6ff);
-    color: var(--color-primary);
+    background: #6366f1;
 }
 
 .summary-badge.risk-low {
-    background: var(--color-success-light, #dcfce7);
-    color: var(--color-success);
+    background: #10b981;
 }
 
 .summary-badge.risk-medium {
-    background: var(--color-warning-light, #fef3c7);
-    color: var(--color-warning-dark, #92400e);
+    background: #f59e0b;
 }
 
 .summary-badge.risk-high,
 .summary-badge.risk-critical {
-    background: var(--color-danger-light, #fee2e2);
-    color: var(--color-danger);
+    background: #ef4444;
 }
 
 .summary-badge.rec-approve {
-    background: var(--color-success-light, #dcfce7);
-    color: var(--color-success);
+    background: #10b981;
 }
 
 .summary-badge.rec-review {
-    background: var(--color-warning-light, #fef3c7);
-    color: var(--color-warning-dark, #92400e);
+    background: #f59e0b;
 }
 
 .summary-badge.rec-reject {
-    background: var(--color-danger-light, #fee2e2);
-    color: var(--color-danger);
+    background: #ef4444;
 }
 
 .summary-text {
@@ -10278,52 +10272,45 @@ textarea.ai-corrected {
 /* Alert tags */
 .alert-row .alert-tag {
     flex-shrink: 0;
-    padding: 2px 8px;
+    padding: 3px 8px;
     border-radius: 10px;
     font-size: 10px;
     font-weight: 600;
     text-transform: uppercase;
     letter-spacing: 0.3px;
+    color: white;
 }
 
 .alert-tag.tag-applied {
-    background: var(--color-success-light, #dcfce7);
-    color: var(--color-success);
+    background: #10b981;
 }
 
 .alert-tag.tag-critical {
-    background: var(--color-danger-light, #fee2e2);
-    color: var(--color-danger);
+    background: #dc2626;
 }
 
 .alert-tag.tag-high {
-    background: var(--color-danger-light, #fee2e2);
-    color: var(--color-danger);
+    background: #ef4444;
 }
 
 .alert-tag.tag-medium {
-    background: var(--color-warning-light, #fef3c7);
-    color: var(--color-warning-dark, #92400e);
+    background: #f59e0b;
 }
 
 .alert-tag.tag-low {
-    background: var(--gray-100);
-    color: var(--text-secondary);
+    background: #6b7280;
 }
 
 .alert-tag.tag-info {
-    background: var(--color-info-light, #dbeafe);
-    color: var(--color-info, #3b82f6);
+    background: #3b82f6;
 }
 
 .alert-tag.tag-insight {
-    background: #fef9c3;
-    color: #ca8a04;
+    background: #eab308;
 }
 
 .alert-tag.tag-lineitem {
-    background: var(--purple-100, #ede9fe);
-    color: var(--purple-600, #7c3aed);
+    background: #8b5cf6;
 }
 
 /* Alert action buttons */
