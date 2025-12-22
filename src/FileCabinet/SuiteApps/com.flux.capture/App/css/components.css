@@ -1801,7 +1801,8 @@
     margin-right: 6px;
 }
 
-.alert-icon i {
+/* Old alert-icon style for header metrics only */
+.header-metric .alert-icon i {
     color: var(--color-warning);
     font-size: 16px;
 }
