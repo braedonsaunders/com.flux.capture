@@ -3391,8 +3391,13 @@ define([
             if (bodyFields.total !== undefined) {
                 values['custrecord_flux_total_amount'] = bodyFields.total;
             }
+            // Only save currency if it's a numeric ID (not a text code like "CAD")
             if (bodyFields.currency) {
-                values['custrecord_flux_currency'] = bodyFields.currency;
+                var currencyVal = bodyFields.currency;
+                if (typeof currencyVal === 'number' || (typeof currencyVal === 'string' && /^\d+$/.test(currencyVal))) {
+                    values['custrecord_flux_currency'] = parseInt(currencyVal, 10);
+                }
+                // Skip text currency codes - would need lookup to convert
             }
 
             record.submitFields({
