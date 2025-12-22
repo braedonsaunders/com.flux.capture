@@ -1773,6 +1773,21 @@
                 btn.classList.toggle('active', this.extractionPool.showAnnotations);
             }, this);
 
+            // Multi-page (primary) path uses stored page overlays
+            if (this.pageElements && this.pageElements.length > 0) {
+                if (this.extractionPool.showAnnotations) {
+                    this.pageElements.forEach(function(pageEl) {
+                        this.renderPageAnnotations(pageEl.pageNum, pageEl.overlay, pageEl.viewport);
+                    }, this);
+                } else {
+                    this.pageElements.forEach(function(pageEl) {
+                        pageEl.overlay.innerHTML = '';
+                    });
+                }
+                return;
+            }
+
+            // Legacy single-page fallback
             if (this.pdfPage && this.pdfCanvas) {
                 // Use CSS dimensions (not canvas.width which includes DPI scaling)
                 var cssWidth = parseFloat(this.pdfCanvas.style.width) || this.pdfCanvas.clientWidth;
@@ -1782,10 +1797,8 @@
                 });
                 if (this.extractionPool.showAnnotations) {
                     this.renderExtractionAnnotations(viewport);
-                } else {
-                    if (this.annotationOverlay) {
-                        this.annotationOverlay.innerHTML = '';
-                    }
+                } else if (this.annotationOverlay) {
+                    this.annotationOverlay.innerHTML = '';
                 }
             }
         },
