@@ -136,13 +136,18 @@ define([
                     };
                 }
 
-                // Get file content as base64
+                // Get file content as base64 (NetSuite binary files return base64)
                 const fileContents = fileObj.getContents();
-                const pdfBase64 = encode.convert({
-                    string: fileContents,
-                    inputEncoding: encode.Encoding.UTF_8,
-                    outputEncoding: encode.Encoding.BASE_64
-                });
+
+                // Avoid double-encoding when contents are already base64 (PDF/Image files)
+                const looksBase64 = /^[A-Za-z0-9+/=\s]+$/.test(fileContents);
+                const pdfBase64 = looksBase64
+                    ? fileContents
+                    : encode.convert({
+                        string: fileContents,
+                        inputEncoding: encode.Encoding.UTF_8,
+                        outputEncoding: encode.Encoding.BASE_64
+                    });
 
                 // Determine MIME type
                 const fileName = fileObj.name.toLowerCase();
@@ -233,6 +238,9 @@ define([
          * @private
          */
         _buildVerificationPrompt(extractionResult, formSchema) {
+            const today = new Date();
+            const todayIso = today.toISOString().split('T')[0];
+
             // Prepare extracted data summary
             const extractedData = this._prepareExtractionSummary(extractionResult);
 
@@ -248,6 +256,8 @@ define([
 
             return `You are an expert document analyst verifying invoice/bill OCR extraction accuracy.
 
+CURRENT DATE: ${todayIso} (use this to avoid downgrading years and to validate recency)
+
 TASK: Carefully read the attached document and verify the accuracy of the extracted data below.
 
 EXTRACTED DATA TO VERIFY:
@@ -260,7 +270,9 @@ VERIFICATION INSTRUCTIONS:
 4. Find important fields that exist on the document but weren't extracted
 5. Verify line items match what's on the invoice
 6. Check that amounts add up correctly (line items = subtotal, subtotal + tax = total)
-7. Look for handwritten annotations, stamps, or notes that might contain important info
+7. Confirm invoice and due dates are in the correct year and infer a due date if terms (e.g., Net 30) are visible but the date is missing
+8. Look for handwritten annotations, stamps, or notes that might contain important info
+9. Suggest any extraction improvements beyond simple corrections when clear opportunities exist
 
 RESPOND WITH THIS EXACT JSON STRUCTURE:
 {
@@ -322,6 +334,7 @@ Be thorough but focus on accuracy. Only report genuine discrepancies, not minor 
                 invoiceNumber: fields.invoiceNumber || null,
                 invoiceDate: fields.invoiceDate || null,
                 dueDate: fields.dueDate || null,
+                paymentTerms: fields.paymentTerms || null,
                 poNumber: fields.poNumber || null,
                 subtotal: fields.subtotal || null,
                 taxAmount: fields.taxAmount || null,

@@ -1797,6 +1797,7 @@
             if (!panel) return;
 
             var doc = this.data;
+            var extractedData = doc.extractedData || {};
             // Normalize confidence: may be stored as decimal (0-1) or percentage (0-100)
             var rawConf = parseFloat(doc.confidence) || 0;
             var normalizedConfidence = rawConf <= 1 ? Math.round(rawConf * 100) : Math.round(rawConf);
@@ -1838,7 +1839,7 @@
             var unmatchedCount = this.extractionPool.unmatched.length;
 
             // AI Verification data
-            var aiVerification = doc.aiVerification || null;
+            var aiVerification = doc.aiVerification || extractedData.aiVerification || null;
             var hasAiVerification = aiVerification && aiVerification.verified;
             var aiCorrections = (aiVerification && aiVerification.corrections) || [];
             var aiMissedFields = (aiVerification && aiVerification.missedFields) || [];
