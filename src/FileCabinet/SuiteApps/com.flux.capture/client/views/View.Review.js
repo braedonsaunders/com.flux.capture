@@ -608,10 +608,10 @@
             var bodyFields = {};
             var sublists = {};
 
-            // Collect body fields
+            // Collect body fields from extraction panel
             var panel = el('#extraction-panel');
             if (panel) {
-                // Regular inputs and selects
+                // Regular inputs and selects with data-field attribute
                 panel.querySelectorAll('input[data-field], select[data-field], textarea[data-field]').forEach(function(input) {
                     var fieldId = input.dataset.field;
                     if (!fieldId) return;
@@ -643,15 +643,25 @@
                         bodyFields[fieldId + '_display'] = displayInput.value;
                     }
                 });
+            }
 
-                // Collect entity field (vendor/employee - special handling - no data-field attribute)
-                var entityInput = el('#field-entity');
-                var entityIdInput = el('#field-entityId');
-                if (entityInput) {
-                    bodyFields.entity_display = entityInput.value || '';
-                }
-                if (entityIdInput) {
-                    bodyFields.entity = entityIdInput.value || '';
+            // Collect entity field globally (special handling - no data-field attribute)
+            // This works regardless of whether extraction panel exists
+            var entityInput = el('#field-entity');
+            var entityIdInput = el('#field-entityId');
+            if (entityInput && entityInput.value) {
+                bodyFields.entity_display = entityInput.value;
+            }
+            if (entityIdInput && entityIdInput.value) {
+                bodyFields.entity = entityIdInput.value;
+            }
+
+            // Also check document-level data for entity (fallback if DOM not populated)
+            if (!bodyFields.entity && this.data) {
+                if (this.data.vendorId) {
+                    bodyFields.entity = this.data.vendorId;
+                } else if (this.data.employeeId) {
+                    bodyFields.entity = this.data.employeeId;
                 }
             }
 
@@ -672,9 +682,27 @@
                         bodyFields.entity_display = self.changes[key];
                     } else if (key === 'vendorId') {
                         bodyFields.entity = self.changes[key];
+                    } else if (key === 'employeeName') {
+                        bodyFields.entity_display = self.changes[key];
+                    } else if (key === 'employeeId') {
+                        bodyFields.entity = self.changes[key];
                     } else {
                         // For other changes, use as-is
                         bodyFields[key] = self.changes[key];
+                    }
+                });
+            }
+
+            // Merge with existing formData to preserve fields not in DOM
+            // This handles cases where fields were previously saved but not currently rendered
+            if (this.formData && this.formData.bodyFields) {
+                var existingFields = this.formData.bodyFields;
+                Object.keys(existingFields).forEach(function(key) {
+                    // Only use existing value if we didn't collect a value from DOM
+                    if (bodyFields[key] === undefined || bodyFields[key] === '') {
+                        if (existingFields[key] !== undefined && existingFields[key] !== '') {
+                            bodyFields[key] = existingFields[key];
+                        }
                     }
                 });
             }
@@ -686,6 +714,13 @@
             this.formData._meta = this.formData._meta || {};
             this.formData._meta.transactionType = this.transactionType;
             this.formData._meta.collectedAt = new Date().toISOString();
+
+            // Debug logging
+            console.log('[Flux] collectFormData - panel exists:', !!panel);
+            console.log('[Flux] collectFormData - entityInput:', entityInput ? entityInput.value : 'NOT FOUND');
+            console.log('[Flux] collectFormData - entityIdInput:', entityIdInput ? entityIdInput.value : 'NOT FOUND');
+            console.log('[Flux] collectFormData - this.changes:', this.changes);
+            console.log('[Flux] collectFormData - bodyFields:', bodyFields);
 
             FCDebug.log('[FormData] Collected from DOM:', this.formData);
             return this.formData;
@@ -5880,13 +5915,19 @@
 
             // Show processing state
             var approveBtn = el('#btn-approve');
+            var approveBtnText = approveBtn ? approveBtn.querySelector('.btn-text') : null;
+            var approveBtnIcon = approveBtn ? approveBtn.querySelector('i') : null;
             if (approveBtn) {
                 approveBtn.disabled = true;
-                approveBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Creating Transaction...';
+                if (approveBtnIcon) approveBtnIcon.className = 'fas fa-spinner fa-spin';
+                if (approveBtnText) approveBtnText.textContent = 'Creating Transaction...';
             }
 
             // Always save current form state before approval to ensure transaction uses latest data
             var formData = this.collectFormData();
+
+            // Log collected form data for debugging
+            console.log('[Flux] Collected formData for approval:', JSON.stringify(formData, null, 2));
 
             API.put('update', { documentId: this.docId, formData: formData })
                 .then(function() {
@@ -5936,26 +5977,13 @@
                     // Reset button state
                     if (approveBtn) {
                         approveBtn.disabled = false;
-                        approveBtn.innerHTML = '<i class="fas fa-check"></i> Approve & Create Transaction';
+                        if (approveBtnIcon) approveBtnIcon.className = 'fas fa-check';
+                        if (approveBtnText) approveBtnText.textContent = 'Approve & Next';
                     }
 
-                    // Handle validation errors specially
+                    // Handle validation errors with persistent modal
                     if (err.errors && Array.isArray(err.errors)) {
-                        var errorMessages = err.errors.map(function(e) { return e.message; }).join(', ');
-                        UI.toast('Validation failed: ' + errorMessages, 'error');
-
-                        // Focus first error field if possible
-                        if (err.errors[0] && err.errors[0].field) {
-                            var fieldId = err.errors[0].field;
-                            // Handle sublist field references like "expense[0].account"
-                            if (fieldId.indexOf('[') === -1) {
-                                var fieldEl = el('#field-' + fieldId);
-                                if (fieldEl) {
-                                    fieldEl.focus();
-                                    fieldEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                                }
-                            }
-                        }
+                        self.showValidationErrorsModal(err.errors, err.warnings || []);
                     } else {
                         UI.toast('Error: ' + err.message, 'error');
                     }
@@ -6005,6 +6033,109 @@
                     if (el.parentNode) el.parentNode.removeChild(el);
                 }, 2500, confetti);
             }
+        },
+
+        /**
+         * Show validation errors in a persistent modal dialog
+         * @param {Array} errors - Array of error objects with field and message
+         * @param {Array} warnings - Array of warning objects with field and message
+         */
+        showValidationErrorsModal: function(errors, warnings) {
+            var self = this;
+
+            // Build error list HTML
+            var errorListHtml = errors.map(function(err) {
+                return '<li class="validation-error-item">' +
+                    '<i class="fas fa-times-circle text-danger"></i> ' +
+                    '<span>' + escapeHtml(err.message) + '</span>' +
+                    (err.field ? '<button class="btn-goto-field" data-field="' + escapeHtml(err.field) + '">Go to field</button>' : '') +
+                    '</li>';
+            }).join('');
+
+            var warningListHtml = warnings && warnings.length > 0 ? warnings.map(function(warn) {
+                return '<li class="validation-warning-item">' +
+                    '<i class="fas fa-exclamation-triangle text-warning"></i> ' +
+                    '<span>' + escapeHtml(warn.message) + '</span>' +
+                    '</li>';
+            }).join('') : '';
+
+            var modalHtml = '<div class="modal-overlay validation-errors-modal" id="validation-errors-modal">' +
+                '<div class="modal-dialog">' +
+                    '<div class="modal-header modal-header-danger">' +
+                        '<h3><i class="fas fa-exclamation-circle"></i> Validation Failed</h3>' +
+                        '<button class="modal-close" id="validation-modal-close"><i class="fas fa-times"></i></button>' +
+                    '</div>' +
+                    '<div class="modal-body">' +
+                        '<p class="validation-intro">Please fix the following errors before creating a transaction:</p>' +
+                        '<ul class="validation-error-list">' + errorListHtml + '</ul>' +
+                        (warningListHtml ? '<p class="validation-warnings-title"><i class="fas fa-exclamation-triangle"></i> Warnings:</p><ul class="validation-warning-list">' + warningListHtml + '</ul>' : '') +
+                    '</div>' +
+                    '<div class="modal-footer">' +
+                        '<button class="btn btn-primary" id="validation-modal-ok">OK, I\'ll fix these</button>' +
+                    '</div>' +
+                '</div>' +
+            '</div>';
+
+            // Remove any existing modal
+            var existingModal = el('#validation-errors-modal');
+            if (existingModal) existingModal.remove();
+
+            // Add modal to DOM
+            document.body.insertAdjacentHTML('beforeend', modalHtml);
+
+            // Bind events
+            var modal = el('#validation-errors-modal');
+            var closeBtn = el('#validation-modal-close');
+            var okBtn = el('#validation-modal-ok');
+
+            var closeModal = function() {
+                if (modal) modal.remove();
+            };
+
+            if (closeBtn) closeBtn.addEventListener('click', closeModal);
+            if (okBtn) okBtn.addEventListener('click', closeModal);
+
+            // Close on overlay click
+            if (modal) {
+                modal.addEventListener('click', function(e) {
+                    if (e.target === modal) closeModal();
+                });
+            }
+
+            // Close on Escape key
+            var escHandler = function(e) {
+                if (e.key === 'Escape') {
+                    closeModal();
+                    document.removeEventListener('keydown', escHandler);
+                }
+            };
+            document.addEventListener('keydown', escHandler);
+
+            // Bind go-to-field buttons
+            modal.querySelectorAll('.btn-goto-field').forEach(function(btn) {
+                btn.addEventListener('click', function() {
+                    var fieldId = this.dataset.field;
+                    closeModal();
+
+                    // Handle sublist field references like "expense[0].account"
+                    if (fieldId.indexOf('[') !== -1) {
+                        // Focus on the sublist section
+                        var sublistMatch = fieldId.match(/^(\w+)\[/);
+                        if (sublistMatch) {
+                            var sublistSection = el('.line-section[data-sublist="' + sublistMatch[1] + '"]');
+                            if (sublistSection) {
+                                sublistSection.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                            }
+                        }
+                    } else {
+                        var fieldEl = el('#field-' + fieldId);
+                        if (fieldEl) {
+                            fieldEl.focus();
+                            fieldEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                        }
+                    }
+                });
+            });
         },
 
         // ==========================================
