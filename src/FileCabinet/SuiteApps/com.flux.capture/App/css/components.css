@@ -6157,12 +6157,6 @@ body.dark-mode #btn-dark-mode i::before {
     color: var(--text-primary);
 }
 
-.bulk-buttons {
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-sm);
-}
-
 /* Dashboard Preview Panel - scoped to avoid conflicts with Review page */
 .action-dashboard .dashboard-preview-panel {
     position: fixed;
