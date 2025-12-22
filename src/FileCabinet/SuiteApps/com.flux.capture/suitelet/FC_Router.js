@@ -2188,7 +2188,10 @@ define([
             // Company locale settings - critical for reliable currency detection
             companyCountry: savedSettings.companyCountry || 'CA', // Default to Canada
             companyCurrency: savedSettings.companyCurrency || 'CAD', // Default to CAD
-            anomalyDetection: anomalyDefaults
+            anomalyDetection: anomalyDefaults,
+            // Transaction creation settings
+            attachFileToTransaction: savedSettings.attachFileToTransaction === true, // Default OFF
+            deleteDocumentOnSuccess: savedSettings.deleteDocumentOnSuccess !== false // Default ON
         };
 
         return Response.success(settings);
@@ -2204,6 +2207,9 @@ define([
                 // Company locale settings
                 companyCountry: context.companyCountry || 'CA',
                 companyCurrency: context.companyCurrency || 'CAD',
+                // Transaction creation settings
+                attachFileToTransaction: context.attachFileToTransaction === true,
+                deleteDocumentOnSuccess: context.deleteDocumentOnSuccess !== false,
                 anomalyDetection: {
                     // Duplicate Detection
                     detectDuplicateInvoice: anomaly.detectDuplicateInvoice !== false,
@@ -3364,6 +3370,10 @@ define([
         }
 
         try {
+            // Load settings for transaction creation options
+            var settingsResult = getSettings();
+            var settings = (settingsResult && settingsResult.data) ? settingsResult.data : {};
+
             var docRecord = record.load({
                 type: 'customrecord_flux_document',
                 id: documentId
@@ -3371,96 +3381,177 @@ define([
 
             var vendorId = docRecord.getValue('custrecord_flux_vendor');
             var documentType = docRecord.getValue('custrecord_flux_document_type');
+            var fileId = docRecord.getValue('custrecord_flux_source_file');
+            var originalFilename = docRecord.getValue('custrecord_flux_original_filename');
 
             var transactionId = null;
             var actualTransactionType = transactionType;
+            var fileAttached = false;
+            var documentDeleted = false;
+            var warnings = [];
 
-            if (createTransaction && vendorId) {
-                if (!actualTransactionType) {
-                    if (documentType === DocType.EXPENSE_REPORT) {
-                        actualTransactionType = 'expensereport';
-                    } else if (documentType === DocType.CREDIT_MEMO) {
-                        actualTransactionType = 'vendorcredit';
-                    } else {
-                        actualTransactionType = 'vendorbill';
-                    }
+            // Determine transaction type
+            if (!actualTransactionType) {
+                if (documentType === DocType.EXPENSE_REPORT) {
+                    actualTransactionType = 'expensereport';
+                } else if (documentType === DocType.CREDIT_MEMO) {
+                    actualTransactionType = 'vendorcredit';
+                } else if (documentType === DocType.PURCHASE_ORDER) {
+                    actualTransactionType = 'purchaseorder';
+                } else {
+                    actualTransactionType = 'vendorbill';
                 }
-
-                transactionId = createTransactionFromDocument(docRecord, actualTransactionType);
             }
 
-            // SMART AUTO-CODING: Learn from this approved transaction
+            // Load form data for validation and transaction creation
+            var formData = JSON.parse(docRecord.getValue('custrecord_flux_form_data') || 'null');
+
+            // Fallback to legacy fields if no formData
+            if (!formData) {
+                formData = {
+                    bodyFields: {
+                        entity: vendorId,
+                        tranid: docRecord.getValue('custrecord_flux_invoice_number'),
+                        trandate: docRecord.getValue('custrecord_flux_invoice_date'),
+                        duedate: docRecord.getValue('custrecord_flux_due_date'),
+                        total: docRecord.getValue('custrecord_flux_total_amount'),
+                        currency: docRecord.getValue('custrecord_flux_currency')
+                    },
+                    sublists: {
+                        expense: JSON.parse(docRecord.getValue('custrecord_flux_line_items') || '[]')
+                    }
+                };
+            }
+
+            // ===== VALIDATION =====
+            var validation = validateForTransaction(formData, actualTransactionType);
+            if (!validation.valid) {
+                return Response.error('VALIDATION_FAILED', 'Document failed validation', {
+                    errors: validation.errors,
+                    warnings: validation.warnings
+                });
+            }
+            warnings = validation.warnings;
+
+            // ===== CREATE TRANSACTION =====
+            if (createTransaction && (vendorId || actualTransactionType === 'expensereport')) {
+                transactionId = createTransactionFromDocument(docRecord, actualTransactionType);
+
+                // ===== FILE ATTACHMENT (if enabled) =====
+                if (transactionId && settings.attachFileToTransaction && fileId) {
+                    try {
+                        moveAndAttachFile(fileId, originalFilename, actualTransactionType, transactionId);
+                        fileAttached = true;
+                        fileId = null; // File has been moved, don't delete again later
+                    } catch (attachErr) {
+                        log.error('approveDocument.fileAttachment', attachErr);
+                        warnings.push({ field: 'file', message: 'Could not attach file: ' + attachErr.message });
+                    }
+                }
+            }
+
+            // ===== LEARNING (before potential deletion) =====
             var learningResult = null;
-            if (vendorId) {
+            if (vendorId && formData) {
                 try {
-                    var formData = JSON.parse(docRecord.getValue('custrecord_flux_form_data') || 'null');
-                    if (formData) {
-                        var engine = new FC_Engine.FluxCaptureEngine({ enableLearning: true });
+                    var engine = new FC_Engine.FluxCaptureEngine({ enableLearning: true });
 
-                        // Extract header fields for learning
-                        var headerFields = {};
-                        var bodyFields = formData.bodyFields || {};
-                        if (bodyFields.department) headerFields.department = bodyFields.department;
-                        if (bodyFields.class) headerFields.class = bodyFields.class;
-                        if (bodyFields.location) headerFields.location = bodyFields.location;
-                        if (bodyFields.terms) headerFields.terms = bodyFields.terms;
+                    // Extract header fields for learning
+                    var headerFields = {};
+                    var bodyFields = formData.bodyFields || {};
+                    if (bodyFields.department) headerFields.department = bodyFields.department;
+                    if (bodyFields.class) headerFields.class = bodyFields.class;
+                    if (bodyFields.location) headerFields.location = bodyFields.location;
+                    if (bodyFields.terms) headerFields.terms = bodyFields.terms;
 
-                        // Extract line items for learning
-                        var lineItems = [];
-                        var sublists = formData.sublists || {};
-                        var expenseLines = sublists.expense || sublists.item || [];
-                        for (var i = 0; i < expenseLines.length; i++) {
-                            var line = expenseLines[i];
-                            lineItems.push({
-                                description: line.memo || line.description || '',
-                                account: line.account || line.expenseaccount || '',
-                                department: line.department || '',
-                                class: line.class || '',
-                                location: line.location || '',
-                                item: line.item || ''
-                            });
-                        }
-
-                        // Learn from this approval
-                        learningResult = engine.learnFromApproval({
-                            vendorId: parseInt(vendorId),
-                            headerFields: headerFields,
-                            lineItems: lineItems
-                        });
-
-                        log.audit('FluxCapture.ApprovalLearning', {
-                            vendorId: vendorId,
-                            documentId: documentId,
-                            headerFieldsLearned: Object.keys(headerFields).length,
-                            lineItemsLearned: lineItems.length,
-                            success: learningResult ? learningResult.success : false
+                    // Extract line items for learning
+                    var lineItems = [];
+                    var sublists = formData.sublists || {};
+                    var expenseLines = sublists.expense || sublists.item || [];
+                    for (var i = 0; i < expenseLines.length; i++) {
+                        var line = expenseLines[i];
+                        lineItems.push({
+                            description: line.memo || line.description || '',
+                            account: line.account || line.expenseaccount || '',
+                            department: line.department || '',
+                            class: line.class || '',
+                            location: line.location || '',
+                            item: line.item || ''
                         });
                     }
+
+                    // Learn from this approval
+                    learningResult = engine.learnFromApproval({
+                        vendorId: parseInt(vendorId),
+                        headerFields: headerFields,
+                        lineItems: lineItems
+                    });
+
+                    log.audit('FluxCapture.ApprovalLearning', {
+                        vendorId: vendorId,
+                        documentId: documentId,
+                        headerFieldsLearned: Object.keys(headerFields).length,
+                        lineItemsLearned: lineItems.length,
+                        success: learningResult ? learningResult.success : false
+                    });
                 } catch (learnErr) {
                     // Don't fail the approval if learning fails
                     log.error('FluxCapture.ApprovalLearning', learnErr.message);
                 }
             }
 
-            record.submitFields({
-                type: 'customrecord_flux_document',
-                id: documentId,
-                values: {
-                    'custrecord_flux_status': DocStatus.COMPLETED,
-                    'custrecord_flux_created_transaction': transactionId ? String(transactionId) : '',
-                    'custrecord_flux_modified_date': new Date()
+            // ===== CLEANUP OR UPDATE STATUS =====
+            if (transactionId && settings.deleteDocumentOnSuccess) {
+                // Delete the flux document record
+                record.delete({ type: 'customrecord_flux_document', id: documentId });
+                documentDeleted = true;
+
+                // Delete source file if not already moved during attachment
+                if (fileId) {
+                    try {
+                        file.delete({ id: fileId });
+                    } catch (delErr) {
+                        log.debug('approveDocument.fileCleanup', 'Could not delete file: ' + delErr.message);
+                    }
                 }
-            });
+
+                log.audit('FluxCapture.DocumentCleanup', {
+                    documentId: documentId,
+                    transactionId: transactionId,
+                    fileDeleted: !!fileId
+                });
+            } else {
+                // Just update status to completed
+                record.submitFields({
+                    type: 'customrecord_flux_document',
+                    id: documentId,
+                    values: {
+                        'custrecord_flux_status': DocStatus.COMPLETED,
+                        'custrecord_flux_created_transaction': transactionId ? String(transactionId) : '',
+                        'custrecord_flux_modified_date': new Date()
+                    }
+                });
+            }
 
             return Response.success({
                 documentId: documentId,
                 transactionId: transactionId,
                 transactionType: actualTransactionType,
                 status: DocStatus.COMPLETED,
-                learned: learningResult ? learningResult.success : false
+                learned: learningResult ? learningResult.success : false,
+                fileAttached: fileAttached,
+                documentDeleted: documentDeleted,
+                warnings: warnings
             }, 'Document approved');
         } catch (e) {
             log.error('Approve error', e);
+            // Check for validation error type
+            if (e.type === 'VALIDATION_ERROR') {
+                return Response.error('VALIDATION_FAILED', e.message, {
+                    errors: e.errors || [],
+                    warnings: e.warnings || []
+                });
+            }
             return Response.error('APPROVE_FAILED', e.message);
         }
     }
@@ -3702,6 +3793,209 @@ define([
         var timestamp = Date.now().toString(36);
         var random = Math.random().toString(36).substring(2, 8);
         return ('FC-' + timestamp + '-' + random).toUpperCase();
+    }
+
+    // ==================== Transaction Creation Helpers ====================
+
+    /**
+     * Validate form data before transaction creation
+     * @param {Object} formData - The form data to validate
+     * @param {string} transactionType - Type of transaction to create
+     * @returns {Object} Validation result with valid, errors, and warnings arrays
+     */
+    function validateForTransaction(formData, transactionType) {
+        var errors = [];
+        var warnings = [];
+        var bodyFields = formData.bodyFields || {};
+        var sublists = formData.sublists || {};
+
+        // ===== REQUIRED FIELD VALIDATION =====
+
+        // Entity is always required (except expense reports use current user)
+        if (transactionType !== 'expensereport') {
+            if (!bodyFields.entity) {
+                errors.push({ field: 'entity', message: 'Vendor is required' });
+            }
+        }
+
+        // Date is required
+        if (!bodyFields.trandate) {
+            errors.push({ field: 'trandate', message: 'Transaction date is required' });
+        }
+
+        // Total amount validation
+        var total = parseFloat(bodyFields.total) || parseFloat(bodyFields.usertotal) || 0;
+        if (total <= 0) {
+            errors.push({ field: 'total', message: 'Total amount must be greater than zero' });
+        }
+
+        // ===== LINE ITEM VALIDATION =====
+
+        var expenseLines = sublists.expense || [];
+        var itemLines = sublists.item || [];
+        var hasLines = expenseLines.length > 0 || itemLines.length > 0;
+
+        if (!hasLines) {
+            // No lines - will use fallback single line with total
+            warnings.push({ field: 'sublists', message: 'No line items - will create single expense line with total amount' });
+        } else {
+            // Validate each expense line has required fields
+            expenseLines.forEach(function(line, idx) {
+                if (!line.account && !line.category) {
+                    errors.push({
+                        field: 'expense[' + idx + '].account',
+                        message: 'Expense line ' + (idx + 1) + ' requires an account or category'
+                    });
+                }
+                var lineAmount = parseFloat(line.amount) || 0;
+                if (lineAmount <= 0) {
+                    errors.push({
+                        field: 'expense[' + idx + '].amount',
+                        message: 'Expense line ' + (idx + 1) + ' requires a positive amount'
+                    });
+                }
+            });
+
+            // Validate each item line has required fields
+            itemLines.forEach(function(line, idx) {
+                if (!line.item) {
+                    errors.push({
+                        field: 'item[' + idx + '].item',
+                        message: 'Item line ' + (idx + 1) + ' requires an item'
+                    });
+                }
+            });
+
+            // ===== TOTAL RECONCILIATION (warning only) =====
+            var lineTotal = 0;
+            expenseLines.forEach(function(line) { lineTotal += parseFloat(line.amount) || 0; });
+            itemLines.forEach(function(line) { lineTotal += parseFloat(line.amount) || 0; });
+
+            if (Math.abs(lineTotal - total) > 0.01) {
+                warnings.push({
+                    field: 'total',
+                    message: 'Line items total (' + lineTotal.toFixed(2) + ') differs from header total (' + total.toFixed(2) + ')'
+                });
+            }
+        }
+
+        // ===== DATE VALIDATION =====
+
+        if (bodyFields.trandate) {
+            var tranDate = new Date(bodyFields.trandate);
+            var today = new Date();
+            today.setHours(23, 59, 59, 999); // End of today
+
+            // Future date warning
+            if (tranDate > today) {
+                warnings.push({ field: 'trandate', message: 'Transaction date is in the future' });
+            }
+
+            // Due date before transaction date
+            if (bodyFields.duedate) {
+                var dueDate = new Date(bodyFields.duedate);
+                if (dueDate < tranDate) {
+                    errors.push({ field: 'duedate', message: 'Due date cannot be before transaction date' });
+                }
+            }
+        }
+
+        return {
+            valid: errors.length === 0,
+            errors: errors,
+            warnings: warnings
+        };
+    }
+
+    /**
+     * Get or create the Transaction Attachments folder
+     * @returns {number} Folder internal ID
+     */
+    function getTransactionAttachmentFolder() {
+        // Look for existing folder
+        var folderSearch = search.create({
+            type: 'folder',
+            filters: [['name', 'is', 'Transaction Attachments']],
+            columns: ['internalid']
+        });
+
+        var results = folderSearch.run().getRange({ start: 0, end: 1 });
+        if (results.length > 0) {
+            return results[0].id;
+        }
+
+        // Create folder
+        var folderRecord = record.create({ type: 'folder' });
+        folderRecord.setValue('name', 'Transaction Attachments');
+        folderRecord.setValue('description', 'Source documents attached to transactions via Flux Capture');
+        return folderRecord.save();
+    }
+
+    /**
+     * Move file to Transaction Attachments folder and attach to transaction
+     * @param {number} fileId - Original file ID
+     * @param {string} originalFilename - Original filename
+     * @param {string} transactionType - Type of transaction (vendorbill, etc.)
+     * @param {number} transactionId - Transaction internal ID
+     * @returns {number} New file ID in target folder
+     */
+    function moveAndAttachFile(fileId, originalFilename, transactionType, transactionId) {
+        try {
+            // Get the target folder
+            var targetFolderId = getTransactionAttachmentFolder();
+
+            // Load original file
+            var originalFile = file.load({ id: fileId });
+            var fileContents = originalFile.getContents();
+            var fileType = originalFile.fileType;
+
+            // Create new file in target folder with descriptive name
+            var typePrefix = (transactionType || 'TXN').toUpperCase();
+            var newFileName = typePrefix + '_' + transactionId + '_' + (originalFilename || 'attachment.pdf');
+
+            var newFile = file.create({
+                name: newFileName,
+                fileType: fileType,
+                contents: fileContents,
+                folder: targetFolderId,
+                isOnline: true
+            });
+            var newFileId = newFile.save();
+
+            // Attach to transaction
+            // Map transaction type to record type
+            var recordTypeMap = {
+                'vendorbill': record.Type.VENDOR_BILL,
+                'vendorcredit': record.Type.VENDOR_CREDIT,
+                'expensereport': record.Type.EXPENSE_REPORT,
+                'purchaseorder': record.Type.PURCHASE_ORDER
+            };
+            var recordType = recordTypeMap[transactionType] || transactionType;
+
+            record.attach({
+                record: { type: 'file', id: newFileId },
+                to: { type: recordType, id: transactionId }
+            });
+
+            // Delete original file from Flux uploads folder
+            try {
+                file.delete({ id: fileId });
+            } catch (delErr) {
+                log.debug('moveAndAttachFile', 'Could not delete original file ' + fileId + ': ' + delErr.message);
+            }
+
+            log.audit('moveAndAttachFile', {
+                originalFileId: fileId,
+                newFileId: newFileId,
+                transactionType: transactionType,
+                transactionId: transactionId
+            });
+
+            return newFileId;
+        } catch (e) {
+            log.error('moveAndAttachFile', e);
+            throw e;
+        }
     }
 
     function createTransactionFromDocument(docRecord, transactionType) {

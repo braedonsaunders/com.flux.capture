@@ -309,6 +309,12 @@
                     return;
                 }
 
+                if (e.target.closest('#bulk-approve')) {
+                    e.stopPropagation();
+                    self.approveSelected();
+                    return;
+                }
+
                 // Sortable column headers
                 var sortableHeader = e.target.closest('th.sortable');
                 if (sortableHeader) {
@@ -635,6 +641,7 @@
                 '<span class="bulk-count"><strong>' + this.selectedIds.length + '</strong> selected</span>' +
                 '<div class="bulk-buttons">' +
                     '<button class="btn btn-sm btn-secondary" id="bulk-clear"><i class="fas fa-times"></i> Clear</button>' +
+                    '<button class="btn btn-sm btn-success" id="bulk-approve"><i class="fas fa-check-double"></i> Approve Selected</button>' +
                     '<button class="btn btn-sm btn-danger" id="bulk-delete"><i class="fas fa-trash-can"></i> Delete Selected</button>' +
                 '</div>' +
             '</div>';
@@ -1081,6 +1088,12 @@
         approveDocument: function(docId) {
             var self = this;
 
+            // Show loading state on the row
+            var row = document.querySelector('.doc-row[data-doc-id="' + docId + '"]');
+            if (row) {
+                row.classList.add('approving');
+            }
+
             API.put('approve', { documentId: docId, createTransaction: true })
                 .then(function(result) {
                     self.streak++;
@@ -1092,22 +1105,145 @@
                     localStorage.setItem('fc_processed_today', String(self.processedToday));
 
                     self.showApprovalAnimation(docId);
-                    UI.toast('Document approved!', 'success');
+
+                    // Build success message
+                    var message = 'Transaction #' + result.transactionId + ' created!';
+                    if (result.fileAttached) {
+                        message += ' Document attached.';
+                    }
+                    UI.toast(message, 'success');
 
                     // Streak celebration
                     if (self.streak === 5) {
-                        UI.toast('🔥 5 streak! Keep going!', 'info');
+                        UI.toast('5 streak! Keep going!', 'info');
                     } else if (self.streak === 10) {
-                        UI.toast('🔥🔥 10 streak! On fire!', 'info');
+                        UI.toast('10 streak! On fire!', 'info');
                         self.triggerConfetti();
                     }
 
-                    self.loadData();
+                    // If document was deleted, remove row immediately for smoother UX
+                    if (result.documentDeleted && row) {
+                        row.classList.add('fade-out');
+                        setTimeout(function() {
+                            self.loadData();
+                        }, 300);
+                    } else {
+                        self.loadData();
+                    }
                 })
                 .catch(function(err) {
                     self.streak = 0;
-                    UI.toast('Error: ' + err.message, 'error');
+
+                    // Remove loading state on error
+                    if (row) {
+                        row.classList.remove('approving');
+                    }
+
+                    // Handle validation errors specially
+                    if (err.errors && Array.isArray(err.errors)) {
+                        var errorMessages = err.errors.map(function(e) { return e.message; }).join(', ');
+                        UI.toast('Validation failed: ' + errorMessages, 'error');
+
+                        // Prompt to open review view for fixing
+                        UI.confirm({
+                            title: 'Validation Failed',
+                            message: 'This document has validation errors:\n\n' + errorMessages + '\n\nOpen in Review to fix?',
+                            confirmText: 'Open Review',
+                            cancelText: 'Cancel'
+                        }).then(function(confirmed) {
+                            if (confirmed) {
+                                Router.navigate('review', { docId: docId });
+                            }
+                        });
+                    } else {
+                        UI.toast('Error: ' + err.message, 'error');
+                    }
                 });
+        },
+
+        approveSelected: function() {
+            var self = this;
+            var count = this.selectedIds.length;
+
+            if (count === 0) return;
+
+            UI.confirm({
+                title: 'Approve ' + count + ' Document' + (count > 1 ? 's' : ''),
+                message: 'Create transactions for ' + count + ' document' + (count > 1 ? 's' : '') + '?',
+                confirmText: 'Approve All',
+                cancelText: 'Cancel',
+                type: 'success'
+            }).then(function(confirmed) {
+                if (!confirmed) return;
+
+                var approved = 0;
+                var failed = 0;
+                var failedDocs = [];
+                var idsToApprove = self.selectedIds.slice();
+
+                // Show progress in UI
+                var bar = el('.bulk-actions-bar');
+                if (bar) {
+                    bar.classList.add('processing');
+                }
+
+                function approveNext(index) {
+                    if (index >= idsToApprove.length) {
+                        // Remove processing state
+                        if (bar) {
+                            bar.classList.remove('processing');
+                        }
+                        self.selectedIds = [];
+
+                        if (approved > 0) {
+                            UI.toast('Created ' + approved + ' transaction' + (approved > 1 ? 's' : ''), 'success');
+                            if (approved >= 5) {
+                                self.triggerConfetti();
+                            }
+                        }
+                        if (failed > 0) {
+                            UI.toast(failed + ' document' + (failed > 1 ? 's' : '') + ' failed validation', 'warning');
+                        }
+                        self.loadData();
+                        return;
+                    }
+
+                    var docId = idsToApprove[index];
+                    var row = document.querySelector('.doc-row[data-doc-id="' + docId + '"]');
+                    if (row) {
+                        row.classList.add('approving');
+                    }
+
+                    API.put('approve', { documentId: docId, createTransaction: true })
+                        .then(function(result) {
+                            approved++;
+                            self.streak++;
+                            self.processedToday++;
+                            self.bestStreak = Math.max(self.bestStreak, self.streak);
+                            localStorage.setItem('fc_best_streak', String(self.bestStreak));
+                            localStorage.setItem('fc_processed_today', String(self.processedToday));
+
+                            if (row) {
+                                row.classList.remove('approving');
+                                row.classList.add('approved');
+                            }
+                            approveNext(index + 1);
+                        })
+                        .catch(function(err) {
+                            failed++;
+                            self.streak = 0;
+                            failedDocs.push({ id: docId, error: err.message });
+
+                            if (row) {
+                                row.classList.remove('approving');
+                                row.classList.add('failed');
+                            }
+                            approveNext(index + 1);
+                        });
+                }
+
+                approveNext(0);
+            });
         },
 
         deleteDocument: function(docId) {

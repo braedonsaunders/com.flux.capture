@@ -83,6 +83,10 @@
                     // Required Fields
                     setCheckbox('#require-invoice-number', anomaly.requireInvoiceNumber);
                     setCheckbox('#require-total-amount', anomaly.requireTotalAmount);
+
+                    // Transaction Creation Settings
+                    setCheckboxOff('#attach-file-to-transaction', settings.attachFileToTransaction);
+                    setCheckbox('#delete-document-on-success', settings.deleteDocumentOnSuccess);
                 })
                 .catch(function(err) {
                     console.warn('Could not load settings:', err);
@@ -2675,6 +2679,9 @@
                 defaultDocumentType: el('#default-type').value || 'auto',
                 defaultLineSublist: el('#default-line-sublist') ? el('#default-line-sublist').value : 'auto',
                 maxExtractionPages: isNaN(maxPagesVal) ? 0 : maxPagesVal,
+                // Transaction Creation Settings
+                attachFileToTransaction: getChecked('#attach-file-to-transaction'),
+                deleteDocumentOnSuccess: getChecked('#delete-document-on-success'),
                 // Anomaly Detection Settings (grouped)
                 anomalyDetection: {
                     // Duplicate Detection

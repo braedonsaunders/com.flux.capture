@@ -6354,9 +6354,62 @@ tr.doc-row:hover .row-action.btn-delete:hover { background: var(--color-danger);
 .col-date { color: var(--text-secondary); }
 .col-type { color: var(--text-tertiary); font-size: var(--font-size-xs); }
 
-/* Row animation */
-tr.doc-row.approving { animation: compress-out 0.3s ease forwards; }
-@keyframes compress-out { 0% { transform: scaleY(1); opacity: 1; } 100% { transform: scaleY(0); opacity: 0; height: 0; padding: 0; margin: 0; border: 0; } }
+/* Row animation - approving state with spinner */
+tr.doc-row.approving {
+    position: relative;
+    pointer-events: none;
+    opacity: 0.7;
+    background: rgba(16, 185, 129, 0.05);
+}
+tr.doc-row.approving td { position: relative; }
+tr.doc-row.approving .row-actions { visibility: hidden; }
+tr.doc-row.approving::after {
+    content: '';
+    position: absolute;
+    right: 16px;
+    top: 50%;
+    margin-top: -9px;
+    width: 18px;
+    height: 18px;
+    border: 2px solid var(--gray-300);
+    border-top-color: var(--color-success);
+    border-radius: 50%;
+    animation: approve-spin 0.8s linear infinite;
+}
+@keyframes approve-spin { to { transform: rotate(360deg); } }
+
+/* Approved state */
+tr.doc-row.approved {
+    background: rgba(16, 185, 129, 0.1);
+}
+tr.doc-row.approved td:first-child::before {
+    content: '\f00c';
+    font-family: 'Font Awesome 6 Free';
+    font-weight: 900;
+    color: var(--color-success);
+    margin-right: 8px;
+}
+
+/* Failed state */
+tr.doc-row.failed {
+    background: rgba(239, 68, 68, 0.08);
+}
+tr.doc-row.failed td:first-child::before {
+    content: '\f00d';
+    font-family: 'Font Awesome 6 Free';
+    font-weight: 900;
+    color: var(--color-danger);
+    margin-right: 8px;
+}
+
+/* Fade out animation */
+tr.doc-row.fade-out {
+    animation: fade-out 0.3s ease forwards;
+}
+@keyframes fade-out {
+    0% { opacity: 1; transform: translateX(0); }
+    100% { opacity: 0; transform: translateX(20px); }
+}
 
 /* Delete loading state */
 tr.doc-row.deleting {
@@ -6403,6 +6456,29 @@ tr.doc-row.deleting::after {
     animation: delete-spin 0.8s linear infinite;
 }
 .bulk-actions-bar.deleting .bulk-buttons .btn-danger i { display: none; }
+
+/* Bulk processing (approve) loading overlay */
+.bulk-actions-bar.processing {
+    pointer-events: none;
+}
+.bulk-actions-bar.processing .bulk-buttons .btn-success {
+    position: relative;
+    padding-left: 32px;
+}
+.bulk-actions-bar.processing .bulk-buttons .btn-success::before {
+    content: '';
+    position: absolute;
+    left: 10px;
+    top: 50%;
+    margin-top: -7px;
+    width: 14px;
+    height: 14px;
+    border: 2px solid rgba(255, 255, 255, 0.3);
+    border-top-color: white;
+    border-radius: 50%;
+    animation: approve-spin 0.8s linear infinite;
+}
+.bulk-actions-bar.processing .bulk-buttons .btn-success i { display: none; }
 
 .bulk-delete-progress {
     display: flex;

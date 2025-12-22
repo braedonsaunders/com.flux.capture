@@ -1558,6 +1558,43 @@
                         </div>
                     </div>
                 </div>
+
+                <!-- Transaction Creation Settings -->
+                <div class="settings-card">
+                    <div class="settings-card-header">
+                        <i class="fas fa-file-invoice-dollar"></i>
+                        <div>
+                            <h3>Transaction Creation</h3>
+                            <p>Configure how transactions are created from approved documents</p>
+                        </div>
+                    </div>
+                    <div class="settings-card-body">
+                        <div class="setting-row">
+                            <div class="setting-label">
+                                <span>Attach Source Document</span>
+                                <small>Attach the original PDF/image to the created transaction. File will be moved to "Transaction Attachments" folder.</small>
+                            </div>
+                            <div class="setting-control">
+                                <label class="toggle">
+                                    <input type="checkbox" id="attach-file-to-transaction">
+                                    <span class="toggle-track"><span class="toggle-thumb"></span></span>
+                                </label>
+                            </div>
+                        </div>
+                        <div class="setting-row">
+                            <div class="setting-label">
+                                <span>Delete Flux Document on Success</span>
+                                <small>Automatically delete the Flux Capture document record and source file after successfully creating the transaction</small>
+                            </div>
+                            <div class="setting-control">
+                                <label class="toggle">
+                                    <input type="checkbox" id="delete-document-on-success" checked>
+                                    <span class="toggle-track"><span class="toggle-thumb"></span></span>
+                                </label>
+                            </div>
+                        </div>
+                    </div>
+                </div>
                 </div>
             </div>
 
