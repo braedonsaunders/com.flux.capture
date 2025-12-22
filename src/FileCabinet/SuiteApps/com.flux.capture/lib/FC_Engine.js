@@ -761,6 +761,29 @@ define([
                 }
             }
 
+            // If due date wasn't directly extracted, try to infer it from visible payment terms
+            if (!fields.dueDate && fields.invoiceDate) {
+                const inferredFromText = rawResult.rawText
+                    ? this._inferDueDateFromText(rawResult.rawText, fields.invoiceDate, 'document')
+                    : null;
+
+                const inferredFromField = !inferredFromText && fields.paymentTerms
+                    ? this._inferDueDateFromText(fields.paymentTerms, fields.invoiceDate, 'payment_terms_field')
+                    : null;
+
+                const inferred = inferredFromText || inferredFromField;
+
+                if (inferred) {
+                    fields.dueDate = inferred.date;
+                    extractionWarnings.push({
+                        type: 'due_date_inferred',
+                        message: `Inferred due date from terms (${inferred.source})`,
+                        field: 'dueDate',
+                        rawValue: inferred.raw
+                    });
+                }
+            }
+
             // Extract line items from tables
             let lineItems = [];
             let lineItemWarnings = [];
@@ -1028,6 +1051,42 @@ define([
 
             // String fields
             return value;
+        }
+
+        /**
+         * Infer due date from natural-language payment terms in the raw text
+         */
+        _inferDueDateFromText(rawText, invoiceDate, sourceHint) {
+            if (!rawText || !invoiceDate) return null;
+
+            const normalized = rawText.replace(/\s+/g, ' ');
+            const patterns = [
+                { regex: /net\s*(\d{1,3})/i, source: 'net_terms' },
+                { regex: /due\s+in\s+(\d{1,3})\s+days/i, source: 'due_in_days' },
+                { regex: /(payment\s+)?terms?:?\s*(\d{1,3})\s*days/i, source: 'terms_days' }
+            ];
+
+            for (const pattern of patterns) {
+                const match = normalized.match(pattern.regex);
+                if (match) {
+                    const days = parseInt(match[1] || match[2], 10);
+                    if (!isNaN(days) && days > 0 && days <= 365) {
+                        const date = new Date(invoiceDate.getTime() + days * 24 * 60 * 60 * 1000);
+                        const source = sourceHint
+                            ? `${sourceHint}:${pattern.source}`
+                            : pattern.source;
+
+                        return {
+                            date,
+                            days,
+                            raw: match[0],
+                            source
+                        };
+                    }
+                }
+            }
+
+            return null;
         }
 
         /**
