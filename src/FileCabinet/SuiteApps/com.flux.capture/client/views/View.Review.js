@@ -1856,8 +1856,22 @@
             var aiCorrections = (aiVerification && aiVerification.corrections) || [];
             var aiMissedFields = (aiVerification && aiVerification.missedFields) || [];
             var aiFlags = (aiVerification && aiVerification.validationFlags) || [];
-            var aiTotalIssues = aiCorrections.length + aiMissedFields.length + aiFlags.length;
+            var aiLineItemIssues = (aiVerification && aiVerification.lineItemIssues) || [];
+            var aiTotalIssues = aiCorrections.length + aiMissedFields.length + aiFlags.length + aiLineItemIssues.length;
             var aiAccuracy = aiVerification && aiVerification.accuracy ? Math.round(aiVerification.accuracy * 100) : 0;
+            // Enhanced AI verification data
+            var aiRiskScore = (aiVerification && aiVerification.riskScore) || 'low';
+            var aiRecommendation = (aiVerification && aiVerification.recommendation) || null;
+            var aiMathValidation = (aiVerification && aiVerification.mathValidation) || null;
+            var aiPaymentTerms = (aiVerification && aiVerification.paymentTerms) || null;
+            var aiInsights = (aiVerification && aiVerification.insights) || [];
+            var aiSummary = (aiVerification && aiVerification.summary) || null;
+
+            // Calculate total alerts (anomalies + AI issues that need attention)
+            var totalAlerts = anomalies.length + aiCorrections.length + aiMissedFields.length + aiFlags.length + aiLineItemIssues.length;
+            var hasAlerts = totalAlerts > 0;
+            var hasHighSeverity = anomalies.some(function(a) { return a.severity === 'high'; }) ||
+                aiFlags.some(function(f) { return f.severity === 'high'; });
 
             html += '<div class="review-header">' +
                 '<div class="review-header-bar">' +
@@ -1873,24 +1887,22 @@
                         '</div>' +
                         '<span class="metric-label">Confidence</span>' +
                     '</div>' +
-                    // AI Verification indicator (if verified)
-                    (hasAiVerification ?
-                        '<div class="header-metric ai-metric' + (aiTotalIssues > 0 ? ' has-issues' : ' verified-ok') + '" id="ai-status-toggle">' +
+                    // AI Verified badge (if verified and no issues)
+                    (hasAiVerification && aiTotalIssues === 0 ?
+                        '<div class="header-metric ai-metric verified-ok">' +
                             '<div class="metric-icon ai-icon">' +
-                                '<i class="fas fa-wand-magic-sparkles"></i>' +
-                                (aiTotalIssues > 0 ? '<span class="metric-badge">' + aiTotalIssues + '</span>' : '') +
+                                '<i class="fas fa-shield-check"></i>' +
                             '</div>' +
-                            '<span class="metric-label">AI ' + (aiTotalIssues > 0 ? 'Issues' : aiAccuracy + '%') + '</span>' +
-                            '<i class="fas fa-chevron-down metric-chevron"></i>' +
+                            '<span class="metric-label">AI Verified ' + aiAccuracy + '%</span>' +
                         '</div>' : '') +
-                    // Alerts indicator (if any)
-                    (anomalies.length > 0 ?
-                        '<div class="header-metric alert-metric" id="alert-status-toggle">' +
+                    // Unified Alerts indicator (anomalies + AI issues combined)
+                    (hasAlerts ?
+                        '<div class="header-metric alert-metric' + (hasHighSeverity ? ' has-critical' : '') + '" id="alert-status-toggle">' +
                             '<div class="metric-icon alert-icon">' +
-                                '<i class="fas fa-triangle-exclamation"></i>' +
-                                '<span class="metric-badge">' + anomalies.length + '</span>' +
+                                '<i class="fas fa-' + (hasHighSeverity ? 'exclamation-triangle' : 'bell') + '"></i>' +
+                                '<span class="metric-badge">' + totalAlerts + '</span>' +
                             '</div>' +
-                            '<span class="metric-label">Alert' + (anomalies.length > 1 ? 's' : '') + '</span>' +
+                            '<span class="metric-label">Alert' + (totalAlerts > 1 ? 's' : '') + '</span>' +
                             '<i class="fas fa-chevron-down metric-chevron"></i>' +
                         '</div>' : '') +
                     // Spacer
@@ -1906,84 +1918,154 @@
                             '<i class="fas fa-chevron-down metric-chevron"></i>' +
                         '</div>' : '') +
                 '</div>' +
-                // Alert details dropdown
-                (anomalies.length > 0 ?
-                    '<div class="header-dropdown alert-dropdown" id="alert-details" style="display:none;">' +
-                        anomalies.map(function(a) {
-                            return '<div class="dropdown-item alert-' + a.severity + '">' +
-                                '<i class="fas fa-' + (a.severity === 'high' ? 'exclamation-circle' : 'info-circle') + '"></i>' +
-                                '<span>' + escapeHtml(a.message) + '</span>' +
-                            '</div>';
-                        }).join('') +
-                    '</div>' : '') +
-                // AI Verification details dropdown
-                (hasAiVerification ?
-                    '<div class="header-dropdown ai-dropdown" id="ai-details" style="display:none;">' +
-                        '<div class="ai-dropdown-header">' +
-                            '<span class="ai-dropdown-title"><i class="fas fa-wand-magic-sparkles"></i> AI Verification Results</span>' +
-                            '<span class="ai-accuracy-badge">' + aiAccuracy + '% accuracy</span>' +
-                        '</div>' +
-                        // Corrections section
+                // Unified Alerts dropdown (combines anomalies + AI verification)
+                (hasAlerts ?
+                    '<div class="header-dropdown alert-dropdown unified-alerts" id="alert-details" style="display:none;">' +
+                        // AI Verification header with risk score and recommendation (if verified)
+                        (hasAiVerification ?
+                            '<div class="alert-section-header ai-header">' +
+                                '<div class="ai-header-main">' +
+                                    '<i class="fas fa-wand-magic-sparkles"></i>' +
+                                    '<span>AI Verification</span>' +
+                                    '<span class="ai-accuracy-pill">' + aiAccuracy + '%</span>' +
+                                    '<span class="ai-risk-pill risk-' + aiRiskScore + '">' +
+                                        '<i class="fas fa-' + (aiRiskScore === 'critical' || aiRiskScore === 'high' ? 'exclamation-triangle' : aiRiskScore === 'medium' ? 'exclamation-circle' : 'check-circle') + '"></i> ' +
+                                        aiRiskScore.charAt(0).toUpperCase() + aiRiskScore.slice(1) + ' Risk' +
+                                    '</span>' +
+                                '</div>' +
+                                (aiSummary ? '<div class="ai-summary">' + escapeHtml(aiSummary) + '</div>' : '') +
+                                (aiRecommendation ? '<div class="ai-recommendation rec-' + aiRecommendation + '"><i class="fas fa-' + (aiRecommendation === 'approve' ? 'check' : aiRecommendation === 'reject' ? 'times' : 'eye') + '"></i> ' + aiRecommendation.charAt(0).toUpperCase() + aiRecommendation.slice(1) + '</div>' : '') +
+                            '</div>' : '') +
+                        // Math Validation section (high value - shows if amounts don't add up)
+                        (hasAiVerification && aiMathValidation && !aiMathValidation.isValid ?
+                            '<div class="alert-section math-validation-section">' +
+                                '<div class="alert-section-title"><i class="fas fa-calculator"></i> Math Validation Issue</div>' +
+                                '<div class="alert-item alert-high math-error">' +
+                                    '<i class="fas fa-exclamation-triangle"></i>' +
+                                    '<div class="alert-item-content">' +
+                                        '<div class="math-detail">Line items sum: <strong>$' + (aiMathValidation.lineItemsSum || '?') + '</strong></div>' +
+                                        '<div class="math-detail">Subtotal on doc: <strong>$' + (aiMathValidation.subtotalOnDoc || '?') + '</strong></div>' +
+                                        '<div class="math-detail">Tax (' + (aiMathValidation.taxRate || '?') + '): <strong>$' + (aiMathValidation.taxAmount || '?') + '</strong></div>' +
+                                        '<div class="math-detail">Total on doc: <strong>$' + (aiMathValidation.totalOnDoc || '?') + '</strong></div>' +
+                                        '<div class="math-detail math-discrepancy">Discrepancy: <strong class="text-danger">$' + (aiMathValidation.discrepancy || '0') + '</strong></div>' +
+                                    '</div>' +
+                                '</div>' +
+                            '</div>' : '') +
+                        // Payment Terms section (helpful info)
+                        (hasAiVerification && aiPaymentTerms && aiPaymentTerms.detected ?
+                            '<div class="alert-section payment-terms-section">' +
+                                '<div class="alert-section-title"><i class="fas fa-calendar-alt"></i> Payment Terms Detected</div>' +
+                                '<div class="alert-item alert-info payment-terms-info">' +
+                                    '<i class="fas fa-info-circle"></i>' +
+                                    '<div class="alert-item-content">' +
+                                        '<div class="terms-detail">Terms: <strong>' + escapeHtml(aiPaymentTerms.detected) + '</strong></div>' +
+                                        (aiPaymentTerms.dueDate ? '<div class="terms-detail">Due Date: <strong>' + escapeHtml(aiPaymentTerms.dueDate) + '</strong></div>' : '') +
+                                        (aiPaymentTerms.daysUntilDue !== null ? '<div class="terms-detail">Days until due: <strong>' + aiPaymentTerms.daysUntilDue + '</strong></div>' : '') +
+                                        (aiPaymentTerms.earlyPayDiscount ? '<div class="terms-detail terms-discount"><i class="fas fa-tag"></i> <strong>' + escapeHtml(aiPaymentTerms.earlyPayDiscount) + '</strong></div>' : '') +
+                                    '</div>' +
+                                '</div>' +
+                            '</div>' : '') +
+                        // AI Corrections (actionable - highest priority)
                         (aiCorrections.length > 0 ?
-                            '<div class="ai-section">' +
-                                '<div class="ai-section-header"><i class="fas fa-edit"></i> Corrections (' + aiCorrections.length + ')</div>' +
+                            '<div class="alert-section ai-corrections-section">' +
+                                '<div class="alert-section-title"><i class="fas fa-edit"></i> Suggested Corrections</div>' +
                                 aiCorrections.map(function(c, idx) {
-                                    return '<div class="ai-correction-item" data-correction-idx="' + idx + '">' +
-                                        '<div class="correction-field">' + escapeHtml(c.field || 'Unknown') + '</div>' +
-                                        '<div class="correction-values">' +
-                                            '<span class="correction-old">' + escapeHtml(String(c.extracted || '')) + '</span>' +
-                                            '<i class="fas fa-arrow-right"></i>' +
-                                            '<span class="correction-new">' + escapeHtml(String(c.correct || '')) + '</span>' +
+                                    return '<div class="alert-item ai-correction-item" data-correction-idx="' + idx + '">' +
+                                        '<div class="alert-item-content">' +
+                                            '<div class="correction-field-name">' + escapeHtml(c.field || 'Unknown') + '</div>' +
+                                            '<div class="correction-values">' +
+                                                '<span class="correction-old">' + escapeHtml(String(c.extracted || '')) + '</span>' +
+                                                '<i class="fas fa-arrow-right"></i>' +
+                                                '<span class="correction-new">' + escapeHtml(String(c.correct || '')) + '</span>' +
+                                            '</div>' +
+                                            '<div class="correction-reason">' + escapeHtml(c.reason || '') + '</div>' +
                                         '</div>' +
-                                        '<div class="correction-reason">' + escapeHtml(c.reason || '') + '</div>' +
-                                        '<div class="correction-actions">' +
+                                        '<div class="alert-item-actions">' +
                                             '<button class="btn btn-sm btn-primary btn-accept-correction" data-field="' + escapeHtml(c.field || '') + '" data-value="' + escapeHtml(String(c.correct || '')) + '">' +
                                                 '<i class="fas fa-check"></i> Accept' +
                                             '</button>' +
                                             '<button class="btn btn-sm btn-ghost btn-ignore-correction">' +
-                                                '<i class="fas fa-times"></i> Ignore' +
+                                                '<i class="fas fa-times"></i>' +
                                             '</button>' +
                                         '</div>' +
                                     '</div>';
                                 }).join('') +
                             '</div>' : '') +
-                        // Missed fields section
+                        // AI Missed Fields (actionable)
                         (aiMissedFields.length > 0 ?
-                            '<div class="ai-section">' +
-                                '<div class="ai-section-header"><i class="fas fa-plus-circle"></i> Missed Fields (' + aiMissedFields.length + ')</div>' +
+                            '<div class="alert-section ai-missed-section">' +
+                                '<div class="alert-section-title"><i class="fas fa-plus-circle"></i> Missing Data Found</div>' +
                                 aiMissedFields.map(function(m, idx) {
-                                    return '<div class="ai-missed-item" data-missed-idx="' + idx + '">' +
-                                        '<div class="missed-field">' + escapeHtml(m.field || 'Unknown') + '</div>' +
-                                        '<div class="missed-value">' + escapeHtml(String(m.value || '')) + '</div>' +
-                                        '<div class="missed-location">' + escapeHtml(m.location || '') + '</div>' +
-                                        '<div class="missed-actions">' +
+                                    return '<div class="alert-item ai-missed-item" data-missed-idx="' + idx + '">' +
+                                        '<div class="alert-item-content">' +
+                                            '<div class="missed-field-name">' + escapeHtml(m.field || 'Unknown') + '</div>' +
+                                            '<div class="missed-value">' + escapeHtml(String(m.value || '')) + '</div>' +
+                                            '<div class="missed-location"><i class="fas fa-map-marker-alt"></i> ' + escapeHtml(m.location || 'Document') + '</div>' +
+                                        '</div>' +
+                                        '<div class="alert-item-actions">' +
                                             '<button class="btn btn-sm btn-primary btn-add-missed" data-field="' + escapeHtml(m.field || '') + '" data-value="' + escapeHtml(String(m.value || '')) + '">' +
-                                                '<i class="fas fa-plus"></i> Add to Form' +
+                                                '<i class="fas fa-plus"></i> Add' +
                                             '</button>' +
                                             '<button class="btn btn-sm btn-ghost btn-ignore-missed">' +
-                                                '<i class="fas fa-times"></i> Ignore' +
+                                                '<i class="fas fa-times"></i>' +
                                             '</button>' +
                                         '</div>' +
                                     '</div>';
                                 }).join('') +
                             '</div>' : '') +
-                        // Validation flags section
-                        (aiFlags.length > 0 ?
-                            '<div class="ai-section">' +
-                                '<div class="ai-section-header"><i class="fas fa-flag"></i> Validation Flags (' + aiFlags.length + ')</div>' +
-                                aiFlags.map(function(f) {
-                                    var severityClass = f.severity === 'high' ? 'flag-high' : f.severity === 'medium' ? 'flag-medium' : 'flag-low';
-                                    return '<div class="ai-flag-item ' + severityClass + '">' +
-                                        '<i class="fas fa-' + (f.severity === 'high' ? 'exclamation-triangle' : 'info-circle') + '"></i>' +
-                                        '<span>' + escapeHtml(f.message || '') + '</span>' +
+                        // AI Line Item Issues
+                        (aiLineItemIssues.length > 0 ?
+                            '<div class="alert-section ai-lineitem-section">' +
+                                '<div class="alert-section-title"><i class="fas fa-table"></i> Line Item Issues</div>' +
+                                aiLineItemIssues.map(function(li) {
+                                    var typeIcon = li.type === 'missing' ? 'minus-circle' : li.type === 'extra' ? 'plus-circle' : 'exclamation-circle';
+                                    return '<div class="alert-item lineitem-issue-item alert-medium">' +
+                                        '<i class="fas fa-' + typeIcon + '"></i>' +
+                                        '<div class="alert-item-content">' +
+                                            '<span class="lineitem-type">' + escapeHtml(li.type || 'Issue') + '</span>' +
+                                            (li.lineNumber ? ' <span class="lineitem-number">Line ' + li.lineNumber + '</span>' : '') +
+                                            '<div class="lineitem-desc">' + escapeHtml(li.description || '') + '</div>' +
+                                        '</div>' +
                                     '</div>';
                                 }).join('') +
                             '</div>' : '') +
-                        // No issues message
-                        (aiTotalIssues === 0 ?
-                            '<div class="ai-no-issues">' +
-                                '<i class="fas fa-check-circle"></i>' +
-                                '<span>All extracted data verified successfully</span>' +
+                        // Standard Anomalies/Alerts
+                        (anomalies.length > 0 ?
+                            '<div class="alert-section anomaly-section">' +
+                                '<div class="alert-section-title"><i class="fas fa-shield-alt"></i> Validation Alerts</div>' +
+                                anomalies.map(function(a) {
+                                    var iconType = a.severity === 'high' ? 'exclamation-triangle' : a.severity === 'medium' ? 'exclamation-circle' : 'info-circle';
+                                    return '<div class="alert-item alert-' + a.severity + '">' +
+                                        '<i class="fas fa-' + iconType + '"></i>' +
+                                        '<span class="alert-message">' + escapeHtml(a.message) + '</span>' +
+                                    '</div>';
+                                }).join('') +
+                            '</div>' : '') +
+                        // AI Validation Flags
+                        (aiFlags.length > 0 ?
+                            '<div class="alert-section ai-flags-section">' +
+                                '<div class="alert-section-title"><i class="fas fa-flag"></i> AI Validation Flags</div>' +
+                                aiFlags.map(function(f) {
+                                    var iconType = f.severity === 'high' || f.severity === 'critical' ? 'exclamation-triangle' : f.severity === 'medium' ? 'exclamation-circle' : 'info-circle';
+                                    return '<div class="alert-item alert-' + (f.severity || 'low') + '">' +
+                                        '<i class="fas fa-' + iconType + '"></i>' +
+                                        '<div class="alert-item-content">' +
+                                            '<span class="alert-message">' + escapeHtml(f.message || '') + '</span>' +
+                                            (f.action ? '<div class="alert-action"><i class="fas fa-hand-point-right"></i> ' + escapeHtml(f.action) + '</div>' : '') +
+                                        '</div>' +
+                                    '</div>';
+                                }).join('') +
+                            '</div>' : '') +
+                        // AI Insights (money-saving tips and observations)
+                        (hasAiVerification && aiInsights.length > 0 ?
+                            '<div class="alert-section ai-insights-section">' +
+                                '<div class="alert-section-title"><i class="fas fa-lightbulb"></i> Insights</div>' +
+                                aiInsights.map(function(insight) {
+                                    return '<div class="alert-item alert-info insight-item">' +
+                                        '<i class="fas fa-lightbulb"></i>' +
+                                        '<span class="insight-text">' + escapeHtml(insight) + '</span>' +
+                                    '</div>';
+                                }).join('') +
                             '</div>' : '') +
                     '</div>' : '') +
                 // Extraction pool dropdown
@@ -3085,7 +3167,7 @@
                 });
             }
 
-            // Toggle alert details in unified header
+            // Toggle unified alerts dropdown (contains both anomalies and AI verification)
             var alertToggle = el('#alert-status-toggle');
             if (alertToggle) {
                 alertToggle.onclick = function(e) {
@@ -3117,6 +3199,9 @@
                         }
                     }
                 };
+
+                // Bind AI correction/missed field actions (now inside unified alerts)
+                self.bindAIVerificationEvents();
             }
 
             // Toggle pool dropdown in unified header
@@ -3155,56 +3240,6 @@
 
                 // Bind chip actions within pool dropdown
                 self.bindPoolChipEvents();
-            }
-
-            // Toggle AI verification dropdown
-            var aiToggle = el('#ai-status-toggle');
-            if (aiToggle) {
-                aiToggle.onclick = function(e) {
-                    e.stopPropagation();
-                    var aiDetails = el('#ai-details');
-                    var alertDetails = el('#alert-details');
-                    var poolDropdown = el('#pool-dropdown');
-                    var chevron = aiToggle.querySelector('.metric-chevron');
-
-                    // Close other dropdowns
-                    if (alertDetails && alertDetails.style.display !== 'none') {
-                        alertDetails.style.display = 'none';
-                        var alertToggleEl = el('#alert-status-toggle');
-                        if (alertToggleEl) {
-                            alertToggleEl.classList.remove('active');
-                            var alertChevron = alertToggleEl.querySelector('.metric-chevron');
-                            if (alertChevron) {
-                                alertChevron.classList.remove('fa-chevron-up');
-                                alertChevron.classList.add('fa-chevron-down');
-                            }
-                        }
-                    }
-                    if (poolDropdown && poolDropdown.style.display !== 'none') {
-                        poolDropdown.style.display = 'none';
-                        var poolToggleEl = el('#pool-header-toggle');
-                        if (poolToggleEl) {
-                            var poolChevron = poolToggleEl.querySelector('.metric-chevron');
-                            if (poolChevron) {
-                                poolChevron.classList.remove('fa-chevron-up');
-                                poolChevron.classList.add('fa-chevron-down');
-                            }
-                        }
-                    }
-
-                    if (aiDetails) {
-                        var isHidden = aiDetails.style.display === 'none';
-                        aiDetails.style.display = isHidden ? 'block' : 'none';
-                        aiToggle.classList.toggle('active', isHidden);
-                        if (chevron) {
-                            chevron.classList.toggle('fa-chevron-down', !isHidden);
-                            chevron.classList.toggle('fa-chevron-up', isHidden);
-                        }
-                    }
-                };
-
-                // Bind AI correction/missed field actions
-                self.bindAIVerificationEvents();
             }
 
             // Track all field changes
