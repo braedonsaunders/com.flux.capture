@@ -6890,14 +6890,19 @@
             this.refreshExtractionPool();
 
             // Update annotations if showing - always refresh to show green status
-            if (this.extractionPool.showAnnotations && this.pdfPage) {
-                // Use CSS dimensions (not canvas.width which includes DPI scaling)
-                var cssWidth = parseFloat(this.pdfCanvas.style.width) || this.pdfCanvas.clientWidth;
-                var viewport = this.pdfPage.getViewport({
-                    scale: cssWidth / this.pdfPage.getViewport({ scale: 1 }).width,
-                    rotation: this.rotation
-                });
-                this.renderExtractionAnnotations(viewport);
+            if (this.extractionPool.showAnnotations) {
+                if (this.pageElements && this.pageElements.length > 0) {
+                    // Multi-page mode - each page has its own viewport stored
+                    this.renderExtractionAnnotations();
+                } else if (this.pdfPage && this.pdfCanvas) {
+                    // Legacy single-page mode
+                    var cssWidth = parseFloat(this.pdfCanvas.style.width) || this.pdfCanvas.clientWidth;
+                    var viewport = this.pdfPage.getViewport({
+                        scale: cssWidth / this.pdfPage.getViewport({ scale: 1 }).width,
+                        rotation: this.rotation
+                    });
+                    this.renderExtractionAnnotations(viewport);
+                }
             }
         },
 
@@ -7318,13 +7323,19 @@
 
                             // Refresh to update annotations
                             self.refreshExtractionPool();
-                            if (self.extractionPool.showAnnotations && self.pdfPage) {
-                                var cssWidth = parseFloat(self.pdfCanvas.style.width) || self.pdfCanvas.clientWidth;
-                                var viewport = self.pdfPage.getViewport({
-                                    scale: cssWidth / self.pdfPage.getViewport({ scale: 1 }).width,
-                                    rotation: self.rotation
-                                });
-                                self.renderExtractionAnnotations(viewport);
+                            if (self.extractionPool.showAnnotations) {
+                                if (self.pageElements && self.pageElements.length > 0) {
+                                    // Multi-page mode - each page has its own viewport stored
+                                    self.renderExtractionAnnotations();
+                                } else if (self.pdfPage && self.pdfCanvas) {
+                                    // Legacy single-page mode
+                                    var cssWidth = parseFloat(self.pdfCanvas.style.width) || self.pdfCanvas.clientWidth;
+                                    var viewport = self.pdfPage.getViewport({
+                                        scale: cssWidth / self.pdfPage.getViewport({ scale: 1 }).width,
+                                        rotation: self.rotation
+                                    });
+                                    self.renderExtractionAnnotations(viewport);
+                                }
                             }
                         }
 
