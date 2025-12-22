@@ -3302,6 +3302,47 @@ define([
 
     // ==================== PUT Implementations ====================
 
+    /**
+     * Helper to parse date strings from various formats into Date objects
+     * Handles ISO 8601, MM/DD/YYYY, YYYY-MM-DD formats
+     */
+    function parseDateValue(dateVal) {
+        if (!dateVal) return null;
+        if (dateVal instanceof Date) return dateVal;
+
+        var dateStr = String(dateVal).trim();
+        if (!dateStr) return null;
+
+        var parsed = null;
+
+        // Try ISO 8601 format (e.g., 2025-03-12T07:00:00.000Z)
+        if (dateStr.indexOf('T') > -1) {
+            parsed = new Date(dateStr);
+        }
+        // Try YYYY-MM-DD format
+        else if (/^\d{4}[-\/]\d{1,2}[-\/]\d{1,2}$/.test(dateStr)) {
+            var parts = dateStr.split(/[-\/]/);
+            parsed = new Date(parseInt(parts[0]), parseInt(parts[1]) - 1, parseInt(parts[2]));
+        }
+        // Try MM/DD/YYYY format
+        else if (/^\d{1,2}[-\/]\d{1,2}[-\/]\d{4}$/.test(dateStr)) {
+            var parts = dateStr.split(/[-\/]/);
+            parsed = new Date(parseInt(parts[2]), parseInt(parts[0]) - 1, parseInt(parts[1]));
+        }
+        // Fallback to native parsing
+        else {
+            parsed = new Date(dateStr);
+        }
+
+        // Validate the parsed date
+        if (parsed && !isNaN(parsed.getTime())) {
+            return parsed;
+        }
+
+        log.warn('parseDateValue', 'Could not parse date: ' + dateStr);
+        return null;
+    }
+
     function updateDocument(context) {
         var documentId = context.documentId;
         var formData = context.formData;
@@ -3336,10 +3377,16 @@ define([
                 values['custrecord_flux_invoice_number'] = bodyFields.tranid;
             }
             if (bodyFields.trandate) {
-                values['custrecord_flux_invoice_date'] = bodyFields.trandate;
+                var parsedTrandate = parseDateValue(bodyFields.trandate);
+                if (parsedTrandate) {
+                    values['custrecord_flux_invoice_date'] = parsedTrandate;
+                }
             }
             if (bodyFields.duedate) {
-                values['custrecord_flux_due_date'] = bodyFields.duedate;
+                var parsedDuedate = parseDateValue(bodyFields.duedate);
+                if (parsedDuedate) {
+                    values['custrecord_flux_due_date'] = parsedDuedate;
+                }
             }
             if (bodyFields.total !== undefined) {
                 values['custrecord_flux_total_amount'] = bodyFields.total;
