@@ -5862,44 +5862,98 @@
         approveDocument: function() {
             var self = this;
 
-            // Validate all required fields
+            // Validate all required fields (client-side)
             var validation = this.validateRequiredFields();
             if (!validation.valid) {
                 UI.toast(validation.message, 'warning');
                 if (validation.focusElement) {
                     validation.focusElement.focus();
-                    // Scroll to make visible if needed
                     validation.focusElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
                 }
                 return;
             }
 
+            // Show processing state
+            var approveBtn = el('#btn-approve');
+            if (approveBtn) {
+                approveBtn.disabled = true;
+                approveBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Creating Transaction...';
+            }
+
             // Always save current form state before approval to ensure transaction uses latest data
             var formData = this.collectFormData();
-            var savePromise = API.put('update', { documentId: this.docId, formData: formData });
 
-            savePromise
+            API.put('update', { documentId: this.docId, formData: formData })
                 .then(function() {
-                    return API.put('approve', { documentId: self.docId, createTransaction: true });
+                    return API.put('approve', {
+                        documentId: self.docId,
+                        createTransaction: true,
+                        transactionType: self.transactionType
+                    });
                 })
                 .then(function(result) {
                     // Trigger confetti celebration
                     self.triggerConfetti();
-                    UI.toast('Document approved! Transaction created.', 'success');
+
+                    // Build success message
+                    var message = 'Transaction #' + result.transactionId + ' created!';
+                    if (result.fileAttached) {
+                        message += ' Document attached.';
+                    }
+                    UI.toast(message, 'success');
+
+                    // Remove current doc from queue if it was deleted
+                    if (result.documentDeleted && self.queueIds && self.queueIds.length > 0) {
+                        var currentIdx = self.queueIds.indexOf(String(self.docId));
+                        if (currentIdx > -1) {
+                            self.queueIds.splice(currentIdx, 1);
+                            // Adjust queue index if needed
+                            if (self.queueIndex > currentIdx) {
+                                self.queueIndex--;
+                            }
+                        }
+                    }
 
                     // Go to next document or back to documents list
                     if (self.queueIndex >= 0 && self.queueIndex < self.queueIds.length - 1) {
                         self.goToNextDocument();
                     } else {
                         // Last document - celebrate and go back
-                        UI.toast('Queue complete! Great work!', 'success');
+                        if (self.queueIds && self.queueIds.length > 0) {
+                            UI.toast('Queue complete! Great work!', 'success');
+                        }
                         setTimeout(function() {
                             Router.navigate('documents');
                         }, 800);
                     }
                 })
                 .catch(function(err) {
-                    UI.toast('Error: ' + err.message, 'error');
+                    // Reset button state
+                    if (approveBtn) {
+                        approveBtn.disabled = false;
+                        approveBtn.innerHTML = '<i class="fas fa-check"></i> Approve & Create Transaction';
+                    }
+
+                    // Handle validation errors specially
+                    if (err.errors && Array.isArray(err.errors)) {
+                        var errorMessages = err.errors.map(function(e) { return e.message; }).join(', ');
+                        UI.toast('Validation failed: ' + errorMessages, 'error');
+
+                        // Focus first error field if possible
+                        if (err.errors[0] && err.errors[0].field) {
+                            var fieldId = err.errors[0].field;
+                            // Handle sublist field references like "expense[0].account"
+                            if (fieldId.indexOf('[') === -1) {
+                                var fieldEl = el('#field-' + fieldId);
+                                if (fieldEl) {
+                                    fieldEl.focus();
+                                    fieldEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                                }
+                            }
+                        }
+                    } else {
+                        UI.toast('Error: ' + err.message, 'error');
+                    }
                 });
         },
 
