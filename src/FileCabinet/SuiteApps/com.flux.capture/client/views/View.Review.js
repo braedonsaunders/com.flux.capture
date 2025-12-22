@@ -1921,152 +1921,153 @@
                 // Unified Alerts dropdown (combines anomalies + AI verification)
                 (hasAlerts ?
                     '<div class="header-dropdown alert-dropdown unified-alerts" id="alert-details" style="display:none;">' +
-                        // AI Verification header with risk score and recommendation (if verified)
+                        // Compact AI summary bar (if verified)
                         (hasAiVerification ?
-                            '<div class="alert-section-header ai-header">' +
-                                '<div class="ai-header-main">' +
-                                    '<i class="fas fa-wand-magic-sparkles"></i>' +
-                                    '<span>AI Verification</span>' +
-                                    '<span class="ai-accuracy-pill">' + aiAccuracy + '%</span>' +
-                                    '<span class="ai-risk-pill risk-' + aiRiskScore + '">' +
-                                        '<i class="fas fa-' + (aiRiskScore === 'critical' || aiRiskScore === 'high' ? 'exclamation-triangle' : aiRiskScore === 'medium' ? 'exclamation-circle' : 'check-circle') + '"></i> ' +
-                                        aiRiskScore.charAt(0).toUpperCase() + aiRiskScore.slice(1) + ' Risk' +
+                            '<div class="alerts-summary-bar">' +
+                                '<div class="summary-left">' +
+                                    '<span class="summary-badge accuracy"><i class="fas fa-bullseye"></i> ' + aiAccuracy + '%</span>' +
+                                    '<span class="summary-badge risk-' + aiRiskScore + '">' +
+                                        '<i class="fas fa-' + (aiRiskScore === 'critical' || aiRiskScore === 'high' ? 'exclamation-triangle' : aiRiskScore === 'medium' ? 'exclamation-circle' : 'shield-check') + '"></i> ' +
+                                        aiRiskScore.charAt(0).toUpperCase() + aiRiskScore.slice(1) +
                                     '</span>' +
+                                    (aiRecommendation ? '<span class="summary-badge rec-' + aiRecommendation + '">' +
+                                        '<i class="fas fa-' + (aiRecommendation === 'approve' ? 'thumbs-up' : aiRecommendation === 'reject' ? 'thumbs-down' : 'search') + '"></i> ' +
+                                        aiRecommendation.charAt(0).toUpperCase() + aiRecommendation.slice(1) +
+                                    '</span>' : '') +
                                 '</div>' +
-                                (aiSummary ? '<div class="ai-summary">' + escapeHtml(aiSummary) + '</div>' : '') +
-                                (aiRecommendation ? '<div class="ai-recommendation rec-' + aiRecommendation + '"><i class="fas fa-' + (aiRecommendation === 'approve' ? 'check' : aiRecommendation === 'reject' ? 'times' : 'eye') + '"></i> ' + aiRecommendation.charAt(0).toUpperCase() + aiRecommendation.slice(1) + '</div>' : '') +
+                                (aiSummary ? '<div class="summary-text">' + escapeHtml(aiSummary) + '</div>' : '') +
                             '</div>' : '') +
-                        // Math Validation section (high value - shows if amounts don't add up)
-                        (hasAiVerification && aiMathValidation && !aiMathValidation.isValid ?
-                            '<div class="alert-section math-validation-section">' +
-                                '<div class="alert-section-title"><i class="fas fa-calculator"></i> Math Validation Issue</div>' +
-                                '<div class="alert-item alert-high math-error">' +
-                                    '<i class="fas fa-exclamation-triangle"></i>' +
-                                    '<div class="alert-item-content">' +
-                                        '<div class="math-detail">Line items sum: <strong>$' + (aiMathValidation.lineItemsSum || '?') + '</strong></div>' +
-                                        '<div class="math-detail">Subtotal on doc: <strong>$' + (aiMathValidation.subtotalOnDoc || '?') + '</strong></div>' +
-                                        '<div class="math-detail">Tax (' + (aiMathValidation.taxRate || '?') + '): <strong>$' + (aiMathValidation.taxAmount || '?') + '</strong></div>' +
-                                        '<div class="math-detail">Total on doc: <strong>$' + (aiMathValidation.totalOnDoc || '?') + '</strong></div>' +
-                                        '<div class="math-detail math-discrepancy">Discrepancy: <strong class="text-danger">$' + (aiMathValidation.discrepancy || '0') + '</strong></div>' +
-                                    '</div>' +
-                                '</div>' +
-                            '</div>' : '') +
-                        // Payment Terms section (helpful info)
-                        (hasAiVerification && aiPaymentTerms && aiPaymentTerms.detected ?
-                            '<div class="alert-section payment-terms-section">' +
-                                '<div class="alert-section-title"><i class="fas fa-calendar-alt"></i> Payment Terms Detected</div>' +
-                                '<div class="alert-item alert-info payment-terms-info">' +
-                                    '<i class="fas fa-info-circle"></i>' +
-                                    '<div class="alert-item-content">' +
-                                        '<div class="terms-detail">Terms: <strong>' + escapeHtml(aiPaymentTerms.detected) + '</strong></div>' +
-                                        (aiPaymentTerms.dueDate ? '<div class="terms-detail">Due Date: <strong>' + escapeHtml(aiPaymentTerms.dueDate) + '</strong></div>' : '') +
-                                        (aiPaymentTerms.daysUntilDue !== null ? '<div class="terms-detail">Days until due: <strong>' + aiPaymentTerms.daysUntilDue + '</strong></div>' : '') +
-                                        (aiPaymentTerms.earlyPayDiscount ? '<div class="terms-detail terms-discount"><i class="fas fa-tag"></i> <strong>' + escapeHtml(aiPaymentTerms.earlyPayDiscount) + '</strong></div>' : '') +
-                                    '</div>' +
-                                '</div>' +
-                            '</div>' : '') +
-                        // AI Corrections (actionable - highest priority)
-                        (aiCorrections.length > 0 ?
-                            '<div class="alert-section ai-corrections-section">' +
-                                '<div class="alert-section-title"><i class="fas fa-edit"></i> Suggested Corrections</div>' +
-                                aiCorrections.map(function(c, idx) {
-                                    return '<div class="alert-item ai-correction-item" data-correction-idx="' + idx + '">' +
-                                        '<div class="alert-item-content">' +
-                                            '<div class="correction-field-name">' + escapeHtml(c.field || 'Unknown') + '</div>' +
-                                            '<div class="correction-values">' +
-                                                '<span class="correction-old">' + escapeHtml(String(c.extracted || '')) + '</span>' +
-                                                '<i class="fas fa-arrow-right"></i>' +
-                                                '<span class="correction-new">' + escapeHtml(String(c.correct || '')) + '</span>' +
+                        // Unified alerts list - all items in one consistent format
+                        '<div class="alerts-list">' +
+                            // Auto-applied corrections (shown as success)
+                            ((aiVerification && aiVerification.autoApplied && aiVerification.autoApplied.length > 0) ?
+                                aiVerification.autoApplied.map(function(applied) {
+                                    return '<div class="alert-row alert-applied">' +
+                                        '<div class="alert-icon"><i class="fas fa-check-circle"></i></div>' +
+                                        '<div class="alert-body">' +
+                                            '<div class="alert-title">Auto-corrected: ' + escapeHtml(applied.field || 'Field') + '</div>' +
+                                            '<div class="alert-detail">' +
+                                                (applied.oldValue ? '<span class="old-val">' + escapeHtml(String(applied.oldValue)) + '</span> → ' : '') +
+                                                '<span class="new-val">' + escapeHtml(String(applied.value || '')) + '</span>' +
                                             '</div>' +
-                                            '<div class="correction-reason">' + escapeHtml(c.reason || '') + '</div>' +
+                                            (applied.reason ? '<div class="alert-reason">' + escapeHtml(applied.reason) + '</div>' : '') +
                                         '</div>' +
-                                        '<div class="alert-item-actions">' +
-                                            '<button class="btn btn-sm btn-primary btn-accept-correction" data-field="' + escapeHtml(c.field || '') + '" data-value="' + escapeHtml(String(c.correct || '')) + '">' +
-                                                '<i class="fas fa-check"></i> Accept' +
-                                            '</button>' +
-                                            '<button class="btn btn-sm btn-ghost btn-ignore-correction">' +
-                                                '<i class="fas fa-times"></i>' +
-                                            '</button>' +
+                                        '<div class="alert-tag tag-applied">Applied</div>' +
+                                    '</div>';
+                                }).join('') : '') +
+                            // Math validation error (critical)
+                            (hasAiVerification && aiMathValidation && !aiMathValidation.isValid ?
+                                '<div class="alert-row alert-critical">' +
+                                    '<div class="alert-icon"><i class="fas fa-calculator"></i></div>' +
+                                    '<div class="alert-body">' +
+                                        '<div class="alert-title">Math Validation Failed</div>' +
+                                        '<div class="alert-detail math-breakdown">' +
+                                            '<span>Lines: $' + (aiMathValidation.lineItemsSum || '?') + '</span>' +
+                                            '<span>Tax: $' + (aiMathValidation.taxAmount || '?') + '</span>' +
+                                            '<span>Total: $' + (aiMathValidation.totalOnDoc || '?') + '</span>' +
+                                            '<span class="discrepancy">Δ $' + (aiMathValidation.discrepancy || '0') + '</span>' +
                                         '</div>' +
-                                    '</div>';
-                                }).join('') +
-                            '</div>' : '') +
-                        // AI Missed Fields (actionable)
-                        (aiMissedFields.length > 0 ?
-                            '<div class="alert-section ai-missed-section">' +
-                                '<div class="alert-section-title"><i class="fas fa-plus-circle"></i> Missing Data Found</div>' +
-                                aiMissedFields.map(function(m, idx) {
-                                    return '<div class="alert-item ai-missed-item" data-missed-idx="' + idx + '">' +
-                                        '<div class="alert-item-content">' +
-                                            '<div class="missed-field-name">' + escapeHtml(m.field || 'Unknown') + '</div>' +
-                                            '<div class="missed-value">' + escapeHtml(String(m.value || '')) + '</div>' +
-                                            '<div class="missed-location"><i class="fas fa-map-marker-alt"></i> ' + escapeHtml(m.location || 'Document') + '</div>' +
+                                    '</div>' +
+                                    '<div class="alert-tag tag-critical">Critical</div>' +
+                                '</div>' : '') +
+                            // AI Corrections (suggestions to accept)
+                            aiCorrections.map(function(c, idx) {
+                                var severity = c.impact === 'high' ? 'high' : c.impact === 'medium' ? 'medium' : 'low';
+                                return '<div class="alert-row alert-actionable alert-' + severity + ' ai-correction-item" data-correction-idx="' + idx + '">' +
+                                    '<div class="alert-icon"><i class="fas fa-pen"></i></div>' +
+                                    '<div class="alert-body">' +
+                                        '<div class="alert-title">' + escapeHtml(c.field || 'Unknown') + '</div>' +
+                                        '<div class="alert-detail">' +
+                                            '<span class="old-val">' + escapeHtml(String(c.extracted || '')) + '</span>' +
+                                            '<i class="fas fa-arrow-right"></i>' +
+                                            '<span class="new-val">' + escapeHtml(String(c.correct || '')) + '</span>' +
                                         '</div>' +
-                                        '<div class="alert-item-actions">' +
-                                            '<button class="btn btn-sm btn-primary btn-add-missed" data-field="' + escapeHtml(m.field || '') + '" data-value="' + escapeHtml(String(m.value || '')) + '">' +
-                                                '<i class="fas fa-plus"></i> Add' +
-                                            '</button>' +
-                                            '<button class="btn btn-sm btn-ghost btn-ignore-missed">' +
-                                                '<i class="fas fa-times"></i>' +
-                                            '</button>' +
+                                        (c.reason ? '<div class="alert-reason">' + escapeHtml(c.reason) + '</div>' : '') +
+                                    '</div>' +
+                                    '<div class="alert-actions">' +
+                                        '<button class="btn-action btn-accept btn-accept-correction" data-field="' + escapeHtml(c.field || '') + '" data-value="' + escapeHtml(String(c.correct || '')) + '" title="Accept"><i class="fas fa-check"></i></button>' +
+                                        '<button class="btn-action btn-dismiss btn-ignore-correction" title="Dismiss"><i class="fas fa-times"></i></button>' +
+                                    '</div>' +
+                                '</div>';
+                            }).join('') +
+                            // AI Missed Fields (suggestions to add)
+                            aiMissedFields.map(function(m, idx) {
+                                var importance = m.importance === 'critical' ? 'high' : m.importance === 'important' ? 'medium' : 'low';
+                                return '<div class="alert-row alert-actionable alert-' + importance + ' ai-missed-item" data-missed-idx="' + idx + '">' +
+                                    '<div class="alert-icon"><i class="fas fa-plus"></i></div>' +
+                                    '<div class="alert-body">' +
+                                        '<div class="alert-title">Missing: ' + escapeHtml(m.field || 'Unknown') + '</div>' +
+                                        '<div class="alert-detail"><span class="new-val">' + escapeHtml(String(m.value || '')) + '</span></div>' +
+                                        (m.location ? '<div class="alert-reason"><i class="fas fa-map-marker-alt"></i> ' + escapeHtml(m.location) + '</div>' : '') +
+                                    '</div>' +
+                                    '<div class="alert-actions">' +
+                                        '<button class="btn-action btn-accept btn-add-missed" data-field="' + escapeHtml(m.field || '') + '" data-value="' + escapeHtml(String(m.value || '')) + '" title="Add"><i class="fas fa-plus"></i></button>' +
+                                        '<button class="btn-action btn-dismiss btn-ignore-missed" title="Dismiss"><i class="fas fa-times"></i></button>' +
+                                    '</div>' +
+                                '</div>';
+                            }).join('') +
+                            // AI Line Item Issues
+                            aiLineItemIssues.map(function(li) {
+                                var icon = li.type === 'missing' ? 'minus-circle' : li.type === 'extra' ? 'plus-circle' : li.type === 'calculation_error' ? 'calculator' : 'exclamation-circle';
+                                return '<div class="alert-row alert-medium">' +
+                                    '<div class="alert-icon"><i class="fas fa-' + icon + '"></i></div>' +
+                                    '<div class="alert-body">' +
+                                        '<div class="alert-title">Line Item ' + (li.lineNumber ? '#' + li.lineNumber + ' ' : '') + '- ' + escapeHtml(li.type || 'Issue') + '</div>' +
+                                        '<div class="alert-detail">' + escapeHtml(li.description || '') + '</div>' +
+                                        (li.impact ? '<div class="alert-reason">' + escapeHtml(li.impact) + '</div>' : '') +
+                                    '</div>' +
+                                    '<div class="alert-tag tag-lineitem">Line Item</div>' +
+                                '</div>';
+                            }).join('') +
+                            // Standard Anomalies (validation alerts)
+                            anomalies.map(function(a) {
+                                var icon = a.severity === 'high' ? 'exclamation-triangle' : a.severity === 'medium' ? 'exclamation-circle' : 'info-circle';
+                                return '<div class="alert-row alert-' + a.severity + '">' +
+                                    '<div class="alert-icon"><i class="fas fa-' + icon + '"></i></div>' +
+                                    '<div class="alert-body">' +
+                                        '<div class="alert-title">' + escapeHtml(a.message) + '</div>' +
+                                    '</div>' +
+                                    '<div class="alert-tag tag-' + a.severity + '">' + a.severity.charAt(0).toUpperCase() + a.severity.slice(1) + '</div>' +
+                                '</div>';
+                            }).join('') +
+                            // AI Validation Flags
+                            aiFlags.map(function(f) {
+                                var icon = f.severity === 'high' || f.severity === 'critical' ? 'flag' : f.severity === 'medium' ? 'exclamation-circle' : 'info-circle';
+                                var sev = f.severity || 'low';
+                                return '<div class="alert-row alert-' + sev + '">' +
+                                    '<div class="alert-icon"><i class="fas fa-' + icon + '"></i></div>' +
+                                    '<div class="alert-body">' +
+                                        '<div class="alert-title">' + escapeHtml(f.message || '') + '</div>' +
+                                        (f.action ? '<div class="alert-reason"><i class="fas fa-hand-point-right"></i> ' + escapeHtml(f.action) + '</div>' : '') +
+                                    '</div>' +
+                                    '<div class="alert-tag tag-' + sev + '">' + sev.charAt(0).toUpperCase() + sev.slice(1) + '</div>' +
+                                '</div>';
+                            }).join('') +
+                            // Payment Terms (info)
+                            (hasAiVerification && aiPaymentTerms && aiPaymentTerms.detected ?
+                                '<div class="alert-row alert-info">' +
+                                    '<div class="alert-icon"><i class="fas fa-calendar-check"></i></div>' +
+                                    '<div class="alert-body">' +
+                                        '<div class="alert-title">Payment Terms: ' + escapeHtml(aiPaymentTerms.detected) + '</div>' +
+                                        '<div class="alert-detail payment-info">' +
+                                            (aiPaymentTerms.dueDate ? '<span>Due: ' + escapeHtml(aiPaymentTerms.dueDate) + '</span>' : '') +
+                                            (aiPaymentTerms.daysUntilDue !== null ? '<span>' + aiPaymentTerms.daysUntilDue + ' days</span>' : '') +
+                                            (aiPaymentTerms.earlyPayDiscount ? '<span class="discount"><i class="fas fa-tag"></i> ' + escapeHtml(aiPaymentTerms.earlyPayDiscount) + '</span>' : '') +
                                         '</div>' +
-                                    '</div>';
-                                }).join('') +
-                            '</div>' : '') +
-                        // AI Line Item Issues
-                        (aiLineItemIssues.length > 0 ?
-                            '<div class="alert-section ai-lineitem-section">' +
-                                '<div class="alert-section-title"><i class="fas fa-table"></i> Line Item Issues</div>' +
-                                aiLineItemIssues.map(function(li) {
-                                    var typeIcon = li.type === 'missing' ? 'minus-circle' : li.type === 'extra' ? 'plus-circle' : 'exclamation-circle';
-                                    return '<div class="alert-item lineitem-issue-item alert-medium">' +
-                                        '<i class="fas fa-' + typeIcon + '"></i>' +
-                                        '<div class="alert-item-content">' +
-                                            '<span class="lineitem-type">' + escapeHtml(li.type || 'Issue') + '</span>' +
-                                            (li.lineNumber ? ' <span class="lineitem-number">Line ' + li.lineNumber + '</span>' : '') +
-                                            '<div class="lineitem-desc">' + escapeHtml(li.description || '') + '</div>' +
-                                        '</div>' +
-                                    '</div>';
-                                }).join('') +
-                            '</div>' : '') +
-                        // Standard Anomalies/Alerts
-                        (anomalies.length > 0 ?
-                            '<div class="alert-section anomaly-section">' +
-                                '<div class="alert-section-title"><i class="fas fa-shield-alt"></i> Validation Alerts</div>' +
-                                anomalies.map(function(a) {
-                                    var iconType = a.severity === 'high' ? 'exclamation-triangle' : a.severity === 'medium' ? 'exclamation-circle' : 'info-circle';
-                                    return '<div class="alert-item alert-' + a.severity + '">' +
-                                        '<i class="fas fa-' + iconType + '"></i>' +
-                                        '<span class="alert-message">' + escapeHtml(a.message) + '</span>' +
-                                    '</div>';
-                                }).join('') +
-                            '</div>' : '') +
-                        // AI Validation Flags
-                        (aiFlags.length > 0 ?
-                            '<div class="alert-section ai-flags-section">' +
-                                '<div class="alert-section-title"><i class="fas fa-flag"></i> AI Validation Flags</div>' +
-                                aiFlags.map(function(f) {
-                                    var iconType = f.severity === 'high' || f.severity === 'critical' ? 'exclamation-triangle' : f.severity === 'medium' ? 'exclamation-circle' : 'info-circle';
-                                    return '<div class="alert-item alert-' + (f.severity || 'low') + '">' +
-                                        '<i class="fas fa-' + iconType + '"></i>' +
-                                        '<div class="alert-item-content">' +
-                                            '<span class="alert-message">' + escapeHtml(f.message || '') + '</span>' +
-                                            (f.action ? '<div class="alert-action"><i class="fas fa-hand-point-right"></i> ' + escapeHtml(f.action) + '</div>' : '') +
-                                        '</div>' +
-                                    '</div>';
-                                }).join('') +
-                            '</div>' : '') +
-                        // AI Insights (money-saving tips and observations)
-                        (hasAiVerification && aiInsights.length > 0 ?
-                            '<div class="alert-section ai-insights-section">' +
-                                '<div class="alert-section-title"><i class="fas fa-lightbulb"></i> Insights</div>' +
-                                aiInsights.map(function(insight) {
-                                    return '<div class="alert-item alert-info insight-item">' +
-                                        '<i class="fas fa-lightbulb"></i>' +
-                                        '<span class="insight-text">' + escapeHtml(insight) + '</span>' +
-                                    '</div>';
-                                }).join('') +
-                            '</div>' : '') +
+                                    '</div>' +
+                                    '<div class="alert-tag tag-info">Info</div>' +
+                                '</div>' : '') +
+                            // AI Insights
+                            aiInsights.map(function(insight) {
+                                return '<div class="alert-row alert-insight">' +
+                                    '<div class="alert-icon"><i class="fas fa-lightbulb"></i></div>' +
+                                    '<div class="alert-body">' +
+                                        '<div class="alert-title">' + escapeHtml(insight) + '</div>' +
+                                    '</div>' +
+                                    '<div class="alert-tag tag-insight">Insight</div>' +
+                                '</div>';
+                            }).join('') +
+                        '</div>' +
                     '</div>' : '') +
                 // Extraction pool dropdown
                 (unmatchedCount > 0 ? this.renderExtractionPoolDropdown() : '') +
@@ -7387,11 +7388,11 @@
          */
         bindAIVerificationEvents: function() {
             var self = this;
-            var aiDropdown = el('#ai-details');
-            if (!aiDropdown) return;
+            var alertDropdown = el('#alert-details');
+            if (!alertDropdown) return;
 
             // Accept correction buttons
-            aiDropdown.querySelectorAll('.btn-accept-correction').forEach(function(btn) {
+            alertDropdown.querySelectorAll('.btn-accept-correction').forEach(function(btn) {
                 btn.onclick = function(e) {
                     e.stopPropagation();
                     var field = btn.dataset.field;
@@ -7399,30 +7400,41 @@
 
                     if (field && value) {
                         self.applyAICorrection(field, value);
-                        // Remove the correction item from UI
-                        var item = btn.closest('.ai-correction-item');
-                        if (item) {
-                            item.style.opacity = '0.5';
-                            item.innerHTML = '<div class="correction-applied"><i class="fas fa-check"></i> Correction applied</div>';
+                        // Transform the row to show applied state
+                        var row = btn.closest('.alert-row');
+                        if (row) {
+                            row.classList.remove('alert-actionable', 'alert-high', 'alert-medium', 'alert-low');
+                            row.classList.add('alert-applied');
+                            row.innerHTML = '<div class="alert-icon"><i class="fas fa-check-circle"></i></div>' +
+                                '<div class="alert-body"><div class="alert-title">Applied: ' + field + '</div></div>' +
+                                '<div class="alert-tag tag-applied">Applied</div>';
                         }
                     }
                 };
             });
 
             // Ignore correction buttons
-            aiDropdown.querySelectorAll('.btn-ignore-correction').forEach(function(btn) {
+            alertDropdown.querySelectorAll('.btn-ignore-correction').forEach(function(btn) {
                 btn.onclick = function(e) {
                     e.stopPropagation();
-                    var item = btn.closest('.ai-correction-item');
-                    if (item) {
-                        item.remove();
-                        self.updateAIBadgeCount();
+                    var row = btn.closest('.alert-row');
+                    if (row) {
+                        row.style.height = row.offsetHeight + 'px';
+                        row.style.overflow = 'hidden';
+                        row.style.transition = 'all 0.2s ease';
+                        requestAnimationFrame(function() {
+                            row.style.height = '0';
+                            row.style.opacity = '0';
+                            row.style.padding = '0';
+                            row.style.margin = '0';
+                        });
+                        setTimeout(function() { row.remove(); self.updateAlertBadgeCount(); }, 200);
                     }
                 };
             });
 
             // Add missed field buttons
-            aiDropdown.querySelectorAll('.btn-add-missed').forEach(function(btn) {
+            alertDropdown.querySelectorAll('.btn-add-missed').forEach(function(btn) {
                 btn.onclick = function(e) {
                     e.stopPropagation();
                     var field = btn.dataset.field;
@@ -7430,24 +7442,35 @@
 
                     if (field && value) {
                         self.applyAICorrection(field, value);
-                        // Remove the missed field item from UI
-                        var item = btn.closest('.ai-missed-item');
-                        if (item) {
-                            item.style.opacity = '0.5';
-                            item.innerHTML = '<div class="correction-applied"><i class="fas fa-check"></i> Field added</div>';
+                        // Transform the row to show applied state
+                        var row = btn.closest('.alert-row');
+                        if (row) {
+                            row.classList.remove('alert-actionable', 'alert-high', 'alert-medium', 'alert-low');
+                            row.classList.add('alert-applied');
+                            row.innerHTML = '<div class="alert-icon"><i class="fas fa-check-circle"></i></div>' +
+                                '<div class="alert-body"><div class="alert-title">Added: ' + field + '</div></div>' +
+                                '<div class="alert-tag tag-applied">Applied</div>';
                         }
                     }
                 };
             });
 
             // Ignore missed field buttons
-            aiDropdown.querySelectorAll('.btn-ignore-missed').forEach(function(btn) {
+            alertDropdown.querySelectorAll('.btn-ignore-missed').forEach(function(btn) {
                 btn.onclick = function(e) {
                     e.stopPropagation();
-                    var item = btn.closest('.ai-missed-item');
-                    if (item) {
-                        item.remove();
-                        self.updateAIBadgeCount();
+                    var row = btn.closest('.alert-row');
+                    if (row) {
+                        row.style.height = row.offsetHeight + 'px';
+                        row.style.overflow = 'hidden';
+                        row.style.transition = 'all 0.2s ease';
+                        requestAnimationFrame(function() {
+                            row.style.height = '0';
+                            row.style.opacity = '0';
+                            row.style.padding = '0';
+                            row.style.margin = '0';
+                        });
+                        setTimeout(function() { row.remove(); self.updateAlertBadgeCount(); }, 200);
                     }
                 };
             });
@@ -7500,29 +7523,31 @@
                 UI.toast('Field "' + fieldName + '" not found in form', 'warning');
             }
 
-            self.updateAIBadgeCount();
+            self.updateAlertBadgeCount();
         },
 
         /**
-         * Update the AI badge count after accepting/ignoring items
+         * Update the alert badge count after accepting/ignoring items
          */
-        updateAIBadgeCount: function() {
-            var aiDropdown = el('#ai-details');
-            if (!aiDropdown) return;
+        updateAlertBadgeCount: function() {
+            var alertDropdown = el('#alert-details');
+            if (!alertDropdown) return;
 
-            var remainingItems = aiDropdown.querySelectorAll('.ai-correction-item:not([style*="opacity"]), .ai-missed-item:not([style*="opacity"])').length;
-            var flagCount = aiDropdown.querySelectorAll('.ai-flag-item').length;
-            var totalRemaining = remainingItems + flagCount;
+            // Count remaining actionable items (not applied)
+            var actionableRows = alertDropdown.querySelectorAll('.alert-row.alert-actionable').length;
+            var alertRows = alertDropdown.querySelectorAll('.alert-row.alert-high, .alert-row.alert-medium, .alert-row.alert-critical').length;
+            var totalRemaining = actionableRows + alertRows;
 
-            var badge = document.querySelector('#ai-status-toggle .metric-badge');
-            var label = document.querySelector('#ai-status-toggle .metric-label');
+            var toggle = el('#alert-status-toggle');
+            var badge = toggle ? toggle.querySelector('.metric-badge') : null;
+            var label = toggle ? toggle.querySelector('.metric-label') : null;
 
             if (totalRemaining === 0) {
-                if (badge) badge.remove();
-                if (label) label.textContent = 'AI Verified';
-                var toggle = el('#ai-status-toggle');
+                // All issues resolved
+                if (badge) badge.textContent = '0';
+                if (label) label.textContent = 'Verified';
                 if (toggle) {
-                    toggle.classList.remove('has-issues');
+                    toggle.classList.remove('has-critical');
                     toggle.classList.add('verified-ok');
                 }
             } else if (badge) {
