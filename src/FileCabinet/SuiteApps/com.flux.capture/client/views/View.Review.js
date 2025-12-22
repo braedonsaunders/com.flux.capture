@@ -1855,9 +1855,8 @@
             var hasAiVerification = aiVerification && aiVerification.verified;
             var aiCorrections = (aiVerification && aiVerification.corrections) || [];
             var aiMissedFields = (aiVerification && aiVerification.missedFields) || [];
-            var aiFlags = (aiVerification && aiVerification.validationFlags) || [];
             var aiLineItemIssues = (aiVerification && aiVerification.lineItemIssues) || [];
-            var aiTotalIssues = aiCorrections.length + aiMissedFields.length + aiFlags.length + aiLineItemIssues.length;
+            var aiTotalIssues = aiCorrections.length + aiMissedFields.length + aiLineItemIssues.length;
             var aiAccuracy = aiVerification && aiVerification.accuracy ? Math.round(aiVerification.accuracy * 100) : 0;
             // Enhanced AI verification data
             var aiRiskScore = (aiVerification && aiVerification.riskScore) || 'low';
@@ -1867,11 +1866,15 @@
             var aiInsights = (aiVerification && aiVerification.insights) || [];
             var aiSummary = (aiVerification && aiVerification.summary) || null;
 
-            // Calculate total alerts (anomalies + AI issues that need attention)
-            var totalAlerts = anomalies.length + aiCorrections.length + aiMissedFields.length + aiFlags.length + aiLineItemIssues.length;
+            // Use unified alerts from AI if available (AI consolidates system alerts + its own findings)
+            // Fall back to original anomalies if AI verification didn't run
+            var unifiedAlerts = (aiVerification && aiVerification.alerts) || [];
+            var displayAlerts = hasAiVerification && unifiedAlerts.length > 0 ? unifiedAlerts : anomalies;
+
+            // Calculate total alerts
+            var totalAlerts = displayAlerts.length + aiCorrections.length + aiMissedFields.length + aiLineItemIssues.length;
             var hasAlerts = totalAlerts > 0;
-            var hasHighSeverity = anomalies.some(function(a) { return a.severity === 'high'; }) ||
-                aiFlags.some(function(f) { return f.severity === 'high'; });
+            var hasHighSeverity = displayAlerts.some(function(a) { return a.severity === 'high' || a.severity === 'critical'; });
 
             html += '<div class="review-header">' +
                 '<div class="review-header-bar">' +
@@ -2019,26 +2022,15 @@
                                     '<div class="alert-tag tag-lineitem">Line Item</div>' +
                                 '</div>';
                             }).join('') +
-                            // Standard Anomalies (validation alerts)
-                            anomalies.map(function(a) {
-                                var icon = a.severity === 'high' ? 'exclamation-triangle' : a.severity === 'medium' ? 'exclamation-circle' : 'info-circle';
-                                return '<div class="alert-row alert-' + a.severity + '">' +
-                                    '<div class="alert-icon"><i class="fas fa-' + icon + '"></i></div>' +
-                                    '<div class="alert-body">' +
-                                        '<div class="alert-title">' + escapeHtml(a.message) + '</div>' +
-                                    '</div>' +
-                                    '<div class="alert-tag tag-' + a.severity + '">' + a.severity.charAt(0).toUpperCase() + a.severity.slice(1) + '</div>' +
-                                '</div>';
-                            }).join('') +
-                            // AI Validation Flags
-                            aiFlags.map(function(f) {
-                                var icon = f.severity === 'high' || f.severity === 'critical' ? 'flag' : f.severity === 'medium' ? 'exclamation-circle' : 'info-circle';
-                                var sev = f.severity || 'low';
+                            // Unified Alerts (consolidated by AI or original system alerts)
+                            displayAlerts.map(function(a) {
+                                var sev = a.severity || 'medium';
+                                var icon = sev === 'high' || sev === 'critical' ? 'exclamation-triangle' : sev === 'medium' ? 'exclamation-circle' : 'info-circle';
                                 return '<div class="alert-row alert-' + sev + '">' +
                                     '<div class="alert-icon"><i class="fas fa-' + icon + '"></i></div>' +
                                     '<div class="alert-body">' +
-                                        '<div class="alert-title">' + escapeHtml(f.message || '') + '</div>' +
-                                        (f.action ? '<div class="alert-reason"><i class="fas fa-hand-point-right"></i> ' + escapeHtml(f.action) + '</div>' : '') +
+                                        '<div class="alert-title">' + escapeHtml(a.message) + '</div>' +
+                                        (a.action ? '<div class="alert-reason"><i class="fas fa-hand-point-right"></i> ' + escapeHtml(a.action) + '</div>' : '') +
                                     '</div>' +
                                     '<div class="alert-tag tag-' + sev + '">' + sev.charAt(0).toUpperCase() + sev.slice(1) + '</div>' +
                                 '</div>';
