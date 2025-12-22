@@ -1828,6 +1828,61 @@
     color: #92400e;
 }
 
+/* Error Metric (validation errors from API) */
+.error-metric {
+    background: rgba(239, 68, 68, 0.1);
+}
+.error-metric:hover {
+    background: rgba(239, 68, 68, 0.18);
+}
+.error-metric.active {
+    background: rgba(239, 68, 68, 0.22);
+}
+.error-icon i {
+    color: var(--color-danger);
+    font-size: 16px;
+}
+.error-metric .metric-badge {
+    background: var(--color-danger);
+}
+.error-metric .metric-label {
+    color: #b91c1c;
+}
+.error-dropdown {
+    background: var(--surface-card);
+    border: 1px solid rgba(239, 68, 68, 0.2);
+    border-radius: var(--radius-md);
+    padding: var(--space-md);
+    margin-bottom: var(--space-md);
+    box-shadow: var(--shadow-md);
+}
+.error-dropdown .error-item {
+    color: var(--color-danger);
+}
+.error-dropdown .error-item i {
+    color: var(--color-danger);
+}
+.error-dropdown .warning-item {
+    color: var(--color-warning);
+}
+.error-dropdown .warning-item i {
+    color: var(--color-warning);
+}
+.error-dropdown .btn-goto-field {
+    font-size: var(--font-size-xs);
+    padding: 2px 8px;
+    margin-left: var(--space-sm);
+    background: var(--gray-100);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-sm);
+    cursor: pointer;
+    color: var(--text-secondary);
+}
+.error-dropdown .btn-goto-field:hover {
+    background: var(--gray-200);
+    color: var(--text-primary);
+}
+
 /* Pool Metric */
 .pool-metric {
     background: rgba(217, 119, 6, 0.08);
