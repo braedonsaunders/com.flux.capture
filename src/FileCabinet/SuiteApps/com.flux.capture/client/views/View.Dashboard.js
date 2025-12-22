@@ -579,10 +579,10 @@
                 self.hideContextMenu();
             });
 
-            // Preview panel
-            this.on('#preview-close', 'click', function() { self.closePreview(); });
-            this.on('#preview-approve', 'click', function() { self.approvePreviewDoc(); });
-            this.on('#preview-open', 'click', function() { self.openPreviewDoc(); });
+            // Preview panel (dashboard-specific)
+            this.on('#dashboard-preview-close', 'click', function() { self.closePreview(); });
+            this.on('#dashboard-preview-approve', 'click', function() { self.approvePreviewDoc(); });
+            this.on('#dashboard-preview-open', 'click', function() { self.openPreviewDoc(); });
 
             // Keyboard help
             this.on('#close-keyboard-help', 'click', function() { self.hideKeyboardHelp(); });
@@ -1355,10 +1355,10 @@
 
             this.previewDoc = doc;
 
-            var panel = el('#preview-panel');
-            var title = el('#preview-title');
-            var img = el('#preview-img');
-            var details = el('#preview-details');
+            var panel = el('#dashboard-preview-panel');
+            var title = el('#dashboard-preview-title');
+            var img = el('#dashboard-preview-img');
+            var details = el('#dashboard-preview-details');
 
             if (!panel) return;
 
@@ -1377,17 +1377,17 @@
 
             if (details) {
                 details.innerHTML =
-                    '<div class="preview-field"><label>Invoice #</label><span>' + (doc.invoiceNumber || '-') + '</span></div>' +
-                    '<div class="preview-field"><label>Amount</label><span>$' + formatNumber(doc.totalAmount || 0) + '</span></div>' +
-                    '<div class="preview-field"><label>Invoice Date</label><span>' + (doc.invoiceDate ? formatDate(doc.invoiceDate) : '-') + '</span></div>' +
-                    '<div class="preview-field"><label>Due Date</label><span>' + (doc.dueDate ? formatDate(doc.dueDate) : '-') + '</span></div>' +
-                    '<div class="preview-field"><label>Confidence</label><span>' + (doc.confidence || 0) + '%</span></div>';
+                    '<div class="dashboard-preview-field"><label>Invoice #</label><span>' + (doc.invoiceNumber || '-') + '</span></div>' +
+                    '<div class="dashboard-preview-field"><label>Amount</label><span>$' + formatNumber(doc.totalAmount || 0) + '</span></div>' +
+                    '<div class="dashboard-preview-field"><label>Invoice Date</label><span>' + (doc.invoiceDate ? formatDate(doc.invoiceDate) : '-') + '</span></div>' +
+                    '<div class="dashboard-preview-field"><label>Due Date</label><span>' + (doc.dueDate ? formatDate(doc.dueDate) : '-') + '</span></div>' +
+                    '<div class="dashboard-preview-field"><label>Confidence</label><span>' + (doc.confidence || 0) + '%</span></div>';
             }
         },
 
         closePreview: function() {
             this.previewDoc = null;
-            var panel = el('#preview-panel');
+            var panel = el('#dashboard-preview-panel');
             if (panel) {
                 panel.classList.remove('open');
             }
