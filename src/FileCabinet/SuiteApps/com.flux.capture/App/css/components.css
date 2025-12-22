@@ -6163,8 +6163,8 @@ body.dark-mode #btn-dark-mode i::before {
     gap: var(--space-sm);
 }
 
-/* Preview Panel */
-.preview-panel {
+/* Dashboard Preview Panel - scoped to avoid conflicts with Review page */
+.action-dashboard .dashboard-preview-panel {
     position: fixed;
     top: 0;
     right: -400px;
@@ -6179,11 +6179,11 @@ body.dark-mode #btn-dark-mode i::before {
     transition: right 0.3s ease;
 }
 
-.preview-panel.open {
+.action-dashboard .dashboard-preview-panel.open {
     right: 0;
 }
 
-.preview-header {
+.action-dashboard .dashboard-preview-header {
     display: flex;
     justify-content: space-between;
     align-items: center;
@@ -6191,51 +6191,51 @@ body.dark-mode #btn-dark-mode i::before {
     border-bottom: 1px solid var(--border-color);
 }
 
-.preview-header h3 {
+.action-dashboard .dashboard-preview-header h3 {
     font-size: var(--font-size-lg);
     font-weight: 600;
     margin: 0;
     color: var(--text-primary);
 }
 
-.preview-actions {
+.action-dashboard .dashboard-preview-actions {
     display: flex;
     gap: var(--space-sm);
 }
 
-.preview-body {
+.action-dashboard .dashboard-preview-body {
     flex: 1;
     overflow-y: auto;
     padding: var(--space-lg);
 }
 
-.preview-image {
+.action-dashboard .dashboard-preview-image {
     margin-bottom: var(--space-lg);
 }
 
-.preview-image img {
+.action-dashboard .dashboard-preview-image img {
     width: 100%;
     border-radius: var(--radius-md);
     border: 1px solid var(--border-color);
 }
 
-.preview-field {
+.action-dashboard .dashboard-preview-field {
     display: flex;
     justify-content: space-between;
     padding: var(--space-sm) 0;
     border-bottom: 1px solid var(--border-subtle);
 }
 
-.preview-field:last-child {
+.action-dashboard .dashboard-preview-field:last-child {
     border-bottom: none;
 }
 
-.preview-field label {
+.action-dashboard .dashboard-preview-field label {
     color: var(--text-secondary);
     font-size: var(--font-size-sm);
 }
 
-.preview-field span {
+.action-dashboard .dashboard-preview-field span {
     color: var(--text-primary);
     font-weight: 500;
 }
