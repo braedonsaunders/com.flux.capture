@@ -103,6 +103,8 @@ define(['N/log', '../FC_Debug'], function(log, fcDebug) {
          * @param {string} context.currency - Known currency code
          * @param {string} context.vendorCountry - Vendor country for format hint
          * @param {string} context.vendorLocale - Vendor locale for format hint
+         * @param {string} context.companyCountry - Company country for $ symbol resolution
+         * @param {string} context.companyCurrency - Company default currency
          * @returns {Object} { amount: number, currency: string|null, confidence: number, negative: boolean }
          */
         parse(value, context = {}) {
@@ -113,8 +115,8 @@ define(['N/log', '../FC_Debug'], function(log, fcDebug) {
             const strValue = String(value).trim();
             fcDebug.debug('AmountParser.parse', `Input: "${strValue}"`);
 
-            // Extract currency symbol/code
-            const currencyInfo = this.extractCurrency(strValue);
+            // Extract currency symbol/code with company context
+            const currencyInfo = this.extractCurrency(strValue, context);
 
             // Detect if negative
             const negativeInfo = this.detectNegative(strValue);
@@ -149,29 +151,109 @@ define(['N/log', '../FC_Debug'], function(log, fcDebug) {
 
         /**
          * Extract currency from amount string
+         * Uses company context to resolve ambiguous symbols (like $)
+         * @param {string} value - The amount string
+         * @param {Object} context - Parsing context with company info
+         * @returns {Object} { currency, confidence, symbol, source }
          */
-        extractCurrency(value) {
-            // Check for currency code prefix/suffix (USD, EUR, etc.)
+        extractCurrency(value, context = {}) {
+            // Check for explicit currency code prefix/suffix (USD, EUR, CAD, etc.)
+            // This takes highest precedence - explicit code means high confidence
             const codeMatch = value.match(/\b([A-Z]{3})\b/);
             if (codeMatch) {
-                return {
-                    currency: codeMatch[1],
-                    confidence: 0.95
-                };
-            }
-
-            // Check for currency symbols
-            for (const [symbol, codes] of Object.entries(this.CURRENCY_SYMBOLS)) {
-                if (value.includes(symbol)) {
+                const code = codeMatch[1];
+                // Validate it's a known currency code
+                const knownCurrencies = ['USD', 'CAD', 'EUR', 'GBP', 'AUD', 'NZD', 'JPY', 'CNY',
+                    'CHF', 'HKD', 'SGD', 'MXN', 'INR', 'BRL', 'SEK', 'NOK', 'DKK', 'PLN', 'RUB', 'KRW', 'ZAR'];
+                if (knownCurrencies.includes(code)) {
                     return {
-                        currency: codes[0], // Default to first currency for symbol
-                        confidence: codes.length === 1 ? 0.95 : 0.70, // Lower if ambiguous
-                        symbol: symbol
+                        currency: code,
+                        confidence: 0.98,
+                        source: 'explicit_code'
                     };
                 }
             }
 
-            return { currency: null, confidence: 0 };
+            // Country to currency mapping for $ symbol resolution
+            const COUNTRY_DOLLAR_CURRENCY = {
+                'CA': 'CAD', 'CAN': 'CAD', 'CANADA': 'CAD',
+                'US': 'USD', 'USA': 'USD', 'UNITED STATES': 'USD',
+                'AU': 'AUD', 'AUS': 'AUD', 'AUSTRALIA': 'AUD',
+                'NZ': 'NZD', 'NEW ZEALAND': 'NZD',
+                'HK': 'HKD', 'HONG KONG': 'HKD',
+                'SG': 'SGD', 'SINGAPORE': 'SGD',
+                'MX': 'MXN', 'MEXICO': 'MXN'
+            };
+
+            // Check for currency symbols
+            for (const [symbol, codes] of Object.entries(this.CURRENCY_SYMBOLS)) {
+                if (value.includes(symbol)) {
+                    // For unambiguous symbols, use high confidence
+                    if (codes.length === 1) {
+                        return {
+                            currency: codes[0],
+                            confidence: 0.95,
+                            symbol: symbol,
+                            source: 'unambiguous_symbol'
+                        };
+                    }
+
+                    // For ambiguous $ symbol, use company country to determine currency
+                    if (symbol === '$') {
+                        const companyCountry = (context.companyCountry || '').toUpperCase();
+                        const companyCurrency = context.companyCurrency;
+
+                        // If we have company currency and it's a $ currency, use it with high confidence
+                        if (companyCurrency && codes.includes(companyCurrency)) {
+                            return {
+                                currency: companyCurrency,
+                                confidence: 0.95, // High confidence - company setting
+                                symbol: symbol,
+                                source: 'company_currency'
+                            };
+                        }
+
+                        // If we have company country, map to appropriate dollar
+                        if (companyCountry && COUNTRY_DOLLAR_CURRENCY[companyCountry]) {
+                            return {
+                                currency: COUNTRY_DOLLAR_CURRENCY[companyCountry],
+                                confidence: 0.92, // High confidence - company country
+                                symbol: symbol,
+                                source: 'company_country'
+                            };
+                        }
+
+                        // Check vendor country if available
+                        const vendorCountry = (context.vendorCountry || '').toUpperCase();
+                        if (vendorCountry && COUNTRY_DOLLAR_CURRENCY[vendorCountry]) {
+                            return {
+                                currency: COUNTRY_DOLLAR_CURRENCY[vendorCountry],
+                                confidence: 0.85, // Good confidence - vendor country
+                                symbol: symbol,
+                                source: 'vendor_country'
+                            };
+                        }
+
+                        // Fallback: No context, must guess - use company currency if set, else CAD (company default)
+                        return {
+                            currency: companyCurrency || 'CAD',
+                            confidence: 0.80, // Lower confidence - no strong context
+                            symbol: symbol,
+                            source: 'default_fallback'
+                        };
+                    }
+
+                    // For other ambiguous symbols (like ¥ for JPY/CNY)
+                    return {
+                        currency: codes[0],
+                        confidence: 0.70,
+                        symbol: symbol,
+                        source: 'ambiguous_symbol'
+                    };
+                }
+            }
+
+            return { currency: null, confidence: 0, source: 'none' };
         }
 
         /**

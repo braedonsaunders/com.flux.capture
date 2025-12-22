@@ -688,7 +688,10 @@ define([
             const extractionContext = {
                 vendorCountry: options.vendorCountry || null,
                 vendorLocale: options.vendorLocale || null,
-                learnedFormat: null // Will be set if vendor has learned format
+                learnedFormat: null, // Will be set if vendor has learned format
+                // Company locale settings for reliable currency detection
+                companyCountry: options.companyCountry || 'CA',
+                companyCurrency: options.companyCurrency || 'CAD'
             };
 
             // Get learned formats if we have a vendor
@@ -1049,7 +1052,10 @@ define([
             if (['subtotal', 'taxAmount', 'totalAmount'].includes(fieldName)) {
                 const amountContext = {
                     vendorCountry: context.vendorCountry,
-                    currency: context.currency
+                    currency: context.currency,
+                    // Include company locale for reliable $ symbol resolution
+                    companyCountry: context.companyCountry,
+                    companyCurrency: context.companyCurrency
                 };
 
                 // Use learned format if available

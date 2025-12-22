@@ -107,9 +107,11 @@ define([
          * @param {number} fileId - NetSuite file ID
          * @param {Object} extractionResult - OCR extraction result
          * @param {Object} formSchema - Form field schema (optional)
+         * @param {Object} options - Additional options
+         * @param {number} options.vendorId - Vendor ID for history lookup
          * @returns {Object} Verification result
          */
-        verify(fileId, extractionResult, formSchema = null) {
+        verify(fileId, extractionResult, formSchema = null, options = {}) {
             const startTime = Date.now();
 
             try {
@@ -156,8 +158,14 @@ define([
                 else if (fileName.endsWith('.jpg') || fileName.endsWith('.jpeg')) mimeType = 'image/jpeg';
                 else if (fileName.endsWith('.tiff') || fileName.endsWith('.tif')) mimeType = 'image/tiff';
 
-                // Build verification prompt
-                const prompt = this._buildVerificationPrompt(extractionResult, formSchema);
+                // Get vendor history for anomaly detection (if vendor ID provided)
+                let vendorHistory = null;
+                if (options.vendorId) {
+                    vendorHistory = getVendorHistory(options.vendorId);
+                }
+
+                // Build verification prompt with vendor history context
+                const prompt = this._buildVerificationPrompt(extractionResult, formSchema, vendorHistory);
 
                 // Build request body
                 const requestBody = {
@@ -235,9 +243,10 @@ define([
 
         /**
          * Build the verification prompt for Gemini
+         * Enhanced with fraud detection, risk assessment, and high-value insights
          * @private
          */
-        _buildVerificationPrompt(extractionResult, formSchema) {
+        _buildVerificationPrompt(extractionResult, formSchema, vendorHistory = null) {
             const today = new Date();
             const todayIso = today.toISOString().split('T')[0];
 
@@ -254,71 +263,158 @@ define([
                 formFieldsSection = `\nAVAILABLE FORM FIELDS:\n${fieldLabels}\n`;
             }
 
-            return `You are an expert document analyst verifying invoice/bill OCR extraction accuracy.
+            // Build vendor history context if available
+            let vendorHistorySection = '';
+            if (vendorHistory) {
+                vendorHistorySection = `
+VENDOR HISTORY CONTEXT (use this to detect anomalies):
+- Vendor: ${vendorHistory.vendorName || 'Unknown'}
+- Typical invoice range: ${vendorHistory.avgAmount ? '$' + vendorHistory.minAmount + ' - $' + vendorHistory.maxAmount : 'Unknown'}
+- Average invoice: ${vendorHistory.avgAmount ? '$' + vendorHistory.avgAmount.toFixed(2) : 'Unknown'}
+- Typical payment terms: ${vendorHistory.typicalTerms || 'Unknown'}
+- Common invoice format: ${vendorHistory.invoicePattern || 'Unknown'}
+- Last invoice date: ${vendorHistory.lastInvoiceDate || 'Unknown'}
+- Total invoices processed: ${vendorHistory.invoiceCount || 'Unknown'}
+`;
+            }
 
-CURRENT DATE: ${todayIso} (use this to avoid downgrading years and to validate recency)
+            return `You are an expert accounts payable analyst and fraud detection specialist. Your job is to verify invoice accuracy, detect potential fraud or errors, and provide actionable insights that save the company money.
 
-TASK: Carefully read the attached document and verify the accuracy of the extracted data below.
+CURRENT DATE: ${todayIso}
+COMPANY LOCATION: Canada (CAD is the primary currency)
 
 EXTRACTED DATA TO VERIFY:
 ${JSON.stringify(extractedData, null, 2)}
-${formFieldsSection}
-VERIFICATION INSTRUCTIONS:
-1. Read every visible element on this document carefully
-2. Compare each extracted field against what you see in the document
-3. Identify any OCR errors (misread characters, wrong values)
-4. Find important fields that exist on the document but weren't extracted
-5. Verify line items match what's on the invoice
-6. Check that amounts add up correctly (line items = subtotal, subtotal + tax = total)
-7. Confirm invoice and due dates are in the correct year and infer a due date if terms (e.g., Net 30) are visible but the date is missing
-8. Look for handwritten annotations, stamps, or notes that might contain important info
-9. Suggest any extraction improvements beyond simple corrections when clear opportunities exist
+${formFieldsSection}${vendorHistorySection}
 
-RESPOND WITH THIS EXACT JSON STRUCTURE:
+=== PRIMARY VERIFICATION TASKS ===
+
+1. OCR ACCURACY VERIFICATION
+   - Compare every extracted field against the actual document
+   - Identify OCR misreads (0/O, 1/I/l, 5/S, 8/B, etc.)
+   - Check for truncated or partial values
+
+2. MATHEMATICAL VALIDATION (HIGH PRIORITY)
+   - Verify: Sum of line item amounts = Subtotal
+   - Verify: Subtotal + Tax = Total
+   - Check tax rate reasonableness (typically 5-15% for GST/HST/PST)
+   - Flag any rounding discrepancies > $0.05
+
+3. DATE VALIDATION & PAYMENT TERMS
+   - Invoice date should not be in the future
+   - Invoice date should not be more than 90 days old (flag if stale)
+   - If payment terms are visible (Net 30, Net 60, 2/10 Net 30), infer the due date
+   - Flag if due date is before invoice date (impossible)
+   - Calculate days until due date
+
+4. MISSING CRITICAL FIELDS
+   - Invoice number (required for duplicate detection)
+   - PO number (if this vendor typically uses POs)
+   - Payment terms (if visible on document)
+   - Remittance address (if different from header address)
+   - Account numbers or reference codes
+
+5. FRAUD & RISK INDICATORS (CRITICAL)
+   Watch for these red flags and report with HIGH severity:
+   - Round dollar amounts with no cents (e.g., $5,000.00 exactly)
+   - Invoice number patterns that seem unusual or sequential manipulation
+   - Vendor address that's a PO Box or residential address
+   - Bank account change notices on the invoice
+   - "Rush" or "urgent" payment language
+   - Invoice dated on weekend/holiday
+   - Amount significantly different from vendor's typical range
+   - Duplicate invoice number from same vendor (different amount)
+   - Missing or inconsistent tax registration numbers
+   - Handwritten changes or whiteout marks on printed invoices
+   - Email/wire payment instructions added by hand
+
+6. VENDOR CONSISTENCY CHECKS
+   - Does the vendor name match the letterhead/logo?
+   - Is the address consistent with what's expected?
+   - Are there multiple vendor names/entities on the document?
+
+=== CURRENCY RULES (STRICT) ===
+- NEVER correct currency based on $ symbol alone
+- Only flag currency issues if you see an EXPLICIT code (USD, EUR, GBP written out)
+- Company is in Canada - assume $ = CAD unless explicitly marked otherwise
+- If you see "US$" or "USD" explicitly, THAT is evidence for a correction
+
+=== RESPONSE FORMAT ===
 {
     "verification": {
-        "accuracy": 0.95,
-        "fieldsVerified": 12,
-        "issuesFound": 2,
-        "summary": "Brief summary of verification results"
+        "accuracy": 0.0-1.0,
+        "fieldsVerified": number,
+        "issuesFound": number,
+        "riskScore": "low|medium|high|critical",
+        "summary": "One-sentence summary of findings",
+        "recommendation": "approve|review|reject"
+    },
+    "mathValidation": {
+        "lineItemsSum": number or null,
+        "subtotalOnDoc": number or null,
+        "taxAmount": number or null,
+        "taxRate": "X%" or null,
+        "totalOnDoc": number or null,
+        "calculatedTotal": number or null,
+        "discrepancy": number or null,
+        "isValid": true/false
     },
     "corrections": [
         {
-            "field": "invoiceNumber",
-            "extracted": "1NV-123",
-            "correct": "INV-123",
-            "confidence": 0.98,
-            "reason": "OCR misread 'I' as '1'"
+            "field": "fieldName",
+            "extracted": "what was extracted",
+            "correct": "what it should be",
+            "confidence": 0.0-1.0,
+            "reason": "why this is wrong",
+            "impact": "low|medium|high"
         }
     ],
     "missedFields": [
         {
-            "field": "purchaseOrderNumber",
-            "value": "PO-5678",
-            "confidence": 0.95,
-            "location": "Top right header area"
+            "field": "fieldName",
+            "value": "the value",
+            "confidence": 0.0-1.0,
+            "location": "where on document",
+            "importance": "critical|important|optional"
         }
     ],
     "lineItemIssues": [
         {
-            "type": "missing|incorrect|extra",
-            "lineNumber": 1,
-            "description": "Description of the issue",
-            "expectedValue": "What should be there",
-            "extractedValue": "What was extracted"
+            "type": "missing|incorrect|extra|calculation_error",
+            "lineNumber": number,
+            "description": "what's wrong",
+            "expectedValue": "what should be",
+            "extractedValue": "what was extracted",
+            "impact": "$X difference" or null
         }
     ],
     "validationFlags": [
         {
-            "type": "amount_mismatch|date_invalid|vendor_mismatch|duplicate_warning",
-            "message": "Clear description of the issue",
-            "severity": "high|medium|low",
+            "type": "fraud_risk|amount_mismatch|date_invalid|duplicate_warning|tax_error|unusual_pattern|missing_critical",
+            "message": "Clear, actionable description",
+            "severity": "critical|high|medium|low",
+            "action": "What the user should do",
             "details": {}
         }
+    ],
+    "paymentTerms": {
+        "detected": "Net 30" or null,
+        "dueDate": "YYYY-MM-DD" or null,
+        "daysUntilDue": number or null,
+        "earlyPayDiscount": "2% if paid within 10 days" or null
+    },
+    "insights": [
+        "Any additional observations that could save money or time"
     ]
 }
 
-Be thorough but focus on accuracy. Only report genuine discrepancies, not minor formatting differences.`;
+=== IMPORTANT GUIDELINES ===
+- Be thorough but only report genuine issues, not formatting preferences
+- If math doesn't add up, this is HIGH severity - money is at stake
+- Missing invoice numbers are HIGH severity - duplicate payment risk
+- Fraud indicators should always be flagged even if you're not certain
+- Provide specific, actionable recommendations
+- If everything looks correct, say so confidently with high accuracy score`;
         }
 
         /**
@@ -391,36 +487,123 @@ Be thorough but focus on accuracy. Only report genuine discrepancies, not minor 
 
             const enhanced = JSON.parse(JSON.stringify(originalResult));
             const extraction = enhanced.extraction || enhanced;
+            const verification = verificationResult.verification || {};
 
-            // Add AI verification metadata
+            // Add AI verification metadata with enhanced fields
             extraction.aiVerification = {
                 verified: true,
-                accuracy: verificationResult.verification?.accuracy || null,
-                fieldsVerified: verificationResult.verification?.fieldsVerified || 0,
-                issuesFound: verificationResult.verification?.issuesFound || 0,
-                summary: verificationResult.verification?.summary || null,
+                accuracy: verification.accuracy || null,
+                fieldsVerified: verification.fieldsVerified || 0,
+                issuesFound: verification.issuesFound || 0,
+                riskScore: verification.riskScore || 'low',
+                recommendation: verification.recommendation || 'review',
+                summary: verification.summary || null,
+                // Actionable items
                 corrections: verificationResult.corrections || [],
                 missedFields: verificationResult.missedFields || [],
                 lineItemIssues: verificationResult.lineItemIssues || [],
                 validationFlags: verificationResult.validationFlags || [],
+                // Enhanced data
+                mathValidation: verificationResult.mathValidation || null,
+                paymentTerms: verificationResult.paymentTerms || null,
+                insights: verificationResult.insights || [],
                 duration: verificationResult.duration || 0
             };
 
-            // Adjust confidence if we have AI accuracy score
-            if (verificationResult.verification?.accuracy) {
-                const ocrConfidence = extraction.confidence?.overall || 0;
-                const aiAccuracy = verificationResult.verification.accuracy;
+            // Auto-apply payment terms if detected and not already set
+            if (verificationResult.paymentTerms) {
+                const terms = verificationResult.paymentTerms;
+                if (terms.dueDate && !extraction.fields?.dueDate) {
+                    extraction.fields = extraction.fields || {};
+                    extraction.fields.dueDate = terms.dueDate;
+                    extraction.aiVerification.autoApplied = extraction.aiVerification.autoApplied || [];
+                    extraction.aiVerification.autoApplied.push({
+                        field: 'dueDate',
+                        value: terms.dueDate,
+                        reason: `Inferred from ${terms.detected || 'payment terms'}`
+                    });
+                }
+                if (terms.detected && !extraction.fields?.paymentTerms) {
+                    extraction.fields = extraction.fields || {};
+                    extraction.fields.paymentTerms = terms.detected;
+                }
+            }
 
-                // Blend OCR confidence with AI accuracy
+            // Adjust confidence based on AI accuracy and risk score
+            if (verification.accuracy) {
+                const ocrConfidence = extraction.confidence?.overall || 0;
+                const aiAccuracy = verification.accuracy;
+                const riskPenalty = verification.riskScore === 'critical' ? 0.3 :
+                                   verification.riskScore === 'high' ? 0.15 :
+                                   verification.riskScore === 'medium' ? 0.05 : 0;
+
+                // Blend OCR confidence with AI accuracy, apply risk penalty
                 extraction.confidence = extraction.confidence || {};
                 extraction.confidence.aiVerified = true;
                 extraction.confidence.aiAccuracy = Math.round(aiAccuracy * 100);
+                extraction.confidence.riskScore = verification.riskScore;
                 extraction.confidence.adjusted = Math.round(
-                    ((ocrConfidence / 100 * 0.4) + (aiAccuracy * 0.6)) * 100
+                    Math.max(0, ((ocrConfidence / 100 * 0.4) + (aiAccuracy * 0.6) - riskPenalty)) * 100
                 );
             }
 
             return enhanced;
+        }
+    }
+
+    // ==================== Vendor History Lookup ====================
+
+    /**
+     * Get vendor invoice history for anomaly detection
+     * @param {number} vendorId - NetSuite vendor internal ID
+     * @returns {Object|null} Vendor history summary
+     */
+    function getVendorHistory(vendorId) {
+        if (!vendorId) return null;
+
+        try {
+            // Search for recent vendor bills to build history
+            const billSearch = search.create({
+                type: 'vendorbill',
+                filters: [
+                    ['entity', 'anyof', vendorId],
+                    'AND',
+                    ['mainline', 'is', 'T'],
+                    'AND',
+                    ['trandate', 'within', 'lastrollingyear']
+                ],
+                columns: [
+                    search.createColumn({ name: 'tranid', summary: 'GROUP' }),
+                    search.createColumn({ name: 'amount', summary: 'AVG' }),
+                    search.createColumn({ name: 'amount', summary: 'MIN' }),
+                    search.createColumn({ name: 'amount', summary: 'MAX' }),
+                    search.createColumn({ name: 'internalid', summary: 'COUNT' }),
+                    search.createColumn({ name: 'trandate', summary: 'MAX' }),
+                    search.createColumn({ name: 'terms', summary: 'GROUP' }),
+                    search.createColumn({ name: 'entity', summary: 'GROUP' })
+                ]
+            });
+
+            let history = null;
+            billSearch.run().each(function(result) {
+                history = {
+                    vendorName: result.getText({ name: 'entity', summary: 'GROUP' }),
+                    avgAmount: parseFloat(result.getValue({ name: 'amount', summary: 'AVG' })) || 0,
+                    minAmount: parseFloat(result.getValue({ name: 'amount', summary: 'MIN' })) || 0,
+                    maxAmount: parseFloat(result.getValue({ name: 'amount', summary: 'MAX' })) || 0,
+                    invoiceCount: parseInt(result.getValue({ name: 'internalid', summary: 'COUNT' })) || 0,
+                    lastInvoiceDate: result.getValue({ name: 'trandate', summary: 'MAX' }),
+                    typicalTerms: result.getText({ name: 'terms', summary: 'GROUP' }),
+                    invoicePattern: result.getValue({ name: 'tranid', summary: 'GROUP' })
+                };
+                return false; // Just get first aggregated result
+            });
+
+            return history;
+
+        } catch (e) {
+            log.debug('getVendorHistory', `Could not get history for vendor ${vendorId}: ${e.message}`);
+            return null;
         }
     }
 
@@ -710,6 +893,7 @@ Be thorough but focus on accuracy. Only report genuine discrepancies, not minor 
         getDefaultConfig: getDefaultConfig,
         testConnection: testConnection,
         createVerifier: createVerifier,
+        getVendorHistory: getVendorHistory,
         DEFAULT_MODEL: DEFAULT_MODEL
     };
 });

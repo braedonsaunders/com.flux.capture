@@ -2185,6 +2185,9 @@ define([
             maxExtractionPages: savedSettings.maxExtractionPages || 0,
             maxFileSize: 10485760,
             supportedFileTypes: ['pdf', 'png', 'jpg', 'jpeg', 'tiff', 'tif', 'gif', 'bmp'],
+            // Company locale settings - critical for reliable currency detection
+            companyCountry: savedSettings.companyCountry || 'CA', // Default to Canada
+            companyCurrency: savedSettings.companyCurrency || 'CAD', // Default to CAD
             anomalyDetection: anomalyDefaults
         };
 
@@ -2198,6 +2201,9 @@ define([
                 defaultDocumentType: context.defaultDocumentType || 'auto',
                 defaultLineSublist: context.defaultLineSublist || 'auto',
                 maxExtractionPages: parseInt(context.maxExtractionPages, 10) || 0,
+                // Company locale settings
+                companyCountry: context.companyCountry || 'CA',
+                companyCurrency: context.companyCurrency || 'CAD',
                 anomalyDetection: {
                     // Duplicate Detection
                     detectDuplicateInvoice: anomaly.detectDuplicateInvoice !== false,
