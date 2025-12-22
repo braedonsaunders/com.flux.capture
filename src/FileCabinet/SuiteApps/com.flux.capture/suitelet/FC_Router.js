@@ -3248,21 +3248,14 @@ define([
                     }
                     return true;
                 });
-
-                log.debug('resolveCurrencyId', 'Built currency cache with ' + Object.keys(currencyCache).length + ' entries');
             } catch (e) {
-                log.error('resolveCurrencyId', 'Failed to build currency cache: ' + e.message);
+                // Search failed - reset cache to allow retry
                 currencyCache = {};
             }
         }
 
-        // Look up in cache
-        if (currencyCache[codeUpper]) {
-            return currencyCache[codeUpper];
-        }
-
-        log.warn('resolveCurrencyId', 'Currency not found: ' + currencyStr);
-        return null;
+        // Return from cache or null if not found
+        return currencyCache[codeUpper] || null;
     }
 
     function updateDocument(context) {
