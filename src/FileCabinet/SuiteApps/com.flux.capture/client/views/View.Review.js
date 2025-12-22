@@ -2298,14 +2298,14 @@
                         '<label>Subtotal ' + this.renderConfidenceBadge('subtotal') + (isSubtotalRequired ? ' <span class="required">*</span>' : '') + '</label>' +
                         '<div class="input-with-prefix">' +
                             '<span class="input-prefix">$</span>' +
-                            '<input type="number" step="0.01" id="field-subtotal" value="' + (doc.subtotal || 0).toFixed(2) + '">' +
+                            '<input type="number" step="0.01" id="field-subtotal" data-field="subtotal" value="' + (doc.subtotal || 0).toFixed(2) + '">' +
                         '</div>' +
                     '</div>' +
                     '<div class="form-field' + (isTaxRequired ? ' is-required' : '') + '">' +
                         '<label>Tax ' + this.renderConfidenceBadge('taxAmount') + (isTaxRequired ? ' <span class="required">*</span>' : '') + '</label>' +
                         '<div class="input-with-prefix">' +
                             '<span class="input-prefix">$</span>' +
-                            '<input type="number" step="0.01" id="field-taxAmount" value="' + (doc.taxAmount || 0).toFixed(2) + '">' +
+                            '<input type="number" step="0.01" id="field-taxAmount" data-field="taxtotal" value="' + (doc.taxAmount || 0).toFixed(2) + '">' +
                         '</div>' +
                     '</div>' +
                 '</div>' +
@@ -2313,7 +2313,7 @@
                     '<label>Total Amount ' + this.renderConfidenceBadge('totalAmount') + (isTotalRequired ? ' <span class="required">*</span>' : '') + '</label>' +
                     '<div class="input-with-prefix total-input">' +
                         '<span class="input-prefix">$</span>' +
-                        '<input type="number" step="0.01" id="field-totalAmount" value="' + (doc.totalAmount || 0).toFixed(2) + '">' +
+                        '<input type="number" step="0.01" id="field-totalAmount" data-field="total" value="' + (doc.totalAmount || 0).toFixed(2) + '">' +
                     '</div>' +
                 '</div>' +
             '</div>';
@@ -5879,10 +5879,9 @@
                 return;
             }
 
-            // Save any pending changes first
-            var savePromise = Object.keys(this.changes).length > 0
-                ? API.put('update', { documentId: this.docId, updates: this.changes })
-                : Promise.resolve();
+            // Always save current form state before approval to ensure transaction uses latest data
+            var formData = this.collectFormData();
+            var savePromise = API.put('update', { documentId: this.docId, formData: formData });
 
             savePromise
                 .then(function() {
