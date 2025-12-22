@@ -6497,6 +6497,149 @@ tr.doc-row.deleting::after {
     animation: delete-spin 0.8s linear infinite;
 }
 
+/* Validation Errors Modal */
+.validation-errors-modal {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.5);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 10000;
+    animation: modal-fade-in 0.2s ease-out;
+}
+@keyframes modal-fade-in {
+    from { opacity: 0; }
+    to { opacity: 1; }
+}
+.validation-errors-modal .modal-dialog {
+    background: var(--surface-card);
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-xl);
+    width: 90%;
+    max-width: 500px;
+    max-height: 80vh;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    animation: modal-slide-in 0.2s ease-out;
+}
+@keyframes modal-slide-in {
+    from { transform: translateY(-20px); opacity: 0; }
+    to { transform: translateY(0); opacity: 1; }
+}
+.validation-errors-modal .modal-header {
+    padding: var(--space-md) var(--space-lg);
+    border-bottom: 1px solid var(--border-color);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+}
+.validation-errors-modal .modal-header-danger {
+    background: rgba(239, 68, 68, 0.1);
+    border-bottom-color: rgba(239, 68, 68, 0.2);
+}
+.validation-errors-modal .modal-header h3 {
+    margin: 0;
+    font-size: var(--font-size-lg);
+    font-weight: 600;
+    color: var(--color-danger);
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
+}
+.validation-errors-modal .modal-close {
+    background: none;
+    border: none;
+    padding: var(--space-xs);
+    cursor: pointer;
+    color: var(--text-tertiary);
+    border-radius: var(--radius-sm);
+    transition: all var(--transition);
+}
+.validation-errors-modal .modal-close:hover {
+    background: var(--gray-100);
+    color: var(--text-primary);
+}
+.validation-errors-modal .modal-body {
+    padding: var(--space-lg);
+    overflow-y: auto;
+    flex: 1;
+}
+.validation-errors-modal .validation-intro {
+    margin: 0 0 var(--space-md);
+    color: var(--text-secondary);
+    font-size: var(--font-size-sm);
+}
+.validation-errors-modal .validation-error-list,
+.validation-errors-modal .validation-warning-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+}
+.validation-errors-modal .validation-error-item,
+.validation-errors-modal .validation-warning-item {
+    display: flex;
+    align-items: flex-start;
+    gap: var(--space-sm);
+    padding: var(--space-sm) 0;
+    border-bottom: 1px solid var(--border-color);
+}
+.validation-errors-modal .validation-error-item:last-child,
+.validation-errors-modal .validation-warning-item:last-child {
+    border-bottom: none;
+}
+.validation-errors-modal .validation-error-item i {
+    flex-shrink: 0;
+    margin-top: 2px;
+}
+.validation-errors-modal .validation-error-item span {
+    flex: 1;
+    color: var(--text-primary);
+}
+.validation-errors-modal .btn-goto-field {
+    flex-shrink: 0;
+    background: var(--gray-100);
+    border: none;
+    padding: var(--space-xs) var(--space-sm);
+    border-radius: var(--radius-sm);
+    font-size: var(--font-size-xs);
+    color: var(--text-secondary);
+    cursor: pointer;
+    transition: all var(--transition);
+}
+.validation-errors-modal .btn-goto-field:hover {
+    background: var(--color-primary);
+    color: white;
+}
+.validation-errors-modal .validation-warnings-title {
+    margin: var(--space-lg) 0 var(--space-sm);
+    font-size: var(--font-size-sm);
+    font-weight: 500;
+    color: var(--color-warning);
+    display: flex;
+    align-items: center;
+    gap: var(--space-xs);
+}
+.validation-errors-modal .validation-warning-item i {
+    flex-shrink: 0;
+    margin-top: 2px;
+    color: var(--color-warning);
+}
+.validation-errors-modal .validation-warning-item span {
+    flex: 1;
+    color: var(--text-secondary);
+}
+.validation-errors-modal .modal-footer {
+    padding: var(--space-md) var(--space-lg);
+    border-top: 1px solid var(--border-color);
+    display: flex;
+    justify-content: flex-end;
+    gap: var(--space-sm);
+}
+.text-danger { color: var(--color-danger); }
+.text-warning { color: var(--color-warning); }
+
 /* Inbox Zero State */
 .inbox-zero {
     display: flex;
