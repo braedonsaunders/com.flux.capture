@@ -10159,38 +10159,39 @@ textarea.ai-corrected {
     justify-content: center;
     border-radius: 50%;
     font-size: 11px;
+    color: white;
 }
 
 .alert-row.alert-applied .alert-icon {
-    background: var(--color-success-light, #dcfce7);
-    color: var(--color-success);
+    background: #10b981;
 }
 
-.alert-row.alert-critical .alert-icon,
+.alert-row.alert-critical .alert-icon {
+    background: #dc2626;
+}
+
 .alert-row.alert-high .alert-icon {
-    background: var(--color-danger-light, #fee2e2);
-    color: var(--color-danger);
+    background: #ef4444;
 }
 
 .alert-row.alert-medium .alert-icon {
-    background: var(--color-warning-light, #fef3c7);
-    color: var(--color-warning-dark, #92400e);
+    background: #f59e0b;
 }
 
-.alert-row.alert-low .alert-icon,
+.alert-row.alert-low .alert-icon {
+    background: #6b7280;
+}
+
 .alert-row.alert-actionable .alert-icon {
-    background: var(--color-info-light, #dbeafe);
-    color: var(--color-primary);
+    background: #3b82f6;
 }
 
 .alert-row.alert-info .alert-icon {
-    background: var(--color-info-light, #dbeafe);
-    color: var(--color-info, #3b82f6);
+    background: #3b82f6;
 }
 
 .alert-row.alert-insight .alert-icon {
-    background: #fef9c3;
-    color: #ca8a04;
+    background: #eab308;
 }
 
 /* Alert body */
