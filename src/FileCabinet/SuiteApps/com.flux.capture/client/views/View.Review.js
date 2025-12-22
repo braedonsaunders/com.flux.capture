@@ -5927,6 +5927,44 @@
                 }
             }
 
+            // Validate at least one line item exists (expense or item sublist)
+            var hasLineItems = false;
+            var firstSublistSection = null;
+            var self = this;
+
+            if (this.sublistData) {
+                Object.keys(this.sublistData).forEach(function(sublistId) {
+                    var lines = self.sublistData[sublistId] || [];
+                    var normalizedId = sublistId.toLowerCase();
+
+                    // Check for at least one populated line
+                    var populatedLines = lines.filter(function(line) {
+                        return self.isSublistLinePopulated(normalizedId, line);
+                    });
+
+                    if (populatedLines.length > 0) {
+                        hasLineItems = true;
+                    }
+
+                    // Track first sublist section for focus
+                    if (!firstSublistSection) {
+                        firstSublistSection = el('.line-section[data-sublist="' + sublistId + '"]');
+                    }
+                });
+            }
+
+            if (!hasLineItems) {
+                // Find the first sublist section to scroll to
+                if (!firstSublistSection) {
+                    firstSublistSection = el('.line-section');
+                }
+                return {
+                    valid: false,
+                    message: 'At least one line item is required. Please add an expense or item line.',
+                    focusElement: firstSublistSection
+                };
+            }
+
             return result;
         },
 
@@ -6037,6 +6075,12 @@
                     // Check both err.details.errors (from API) and err.errors (direct)
                     var errors = (err.details && err.details.errors) || err.errors;
                     var warnings = (err.details && err.details.warnings) || err.warnings;
+
+                    // If no structured errors but we have an error message, create an error object
+                    // This handles cases like APPROVE_FAILED where details is null
+                    if ((!errors || errors.length === 0) && err.message) {
+                        errors = [{ field: null, message: err.message }];
+                    }
 
                     console.log('[Flux] Parsed errors:', errors);
                     console.log('[Flux] Parsed warnings:', warnings);
