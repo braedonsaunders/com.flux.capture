@@ -1769,10 +1769,9 @@
         toggleAnnotations: function() {
             this.extractionPool.showAnnotations = !this.extractionPool.showAnnotations;
 
-            var btn = el('#btn-toggle-annotations');
-            if (btn) {
+            document.querySelectorAll('#btn-toggle-annotations').forEach(function(btn) {
                 btn.classList.toggle('active', this.extractionPool.showAnnotations);
-            }
+            }, this);
 
             if (this.pdfPage && this.pdfCanvas) {
                 // Use CSS dimensions (not canvas.width which includes DPI scaling)
@@ -6971,13 +6970,12 @@
             }
 
             // Toggle annotations button
-            var annotBtn = el('#btn-toggle-annotations');
-            if (annotBtn) {
-                annotBtn.onclick = function(e) {
+            document.querySelectorAll('#btn-toggle-annotations').forEach(function(btn) {
+                btn.onclick = function(e) {
                     e.stopPropagation();
                     self.toggleAnnotations();
                 };
-            }
+            });
 
             // Search input
             var searchInput = el('#pool-search-input');
@@ -7553,12 +7551,11 @@
             });
 
             // Toggle annotations button
-            var annotBtn = el('#btn-toggle-annotations');
-            if (annotBtn) {
-                annotBtn.onclick = function() {
+            document.querySelectorAll('#btn-toggle-annotations').forEach(function(btn) {
+                btn.onclick = function() {
                     self.toggleAnnotations();
                 };
-            }
+            });
         },
 
         /**
@@ -7569,6 +7566,11 @@
             if (dropdown) {
                 // Re-render the dropdown content
                 dropdown.innerHTML = this.renderPoolDropdownContent();
+
+                // Keep annotation toggle state after re-render
+                dropdown.querySelectorAll('#btn-toggle-annotations').forEach(function(btn) {
+                    btn.classList.toggle('active', this.extractionPool.showAnnotations);
+                }, this);
             }
 
             // Update badge count
