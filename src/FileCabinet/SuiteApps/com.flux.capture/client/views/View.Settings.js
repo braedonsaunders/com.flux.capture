@@ -142,6 +142,16 @@
                 });
             });
 
+            // XML source option selection
+            var xmlOption = el('#source-option-xml');
+            if (xmlOption) {
+                xmlOption.addEventListener('click', function(e) {
+                    if (!e.target.closest('button')) {
+                        self.selectSourceOption('xml');
+                    }
+                });
+            }
+
             // XML upload handlers
             var xmlInput = el('#xml-file-input');
             var browseBtn = el('#btn-browse-xml');
