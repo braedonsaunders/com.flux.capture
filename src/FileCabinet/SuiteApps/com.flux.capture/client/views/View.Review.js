@@ -666,10 +666,18 @@
             }
 
             // Collect sublist data from sublistData (already tracked)
+            // Filter out empty/default rows that have no meaningful data
             if (this.sublistData) {
                 Object.keys(this.sublistData).forEach(function(sublistId) {
                     var normalizedId = sublistId.toLowerCase();
-                    sublists[normalizedId] = self.sublistData[sublistId] || [];
+                    var lines = self.sublistData[sublistId] || [];
+
+                    // Filter out empty lines
+                    var nonEmptyLines = lines.filter(function(line) {
+                        return self.isSublistLinePopulated(normalizedId, line);
+                    });
+
+                    sublists[normalizedId] = nonEmptyLines;
                 });
             }
 
@@ -4928,6 +4936,47 @@
             return line;
         },
 
+        /**
+         * Check if a sublist line has meaningful data (not just defaults)
+         * Used to filter out empty placeholder rows before saving
+         * @param {string} sublistId - The sublist type (expense, item, etc.)
+         * @param {object} line - The line data object
+         * @returns {boolean} - True if line has meaningful data
+         */
+        isSublistLinePopulated: function(sublistId, line) {
+            if (!line) return false;
+
+            var slType = (sublistId || '').toLowerCase();
+
+            // For expense lines: must have account or category selected
+            if (slType === 'expense') {
+                var hasAccount = line.account && String(line.account).trim() !== '';
+                var hasCategory = line.category && String(line.category).trim() !== '';
+                var hasExpenseCategory = line.expensecategory && String(line.expensecategory).trim() !== '';
+                return hasAccount || hasCategory || hasExpenseCategory;
+            }
+
+            // For item lines: must have item selected
+            if (slType === 'item') {
+                var hasItem = line.item && String(line.item).trim() !== '';
+                return hasItem;
+            }
+
+            // For other sublists: check if any non-default value exists
+            // A line is populated if it has any non-empty string value or non-zero number
+            var hasData = Object.keys(line).some(function(key) {
+                // Skip display fields and internal fields
+                if (key.indexOf('_display') !== -1 || key.indexOf('_') === 0) return false;
+
+                var val = line[key];
+                if (typeof val === 'string' && val.trim() !== '') return true;
+                if (typeof val === 'number' && val !== 0) return true;
+                return false;
+            });
+
+            return hasData;
+        },
+
         // Show split equally dialog
         showSplitDialog: function(sublistId) {
             var self = this;
@@ -5982,8 +6031,12 @@
                     }
 
                     // Handle validation errors with persistent modal
-                    if (err.errors && Array.isArray(err.errors)) {
-                        self.showValidationErrorsModal(err.errors, err.warnings || []);
+                    // Check both err.details.errors (from API) and err.errors (direct)
+                    var errors = (err.details && err.details.errors) || err.errors;
+                    var warnings = (err.details && err.details.warnings) || err.warnings;
+
+                    if (errors && Array.isArray(errors) && errors.length > 0) {
+                        self.showValidationErrorsModal(errors, warnings || []);
                     } else {
                         UI.toast('Error: ' + err.message, 'error');
                     }

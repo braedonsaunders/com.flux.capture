@@ -176,7 +176,13 @@
                 }
 
                 if (data.success === false) {
-                    throw new Error(data.error ? data.error.message : 'API Error');
+                    var err = new Error(data.error ? data.error.message : 'API Error');
+                    // Preserve full error structure for validation errors etc.
+                    if (data.error) {
+                        err.code = data.error.code;
+                        err.details = data.error.details;
+                    }
+                    throw err;
                 }
                 return data.data;
             });
