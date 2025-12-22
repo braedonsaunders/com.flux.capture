@@ -265,6 +265,9 @@ define([
                     }
                 }
 
+                // Apply vendor/account currency preferences before validation
+                this._applyCurrencyPreference(extractionResult, vendorDefaults, options);
+
                 // Stage 4.6: Match unmatched extractions to custom form fields
                 let customFieldMatches = {};
                 if (options.formSchema && extractionResult.allExtractedFields) {
@@ -406,6 +409,9 @@ define([
                         });
                     }
                 }
+
+                // Apply vendor/account currency preferences before validation
+                this._applyCurrencyPreference(extractionResult, vendorDefaults, options);
 
                 // Stage 4.6: Match unmatched extractions to custom form fields
                 let customFieldMatches = {};
@@ -671,7 +677,7 @@ define([
                 subtotal: 0,
                 taxAmount: 0,
                 totalAmount: 0,
-                currency: 'USD'
+                currency: null
             };
 
             const fieldConfidences = {};
@@ -757,6 +763,11 @@ define([
                     if (parsedValue !== null && parsedValue !== undefined) {
                         fields[fieldName] = parsedValue;
                         fieldConfidences[fieldName] = best.combinedScore || best.matchScore || 0.7;
+
+                        if (fieldName === 'currency' && parsedValue) {
+                            extractionContext.currency = parsedValue;
+                            extractionContext.currencySource = 'field_match';
+                        }
                     }
                 }
             }
@@ -851,6 +862,12 @@ define([
             // Try to infer missing amounts
             this._inferMissingAmounts(fields, lineItems);
 
+            // If currency was detected implicitly via amounts, surface it as a field
+            if (!fields.currency && extractionContext.currency) {
+                fields.currency = extractionContext.currency;
+                fieldConfidences.currency = fieldConfidences.currency || 0.55;
+            }
+
             // v4.0: Cross-validate line items sum vs extracted totals
             if (lineItems.length > 0) {
                 const lineItemsSum = lineItems.reduce((sum, item) => sum + (item.amount || 0), 0);
@@ -931,7 +948,8 @@ define([
                 // v3.0: Include table diagnostics for debugging
                 tableDiagnostics: tableDiagnostics,
                 // v4.0: Track how line items were extracted
-                lineItemExtractionMethod: lineItemExtractionMethod
+                lineItemExtractionMethod: lineItemExtractionMethod,
+                currencySource: extractionContext.currencySource || (fieldConfidences.currency ? 'field_match' : null)
             };
         }
 
@@ -1044,6 +1062,7 @@ define([
                 // Extract currency if found
                 if (result.currency && !context.currency) {
                     context.currency = result.currency;
+                    context.currencySource = 'amount_detection';
                 }
 
                 return result.amount;
@@ -1115,6 +1134,45 @@ define([
                     fields.taxAmount = Math.round(inferredTax * 100) / 100;
                 }
             }
+        }
+
+        /**
+         * Apply currency preferences using vendor defaults or account settings
+         */
+        _applyCurrencyPreference(extractionResult, vendorDefaults, options = {}) {
+            if (!extractionResult || !extractionResult.fields) return;
+
+            const fields = extractionResult.fields;
+            const fieldConfidences = extractionResult.fieldConfidences || {};
+            const warnings = extractionResult.extractionWarnings || [];
+
+            const preferredCurrency = vendorDefaults?.currency ||
+                options.preferredCurrency ||
+                options.accountCurrency || null;
+
+            const extractedCurrency = fields.currency;
+            const extractedConfidence = fieldConfidences.currency || 0;
+            const currencySource = extractionResult.currencySource || null;
+
+            if (preferredCurrency) {
+                const shouldOverride = !extractedCurrency ||
+                    currencySource === 'amount_detection' ||
+                    extractedConfidence < 0.75;
+
+                if (shouldOverride) {
+                    fields.currency = preferredCurrency;
+                    fieldConfidences.currency = Math.max(extractedConfidence, 0.9);
+
+                    warnings.push({
+                        type: 'currency_preference',
+                        message: `Currency set to ${preferredCurrency} using vendor/account preference`,
+                        field: 'currency'
+                    });
+                }
+            }
+
+            extractionResult.fieldConfidences = fieldConfidences;
+            extractionResult.extractionWarnings = warnings;
         }
 
         /**
@@ -2042,7 +2100,7 @@ define([
                     subtotal: 0,
                     taxAmount: 0,
                     totalAmount: 0,
-                    currency: 'USD'
+                    currency: null
                 },
                 fieldConfidences: {
                     vendorName: vendorName ? 0.6 : 0,
