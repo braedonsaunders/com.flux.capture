@@ -3624,7 +3624,7 @@ define([
                 warnings: warnings
             }, 'Document approved');
         } catch (e) {
-            log.error('Approve error', e);
+            log.error('Approve error', { name: e.name, message: e.message, stack: e.stack, id: e.id });
             // Check for validation error type
             if (e.type === 'VALIDATION_ERROR') {
                 return Response.error('VALIDATION_FAILED', e.message, {
@@ -3632,7 +3632,16 @@ define([
                     warnings: e.warnings || []
                 });
             }
-            return Response.error('APPROVE_FAILED', e.message);
+            // Include more error details for debugging
+            var errorMessage = e.message || 'Unknown error';
+            if (e.name && e.name !== 'Error') {
+                errorMessage = e.name + ': ' + errorMessage;
+            }
+            return Response.error('APPROVE_FAILED', errorMessage, {
+                errors: [{ field: null, message: errorMessage }],
+                errorType: e.name,
+                errorId: e.id || null
+            });
         }
     }
 
