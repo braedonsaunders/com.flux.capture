@@ -484,6 +484,9 @@
                         self.renderPreview();
                         self.renderExtractionForm();
 
+                        // Auto-select single options (like subsidiary) and resolve posting period
+                        self.autoSelectSingleOptions();
+
                         // Animate content in
                         self.animateContentEnter();
 
