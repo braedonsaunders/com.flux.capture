@@ -2647,13 +2647,12 @@ define([
                     'custrecord_flux_modified_date': new Date()
                 };
 
-                // Only set currency if it's a numeric ID (not a code like "USD")
+                // Resolve currency - accepts both numeric IDs and text codes (USD, CAD, etc.)
                 if (extraction.fields && extraction.fields.currency) {
-                    var currencyVal = extraction.fields.currency;
-                    if (typeof currencyVal === 'number' || (typeof currencyVal === 'string' && /^\d+$/.test(currencyVal))) {
-                        updateValues['custrecord_flux_currency'] = parseInt(currencyVal, 10);
+                    var resolvedCurrency = resolveCurrencyId(extraction.fields.currency);
+                    if (resolvedCurrency) {
+                        updateValues['custrecord_flux_currency'] = resolvedCurrency;
                     }
-                    // Skip text currency codes - would need lookup to convert
                 }
 
                 // Store ALL extracted data as JSON for flexible field mapping
@@ -3343,6 +3342,76 @@ define([
         return null;
     }
 
+    /**
+     * Currency lookup cache - maps currency codes to internal IDs
+     * Populated on first lookup to avoid repeated searches
+     */
+    var currencyCache = null;
+
+    /**
+     * Helper to resolve currency value to NetSuite internal ID
+     * Accepts either a numeric ID (passed through) or a currency code (USD, CAD, etc.)
+     * @param {string|number} currencyVal - Currency ID or code
+     * @returns {number|null} - NetSuite internal ID or null if not found
+     */
+    function resolveCurrencyId(currencyVal) {
+        if (!currencyVal) return null;
+
+        // If already a numeric ID, return it
+        if (typeof currencyVal === 'number') {
+            return currencyVal;
+        }
+
+        var currencyStr = String(currencyVal).trim();
+        if (!currencyStr) return null;
+
+        // If it's a numeric string, parse and return
+        if (/^\d+$/.test(currencyStr)) {
+            return parseInt(currencyStr, 10);
+        }
+
+        // It's a currency code (like USD, CAD) - need to look up
+        var codeUpper = currencyStr.toUpperCase();
+
+        // Build cache if not already built
+        if (!currencyCache) {
+            currencyCache = {};
+            try {
+                var currencySearch = search.create({
+                    type: search.Type.CURRENCY,
+                    columns: ['internalid', 'symbol', 'name']
+                });
+
+                currencySearch.run().each(function(result) {
+                    var id = result.getValue('internalid');
+                    var symbol = result.getValue('symbol');
+                    var name = result.getValue('name');
+
+                    if (symbol) {
+                        currencyCache[symbol.toUpperCase()] = parseInt(id, 10);
+                    }
+                    if (name) {
+                        currencyCache[name.toUpperCase()] = parseInt(id, 10);
+                    }
+                    return true;
+                });
+
+                log.debug('resolveCurrencyId', 'Built currency cache with ' + Object.keys(currencyCache).length + ' entries');
+            } catch (e) {
+                log.error('resolveCurrencyId', 'Failed to build currency cache: ' + e.message);
+                currencyCache = {};
+            }
+        }
+
+        // Look up in cache
+        if (currencyCache[codeUpper]) {
+            return currencyCache[codeUpper];
+        }
+
+        log.warn('resolveCurrencyId', 'Currency not found: ' + currencyStr);
+        return null;
+    }
+
     function updateDocument(context) {
         var documentId = context.documentId;
         var formData = context.formData;
@@ -3391,13 +3460,12 @@ define([
             if (bodyFields.total !== undefined) {
                 values['custrecord_flux_total_amount'] = bodyFields.total;
             }
-            // Only save currency if it's a numeric ID (not a text code like "CAD")
+            // Resolve currency - accepts both numeric IDs and text codes (USD, CAD, etc.)
             if (bodyFields.currency) {
-                var currencyVal = bodyFields.currency;
-                if (typeof currencyVal === 'number' || (typeof currencyVal === 'string' && /^\d+$/.test(currencyVal))) {
-                    values['custrecord_flux_currency'] = parseInt(currencyVal, 10);
+                var resolvedCurrency = resolveCurrencyId(bodyFields.currency);
+                if (resolvedCurrency) {
+                    values['custrecord_flux_currency'] = resolvedCurrency;
                 }
-                // Skip text currency codes - would need lookup to convert
             }
 
             record.submitFields({
