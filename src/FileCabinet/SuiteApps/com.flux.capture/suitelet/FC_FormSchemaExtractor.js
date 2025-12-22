@@ -275,14 +275,6 @@ function(record, search, log, query, runtime, fcDebug) {
         return loadConfigData(CONFIG_TYPE.LAYOUT, normalizedType, formId);
     }
 
-    /**
-     * Save layout to config record
-     */
-    function saveLayoutToConfig(recordType, formId, layout) {
-        var normalizedType = normalizeRecordType(recordType);
-        return saveConfigData(CONFIG_TYPE.LAYOUT, normalizedType, formId, layout, SOURCE_TYPE.CLIENT_CAPTURE);
-    }
-
     // ==========================================
     // USER CONFIG FUNCTIONS (XML upload / Manual)
     // ==========================================
@@ -562,40 +554,6 @@ function(record, search, log, query, runtime, fcDebug) {
     }
 
     /**
-     * Save form layout extracted from client-side DOM
-     * This captures the actual tabs, groups, field order, and visibility
-     */
-    function saveFormLayout(recordType, formId, layout) {
-        try {
-            var normalizedType = normalizeRecordType(recordType);
-
-            // Validate layout structure
-            if (!layout || !layout.tabs) {
-                return {
-                    success: false,
-                    error: 'INVALID_LAYOUT',
-                    message: 'Layout must contain tabs array'
-                };
-            }
-
-            // Add metadata
-            layout.capturedAt = new Date().toISOString();
-
-            // Save to config record
-            var result = saveLayoutToConfig(normalizedType, formId, layout);
-
-            if (result.success) {
-                return { success: true, message: 'Layout saved to config record', id: result.id };
-            } else {
-                return { success: false, error: result.error };
-            }
-        } catch (e) {
-            log.error('saveFormLayout', e.message);
-            return { success: false, error: e.message };
-        }
-    }
-
-    /**
      * Save user-customized form configuration (from XML upload or manual edit)
      */
     function saveUserConfig(recordType, formId, config, source) {
@@ -757,7 +715,6 @@ function(record, search, log, query, runtime, fcDebug) {
     return {
         // Main functions
         extractFormSchema: extractFormSchema,
-        saveFormLayout: saveFormLayout,
         saveUserConfig: saveUserConfig,
 
         // Cache/config management

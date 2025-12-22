@@ -12,7 +12,6 @@
         editedConfig: null,
         parsedXml: null,
         xmlSelections: {},
-        captureScriptEnabled: false,
         providerConfig: null,
         currentProvider: 'oci',
         emailInboxConfig: null,
@@ -22,7 +21,6 @@
             this.bindEvents();
             this.loadGeneralSettings();
             this.loadFormConfig(this.currentFormType);
-            this.loadCaptureScriptStatus();
             this.loadProviderConfig();
         },
 
@@ -131,7 +129,6 @@
                     this.classList.add('active');
                     self.currentFormType = this.dataset.type;
                     self.loadFormConfig(self.currentFormType);
-                    self.loadCaptureScriptStatus(); // Reload script status for this transaction type
                 });
             });
 
@@ -144,34 +141,6 @@
                     self.showSection(self.currentSection);
                 });
             });
-
-            // Source option selection
-            var captureOption = el('#source-option-capture');
-            var xmlOption = el('#source-option-xml');
-
-            if (captureOption) {
-                captureOption.addEventListener('click', function(e) {
-                    if (!e.target.closest('.toggle') && !e.target.closest('button')) {
-                        self.selectSourceOption('capture');
-                    }
-                });
-            }
-
-            if (xmlOption) {
-                xmlOption.addEventListener('click', function(e) {
-                    if (!e.target.closest('button')) {
-                        self.selectSourceOption('xml');
-                    }
-                });
-            }
-
-            // Capture script toggle
-            var captureToggle = el('#capture-script-toggle');
-            if (captureToggle) {
-                captureToggle.addEventListener('change', function() {
-                    self.toggleCaptureScript(this.checked);
-                });
-            }
 
             // XML upload handlers
             var xmlInput = el('#xml-file-input');
@@ -533,22 +502,12 @@
         // ==========================================
 
         selectSourceOption: function(type) {
-            var captureOption = el('#source-option-capture');
             var xmlOption = el('#source-option-xml');
-            var captureControls = el('#capture-controls');
             var xmlControls = el('#xml-controls');
 
-            if (type === 'capture') {
-                captureOption.classList.add('selected');
-                xmlOption.classList.remove('selected');
-                if (captureControls) captureControls.style.display = 'block';
-                if (xmlControls) xmlControls.style.display = 'none';
-            } else {
-                captureOption.classList.remove('selected');
-                xmlOption.classList.add('selected');
-                if (captureControls) captureControls.style.display = 'none';
-                if (xmlControls) xmlControls.style.display = 'block';
-            }
+            // XML upload is the only option now
+            if (xmlOption) xmlOption.classList.add('selected');
+            if (xmlControls) xmlControls.style.display = 'block';
         },
 
         loadFormConfig: function(type) {
@@ -626,84 +585,6 @@
             if (hours < 24) return hours + ' hour' + (hours === 1 ? '' : 's') + ' ago';
             if (days < 7) return days + ' day' + (days === 1 ? '' : 's') + ' ago';
             return date.toLocaleDateString();
-        },
-
-        // ==========================================
-        // CAPTURE SCRIPT TOGGLE
-        // ==========================================
-
-        // Deployment IDs per transaction type
-        DEPLOYMENT_IDS: {
-            'vendorbill': 'customdeploy_fc_formlayout_vendorbill',
-            'expensereport': 'customdeploy_fc_formlayout_expense',
-            'vendorcredit': 'customdeploy_fc_formlayout_creditmemo',
-            'purchaseorder': 'customdeploy_fc_formlayout_po'
-        },
-
-        getDeploymentId: function() {
-            return this.DEPLOYMENT_IDS[this.currentFormType] || this.DEPLOYMENT_IDS['vendorbill'];
-        },
-
-        loadCaptureScriptStatus: function() {
-            var self = this;
-            var toggle = el('#capture-script-toggle');
-            var label = el('#capture-toggle-label');
-            var deploymentId = this.getDeploymentId();
-
-            // Show loading state
-            if (label) label.textContent = 'Loading status...';
-            if (toggle) toggle.disabled = true;
-
-            API.get('scriptstatus', { deploymentId: deploymentId })
-                .then(function(result) {
-                    self.captureScriptEnabled = result.data && result.data.enabled;
-                    if (toggle) {
-                        toggle.checked = self.captureScriptEnabled;
-                        toggle.disabled = false;
-                    }
-                    if (label) {
-                        label.textContent = self.captureScriptEnabled ?
-                            'Capture Enabled for ' + self.currentFormType : 'Capture Disabled';
-                    }
-                })
-                .catch(function() {
-                    self.captureScriptEnabled = false;
-                    if (toggle) {
-                        toggle.checked = false;
-                        toggle.disabled = false;
-                    }
-                    if (label) label.textContent = 'Script Status Unknown';
-                });
-        },
-
-        toggleCaptureScript: function(enabled) {
-            var self = this;
-            var toggle = el('#capture-script-toggle');
-            var label = el('#capture-toggle-label');
-            var deploymentId = this.getDeploymentId();
-
-            if (label) label.textContent = enabled ? 'Enabling...' : 'Disabling...';
-
-            API.put('scriptstatus', {
-                deploymentId: deploymentId,
-                enabled: enabled
-            })
-                .then(function() {
-                    self.captureScriptEnabled = enabled;
-                    if (label) {
-                        label.textContent = enabled ?
-                            'Capture Enabled for ' + self.currentFormType : 'Capture Disabled';
-                    }
-                    UI.toast('Capture script ' + (enabled ? 'enabled' : 'disabled') + ' for ' + self.currentFormType, 'success');
-                })
-                .catch(function(err) {
-                    if (toggle) toggle.checked = !enabled;
-                    if (label) {
-                        label.textContent = !enabled ?
-                            'Capture Enabled for ' + self.currentFormType : 'Capture Disabled';
-                    }
-                    UI.toast('Failed to update script: ' + err.message, 'error');
-                });
         },
 
         // ==========================================

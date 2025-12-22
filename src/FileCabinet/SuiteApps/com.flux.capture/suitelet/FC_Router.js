@@ -212,9 +212,6 @@ define([
                 case 'codingSuggestions':
                     result = getCodingSuggestions(context.vendorId, context.lineItems);
                     break;
-                case 'scriptstatus':
-                    result = getScriptDeploymentStatus(context.deploymentId);
-                    break;
                 case 'providerconfig':
                     result = getProviderConfig();
                     break;
@@ -308,12 +305,6 @@ define([
                     break;
                 case 'invalidatecache':
                     result = invalidateFormSchemaCache(context.transactionType, context.formId);
-                    break;
-                case 'saveformlayout':
-                    result = saveFormLayout(context.transactionType, context.formId, context.layout);
-                    break;
-                case 'scriptstatus':
-                    result = updateScriptDeploymentStatus(context.deploymentId, context.enabled);
                     break;
                 case 'providerconfig':
                     result = saveProviderConfig(context);
@@ -1984,144 +1975,6 @@ define([
         } catch (e) {
             log.error('getFormLayout', e);
             return Response.error('LAYOUT_ERROR', e.message);
-        }
-    }
-
-    /**
-     * Save form layout extracted from client-side DOM
-     * @param {string} transactionType - The transaction type
-     * @param {string} formId - The form ID
-     * @param {Object} layout - The layout data (tabs, groups, fields, visibility)
-     * @returns {Object} Success/failure status
-     */
-    function saveFormLayout(transactionType, formId, layout) {
-        if (!transactionType) {
-            return Response.error('MISSING_PARAM', 'Transaction type is required');
-        }
-        if (!layout) {
-            return Response.error('MISSING_PARAM', 'Layout data is required');
-        }
-
-        try {
-            var result = FormSchemaExtractor.saveFormLayout(transactionType, formId, layout);
-            if (!result.success) {
-                return Response.error('LAYOUT_SAVE_ERROR', result.error || result.message);
-            }
-            return Response.success({ message: 'Layout saved successfully' });
-        } catch (e) {
-            log.error('saveFormLayout', e);
-            return Response.error('LAYOUT_SAVE_ERROR', e.message);
-        }
-    }
-
-    /**
-     * Get script deployment status (enabled/disabled)
-     * @param {string} deploymentId - The deployment script ID (e.g., 'customdeploy_fc_formlayout_vendorbill')
-     * @returns {Object} { enabled: boolean, deploymentId: string }
-     */
-    function getScriptDeploymentStatus(deploymentId) {
-        if (!deploymentId) {
-            return Response.error('MISSING_PARAM', 'Deployment ID is required');
-        }
-
-        try {
-            // Search for script deployment by deployment scriptid
-            var deploymentSearch = search.create({
-                type: search.Type.SCRIPT_DEPLOYMENT,
-                filters: [
-                    ['scriptid', 'is', deploymentId]
-                ],
-                columns: [
-                    search.createColumn({ name: 'internalid' }),
-                    search.createColumn({ name: 'scriptid' }),
-                    search.createColumn({ name: 'status' }),
-                    search.createColumn({ name: 'isdeployed' })
-                ]
-            });
-
-            var deploymentResult = deploymentSearch.run().getRange({ start: 0, end: 1 });
-
-            if (!deploymentResult || deploymentResult.length === 0) {
-                return Response.success({
-                    enabled: false,
-                    found: false,
-                    message: 'Script deployment not found: ' + deploymentId
-                });
-            }
-
-            var deployment = deploymentResult[0];
-            var isDeployed = deployment.getValue('isdeployed');
-
-            // Use isdeployed field directly for client scripts
-            var enabled = isDeployed === true || isDeployed === 'T';
-
-            return Response.success({
-                enabled: enabled,
-                found: true,
-                internalId: deployment.getValue('internalid'),
-                deploymentId: deployment.getValue('scriptid'),
-                isDeployed: isDeployed
-            });
-        } catch (e) {
-            log.error('getScriptDeploymentStatus', e);
-            return Response.error('SCRIPT_STATUS_ERROR', e.message);
-        }
-    }
-
-    /**
-     * Update script deployment status (enable/disable)
-     * @param {string} deploymentId - The deployment script ID (e.g., 'customdeploy_fc_formlayout_vendorbill')
-     * @param {boolean} enabled - Whether to enable or disable
-     * @returns {Object} Success/failure status
-     */
-    function updateScriptDeploymentStatus(deploymentId, enabled) {
-        if (!deploymentId) {
-            return Response.error('MISSING_PARAM', 'Deployment ID is required');
-        }
-
-        try {
-            // Find the deployment by scriptid
-            var deploymentSearch = search.create({
-                type: search.Type.SCRIPT_DEPLOYMENT,
-                filters: [
-                    ['scriptid', 'is', deploymentId]
-                ],
-                columns: [
-                    search.createColumn({ name: 'internalid' })
-                ]
-            });
-
-            var deploymentResult = deploymentSearch.run().getRange({ start: 0, end: 1 });
-
-            if (!deploymentResult || deploymentResult.length === 0) {
-                return Response.error('DEPLOYMENT_NOT_FOUND', 'Script deployment not found: ' + deploymentId);
-            }
-
-            var internalId = deploymentResult[0].getValue('internalid');
-
-            // Update the deployment status
-            var deploymentRec = record.load({
-                type: record.Type.SCRIPT_DEPLOYMENT,
-                id: internalId
-            });
-
-            // Set isdeployed field directly (client scripts don't use status values)
-            deploymentRec.setValue({
-                fieldId: 'isdeployed',
-                value: enabled
-            });
-
-            deploymentRec.save();
-
-            log.audit('updateScriptDeploymentStatus', 'Deployment ' + deploymentId + ' ' + (enabled ? 'enabled' : 'disabled'));
-
-            return Response.success({
-                enabled: enabled,
-                message: 'Script deployment ' + (enabled ? 'enabled' : 'disabled') + ' successfully'
-            });
-        } catch (e) {
-            log.error('updateScriptDeploymentStatus', e);
-            return Response.error('SCRIPT_UPDATE_ERROR', e.message);
         }
     }
 
