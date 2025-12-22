@@ -5927,6 +5927,30 @@
                 }
             }
 
+            // Validate at least one line item exists
+            var hasLineItems = false;
+            var self = this;
+            if (this.sublistData) {
+                Object.keys(this.sublistData).forEach(function(sublistId) {
+                    var lines = self.sublistData[sublistId] || [];
+                    var normalizedId = sublistId.toLowerCase();
+                    var populatedLines = lines.filter(function(line) {
+                        return self.isSublistLinePopulated(normalizedId, line);
+                    });
+                    if (populatedLines.length > 0) {
+                        hasLineItems = true;
+                    }
+                });
+            }
+            if (!hasLineItems) {
+                var sublistSection = el('.line-section');
+                return {
+                    valid: false,
+                    message: 'At least one line item is required',
+                    focusElement: sublistSection
+                };
+            }
+
             return result;
         },
 
@@ -6025,15 +6049,19 @@
                         if (approveBtnText) approveBtnText.textContent = 'Approve & Next';
                     }
 
-                    // Handle validation errors with persistent modal
-                    // Check both err.details.errors (from API) and err.errors (direct)
+                    // Handle errors with persistent modal
                     var errors = (err.details && err.details.errors) || err.errors;
                     var warnings = (err.details && err.details.warnings) || err.warnings;
+
+                    // If no structured errors but we have an error message, show it in the modal
+                    if ((!errors || errors.length === 0) && err.message) {
+                        errors = [{ field: null, message: err.message }];
+                    }
 
                     if (errors && Array.isArray(errors) && errors.length > 0) {
                         self.showValidationErrorsModal(errors, warnings || []);
                     } else {
-                        UI.toast('Error: ' + err.message, 'error');
+                        UI.toast('Error: ' + (err.message || 'Unknown error'), 'error');
                     }
                 });
         },
