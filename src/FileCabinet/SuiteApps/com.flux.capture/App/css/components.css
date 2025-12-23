@@ -3673,6 +3673,219 @@ body.topbar-minimized .view-review.split-view .review-content {
     padding-left: 24px !important;
 }
 
+/* ==========================================
+   AMOUNTS SUMMARY CARD
+   World-class invoice summary section
+   ========================================== */
+.amounts-summary-card {
+    background: var(--surface-card);
+    border-radius: var(--radius-lg);
+    border: 1px solid var(--border-color);
+    box-shadow: var(--shadow-md);
+    overflow: hidden;
+    margin-top: var(--space-lg);
+    margin-bottom: var(--space-md);
+}
+
+.amounts-header {
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
+    padding: var(--space-sm) var(--space-md);
+    background: linear-gradient(135deg, var(--gray-800) 0%, var(--gray-700) 100%);
+    border-bottom: 1px solid var(--gray-600);
+}
+
+.amounts-header-icon {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 28px;
+    height: 28px;
+    background: rgba(255, 255, 255, 0.1);
+    border-radius: var(--radius-sm);
+    color: var(--text-inverse);
+    font-size: var(--font-size-sm);
+}
+
+.amounts-header-title {
+    font-size: var(--font-size-sm);
+    font-weight: 600;
+    color: var(--text-inverse);
+    letter-spacing: 0.02em;
+    text-transform: uppercase;
+}
+
+.amounts-body {
+    padding: var(--space-md);
+}
+
+.amounts-line-items {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-sm);
+}
+
+.amount-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: var(--space-xs) 0;
+}
+
+.amount-row.is-required .amount-label-text {
+    color: var(--text-primary);
+}
+
+.amount-label {
+    display: flex;
+    align-items: center;
+    gap: var(--space-xs);
+}
+
+.amount-label-text {
+    font-size: var(--font-size-sm);
+    font-weight: 500;
+    color: var(--text-secondary);
+}
+
+.amount-label .field-confidence {
+    font-size: 10px;
+    padding: 1px 5px;
+}
+
+.amount-label .required {
+    color: var(--color-danger);
+    font-weight: 600;
+    margin-left: 2px;
+}
+
+.amount-value {
+    display: flex;
+    align-items: center;
+    position: relative;
+}
+
+.amount-value .currency-symbol {
+    position: absolute;
+    left: 10px;
+    color: var(--text-tertiary);
+    font-size: var(--font-size-sm);
+    font-weight: 500;
+    pointer-events: none;
+    z-index: 1;
+}
+
+.amount-value input {
+    width: 130px;
+    padding: var(--space-xs) var(--space-sm);
+    padding-left: 22px;
+    font-size: var(--font-size-sm);
+    font-weight: 500;
+    text-align: right;
+    border: 1px solid var(--gray-200);
+    border-radius: var(--radius-sm);
+    background: var(--gray-50);
+    color: var(--text-primary);
+    transition: all var(--transition);
+}
+
+.amount-value input:hover {
+    border-color: var(--gray-300);
+}
+
+.amount-value input:focus {
+    outline: none;
+    border-color: var(--color-primary);
+    background: var(--surface-card);
+    box-shadow: 0 0 0 3px var(--color-primary-bg);
+}
+
+.amounts-divider {
+    height: 1px;
+    background: linear-gradient(90deg, transparent, var(--gray-200), transparent);
+    margin: var(--space-md) 0;
+}
+
+.amount-total-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: var(--space-sm);
+    background: linear-gradient(135deg, var(--color-primary-bg) 0%, rgba(37, 99, 235, 0.02) 100%);
+    border-radius: var(--radius-md);
+    border: 1px solid rgba(37, 99, 235, 0.1);
+}
+
+.amount-total-row.is-required .amount-total-label-text {
+    color: var(--text-primary);
+}
+
+.amount-total-label {
+    display: flex;
+    align-items: center;
+    gap: var(--space-xs);
+}
+
+.amount-total-label-text {
+    font-size: var(--font-size-base);
+    font-weight: 700;
+    color: var(--text-primary);
+    letter-spacing: -0.01em;
+}
+
+.amount-total-label .field-confidence {
+    font-size: 10px;
+    padding: 1px 5px;
+}
+
+.amount-total-label .required {
+    color: var(--color-danger);
+    font-weight: 600;
+    margin-left: 2px;
+}
+
+.amount-total-value {
+    display: flex;
+    align-items: center;
+    position: relative;
+}
+
+.amount-total-value .currency-symbol {
+    position: absolute;
+    left: 12px;
+    color: var(--color-primary);
+    font-size: var(--font-size-lg);
+    font-weight: 600;
+    pointer-events: none;
+    z-index: 1;
+}
+
+.amount-total-value input {
+    width: 150px;
+    padding: var(--space-sm) var(--space-md);
+    padding-left: 28px;
+    font-size: var(--font-size-lg);
+    font-weight: 700;
+    text-align: right;
+    border: 2px solid var(--color-primary);
+    border-radius: var(--radius-md);
+    background: var(--surface-card);
+    color: var(--color-primary);
+    transition: all var(--transition);
+}
+
+.amount-total-value input:hover {
+    border-color: var(--color-primary-hover);
+}
+
+.amount-total-value input:focus {
+    outline: none;
+    border-color: var(--color-primary-hover);
+    box-shadow: 0 0 0 4px var(--color-primary-bg);
+}
+
+/* Legacy support - keep old classes working if referenced elsewhere */
 .total-field .input-with-prefix {
     background: var(--gray-50);
     border-radius: var(--radius-md);
@@ -3695,7 +3908,7 @@ body.topbar-minimized .view-review.split-view .review-content {
     color: var(--text-primary) !important;
 }
 
-/* Amounts Section */
+/* Legacy Amounts Section - kept for backwards compatibility */
 .amounts-section {
     background: var(--gray-50);
     border-radius: var(--radius-lg);
