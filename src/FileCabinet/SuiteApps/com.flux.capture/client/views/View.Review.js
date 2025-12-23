@@ -96,6 +96,7 @@
         imageElement: null,
         imageNaturalWidth: null,
         imageNaturalHeight: null,
+        imageBaseWidth: null,
 
         // Quick assign palette state
         quickAssignOpen: false,
@@ -443,6 +444,7 @@
             this.imageElement = null;
             this.imageNaturalWidth = null;
             this.imageNaturalHeight = null;
+            this.imageBaseWidth = null;
             this.isLoading = true;
 
             // Reset coding suggestions
@@ -1337,13 +1339,16 @@
             this.pdfDoc = null;
             this.imageElement = null;
 
+            // Store the viewport width for consistent zoom calculations
+            // Use preview-viewport width, not pdf-container (which has width: max-content)
+            this.imageBaseWidth = viewport.clientWidth - 40;
+
             // Create container structure similar to PDF
             viewport.innerHTML = '<div class="pdf-container" id="pdf-container">' +
                 '<div class="pdf-loading"><div class="loading-spinner"></div><span>Loading image...</span></div>' +
                 '<div class="pdf-pages-container" id="pdf-pages-container"></div>' +
             '</div>';
 
-            var container = el('#pdf-container');
             var pagesContainer = el('#pdf-pages-container');
             var loadingEl = viewport.querySelector('.pdf-loading');
 
@@ -1368,8 +1373,11 @@
                 // Render the image at current zoom level
                 self.renderImagePage(img, pagesContainer);
 
-                // Setup pan handler
-                self.setupPanHandler(viewport);
+                // Setup pan handler (only once per viewport)
+                if (!viewport._panHandlerAttached) {
+                    self.setupPanHandler(viewport);
+                    viewport._panHandlerAttached = true;
+                }
                 self.updatePanCursor();
 
                 // Update page display
@@ -1400,12 +1408,15 @@
             pagesContainer.innerHTML = '';
             this.pageElements = [];
 
-            // Calculate scale to fit container width (same as PDF)
-            var container = el('#pdf-container');
-            var containerWidth = container ? container.clientWidth - 40 : 600;
-            var baseScale = containerWidth / this.imageNaturalWidth;
-            var scaledWidth = this.imageNaturalWidth * baseScale * this.zoom;
-            var scaledHeight = this.imageNaturalHeight * baseScale * this.zoom;
+            // Use stored base width for consistent zoom calculations
+            var baseWidth = this.imageBaseWidth || 600;
+
+            // Calculate the scale to fit the base width at zoom=1
+            var fitScale = baseWidth / this.imageNaturalWidth;
+
+            // Apply zoom to get final dimensions
+            var scaledWidth = this.imageNaturalWidth * fitScale * this.zoom;
+            var scaledHeight = this.imageNaturalHeight * fitScale * this.zoom;
 
             // Apply rotation to dimensions
             var displayWidth = scaledWidth;
@@ -1488,6 +1499,7 @@
             this.imageElement = null;
             this.imageNaturalWidth = null;
             this.imageNaturalHeight = null;
+            this.imageBaseWidth = null;
 
             // Create container structure for continuous scrolling - all pages in one scrollable container
             viewport.innerHTML = '<div class="pdf-container" id="pdf-container">' +
@@ -9504,6 +9516,7 @@
             this.imageElement = null;
             this.imageNaturalWidth = null;
             this.imageNaturalHeight = null;
+            this.imageBaseWidth = null;
         }
     };
 
