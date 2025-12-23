@@ -2511,6 +2511,7 @@
             // ========== BIND FORM EVENTS ==========
             this.bindFormEvents();
             this.bindTabEvents();
+            this.bindSublistColumnEvents();
 
             // ========== BIND EXTRACTION POOL EVENTS ==========
             this.bindExtractionPoolEvents();
@@ -2552,6 +2553,7 @@
 
             // Rebind sublist events for the moved elements
             this.bindSublistEvents(bottomSection);
+            this.bindSublistColumnEvents();
         },
 
         // Get icon for a field group
@@ -3017,19 +3019,52 @@
             // Determine visible columns (important fields first)
             var visibleFields = this.getVisibleSublistFields(sublist);
 
+            // Load persisted column settings from localStorage
+            var columnSettings = this.getSublistColumnSettings(sublistId);
+            var sortState = columnSettings.sort || { field: null, direction: 'asc' };
+
+            // Sort items if sort state exists
+            if (sortState.field && items.length > 1) {
+                items = this.sortSublistItems(items, sortState.field, sortState.direction);
+                this.sublistData[sublistId] = items;
+            }
+
             // Wrap table in scrollable container to prevent overflow
-            var html = '<div class="sublist-table-wrapper">' +
-                '<table class="line-items sublist-table">' +
+            var html = '<div class="sublist-table-wrapper" data-sublist="' + sublistId + '">' +
+                '<table class="line-items sublist-table" data-sublist="' + sublistId + '">' +
                 '<thead><tr>';
 
             visibleFields.forEach(function(f) {
-                var width = '';
-                if (f.id === 'amount' || f.id === 'rate') width = ' style="width:100px;"';
-                else if (f.id === 'quantity') width = ' style="width:70px;"';
-                else if (f.id === 'description' || f.id === 'memo') width = ' style="min-width:150px;"';
-                html += '<th' + width + '>' + escapeHtml(f.label) + '</th>';
+                var widthStyle = '';
+                var savedWidth = columnSettings.widths && columnSettings.widths[f.id];
+                if (savedWidth) {
+                    widthStyle = ' style="width:' + savedWidth + 'px;"';
+                } else if (f.id === 'amount' || f.id === 'rate') {
+                    widthStyle = ' style="width:100px;"';
+                } else if (f.id === 'quantity') {
+                    widthStyle = ' style="width:70px;"';
+                } else if (f.id === 'description' || f.id === 'memo') {
+                    widthStyle = ' style="min-width:150px;"';
+                }
+
+                var sortClass = '';
+                var sortIcon = '<i class="fas fa-sort sort-icon"></i>';
+                if (sortState.field === f.id) {
+                    sortClass = ' sorted ' + sortState.direction;
+                    sortIcon = sortState.direction === 'asc'
+                        ? '<i class="fas fa-sort-up sort-icon active"></i>'
+                        : '<i class="fas fa-sort-down sort-icon active"></i>';
+                }
+
+                html += '<th class="sortable-header resizable-header' + sortClass + '" data-field="' + f.id + '" data-sublist="' + sublistId + '"' + widthStyle + '>' +
+                    '<div class="th-content">' +
+                        '<span class="th-label">' + escapeHtml(f.label) + '</span>' +
+                        sortIcon +
+                    '</div>' +
+                    '<div class="resize-handle" data-field="' + f.id + '"></div>' +
+                '</th>';
             });
-            html += '<th style="width:40px;"></th></tr></thead><tbody>';
+            html += '<th class="action-col" style="width:40px;"></th></tr></thead><tbody>';
 
             items.forEach(function(item, idx) {
                 html += '<tr data-idx="' + idx + '" data-sublist="' + sublistId + '">';
@@ -3115,9 +3150,14 @@
                 }
             });
 
-            // Apply configurable column limit (default 10)
-            var limit = this.sublistColumnLimit || 10;
-            return visible.slice(0, limit);
+            // Only apply column limit for fallback ordering (when no explicit config)
+            // When columnOrder is set (from XML/schema), show ALL configured columns
+            if (columnOrder.length === 0 && visibleFieldsFromSchema.length === 0) {
+                var limit = this.sublistColumnLimit || 10;
+                return visible.slice(0, limit);
+            }
+
+            return visible;
         },
 
         // Render a single cell in the sublist table
@@ -6879,6 +6919,7 @@
 
             // Rebind sublist events for moved elements
             this.bindSublistEvents(bottomSection);
+            this.bindSublistColumnEvents();
 
             // Initialize split view resizers
             this.initSplitViewResizers();
@@ -9065,6 +9106,188 @@
             });
 
             return bestMatch;
+        },
+
+        // ==========================================
+        // SUBLIST COLUMN SETTINGS (Sort, Resize, Persist)
+        // ==========================================
+
+        // Get column settings from localStorage
+        getSublistColumnSettings: function(sublistId) {
+            try {
+                var key = 'fc_sublist_cols_' + (this.transactionType || 'vendorbill') + '_' + sublistId;
+                var stored = localStorage.getItem(key);
+                if (stored) {
+                    return JSON.parse(stored);
+                }
+            } catch (e) {
+                FCDebug.log('[View.Review] Error loading column settings:', e);
+            }
+            return { widths: {}, sort: { field: null, direction: 'asc' } };
+        },
+
+        // Save column settings to localStorage
+        saveSublistColumnSettings: function(sublistId, settings) {
+            try {
+                var key = 'fc_sublist_cols_' + (this.transactionType || 'vendorbill') + '_' + sublistId;
+                localStorage.setItem(key, JSON.stringify(settings));
+            } catch (e) {
+                FCDebug.log('[View.Review] Error saving column settings:', e);
+            }
+        },
+
+        // Sort sublist items by field
+        sortSublistItems: function(items, fieldId, direction) {
+            if (!items || items.length < 2) return items;
+
+            var sorted = items.slice(); // Clone array
+            sorted.sort(function(a, b) {
+                var aVal = a[fieldId] || a[fieldId.toLowerCase()] || '';
+                var bVal = b[fieldId] || b[fieldId.toLowerCase()] || '';
+
+                // Try numeric comparison first
+                var aNum = parseFloat(aVal);
+                var bNum = parseFloat(bVal);
+                if (!isNaN(aNum) && !isNaN(bNum)) {
+                    return direction === 'asc' ? aNum - bNum : bNum - aNum;
+                }
+
+                // String comparison
+                aVal = String(aVal).toLowerCase();
+                bVal = String(bVal).toLowerCase();
+                if (aVal < bVal) return direction === 'asc' ? -1 : 1;
+                if (aVal > bVal) return direction === 'asc' ? 1 : -1;
+                return 0;
+            });
+
+            return sorted;
+        },
+
+        // Bind sublist column events (sorting and resizing)
+        bindSublistColumnEvents: function() {
+            var self = this;
+
+            // Unbind previous handlers to prevent duplicates
+            document.querySelectorAll('.sortable-header').forEach(function(th) {
+                th._sortHandler = null;
+            });
+
+            // Sort on header click
+            this.on('.sortable-header', 'click', function(e) {
+                // Ignore if clicking on resize handle
+                if (e.target.classList.contains('resize-handle')) return;
+
+                var th = e.target.closest('.sortable-header');
+                if (!th) return;
+
+                var fieldId = th.dataset.field;
+                var sublistId = th.dataset.sublist;
+                if (!fieldId || !sublistId) return;
+
+                // Get current settings
+                var settings = self.getSublistColumnSettings(sublistId);
+                var currentSort = settings.sort || { field: null, direction: 'asc' };
+
+                // Toggle direction if same field, otherwise default to asc
+                var newDirection = 'asc';
+                if (currentSort.field === fieldId) {
+                    newDirection = currentSort.direction === 'asc' ? 'desc' : 'asc';
+                }
+
+                // Save new sort state
+                settings.sort = { field: fieldId, direction: newDirection };
+                self.saveSublistColumnSettings(sublistId, settings);
+
+                // Re-render the sublist
+                self.rerenderSublist(sublistId);
+            });
+
+            // Resize on drag
+            this.on('.resize-handle', 'mousedown', function(e) {
+                e.preventDefault();
+                e.stopPropagation();
+
+                var handle = e.target;
+                var th = handle.closest('th');
+                if (!th) return;
+
+                var fieldId = th.dataset.field;
+                var sublistId = th.dataset.sublist;
+                var table = th.closest('.sublist-table');
+                if (!table) return;
+
+                var startX = e.clientX;
+                var startWidth = th.offsetWidth;
+
+                // Add resizing class for cursor
+                th.classList.add('resizing');
+                document.body.style.cursor = 'col-resize';
+                document.body.style.userSelect = 'none';
+
+                function onMouseMove(e) {
+                    var diff = e.clientX - startX;
+                    var newWidth = Math.max(50, startWidth + diff);
+                    th.style.width = newWidth + 'px';
+                }
+
+                function onMouseUp(e) {
+                    document.removeEventListener('mousemove', onMouseMove);
+                    document.removeEventListener('mouseup', onMouseUp);
+
+                    th.classList.remove('resizing');
+                    document.body.style.cursor = '';
+                    document.body.style.userSelect = '';
+
+                    // Save the new width
+                    var settings = self.getSublistColumnSettings(sublistId);
+                    if (!settings.widths) settings.widths = {};
+                    settings.widths[fieldId] = th.offsetWidth;
+                    self.saveSublistColumnSettings(sublistId, settings);
+                }
+
+                document.addEventListener('mousemove', onMouseMove);
+                document.addEventListener('mouseup', onMouseUp);
+            });
+        },
+
+        // Re-render a specific sublist (after sort, etc.)
+        rerenderSublist: function(sublistId) {
+            var self = this;
+            var container = document.querySelector('.sublist-container[data-sublist="' + sublistId + '"]');
+            if (!container) return;
+
+            // Find the sublist definition
+            var sublists = (this.formFields && this.formFields.sublists) || [];
+            var sublist = sublists.find(function(sl) {
+                return (sl.id || '').toLowerCase() === sublistId.toLowerCase();
+            });
+
+            if (!sublist) return;
+
+            // Re-render table HTML
+            var tableWrapper = container.querySelector('.sublist-table-wrapper');
+            if (tableWrapper) {
+                var newHtml = this.renderSublistTable(sublist, this.data);
+                // Extract just the table wrapper content
+                var temp = document.createElement('div');
+                temp.innerHTML = newHtml;
+                var newWrapper = temp.querySelector('.sublist-table-wrapper');
+                var newTotal = temp.querySelector('.line-items-total');
+
+                if (newWrapper) {
+                    tableWrapper.innerHTML = newWrapper.innerHTML;
+                }
+
+                // Update total too
+                var totalEl = container.querySelector('.line-items-total');
+                if (totalEl && newTotal) {
+                    totalEl.innerHTML = newTotal.innerHTML;
+                }
+            }
+
+            // Re-bind sublist events
+            this.bindSublistEvents();
+            this.bindSublistColumnEvents();
         },
 
         // ==========================================
