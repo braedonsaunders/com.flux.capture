@@ -457,6 +457,14 @@
                 });
             }
 
+            // LLM Line Item Enhancement toggle - show/hide field guessing panel
+            var llmEnhanceLineItems = el('#llm-enhance-line-items');
+            if (llmEnhanceLineItems) {
+                llmEnhanceLineItems.addEventListener('change', function() {
+                    self.toggleLLMFieldGuessingPanel(this.checked);
+                });
+            }
+
             // Load LLM config on init
             this.loadLLMConfig();
         },
@@ -3286,6 +3294,38 @@
                     if (maxPagesInput && config.maxPages) {
                         maxPagesInput.value = config.maxPages;
                     }
+
+                    // Line Item Enhancement options
+                    var enhanceLineItemsToggle = el('#llm-enhance-line-items');
+                    var fieldGuessingPanel = el('#llm-field-guessing-panel');
+                    var guessAccountsToggle = el('#llm-guess-accounts');
+                    var guessDepartmentsToggle = el('#llm-guess-departments');
+                    var guessClassesToggle = el('#llm-guess-classes');
+                    var guessLocationsToggle = el('#llm-guess-locations');
+
+                    if (enhanceLineItemsToggle) {
+                        enhanceLineItemsToggle.checked = config.enhanceLineItems === true;
+                    }
+
+                    if (fieldGuessingPanel) {
+                        fieldGuessingPanel.style.display = config.enhanceLineItems ? 'block' : 'none';
+                    }
+
+                    if (guessAccountsToggle) {
+                        guessAccountsToggle.checked = config.guessAccounts === true;
+                    }
+
+                    if (guessDepartmentsToggle) {
+                        guessDepartmentsToggle.checked = config.guessDepartments === true;
+                    }
+
+                    if (guessClassesToggle) {
+                        guessClassesToggle.checked = config.guessClasses === true;
+                    }
+
+                    if (guessLocationsToggle) {
+                        guessLocationsToggle.checked = config.guessLocations === true;
+                    }
                 })
                 .catch(function(err) {
                     console.warn('Could not load LLM config:', err);
@@ -3306,6 +3346,24 @@
                     });
                 } else {
                     configPanel.style.display = 'none';
+                }
+            }
+        },
+
+        toggleLLMFieldGuessingPanel: function(enabled) {
+            var guessingPanel = el('#llm-field-guessing-panel');
+            if (guessingPanel) {
+                if (enabled) {
+                    guessingPanel.style.display = 'block';
+                    guessingPanel.style.opacity = '0';
+                    guessingPanel.style.transform = 'translateY(-10px)';
+                    requestAnimationFrame(function() {
+                        guessingPanel.style.transition = 'opacity 0.3s ease, transform 0.3s ease';
+                        guessingPanel.style.opacity = '1';
+                        guessingPanel.style.transform = 'translateY(0)';
+                    });
+                } else {
+                    guessingPanel.style.display = 'none';
                 }
             }
         },
@@ -3391,6 +3449,13 @@
             var smartThreshold = parseInt(el('#llm-smart-threshold')?.value || '70', 10) / 100;
             var maxPages = parseInt(el('#llm-max-pages')?.value || '20', 10);
 
+            // Line Item Enhancement options
+            var enhanceLineItems = el('#llm-enhance-line-items')?.checked || false;
+            var guessAccounts = el('#llm-guess-accounts')?.checked || false;
+            var guessDepartments = el('#llm-guess-departments')?.checked || false;
+            var guessClasses = el('#llm-guess-classes')?.checked || false;
+            var guessLocations = el('#llm-guess-locations')?.checked || false;
+
             // Validate if enabling
             if (enabled && !apiKey && !(self.llmConfig && self.llmConfig._hasApiKey)) {
                 UI.toast('API key is required to enable AI Verification', 'warning');
@@ -3408,6 +3473,12 @@
                 triggerMode: triggerMode,
                 smartThreshold: smartThreshold,
                 maxPages: maxPages,
+                // Line Item Enhancement options
+                enhanceLineItems: enhanceLineItems,
+                guessAccounts: guessAccounts,
+                guessDepartments: guessDepartments,
+                guessClasses: guessClasses,
+                guessLocations: guessLocations,
                 _preserveApiKey: !apiKey && self.llmConfig && self.llmConfig._hasApiKey
             };
 
@@ -3438,6 +3509,11 @@
                         triggerMode: triggerMode,
                         smartThreshold: smartThreshold,
                         maxPages: maxPages,
+                        enhanceLineItems: enhanceLineItems,
+                        guessAccounts: guessAccounts,
+                        guessDepartments: guessDepartments,
+                        guessClasses: guessClasses,
+                        guessLocations: guessLocations,
                         _hasApiKey: !!(apiKey || (self.llmConfig && self.llmConfig._hasApiKey))
                     };
                 })
