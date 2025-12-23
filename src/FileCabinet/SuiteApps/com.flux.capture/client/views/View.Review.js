@@ -5294,9 +5294,10 @@
             // For expense lines: check account/category OR any meaningful data
             if (slType === 'expense') {
                 var hasAccount = line.account && String(line.account).trim() !== '';
+                var hasExpenseAccount = line.expenseaccount && String(line.expenseaccount).trim() !== '';
                 var hasCategory = line.category && String(line.category).trim() !== '';
                 var hasExpenseCategory = line.expensecategory && String(line.expensecategory).trim() !== '';
-                return hasAccount || hasCategory || hasExpenseCategory ||
+                return hasAccount || hasExpenseAccount || hasCategory || hasExpenseCategory ||
                        hasAmount || hasDescription || hasMemo || hasCustomer || hasProject;
             }
 
@@ -6539,15 +6540,40 @@
                 errorDetails.querySelectorAll('.btn-goto-field').forEach(function(btn) {
                     btn.addEventListener('click', function() {
                         var fieldId = this.dataset.field;
-                        if (fieldId.indexOf('[') !== -1) {
-                            var sublistMatch = fieldId.match(/^(\w+)\[/);
-                            if (sublistMatch) {
-                                var sublistSection = el('.line-section[data-sublist="' + sublistMatch[1] + '"]');
-                                if (sublistSection) {
-                                    sublistSection.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                        // Parse sublist field format: expense[0].account or item[2].quantity
+                        var sublistMatch = fieldId.match(/^(\w+)\[(\d+)\]\.(\w+)$/);
+                        if (sublistMatch) {
+                            var sublistName = sublistMatch[1];
+                            var rowIdx = sublistMatch[2];
+                            var fieldName = sublistMatch[3];
+
+                            // First, activate the correct sublist tab if needed
+                            var sublistTab = el('.sublist-tab[data-sublist="' + sublistName + '"]');
+                            if (sublistTab && !sublistTab.classList.contains('active')) {
+                                sublistTab.click();
+                            }
+
+                            // Find the specific cell or input
+                            var targetCell = el('[data-sublist="' + sublistName + '"][data-idx="' + rowIdx + '"] [data-field="' + fieldName + '"]') ||
+                                             el('tr[data-sublist="' + sublistName + '"][data-idx="' + rowIdx + '"] td[data-field="' + fieldName + '"]');
+                            if (targetCell) {
+                                var input = targetCell.querySelector('input, select');
+                                if (input) {
+                                    input.focus();
+                                    input.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                                } else {
+                                    targetCell.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                                }
+                            } else {
+                                // Fallback: scroll to the sublist container
+                                var sublistContainer = el('.sublist-container[data-sublist-id="' + sublistName + '"]') ||
+                                                       el('#sublist-' + sublistName);
+                                if (sublistContainer) {
+                                    sublistContainer.scrollIntoView({ behavior: 'smooth', block: 'center' });
                                 }
                             }
                         } else {
+                            // Body field - try to find by ID
                             var fieldEl = el('#field-' + fieldId);
                             if (fieldEl) {
                                 fieldEl.focus();

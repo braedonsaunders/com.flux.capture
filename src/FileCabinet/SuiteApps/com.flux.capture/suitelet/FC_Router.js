@@ -4639,6 +4639,15 @@ define([
         var bodyFields = formData.bodyFields || {};
         var sublists = formData.sublists || {};
 
+        // Debug logging to trace validation data
+        log.debug('validateForTransaction.input', {
+            transactionType: transactionType,
+            sublistKeys: Object.keys(sublists),
+            expenseLineCount: (sublists.expense || []).length,
+            itemLineCount: (sublists.item || []).length,
+            firstExpenseLine: sublists.expense && sublists.expense[0] ? JSON.stringify(sublists.expense[0]) : 'none'
+        });
+
         // Load form schema to get mandatory field definitions
         var FormSchemaModule = null;
         try {
@@ -4716,6 +4725,15 @@ define([
 
             // Validate each expense line
             expenseLines.forEach(function(line, idx) {
+                // Log line data for debugging
+                log.debug('validateForTransaction.expenseLine', {
+                    lineIndex: idx,
+                    lineKeys: Object.keys(line),
+                    account: line.account,
+                    expenseaccount: line.expenseaccount,
+                    category: line.category
+                });
+
                 // Check mandatory fields from schema
                 expenseFieldDefs.forEach(function(fieldDef) {
                     if (fieldDef.mandatory && fieldDef.id) {
@@ -4728,14 +4746,15 @@ define([
                         }
                     }
                 });
-                // Fallback: ensure account or category
-                if (expenseFieldDefs.length === 0) {
-                    if (!line.account && !line.category) {
-                        errors.push({
-                            field: 'expense[' + idx + '].account',
-                            message: 'Expense line ' + (idx + 1) + ' requires an account or category'
-                        });
-                    }
+
+                // ALWAYS check for account/category - required for all expense lines
+                // Check all possible field names used for expense account
+                var hasAccount = line.account || line.expenseaccount || line.category || line.expensecategory;
+                if (!hasAccount) {
+                    errors.push({
+                        field: 'expense[' + idx + '].account',
+                        message: 'Expense line ' + (idx + 1) + ' requires an account or category'
+                    });
                 }
                 // Amount validation
                 var lineAmount = parseFloat(line.amount) || 0;
