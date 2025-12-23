@@ -2156,6 +2156,17 @@ define([
             var config = GeminiVerifierModule.getConfigForUI();
             config._available = true;
 
+            // Debug: log config being returned
+            log.audit('getLLMConfig', 'Returning config: ' + JSON.stringify({
+                enabled: config.enabled,
+                triggerMode: config.triggerMode,
+                enhanceLineItems: config.enhanceLineItems,
+                guessAccounts: config.guessAccounts,
+                guessDepartments: config.guessDepartments,
+                guessClasses: config.guessClasses,
+                guessLocations: config.guessLocations
+            }));
+
             return Response.success(config);
         } catch (e) {
             log.error('getLLMConfig', e);
@@ -2196,10 +2207,21 @@ define([
                 config.apiKey = existingConfig.apiKey;
             }
 
+            // Debug: log config being saved
+            log.audit('saveLLMConfig', 'Saving config: ' + JSON.stringify({
+                enabled: config.enabled,
+                triggerMode: config.triggerMode,
+                enhanceLineItems: config.enhanceLineItems,
+                guessAccounts: config.guessAccounts,
+                guessDepartments: config.guessDepartments,
+                guessClasses: config.guessClasses,
+                guessLocations: config.guessLocations
+            }));
+
             var result = GeminiVerifierModule.saveConfig(config);
 
             if (result.success) {
-                log.audit('saveLLMConfig', 'LLM config saved, enabled: ' + config.enabled);
+                log.audit('saveLLMConfig', 'LLM config saved successfully');
                 return Response.success({ saved: true, message: result.message });
             } else {
                 return Response.error('LLM_SAVE_ERROR', result.message);
