@@ -5029,8 +5029,47 @@ define([
             return value.indexOf(' ') !== -1 || isNaN(parseInt(value, 10));
         }
 
-        // Select fields that require internal IDs (skip if text value is passed)
-        var selectFieldsRequiringId = ['terms', 'approvalstatus', 'nextapprover', 'currency'];
+        // Cache for resolved lookups
+        var lookupCache = {};
+
+        // Helper to resolve terms text to internal ID
+        function resolveTermsId(textValue) {
+            if (!textValue || !isTextValue(textValue)) return textValue; // Already an ID
+
+            var cacheKey = 'terms:' + textValue.toLowerCase();
+            if (lookupCache[cacheKey] !== undefined) return lookupCache[cacheKey];
+
+            try {
+                var termSearch = search.create({
+                    type: 'term',
+                    filters: [['name', 'is', textValue]],
+                    columns: ['internalid']
+                });
+                var results = termSearch.run().getRange({ start: 0, end: 1 });
+                if (results && results.length > 0) {
+                    var termId = results[0].getValue('internalid');
+                    lookupCache[cacheKey] = termId;
+                    log.debug('resolveTermsId', 'Resolved "' + textValue + '" to ID: ' + termId);
+                    return termId;
+                }
+            } catch (e) {
+                log.debug('resolveTermsId', 'Could not resolve terms "' + textValue + '": ' + e.message);
+            }
+
+            lookupCache[cacheKey] = null;
+            return null;
+        }
+
+        // Helper to resolve currency text/code to internal ID
+        function resolveCurrencyIdForField(textValue) {
+            if (!textValue || !isTextValue(textValue)) return textValue; // Already an ID
+
+            // Try using the existing resolveCurrencyId function
+            var resolved = resolveCurrencyId(textValue);
+            if (resolved) return resolved;
+
+            return null;
+        }
 
         // Track fields that were set successfully and those that failed
         var fieldSetResults = { success: [], failed: [] };
@@ -5045,14 +5084,24 @@ define([
             try {
                 var valueToSet = value;
 
-                // Skip select fields if value is text instead of ID
-                if (selectFieldsRequiringId.indexOf(lowerFieldId) !== -1 && isTextValue(value)) {
-                    log.debug('setBodyField', 'Skipping ' + fieldId + ' - text value needs ID: ' + value);
-                    return; // Don't fail, just skip - the form might have saved text
+                // Resolve terms text to internal ID
+                if (lowerFieldId === 'terms' && isTextValue(value)) {
+                    valueToSet = resolveTermsId(value);
+                    if (!valueToSet) {
+                        log.debug('setBodyField', 'Could not resolve terms: ' + value);
+                        return; // Skip if can't resolve
+                    }
                 }
-
+                // Resolve currency text/code to internal ID
+                else if (lowerFieldId === 'currency' && isTextValue(value)) {
+                    valueToSet = resolveCurrencyIdForField(value);
+                    if (!valueToSet) {
+                        log.debug('setBodyField', 'Could not resolve currency: ' + value);
+                        return; // Skip if can't resolve
+                    }
+                }
                 // Convert checkbox fields to boolean
-                if (isCheckboxField(fieldId)) {
+                else if (isCheckboxField(fieldId)) {
                     valueToSet = toBoolean(value);
                 }
                 // Convert date fields to proper Date objects
