@@ -12,7 +12,7 @@
     var SHORTCUTS = {
         'Tab': { action: 'nextField', description: 'Next field' },
         'Shift+Tab': { action: 'prevField', description: 'Previous field' },
-        'KeyA': { action: 'approve', description: 'Approve & next' },
+        'KeyA': { action: 'approve', description: 'Approve & create' },
         'KeyR': { action: 'reject', description: 'Reject document' },
         'KeyS': { action: 'skip', description: 'Skip to next' },
         'KeyX': { action: 'reprocess', description: 'Reprocess document' },
@@ -6371,7 +6371,7 @@
                     if (approveBtn) {
                         approveBtn.disabled = false;
                         if (approveBtnIcon) approveBtnIcon.className = 'fas fa-check';
-                        if (approveBtnText) approveBtnText.textContent = 'Approve & Next';
+                        if (approveBtnText) approveBtnText.textContent = 'Approve & Create';
                     }
 
                     // Handle errors with persistent modal
