@@ -2178,7 +2178,13 @@ define([
                 triggerMode: context.triggerMode || 'smart',
                 smartThreshold: parseFloat(context.smartThreshold) || 0.70,
                 maxPages: parseInt(context.maxPages, 10) || 20,
-                skipFileSizeMB: parseInt(context.skipFileSizeMB, 10) || 25
+                skipFileSizeMB: parseInt(context.skipFileSizeMB, 10) || 25,
+                // Line item enhancement options
+                enhanceLineItems: context.enhanceLineItems === true || context.enhanceLineItems === 'true',
+                guessAccounts: context.guessAccounts === true || context.guessAccounts === 'true',
+                guessDepartments: context.guessDepartments === true || context.guessDepartments === 'true',
+                guessClasses: context.guessClasses === true || context.guessClasses === 'true',
+                guessLocations: context.guessLocations === true || context.guessLocations === 'true'
             };
 
             // Only update API key if a new one was provided (not masked)
