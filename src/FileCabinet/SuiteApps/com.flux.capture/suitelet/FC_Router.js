@@ -198,6 +198,9 @@ define([
                 case 'items':
                     result = getItems(context);
                     break;
+                case 'expensecategory':
+                    result = getExpenseCategory(context.id);
+                    break;
                 case 'health':
                     result = Response.success({ status: 'healthy', version: API_VERSION });
                     break;
@@ -1023,6 +1026,54 @@ define([
         } catch (e) {
             log.error('getApprovalStatuses Error', e);
             return Response.error('STATUS_ERROR', e.message);
+        }
+    }
+
+    /**
+     * Get expense category details including associated expense account
+     * Used for auto-populating expense account when category is selected
+     */
+    function getExpenseCategory(categoryId) {
+        try {
+            if (!categoryId) {
+                return Response.error('MISSING_ID', 'Category ID is required');
+            }
+
+            // Load the expense category record
+            var categoryRecord = record.load({
+                type: 'expensecategory',
+                id: categoryId,
+                isDynamic: false
+            });
+
+            var result = {
+                id: categoryId,
+                name: categoryRecord.getValue({ fieldId: 'name' }),
+                expenseAccount: categoryRecord.getValue({ fieldId: 'expenseaccount' }),
+                expenseAccountName: null
+            };
+
+            // Get the expense account name if we have an account ID
+            if (result.expenseAccount) {
+                try {
+                    var accountLookup = search.lookupFields({
+                        type: search.Type.ACCOUNT,
+                        id: result.expenseAccount,
+                        columns: ['name', 'number']
+                    });
+                    var number = accountLookup.number || '';
+                    var name = accountLookup.name || '';
+                    result.expenseAccountName = number ? (number + ' ' + name) : name;
+                } catch (e) {
+                    // Account lookup failed, just use the ID
+                    result.expenseAccountName = String(result.expenseAccount);
+                }
+            }
+
+            return Response.success(result);
+        } catch (e) {
+            log.error('getExpenseCategory Error', e);
+            return Response.error('CATEGORY_LOAD_FAILED', e.message);
         }
     }
 

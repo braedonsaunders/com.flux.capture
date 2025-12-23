@@ -3428,6 +3428,7 @@
         getLookupType: function(fieldId, sublistId) {
             var normalizedId = (fieldId || '').toLowerCase();
             if (normalizedId === 'account') return 'accounts';
+            if (normalizedId === 'expenseaccount') return 'expenseaccounts'; // Expense accounts only
             if (normalizedId === 'item') return 'items';
             if (normalizedId === 'customer') return 'customers';
             if (normalizedId === 'department') return 'departments';
@@ -3457,6 +3458,7 @@
                 'entity', 'customer', 'vendor', 'employee', 'item',
                 'currency', 'terms', 'taxcode', 'postingperiod',
                 'approvalstatus', 'nextapprover', 'category', 'expensecategory',
+                'expenseaccount', // Expense account field on expense reports
                 'job', 'project', 'projecttask', 'customform', 'acctcorpcardexp'
             ];
             return selectFields.indexOf(normalizedId) !== -1;
@@ -3984,12 +3986,12 @@
 
                     // Determine account type based on field
                     var options = {};
-                    if (lookupType === 'accounts') {
-                        // 'account' field (vendor bill) → COGS + Expense (no filter)
-                        // 'expenseaccount' field (expense report) → Expense only
-                        if (fieldId === 'expenseaccount') {
-                            options.accountType = 'Expense';
-                        }
+                    var searchType = lookupType;
+                    if (lookupType === 'expenseaccounts') {
+                        // 'expenseaccount' field → Expense accounts only
+                        searchType = 'accounts';
+                        options.accountType = 'Expense';
+                    } else if (lookupType === 'accounts') {
                         // 'acctcorpcardexp' field → Credit Card accounts only
                         if (fieldId === 'acctcorpcardexp') {
                             options.accountType = 'CCard';
@@ -3998,7 +4000,7 @@
                     }
 
                     self.typeaheadTimeout = setTimeout(function() {
-                        self.searchDatasource(lookupType, query, wrapper, input, options);
+                        self.searchDatasource(searchType, query, wrapper, input, options);
                     }, 300);
                 });
 
@@ -4095,9 +4097,14 @@
 
                 // Determine options based on field
                 var options = {};
+                var searchType = lookupType;
                 if (lookupType === 'accounts' && fieldId === 'account') {
                     // Body-level account field on vendor bill = AP accounts
                     options.accountType = 'AcctPay';
+                } else if (lookupType === 'expenseaccounts') {
+                    // 'expenseaccount' field → Expense accounts only
+                    searchType = 'accounts';
+                    options.accountType = 'Expense';
                 }
                 if (lookupType === 'accounts' && fieldId === 'acctcorpcardexp') {
                     // Corporate card expense account = Credit Card accounts only
@@ -4105,7 +4112,7 @@
                 }
 
                 self.typeaheadTimeout = setTimeout(function() {
-                    self.searchDatasource(lookupType, query, wrapper, input, options);
+                    self.searchDatasource(searchType, query, wrapper, input, options);
                 }, 300);
             });
 
@@ -6333,6 +6340,45 @@
         // ==========================================
         // TYPEAHEAD SEARCH (for sublist select fields)
         // ==========================================
+
+        // Position dropdown using fixed positioning to avoid container clipping
+        positionDropdown: function(dropdown, input) {
+            if (!dropdown || !input) return;
+
+            // Check if inside a sublist table
+            var isInSublist = input.closest('.sublist-table');
+            if (!isInSublist) return; // Use default CSS positioning for non-sublist
+
+            // Get input position
+            var rect = input.getBoundingClientRect();
+            var viewportHeight = window.innerHeight;
+
+            // Calculate available space below and above
+            var spaceBelow = viewportHeight - rect.bottom - 10;
+            var spaceAbove = rect.top - 10;
+
+            // Determine dropdown height (max 220px)
+            var dropdownHeight = Math.min(220, Math.max(spaceBelow, spaceAbove));
+
+            // Position dropdown
+            dropdown.style.position = 'fixed';
+            dropdown.style.width = rect.width + 'px';
+            dropdown.style.minWidth = '200px';
+            dropdown.style.left = rect.left + 'px';
+            dropdown.style.maxHeight = dropdownHeight + 'px';
+
+            // Show above or below depending on space
+            if (spaceBelow >= 150 || spaceBelow >= spaceAbove) {
+                // Show below
+                dropdown.style.top = rect.bottom + 2 + 'px';
+                dropdown.style.bottom = 'auto';
+            } else {
+                // Show above
+                dropdown.style.bottom = (viewportHeight - rect.top + 2) + 'px';
+                dropdown.style.top = 'auto';
+            }
+        },
+
         searchDatasource: function(type, query, wrapper, input, options) {
             var self = this;
             var dropdown = wrapper.querySelector('.typeahead-dropdown');
@@ -6341,6 +6387,9 @@
             // Show loading state
             dropdown.innerHTML = '<div class="typeahead-loading"><i class="fas fa-spinner fa-spin"></i> Searching...</div>';
             dropdown.style.display = 'block';
+
+            // Position dropdown using fixed positioning to avoid container clipping
+            this.positionDropdown(dropdown, input);
 
             // Build API params
             var params = { type: type, query: query, limit: 100 };
@@ -6411,6 +6460,7 @@
 
             // Trigger line update
             var row = wrapper.closest('tr');
+            var self = this;
             if (row) {
                 var idx = parseInt(row.dataset.idx, 10);
                 var sublistId = row.dataset.sublist;
@@ -6423,6 +6473,27 @@
                     if (employeeData) {
                         this.sublistData[sublistId][idx][fieldId + '_employeeData'] = employeeData;
                     }
+                }
+
+                // Auto-populate expense account when category changes
+                var normalizedFieldId = (fieldId || '').toLowerCase();
+                if (normalizedFieldId === 'category' || normalizedFieldId === 'expensecategory') {
+                    this.fetchCategoryExpenseAccount(value, function(expenseAccountData) {
+                        if (expenseAccountData && expenseAccountData.value) {
+                            // Update the expenseaccount field in this row
+                            self.updateSublistLine(sublistId, idx, 'expenseaccount', expenseAccountData.value);
+                            if (self.sublistData && self.sublistData[sublistId] && self.sublistData[sublistId][idx]) {
+                                self.sublistData[sublistId][idx].expenseaccount = expenseAccountData.value;
+                                self.sublistData[sublistId][idx].expenseaccount_display = expenseAccountData.text;
+                            }
+
+                            // Update the DOM input if visible
+                            var expenseAccountInput = row.querySelector('input[data-field="expenseaccount"]');
+                            var expenseAccountDisplay = row.querySelector('.typeahead-input[data-field="expenseaccount"]');
+                            if (expenseAccountInput) expenseAccountInput.value = expenseAccountData.value;
+                            if (expenseAccountDisplay) expenseAccountDisplay.value = expenseAccountData.text;
+                        }
+                    });
                 }
             } else {
                 // Header field - store employeeData in bodyFieldData
@@ -6442,6 +6513,31 @@
             if (!wrapper) return;
             var dropdown = wrapper.querySelector('.typeahead-dropdown');
             if (dropdown) dropdown.style.display = 'none';
+        },
+
+        // Fetch expense account associated with an expense category
+        fetchCategoryExpenseAccount: function(categoryId, callback) {
+            if (!categoryId) {
+                callback(null);
+                return;
+            }
+
+            // Call API to get expense category details including expense account
+            API.get('expensecategory', { id: categoryId })
+                .then(function(result) {
+                    if (result && result.expenseAccount) {
+                        callback({
+                            value: result.expenseAccount,
+                            text: result.expenseAccountName || result.expenseAccount
+                        });
+                    } else {
+                        callback(null);
+                    }
+                })
+                .catch(function(err) {
+                    FCDebug.log('[View.Review] Error fetching expense category:', err);
+                    callback(null);
+                });
         },
 
         // ==========================================
@@ -9370,18 +9466,20 @@
         bindSublistColumnEvents: function() {
             var self = this;
 
-            // Unbind previous handlers to prevent duplicates
-            document.querySelectorAll('.sortable-header').forEach(function(th) {
-                th._sortHandler = null;
-            });
+            // Only bind once using document-level event delegation
+            if (this._sublistColumnEventsBound) return;
+            this._sublistColumnEventsBound = true;
 
-            // Sort on header click
-            this.on('.sortable-header', 'click', function(e) {
-                // Ignore if clicking on resize handle
-                if (e.target.classList.contains('resize-handle')) return;
+            // Use direct event listeners on all elements (not delegated via .on())
+            // because .on() only binds to the first matching element
 
+            // Sort on header click - use event delegation from document
+            document.addEventListener('click', function(e) {
                 var th = e.target.closest('.sortable-header');
                 if (!th) return;
+
+                // Ignore if clicking on resize handle
+                if (e.target.classList.contains('resize-handle')) return;
 
                 var fieldId = th.dataset.field;
                 var sublistId = th.dataset.sublist;
@@ -9405,8 +9503,10 @@
                 self.rerenderSublist(sublistId);
             });
 
-            // Resize on drag
-            this.on('.resize-handle', 'mousedown', function(e) {
+            // Resize on drag - use event delegation from document
+            document.addEventListener('mousedown', function(e) {
+                if (!e.target.classList.contains('resize-handle')) return;
+
                 e.preventDefault();
                 e.stopPropagation();
 
