@@ -324,6 +324,30 @@ body {
     color: rgba(0, 0, 0, 0.9);
 }
 
+/* Minimized topbar state */
+body.topbar-minimized .app-topbar {
+    transform: translateY(calc(-100% + 6px));
+    opacity: 0.4;
+}
+
+body.topbar-minimized .app-topbar:hover {
+    transform: translateY(0);
+    opacity: 1;
+}
+
+body.topbar-minimized .app-main {
+    margin-top: 6px;
+    min-height: calc(100vh - 6px);
+}
+
+body.topbar-minimized #btn-minimize-topbar i {
+    transform: rotate(180deg);
+}
+
+#btn-minimize-topbar i {
+    transition: transform 0.2s ease;
+}
+
 /* ==========================================
    MAIN CONTENT AREA
    ========================================== */
@@ -333,6 +357,7 @@ body {
     min-height: calc(100vh - var(--topbar-height, 56px));
     display: flex;
     flex-direction: column;
+    transition: margin-top 0.3s ease, min-height 0.3s ease;
 }
 
 #view-container {

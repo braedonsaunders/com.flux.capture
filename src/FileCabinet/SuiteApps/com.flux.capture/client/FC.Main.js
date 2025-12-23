@@ -127,6 +127,23 @@
             document.addEventListener('fullscreenchange', fsChangeHandler);
             document.addEventListener('webkitfullscreenchange', fsChangeHandler);
         }
+
+        // Minimize topbar toggle
+        var minimizeBtn = el('#btn-minimize-topbar');
+        if (minimizeBtn) {
+            // Restore from localStorage
+            if (localStorage.getItem('fc_topbarMinimized') === 'true') {
+                document.body.classList.add('topbar-minimized');
+                minimizeBtn.classList.add('active');
+            }
+
+            minimizeBtn.addEventListener('click', function() {
+                document.body.classList.toggle('topbar-minimized');
+                this.classList.toggle('active');
+                var isMinimized = document.body.classList.contains('topbar-minimized');
+                localStorage.setItem('fc_topbarMinimized', isMinimized);
+            });
+        }
     }
 
     /**
