@@ -3260,6 +3260,9 @@
                     var config = result.data || result;
                     self.llmConfig = config;
 
+                    // Debug: log loaded config
+                    console.log('[LLM Config] Loaded config:', JSON.stringify(config, null, 2));
+
                     // Update UI with loaded config
                     var enabledToggle = el('#llm-enabled');
                     var apiKeyInput = el('#llm-api-key');
