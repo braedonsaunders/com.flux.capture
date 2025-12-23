@@ -324,21 +324,42 @@ body {
     color: rgba(0, 0, 0, 0.9);
 }
 
-/* Minimized topbar state */
+/* Minimized topbar state - sleek thin strip */
 body.topbar-minimized .app-topbar {
-    transform: translateY(calc(-100% + 12px));
-    opacity: 0.7;
+    transform: translateY(calc(-100% + 4px)) !important;
+    opacity: 1 !important;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+}
+
+body.topbar-minimized .app-topbar::after {
+    content: '';
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    height: 4px;
+    background: linear-gradient(90deg,
+        transparent 0%,
+        rgba(255,255,255,0.1) 20%,
+        rgba(255,255,255,0.2) 50%,
+        rgba(255,255,255,0.1) 80%,
+        transparent 100%);
 }
 
 body.topbar-minimized .app-topbar:hover,
 body.topbar-minimized .app-topbar:focus-within {
-    transform: translateY(0);
-    opacity: 1;
+    transform: translateY(0) !important;
+    opacity: 1 !important;
+}
+
+body.topbar-minimized .app-topbar:hover::after,
+body.topbar-minimized .app-topbar:focus-within::after {
+    display: none;
 }
 
 body.topbar-minimized .app-main {
-    margin-top: 12px;
-    min-height: calc(100vh - 12px);
+    margin-top: 4px;
+    min-height: calc(100vh - 4px);
 }
 
 body.topbar-minimized #btn-minimize-topbar i {
