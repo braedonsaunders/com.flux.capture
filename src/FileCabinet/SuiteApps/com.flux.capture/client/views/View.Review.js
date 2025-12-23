@@ -7166,6 +7166,41 @@
             this.transitionToDocument(docId);
         },
 
+        getDocumentLabel: function(doc) {
+            // Build a human-readable label from document data
+            // Priority: vendorName + invoiceNumber > vendorName > invoiceNumber > fileName
+            var parts = [];
+
+            if (doc.vendorName) {
+                parts.push(doc.vendorName);
+            }
+
+            if (doc.invoiceNumber) {
+                parts.push('#' + doc.invoiceNumber);
+            }
+
+            if (parts.length > 0) {
+                var label = parts.join(' ');
+                // Truncate if too long
+                if (label.length > 40) {
+                    label = label.substring(0, 37) + '...';
+                }
+                return label;
+            }
+
+            // Fallback to fileName if no vendor/invoice
+            if (doc.fileName) {
+                var fileName = doc.fileName;
+                if (fileName.length > 40) {
+                    fileName = fileName.substring(0, 37) + '...';
+                }
+                return fileName;
+            }
+
+            // Last resort fallback
+            return 'Document #' + doc.id;
+        },
+
         renderDocumentSelector: function() {
             var optionsEl = el('#doc-selector-options');
             if (!optionsEl) return;
@@ -7177,14 +7212,12 @@
             if (this.queueDocs && this.queueDocs.length > 0) {
                 this.queueDocs.forEach(function(doc, index) {
                     var isSelected = index === self.queueIndex;
-                    var docName = doc.fileName || doc.name || ('Document ' + doc.id);
-                    // Truncate long names
-                    if (docName.length > 35) {
-                        docName = docName.substring(0, 32) + '...';
-                    }
+                    // Build a human-readable document label
+                    var docLabel = self.getDocumentLabel(doc);
+
                     html += '<div class="doc-selector-option' + (isSelected ? ' selected' : '') + '" data-doc-id="' + doc.id + '">' +
                         '<span class="doc-option-index">' + (index + 1) + '</span>' +
-                        '<span class="doc-option-name">' + escapeHtml(docName) + '</span>' +
+                        '<span class="doc-option-name">' + escapeHtml(docLabel) + '</span>' +
                     '</div>';
                 });
             } else if (this.queueIds && this.queueIds.length > 0) {
@@ -7193,7 +7226,7 @@
                     var isSelected = index === self.queueIndex;
                     html += '<div class="doc-selector-option' + (isSelected ? ' selected' : '') + '" data-doc-id="' + id + '">' +
                         '<span class="doc-option-index">' + (index + 1) + '</span>' +
-                        '<span class="doc-option-name">Document ' + id + '</span>' +
+                        '<span class="doc-option-name">Document #' + id + '</span>' +
                     '</div>';
                 });
             }
