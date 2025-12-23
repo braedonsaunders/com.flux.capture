@@ -4082,6 +4082,7 @@
                 if (!input.classList.contains('typeahead-input')) return;
                 // Skip sublist typeaheads (handled separately)
                 if (input.closest('.line-section')) return;
+                if (input.closest('.sublist-table')) return;
 
                 var query = input.value.trim();
                 var wrapper = input.closest('.typeahead-select');
@@ -4138,6 +4139,7 @@
                 if (!option) return;
                 // Skip sublist typeaheads
                 if (option.closest('.line-section')) return;
+                if (option.closest('.sublist-table')) return;
 
                 var wrapper = option.closest('.typeahead-select');
                 if (wrapper && wrapper.classList.contains('body-field-typeahead')) {
@@ -4148,7 +4150,9 @@
             // Hide typeahead on blur for body fields
             panel.addEventListener('focusout', function(e) {
                 if (!e.target.classList.contains('typeahead-input')) return;
+                // Skip sublist typeaheads (handled separately)
                 if (e.target.closest('.line-section')) return;
+                if (e.target.closest('.sublist-table')) return;
 
                 setTimeout(function() {
                     var wrapper = e.target.closest('.typeahead-select');
@@ -4161,6 +4165,7 @@
                 var input = e.target;
                 if (!input.classList.contains('typeahead-input')) return;
                 if (input.closest('.line-section')) return;
+                if (input.closest('.sublist-table')) return;
 
                 var wrapper = input.closest('.typeahead-select');
                 var dropdown = wrapper ? wrapper.querySelector('.typeahead-dropdown') : null;
