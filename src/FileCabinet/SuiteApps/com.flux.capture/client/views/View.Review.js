@@ -4017,9 +4017,13 @@
                 lineSection.addEventListener('focusout', function(e) {
                     if (!e.target.classList.contains('typeahead-input')) return;
 
+                    var wrapper = e.target.closest('.typeahead-select');
                     setTimeout(function() {
-                        var wrapper = e.target.closest('.typeahead-select');
-                        self.hideTypeaheadDropdown(wrapper);
+                        // Only hide if focus has truly left the wrapper
+                        // (not just moved to the dropdown or another element within)
+                        if (wrapper && !wrapper.contains(document.activeElement)) {
+                            self.hideTypeaheadDropdown(wrapper);
+                        }
                     }, 200);
                 });
 
@@ -4154,9 +4158,12 @@
                 if (e.target.closest('.line-section')) return;
                 if (e.target.closest('.sublist-table')) return;
 
+                var wrapper = e.target.closest('.typeahead-select');
                 setTimeout(function() {
-                    var wrapper = e.target.closest('.typeahead-select');
-                    self.hideTypeaheadDropdown(wrapper);
+                    // Only hide if focus has truly left the wrapper
+                    if (wrapper && !wrapper.contains(document.activeElement)) {
+                        self.hideTypeaheadDropdown(wrapper);
+                    }
                 }, 200);
             });
 
@@ -7603,9 +7610,12 @@
                 tbody.addEventListener('focusout', function(e) {
                     if (!e.target.classList.contains('typeahead-input')) return;
 
+                    var wrapper = e.target.closest('.typeahead-select');
                     setTimeout(function() {
-                        var wrapper = e.target.closest('.typeahead-select');
-                        self.hideTypeaheadDropdown(wrapper);
+                        // Only hide if focus has truly left the wrapper
+                        if (wrapper && !wrapper.contains(document.activeElement)) {
+                            self.hideTypeaheadDropdown(wrapper);
+                        }
                     }, 200);
                 });
 
