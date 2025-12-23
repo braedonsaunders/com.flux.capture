@@ -11271,6 +11271,95 @@ body.extraction-selecting .form-field:hover {
     text-transform: uppercase;
 }
 
+/* Learning Management Header */
+.learning-header-card {
+    max-width: none;
+}
+
+.learning-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-lg);
+    padding: var(--space-md) var(--space-lg);
+    border-bottom: 1px solid var(--border-color);
+}
+
+.learning-header-left {
+    display: flex;
+    align-items: center;
+    gap: var(--space-lg);
+    flex-wrap: wrap;
+}
+
+.learning-title {
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
+}
+
+.learning-title i {
+    font-size: 20px;
+    color: var(--color-primary);
+}
+
+.learning-title h3 {
+    margin: 0;
+    font-size: var(--font-size-lg);
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+.learning-header-right {
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
+}
+
+.learning-stats-inline {
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
+    font-size: var(--font-size-sm);
+    color: var(--text-secondary);
+}
+
+.stat-inline {
+    white-space: nowrap;
+}
+
+.stat-inline strong {
+    color: var(--text-primary);
+    font-weight: 600;
+}
+
+.stat-divider {
+    color: var(--border-color);
+}
+
+.learning-filters-row {
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
+    padding: var(--space-md) var(--space-lg);
+    flex-wrap: wrap;
+}
+
+.learning-filters-row .filter-input {
+    padding: var(--space-xs) var(--space-sm);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-md);
+    font-size: var(--font-size-sm);
+    font-family: var(--font-family);
+    background: var(--surface-card);
+    color: var(--text-primary);
+}
+
+.learning-filters-row .filter-input:focus {
+    outline: none;
+    border-color: var(--color-primary);
+}
+
 /* ==========================================
    TOOLBAR PDF CONTROLS
    ========================================== */
