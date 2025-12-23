@@ -55,6 +55,11 @@ define([
          * @param {number} config.maxPages - Maximum pages to send to API
          * @param {boolean} config.autoApplyCorrections - Auto-apply high-confidence corrections
          * @param {number} config.autoApplyThreshold - Confidence threshold for auto-apply (0-1)
+         * @param {boolean} config.enhanceLineItems - Allow AI to add/edit/delete line items
+         * @param {boolean} config.guessAccounts - Allow AI to suggest accounts for line items
+         * @param {boolean} config.guessDepartments - Allow AI to suggest departments for line items
+         * @param {boolean} config.guessClasses - Allow AI to suggest classes for line items
+         * @param {boolean} config.guessLocations - Allow AI to suggest locations for line items
          */
         constructor(config = {}) {
             this.enabled = config.enabled || false;
@@ -67,6 +72,12 @@ define([
             // Auto-apply settings - AI can directly update fields
             this.autoApplyCorrections = config.autoApplyCorrections !== false; // Default: true
             this.autoApplyThreshold = config.autoApplyThreshold || 0.85; // High confidence threshold
+            // Line item enhancement settings
+            this.enhanceLineItems = config.enhanceLineItems || false;
+            this.guessAccounts = config.guessAccounts || false;
+            this.guessDepartments = config.guessDepartments || false;
+            this.guessClasses = config.guessClasses || false;
+            this.guessLocations = config.guessLocations || false;
 
             // Build endpoint URL
             this.endpoint = `${GEMINI_API_BASE}/models/${this.model}:generateContent`;
@@ -172,8 +183,17 @@ define([
                 // Extract existing anomalies from the extraction result
                 const existingAnomalies = extractionResult.extraction?.anomalies || extractionResult.anomalies || [];
 
+                // Build line item options for prompt
+                const lineItemOptions = {
+                    enhanceLineItems: this.enhanceLineItems,
+                    guessAccounts: this.guessAccounts,
+                    guessDepartments: this.guessDepartments,
+                    guessClasses: this.guessClasses,
+                    guessLocations: this.guessLocations
+                };
+
                 // Build verification prompt with vendor history context and existing alerts
-                const prompt = this._buildVerificationPrompt(extractionResult, formSchema, vendorHistory, existingAnomalies);
+                const prompt = this._buildVerificationPrompt(extractionResult, formSchema, vendorHistory, existingAnomalies, lineItemOptions);
 
                 // Build request body
                 const requestBody = {
@@ -231,7 +251,11 @@ define([
                     corrections: verificationResult.corrections || [],
                     missedFields: verificationResult.missedFields || [],
                     lineItemIssues: verificationResult.lineItemIssues || [],
+                    lineItems: verificationResult.lineItems || null, // Complete line items from AI
                     validationFlags: verificationResult.validationFlags || [],
+                    mathValidation: verificationResult.mathValidation || null,
+                    paymentTerms: verificationResult.paymentTerms || null,
+                    alerts: verificationResult.alerts || [],
                     rawResponse: verificationResult
                 };
 
@@ -254,7 +278,7 @@ define([
          * Enhanced with fraud detection, risk assessment, and high-value insights
          * @private
          */
-        _buildVerificationPrompt(extractionResult, formSchema, vendorHistory = null, existingAlerts = []) {
+        _buildVerificationPrompt(extractionResult, formSchema, vendorHistory = null, existingAlerts = [], lineItemOptions = {}) {
             const today = new Date();
             const todayIso = today.toISOString().split('T')[0];
 
@@ -361,7 +385,7 @@ ${formFieldsSection}${vendorHistorySection}${existingAlertsSection}
 - Only flag currency issues if you see an EXPLICIT code (USD, EUR, GBP written out)
 - Company is in Canada - assume $ = CAD unless explicitly marked otherwise
 - If you see "US$" or "USD" explicitly, THAT is evidence for a correction
-
+${this._buildLineItemEnhancementSection(lineItemOptions, vendorHistory)}
 === RESPONSE FORMAT ===
 {
     "verification": {
@@ -409,6 +433,22 @@ ${formFieldsSection}${vendorHistorySection}${existingAlertsSection}
             "expectedValue": "what should be",
             "extractedValue": "what was extracted",
             "impact": "$X difference" or null
+        }
+    ],
+    "lineItems": [
+        {
+            "description": "Line item description/memo",
+            "quantity": number or null,
+            "unitPrice": number or null,
+            "amount": number,
+            "account": "Account name or number (if guessing enabled)" or null,
+            "department": "Department name (if guessing enabled)" or null,
+            "class": "Class name (if guessing enabled)" or null,
+            "location": "Location name (if guessing enabled)" or null,
+            "confidence": 0.0-1.0,
+            "_action": "keep|add|modify|delete",
+            "_originalIndex": number or null,
+            "_reason": "Why this action is recommended"
         }
     ],
     "alerts": [
@@ -472,6 +512,91 @@ ${formFieldsSection}${vendorHistorySection}${existingAlertsSection}
                 })),
                 confidence: extraction.confidence?.overall || null
             };
+        }
+
+        /**
+         * Build line item enhancement section for the prompt
+         * @private
+         */
+        _buildLineItemEnhancementSection(lineItemOptions, vendorHistory) {
+            if (!lineItemOptions.enhanceLineItems) {
+                return '\n'; // No line item enhancement
+            }
+
+            const guessingFields = [];
+            if (lineItemOptions.guessAccounts) guessingFields.push('account');
+            if (lineItemOptions.guessDepartments) guessingFields.push('department');
+            if (lineItemOptions.guessClasses) guessingFields.push('class');
+            if (lineItemOptions.guessLocations) guessingFields.push('location');
+
+            let section = `
+=== LINE ITEM ENHANCEMENT (ENABLED) ===
+You have full authority to enhance line items. Your goal is to ensure the line items are COMPLETE and ACCURATE based on what you see in the PDF.
+
+CAPABILITIES:
+- ADD line items that appear in the PDF but were missed by OCR
+- MODIFY line items where values were extracted incorrectly
+- DELETE line items that don't exist in the PDF (OCR hallucinations)
+- KEEP line items that are correct
+
+CRITICAL REQUIREMENTS:
+1. Extract ALL line items visible in the PDF - be thorough
+2. Include description/memo, quantity, unit price, and amount for each line
+3. Ensure line item amounts match what's in the document
+4. Mark each line item with _action: "keep", "add", "modify", or "delete"
+5. For modified items, include _originalIndex to indicate which extracted item was changed
+6. For deleted items, include _originalIndex and set other fields to null
+
+`;
+
+            if (guessingFields.length > 0) {
+                section += `
+FIELD GUESSING (ENABLED for: ${guessingFields.join(', ')}):
+You may suggest values for these sublist-level fields based on context clues:
+`;
+                if (lineItemOptions.guessAccounts) {
+                    section += `- account: Suggest an expense/COGS account based on the line item description
+  Examples: "Office Supplies" for pens/paper, "Travel" for flights/hotels, "Software" for subscriptions
+`;
+                }
+                if (lineItemOptions.guessDepartments) {
+                    section += `- department: Suggest a department based on context (e.g., "Marketing", "Engineering", "Sales")
+`;
+                }
+                if (lineItemOptions.guessClasses) {
+                    section += `- class: Suggest a class/category if apparent from the invoice context
+`;
+                }
+                if (lineItemOptions.guessLocations) {
+                    section += `- location: Suggest a location if mentioned or implied in the document
+`;
+                }
+
+                if (vendorHistory) {
+                    section += `
+VENDOR HISTORY FOR GUESSING:
+This vendor typically uses these classifications (use as guidance):
+${vendorHistory.typicalAccount ? `- Common account: ${vendorHistory.typicalAccount}` : ''}
+${vendorHistory.typicalDepartment ? `- Common department: ${vendorHistory.typicalDepartment}` : ''}
+${vendorHistory.typicalClass ? `- Common class: ${vendorHistory.typicalClass}` : ''}
+${vendorHistory.typicalLocation ? `- Common location: ${vendorHistory.typicalLocation}` : ''}
+`;
+                }
+
+                section += `
+GUESSING CONFIDENCE:
+- Only guess fields with confidence >= 0.7
+- Set confidence based on how certain you are about the suggestion
+- Leave fields as null if you can't make a reasonable guess
+`;
+            } else {
+                section += `
+FIELD GUESSING: DISABLED
+Do not include account, department, class, or location fields in line items.
+`;
+            }
+
+            return section;
         }
 
         /**
@@ -579,6 +704,128 @@ ${formFieldsSection}${vendorHistorySection}${existingAlertsSection}
                 suggestedMissedFields.push(...missedFields);
             }
 
+            // Process line item enhancements if enabled and AI returned line items
+            const lineItemChanges = {
+                added: [],
+                modified: [],
+                deleted: [],
+                kept: []
+            };
+            const aiLineItems = verificationResult.lineItems || verificationResult.rawResponse?.lineItems || null;
+
+            if (this.enhanceLineItems && aiLineItems && Array.isArray(aiLineItems)) {
+                const originalLineItems = extraction.lineItems || [];
+                const enhancedLineItems = [];
+
+                for (const aiItem of aiLineItems) {
+                    const action = aiItem._action || 'keep';
+                    const confidence = aiItem.confidence || 0;
+
+                    if (action === 'delete') {
+                        // Track deletion (don't add to enhanced list)
+                        if (aiItem._originalIndex !== null && aiItem._originalIndex !== undefined) {
+                            const deletedItem = originalLineItems[aiItem._originalIndex];
+                            if (deletedItem) {
+                                lineItemChanges.deleted.push({
+                                    originalIndex: aiItem._originalIndex,
+                                    description: deletedItem.description || deletedItem.memo,
+                                    amount: deletedItem.amount,
+                                    reason: aiItem._reason || 'AI detected this line item does not exist in document'
+                                });
+                            }
+                        }
+                        log.audit('GeminiVerifier', `Deleted line item at index ${aiItem._originalIndex}: ${aiItem._reason || 'not in document'}`);
+
+                    } else if (action === 'add' && confidence >= this.autoApplyThreshold) {
+                        // Add new line item
+                        const newItem = this._buildLineItem(aiItem);
+                        newItem._source = 'ai_enhanced';
+                        newItem._aiAdded = true;
+                        enhancedLineItems.push(newItem);
+                        lineItemChanges.added.push({
+                            description: newItem.description || newItem.memo,
+                            amount: newItem.amount,
+                            confidence: confidence,
+                            reason: aiItem._reason || 'AI detected missing line item'
+                        });
+                        log.audit('GeminiVerifier', `Added line item: ${newItem.description || newItem.memo} = $${newItem.amount}`);
+
+                    } else if (action === 'modify' && confidence >= this.autoApplyThreshold) {
+                        // Modify existing line item
+                        const originalIndex = aiItem._originalIndex;
+                        const originalItem = originalIndex !== null && originalIndex !== undefined
+                            ? originalLineItems[originalIndex] : null;
+                        const modifiedItem = this._buildLineItem(aiItem, originalItem);
+                        modifiedItem._source = 'ai_enhanced';
+                        modifiedItem._aiModified = true;
+                        modifiedItem._originalIndex = originalIndex;
+                        enhancedLineItems.push(modifiedItem);
+                        lineItemChanges.modified.push({
+                            originalIndex: originalIndex,
+                            original: originalItem ? {
+                                description: originalItem.description || originalItem.memo,
+                                amount: originalItem.amount
+                            } : null,
+                            modified: {
+                                description: modifiedItem.description || modifiedItem.memo,
+                                amount: modifiedItem.amount
+                            },
+                            confidence: confidence,
+                            reason: aiItem._reason || 'AI corrected line item values'
+                        });
+                        log.audit('GeminiVerifier', `Modified line item at index ${originalIndex}`);
+
+                    } else if (action === 'keep') {
+                        // Keep original line item (possibly with field suggestions)
+                        const originalIndex = aiItem._originalIndex;
+                        const originalItem = originalIndex !== null && originalIndex !== undefined
+                            ? originalLineItems[originalIndex] : null;
+
+                        if (originalItem) {
+                            const keptItem = { ...originalItem };
+                            // Apply field suggestions (account, department, etc.) if guessing is enabled
+                            if (this.guessAccounts && aiItem.account && confidence >= 0.7) {
+                                keptItem.account = aiItem.account;
+                                keptItem._accountSuggested = true;
+                            }
+                            if (this.guessDepartments && aiItem.department && confidence >= 0.7) {
+                                keptItem.department = aiItem.department;
+                                keptItem._departmentSuggested = true;
+                            }
+                            if (this.guessClasses && aiItem.class && confidence >= 0.7) {
+                                keptItem.class = aiItem.class;
+                                keptItem._classSuggested = true;
+                            }
+                            if (this.guessLocations && aiItem.location && confidence >= 0.7) {
+                                keptItem.location = aiItem.location;
+                                keptItem._locationSuggested = true;
+                            }
+                            enhancedLineItems.push(keptItem);
+                            lineItemChanges.kept.push({
+                                originalIndex: originalIndex,
+                                description: keptItem.description || keptItem.memo,
+                                suggestedFields: {
+                                    account: keptItem._accountSuggested ? keptItem.account : null,
+                                    department: keptItem._departmentSuggested ? keptItem.department : null,
+                                    class: keptItem._classSuggested ? keptItem.class : null,
+                                    location: keptItem._locationSuggested ? keptItem.location : null
+                                }
+                            });
+                        }
+                    } else {
+                        // Low confidence add/modify - keep original if exists, otherwise skip
+                        const originalIndex = aiItem._originalIndex;
+                        if (originalIndex !== null && originalIndex !== undefined && originalLineItems[originalIndex]) {
+                            enhancedLineItems.push({ ...originalLineItems[originalIndex] });
+                        }
+                    }
+                }
+
+                // Replace line items with enhanced version
+                extraction.lineItems = enhancedLineItems;
+                log.audit('GeminiVerifier', `Line items enhanced: ${lineItemChanges.added.length} added, ${lineItemChanges.modified.length} modified, ${lineItemChanges.deleted.length} deleted`);
+            }
+
             // Get unified alerts from AI (consolidates system alerts + AI findings)
             const unifiedAlerts = verificationResult.alerts || verificationResult.rawResponse?.alerts || [];
 
@@ -597,6 +844,8 @@ ${formFieldsSection}${vendorHistorySection}${existingAlertsSection}
                 corrections: suggestedCorrections,
                 missedFields: suggestedMissedFields,
                 lineItemIssues: verificationResult.lineItemIssues || [],
+                // Line item enhancement results
+                lineItemChanges: lineItemChanges,
                 // Unified alerts (replaces both anomalies and validationFlags)
                 alerts: unifiedAlerts,
                 // Enhanced data
@@ -702,6 +951,52 @@ ${formFieldsSection}${vendorHistorySection}${existingAlertsSection}
                 'Description': 'memo'
             };
             return fieldMap[field] || field;
+        }
+
+        /**
+         * Build a line item object from AI response data
+         * @private
+         * @param {Object} aiItem - Line item from AI response
+         * @param {Object} originalItem - Original line item (for modifications)
+         * @returns {Object} Normalized line item object
+         */
+        _buildLineItem(aiItem, originalItem = null) {
+            const item = originalItem ? { ...originalItem } : {};
+
+            // Core line item fields
+            if (aiItem.description !== undefined) {
+                item.description = aiItem.description;
+                item.memo = aiItem.description; // Also set memo for compatibility
+            }
+            if (aiItem.quantity !== undefined) {
+                item.quantity = aiItem.quantity;
+            }
+            if (aiItem.unitPrice !== undefined) {
+                item.unitPrice = aiItem.unitPrice;
+                item.rate = aiItem.unitPrice; // Also set rate for compatibility
+            }
+            if (aiItem.amount !== undefined) {
+                item.amount = aiItem.amount;
+            }
+
+            // Sublist-level fields (only if guessing is enabled and values provided)
+            if (aiItem.account) {
+                item.account = aiItem.account;
+            }
+            if (aiItem.department) {
+                item.department = aiItem.department;
+            }
+            if (aiItem.class) {
+                item.class = aiItem.class;
+            }
+            if (aiItem.location) {
+                item.location = aiItem.location;
+            }
+
+            // Metadata
+            item.confidence = aiItem.confidence || 0.85;
+
+            return item;
         }
     }
 
@@ -898,7 +1193,13 @@ ${formFieldsSection}${vendorHistorySection}${existingAlertsSection}
             triggerMode: TriggerMode.SMART,
             smartThreshold: 0.70,
             maxPages: 20,
-            skipFileSizeMB: 25
+            skipFileSizeMB: 25,
+            // Line item enhancement options
+            enhanceLineItems: false,
+            guessAccounts: false,
+            guessDepartments: false,
+            guessClasses: false,
+            guessLocations: false
         };
     }
 

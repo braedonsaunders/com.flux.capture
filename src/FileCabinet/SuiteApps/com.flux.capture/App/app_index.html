@@ -1997,6 +1997,84 @@
                                         <input type="number" id="llm-max-pages" min="1" max="100" value="20" style="width: 80px; text-align: center;">
                                     </div>
                                 </div>
+
+                                <!-- Line Item Enhancement Section -->
+                                <div class="setting-section-header" style="margin-top: 24px; margin-bottom: 12px; border-top: 1px solid var(--border-color); padding-top: 16px;">
+                                    <i class="fas fa-list-check" style="color: var(--primary-color);"></i>
+                                    <span style="font-weight: 600; margin-left: 8px;">Line Item Enhancement</span>
+                                </div>
+
+                                <div class="setting-row">
+                                    <div class="setting-label">
+                                        <span>Enable Line Item Enhancement</span>
+                                        <small>Allow AI to add, edit, and delete line items to match the PDF</small>
+                                    </div>
+                                    <div class="setting-control">
+                                        <label class="toggle">
+                                            <input type="checkbox" id="llm-enhance-line-items">
+                                            <span class="toggle-track"><span class="toggle-thumb"></span></span>
+                                        </label>
+                                    </div>
+                                </div>
+
+                                <!-- Field Guessing Options (shown when line item enhancement is enabled) -->
+                                <div class="llm-field-guessing-panel" id="llm-field-guessing-panel" style="display:none; margin-left: 16px; border-left: 2px solid var(--primary-color-light); padding-left: 16px;">
+                                    <div class="setting-section-subheader" style="margin-bottom: 12px;">
+                                        <small style="color: var(--text-secondary);">Allow AI to suggest values for these sublist fields based on context:</small>
+                                    </div>
+
+                                    <div class="setting-row">
+                                        <div class="setting-label">
+                                            <span>Guess Accounts</span>
+                                            <small>Suggest expense/COGS accounts based on line descriptions</small>
+                                        </div>
+                                        <div class="setting-control">
+                                            <label class="toggle">
+                                                <input type="checkbox" id="llm-guess-accounts">
+                                                <span class="toggle-track"><span class="toggle-thumb"></span></span>
+                                            </label>
+                                        </div>
+                                    </div>
+
+                                    <div class="setting-row">
+                                        <div class="setting-label">
+                                            <span>Guess Departments</span>
+                                            <small>Suggest departments based on invoice context</small>
+                                        </div>
+                                        <div class="setting-control">
+                                            <label class="toggle">
+                                                <input type="checkbox" id="llm-guess-departments">
+                                                <span class="toggle-track"><span class="toggle-thumb"></span></span>
+                                            </label>
+                                        </div>
+                                    </div>
+
+                                    <div class="setting-row">
+                                        <div class="setting-label">
+                                            <span>Guess Classes</span>
+                                            <small>Suggest classes based on invoice context</small>
+                                        </div>
+                                        <div class="setting-control">
+                                            <label class="toggle">
+                                                <input type="checkbox" id="llm-guess-classes">
+                                                <span class="toggle-track"><span class="toggle-thumb"></span></span>
+                                            </label>
+                                        </div>
+                                    </div>
+
+                                    <div class="setting-row">
+                                        <div class="setting-label">
+                                            <span>Guess Locations</span>
+                                            <small>Suggest locations if mentioned in the document</small>
+                                        </div>
+                                        <div class="setting-control">
+                                            <label class="toggle">
+                                                <input type="checkbox" id="llm-guess-locations">
+                                                <span class="toggle-track"><span class="toggle-thumb"></span></span>
+                                            </label>
+                                        </div>
+                                    </div>
+                                </div>
                             </div>
 
                             <div class="provider-save-row">
