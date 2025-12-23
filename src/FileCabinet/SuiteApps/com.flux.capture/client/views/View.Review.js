@@ -301,6 +301,11 @@
                     if (self.data && self.data.vendorId) {
                         self.fetchCodingSuggestions(self.data.vendorId);
                     }
+
+                    // Auto-load PO match data for vendor bills
+                    if (self.transactionType === 'vendorbill' && self.data && self.data.vendorId) {
+                        self.loadPOMatchData();
+                    }
                 })
                 .catch(function(err) {
                     console.error('[Review] Load error:', err);

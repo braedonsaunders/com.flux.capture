@@ -221,12 +221,13 @@ define([
             var maxResults = options.maxCandidates || 20;
 
             // Build query to find open POs for the vendor
+            // Note: Use foreigntotal instead of total (total is not exposed for SuiteQL search)
             var sql = `
                 SELECT
                     t.id,
                     t.tranid as poNumber,
                     t.trandate as poDate,
-                    t.total,
+                    t.foreigntotal,
                     t.entity as vendorId,
                     BUILTIN.DF(t.entity) as vendorName,
                     t.status,
