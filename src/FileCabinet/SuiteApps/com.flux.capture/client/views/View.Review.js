@@ -9592,15 +9592,21 @@
             this._sublistColumnEventsBound = true;
 
             // Hide sublist typeahead dropdowns when clicking outside
-            document.addEventListener('click', function(e) {
-                // If click is inside a typeahead-select, don't hide
+            // Use mousedown instead of click to avoid race conditions
+            document.addEventListener('mousedown', function(e) {
+                // If mousedown is inside a typeahead-select wrapper, don't hide
                 if (e.target.closest('.typeahead-select')) return;
-                // If click is on a typeahead option, don't hide (selection will handle it)
+                // If mousedown is on a typeahead option, don't hide
                 if (e.target.closest('.typeahead-option')) return;
+                // If mousedown is inside a typeahead-dropdown, don't hide
+                if (e.target.closest('.typeahead-dropdown')) return;
+                // If mousedown is on a typeahead-input, don't hide
+                if (e.target.classList && e.target.classList.contains('typeahead-input')) return;
 
                 // Hide all visible sublist typeahead dropdowns
                 document.querySelectorAll('.sublist-table .typeahead-dropdown').forEach(function(dropdown) {
                     if (dropdown.style.display !== 'none') {
+                        FCDebug.log('[Typeahead] Hiding dropdown via mousedown outside');
                         dropdown.style.display = 'none';
                     }
                 });
