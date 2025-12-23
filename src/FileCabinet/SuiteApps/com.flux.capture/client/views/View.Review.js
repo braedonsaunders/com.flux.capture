@@ -2931,7 +2931,7 @@
                 visibleFields.forEach(function(f) {
                     html += self.renderSublistCell(f, item, idx, sublistId);
                 });
-                html += '<td><button class="btn btn-ghost btn-icon btn-sm btn-remove-line" data-sublist="' + sublistId + '" title="Remove"><i class="fas fa-times"></i></button></td>';
+                html += '<td><button class="btn btn-ghost btn-icon btn-sm btn-remove-line" data-sublist="' + sublistId + '" title="Remove" tabindex="-1"><i class="fas fa-times"></i></button></td>';
                 html += '</tr>';
             });
 
@@ -3032,7 +3032,7 @@
 
             // Fill handle element - appears on cell hover/focus
             var fillHandle = '<div class="fill-handle" title="Drag to fill cells below"></div>' +
-                '<button type="button" class="fill-menu-btn" title="Fill options"><i class="fas fa-ellipsis-v"></i></button>';
+                '<button type="button" class="fill-menu-btn" title="Fill options" tabindex="-1"><i class="fas fa-ellipsis-v"></i></button>';
 
             // Detect if this is a select field (by type or by known field ID)
             var isSelectField = field.type === 'select' || this.isSelectField(normalizedFieldId);
@@ -3202,6 +3202,17 @@
             if (fieldType === 'integer' || fieldType === 'INTEGER') return 'integer';
 
             return fieldType || 'text';
+        },
+
+        // Get the focusable input element from a cell
+        getInputInCell: function(cell) {
+            if (!cell) return null;
+            // For typeahead cells, get the visible input (typeahead-input), not the hidden one
+            var typeaheadInput = cell.querySelector('.typeahead-input');
+            if (typeaheadInput) return typeaheadInput;
+            // For regular cells, get the line-input
+            var lineInput = cell.querySelector('.line-input');
+            return lineInput;
         },
 
         // Initialize sublist data structure
@@ -3945,6 +3956,140 @@
                     if (e.ctrlKey && e.shiftKey && e.key === 'D') {
                         e.preventDefault();
                         self.fillDown(cell, true);
+                        return;
+                    }
+
+                    // ========== ARROW KEY NAVIGATION ==========
+                    // Skip if typeahead dropdown is open (arrow keys navigate dropdown)
+                    var wrapper = input.closest('.typeahead-select');
+                    if (wrapper) {
+                        var dropdown = wrapper.querySelector('.typeahead-dropdown');
+                        if (dropdown && dropdown.style.display !== 'none' && dropdown.children.length > 0) {
+                            return; // Let existing typeahead handler deal with it
+                        }
+                    }
+
+                    var row = cell.closest('tr');
+                    var table = row.closest('table');
+                    var rows = table.querySelectorAll('tbody tr');
+                    var cells = row.querySelectorAll('.fill-cell');
+                    var cellIndex = Array.prototype.indexOf.call(cells, cell);
+                    var rowIndex = Array.prototype.indexOf.call(rows, row);
+
+                    // Tab key - move to next cell in table
+                    if (e.key === 'Tab' && !e.ctrlKey && !e.metaKey) {
+                        var nextInput = null;
+
+                        if (e.shiftKey) {
+                            // Shift+Tab - move backwards
+                            if (cellIndex > 0) {
+                                nextInput = self.getInputInCell(cells[cellIndex - 1]);
+                            } else if (rowIndex > 0) {
+                                var prevRow = rows[rowIndex - 1];
+                                var prevCells = prevRow.querySelectorAll('.fill-cell');
+                                if (prevCells.length > 0) {
+                                    nextInput = self.getInputInCell(prevCells[prevCells.length - 1]);
+                                }
+                            }
+                        } else {
+                            // Tab - move forwards
+                            if (cellIndex < cells.length - 1) {
+                                nextInput = self.getInputInCell(cells[cellIndex + 1]);
+                            } else if (rowIndex < rows.length - 1) {
+                                var nextRow = rows[rowIndex + 1];
+                                var nextCells = nextRow.querySelectorAll('.fill-cell');
+                                if (nextCells.length > 0) {
+                                    nextInput = self.getInputInCell(nextCells[0]);
+                                }
+                            }
+                        }
+
+                        if (nextInput) {
+                            e.preventDefault();
+                            nextInput.focus();
+                            if (nextInput.select) nextInput.select();
+                        }
+                        return;
+                    }
+
+                    // Arrow keys for navigation
+                    if (e.key === 'ArrowRight' && !e.ctrlKey && !e.metaKey) {
+                        // Only navigate if cursor is at end of input or input is not a text field
+                        var isAtEnd = input.type !== 'text' || input.selectionStart === input.value.length;
+                        if (isAtEnd && cellIndex < cells.length - 1) {
+                            e.preventDefault();
+                            var nextInput = self.getInputInCell(cells[cellIndex + 1]);
+                            if (nextInput) {
+                                nextInput.focus();
+                                if (nextInput.select) nextInput.select();
+                            }
+                        }
+                        return;
+                    }
+
+                    if (e.key === 'ArrowLeft' && !e.ctrlKey && !e.metaKey) {
+                        // Only navigate if cursor is at start of input or input is not a text field
+                        var isAtStart = input.type !== 'text' || input.selectionStart === 0;
+                        if (isAtStart && cellIndex > 0) {
+                            e.preventDefault();
+                            var prevInput = self.getInputInCell(cells[cellIndex - 1]);
+                            if (prevInput) {
+                                prevInput.focus();
+                                if (prevInput.select) prevInput.select();
+                            }
+                        }
+                        return;
+                    }
+
+                    if (e.key === 'ArrowDown' && !e.ctrlKey && !e.metaKey) {
+                        if (rowIndex < rows.length - 1) {
+                            e.preventDefault();
+                            var nextRow = rows[rowIndex + 1];
+                            var nextCells = nextRow.querySelectorAll('.fill-cell');
+                            if (nextCells[cellIndex]) {
+                                var nextInput = self.getInputInCell(nextCells[cellIndex]);
+                                if (nextInput) {
+                                    nextInput.focus();
+                                    if (nextInput.select) nextInput.select();
+                                }
+                            }
+                        }
+                        return;
+                    }
+
+                    if (e.key === 'ArrowUp' && !e.ctrlKey && !e.metaKey) {
+                        if (rowIndex > 0) {
+                            e.preventDefault();
+                            var prevRow = rows[rowIndex - 1];
+                            var prevCells = prevRow.querySelectorAll('.fill-cell');
+                            if (prevCells[cellIndex]) {
+                                var prevInput = self.getInputInCell(prevCells[cellIndex]);
+                                if (prevInput) {
+                                    prevInput.focus();
+                                    if (prevInput.select) prevInput.select();
+                                }
+                            }
+                        }
+                        return;
+                    }
+
+                    // Enter key - move to next row, same column
+                    if (e.key === 'Enter' && !e.ctrlKey && !e.metaKey && !e.shiftKey) {
+                        // Skip for typeahead inputs (Enter selects option)
+                        if (input.classList.contains('typeahead-input')) return;
+
+                        if (rowIndex < rows.length - 1) {
+                            e.preventDefault();
+                            var nextRow = rows[rowIndex + 1];
+                            var nextCells = nextRow.querySelectorAll('.fill-cell');
+                            if (nextCells[cellIndex]) {
+                                var nextInput = self.getInputInCell(nextCells[cellIndex]);
+                                if (nextInput) {
+                                    nextInput.focus();
+                                    if (nextInput.select) nextInput.select();
+                                }
+                            }
+                        }
                         return;
                     }
                 });
