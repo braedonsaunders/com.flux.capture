@@ -25,8 +25,9 @@ define([
     '/SuiteApps/com.flux.capture/lib/FC_Engine',
     '/SuiteApps/com.flux.capture/lib/FC_Debug',
     '/SuiteApps/com.flux.capture/suitelet/FC_FormSchemaExtractor',
-    '/SuiteApps/com.flux.capture/lib/llm/GeminiVerifier'
-], function(file, record, search, query, runtime, errorModule, log, encode, email, format, task, FC_Engine, fcDebug, FormSchemaExtractor, GeminiVerifierModule) {
+    '/SuiteApps/com.flux.capture/lib/llm/GeminiVerifier',
+    '/SuiteApps/com.flux.capture/lib/matching/POMatchingEngine'
+], function(file, record, search, query, runtime, errorModule, log, encode, email, format, task, FC_Engine, fcDebug, FormSchemaExtractor, GeminiVerifierModule, POMatchingEngine) {
 
     const API_VERSION = '2.0.0';
 
@@ -236,6 +237,15 @@ define([
                 case 'dashboardPrefs':
                     result = getDashboardPrefs(context.userId);
                     break;
+                case 'pomatch':
+                    result = getPOMatchResult(context.docId || context.id);
+                    break;
+                case 'podetails':
+                    result = getPODetails(context.poId);
+                    break;
+                case 'pocandidates':
+                    result = getPOCandidates(context.docId || context.id);
+                    break;
                 default:
                     result = Response.error('INVALID_ACTION', 'Unknown action: ' + action);
             }
@@ -335,6 +345,15 @@ define([
                     break;
                 case 'saveLearning':
                     result = saveLearning(context);
+                    break;
+                case 'confirmmatch':
+                    result = confirmPOMatch(context);
+                    break;
+                case 'rematch':
+                    result = rematchPO(context);
+                    break;
+                case 'clearmatch':
+                    result = clearPOMatch(context);
                     break;
                 default:
                     result = Response.error('INVALID_ACTION', 'Unknown action: ' + action);
@@ -499,7 +518,15 @@ define([
             emailSubject: docRecord.getValue('custrecord_flux_email_subject'),
             rejectionReason: docRecord.getValue('custrecord_flux_rejection_reason'),
             errorMessage: docRecord.getValue('custrecord_flux_error_message'),
-            processingTime: docRecord.getValue('custrecord_flux_processing_time')
+            processingTime: docRecord.getValue('custrecord_flux_processing_time'),
+            // PO Matching fields
+            matchedPO: docRecord.getValue('custrecord_flux_matched_po'),
+            matchedPONumber: docRecord.getText('custrecord_flux_matched_po'),
+            poMatchStatus: docRecord.getValue('custrecord_flux_po_match_status'),
+            poMatchScore: docRecord.getValue('custrecord_flux_po_match_score'),
+            poMatchDetails: JSON.parse(docRecord.getValue('custrecord_flux_po_match_details') || 'null'),
+            poVariance: docRecord.getValue('custrecord_flux_po_variance'),
+            poCandidates: JSON.parse(docRecord.getValue('custrecord_flux_po_candidates') || '[]')
         };
 
         if (document.sourceFile) {
@@ -1331,6 +1358,293 @@ define([
         });
 
         return Response.success(purchaseOrders);
+    }
+
+    // ==================== PO Matching Functions ====================
+
+    /**
+     * Get PO match result for a document
+     * Performs matching if not already done
+     */
+    function getPOMatchResult(docId) {
+        if (!docId) {
+            return Response.error('MISSING_PARAM', 'Document ID is required');
+        }
+
+        try {
+            // Load document
+            var docRecord = record.load({
+                type: 'customrecord_flux_document',
+                id: docId
+            });
+
+            // Check if matching already done
+            var existingMatchDetails = docRecord.getValue('custrecord_flux_po_match_details');
+            if (existingMatchDetails) {
+                var matchDetails = JSON.parse(existingMatchDetails);
+                return Response.success({
+                    cached: true,
+                    matchStatus: docRecord.getValue('custrecord_flux_po_match_status'),
+                    matchScore: docRecord.getValue('custrecord_flux_po_match_score'),
+                    matchedPO: docRecord.getValue('custrecord_flux_matched_po'),
+                    matchedPONumber: docRecord.getText('custrecord_flux_matched_po'),
+                    poVariance: docRecord.getValue('custrecord_flux_po_variance'),
+                    details: matchDetails,
+                    candidates: JSON.parse(docRecord.getValue('custrecord_flux_po_candidates') || '[]')
+                });
+            }
+
+            // Perform matching
+            var invoiceData = {
+                vendorId: docRecord.getValue('custrecord_flux_vendor'),
+                poNumber: docRecord.getValue('custrecord_flux_po_number'),
+                totalAmount: docRecord.getValue('custrecord_flux_total_amount'),
+                subtotal: docRecord.getValue('custrecord_flux_subtotal'),
+                invoiceDate: docRecord.getValue('custrecord_flux_invoice_date'),
+                currency: docRecord.getValue('custrecord_flux_currency'),
+                lineItems: JSON.parse(docRecord.getValue('custrecord_flux_line_items') || '[]')
+            };
+
+            var matchResult = POMatchingEngine.findMatches(invoiceData);
+
+            // Save match results to document
+            if (matchResult.success) {
+                record.submitFields({
+                    type: 'customrecord_flux_document',
+                    id: docId,
+                    values: {
+                        'custrecord_flux_po_match_status': matchResult.matchStatus,
+                        'custrecord_flux_po_match_score': matchResult.topMatch ? matchResult.topMatch.score / 100 : 0,
+                        'custrecord_flux_matched_po': matchResult.recommendation && matchResult.recommendation.poId ? matchResult.recommendation.poId : '',
+                        'custrecord_flux_po_variance': matchResult.topMatch ? matchResult.topMatch.amountVariance : null,
+                        'custrecord_flux_po_match_details': JSON.stringify(matchResult),
+                        'custrecord_flux_po_candidates': JSON.stringify(matchResult.candidates || [])
+                    }
+                });
+            }
+
+            return Response.success({
+                cached: false,
+                ...matchResult
+            });
+        } catch (e) {
+            log.error('getPOMatchResult Error', e);
+            return Response.error('MATCH_ERROR', e.message);
+        }
+    }
+
+    /**
+     * Get detailed PO information including line items
+     */
+    function getPODetails(poId) {
+        if (!poId) {
+            return Response.error('MISSING_PARAM', 'PO ID is required');
+        }
+
+        try {
+            var poRec = record.load({
+                type: record.Type.PURCHASE_ORDER,
+                id: poId
+            });
+
+            var lineItems = [];
+            var lineCount = poRec.getLineCount({ sublistId: 'item' });
+
+            for (var i = 0; i < lineCount; i++) {
+                lineItems.push({
+                    lineNumber: i + 1,
+                    item: poRec.getSublistValue({ sublistId: 'item', fieldId: 'item', line: i }),
+                    itemText: poRec.getSublistText({ sublistId: 'item', fieldId: 'item', line: i }),
+                    description: poRec.getSublistValue({ sublistId: 'item', fieldId: 'description', line: i }),
+                    quantity: parseFloat(poRec.getSublistValue({ sublistId: 'item', fieldId: 'quantity', line: i })) || 0,
+                    rate: parseFloat(poRec.getSublistValue({ sublistId: 'item', fieldId: 'rate', line: i })) || 0,
+                    amount: parseFloat(poRec.getSublistValue({ sublistId: 'item', fieldId: 'amount', line: i })) || 0,
+                    quantityReceived: parseFloat(poRec.getSublistValue({ sublistId: 'item', fieldId: 'quantityreceived', line: i })) || 0,
+                    quantityBilled: parseFloat(poRec.getSublistValue({ sublistId: 'item', fieldId: 'quantitybilled', line: i })) || 0
+                });
+            }
+
+            return Response.success({
+                id: poId,
+                poNumber: poRec.getValue('tranid'),
+                poDate: poRec.getValue('trandate'),
+                vendor: poRec.getValue('entity'),
+                vendorName: poRec.getText('entity'),
+                total: parseFloat(poRec.getValue('total')) || 0,
+                subtotal: parseFloat(poRec.getValue('subtotal')) || 0,
+                status: poRec.getValue('status'),
+                statusText: poRec.getText('status'),
+                currency: poRec.getValue('currency'),
+                currencyText: poRec.getText('currency'),
+                memo: poRec.getValue('memo'),
+                lineItems: lineItems
+            });
+        } catch (e) {
+            log.error('getPODetails Error', e);
+            return Response.error('PO_LOAD_ERROR', e.message);
+        }
+    }
+
+    /**
+     * Get PO candidates for manual selection
+     */
+    function getPOCandidates(docId) {
+        if (!docId) {
+            return Response.error('MISSING_PARAM', 'Document ID is required');
+        }
+
+        try {
+            var docRecord = record.load({
+                type: 'customrecord_flux_document',
+                id: docId
+            });
+
+            // Check for cached candidates
+            var cachedCandidates = docRecord.getValue('custrecord_flux_po_candidates');
+            if (cachedCandidates) {
+                return Response.success(JSON.parse(cachedCandidates));
+            }
+
+            // Perform fresh matching to get candidates
+            var invoiceData = {
+                vendorId: docRecord.getValue('custrecord_flux_vendor'),
+                poNumber: docRecord.getValue('custrecord_flux_po_number'),
+                totalAmount: docRecord.getValue('custrecord_flux_total_amount'),
+                invoiceDate: docRecord.getValue('custrecord_flux_invoice_date'),
+                currency: docRecord.getValue('custrecord_flux_currency'),
+                lineItems: JSON.parse(docRecord.getValue('custrecord_flux_line_items') || '[]')
+            };
+
+            var matchResult = POMatchingEngine.findMatches(invoiceData, { maxCandidates: 10 });
+
+            return Response.success(matchResult.candidates || []);
+        } catch (e) {
+            log.error('getPOCandidates Error', e);
+            return Response.error('CANDIDATES_ERROR', e.message);
+        }
+    }
+
+    /**
+     * Confirm/update PO match for a document
+     */
+    function confirmPOMatch(context) {
+        var docId = context.docId || context.id;
+        var poId = context.poId;
+
+        if (!docId) {
+            return Response.error('MISSING_PARAM', 'Document ID is required');
+        }
+        if (!poId) {
+            return Response.error('MISSING_PARAM', 'PO ID is required');
+        }
+
+        try {
+            // Load document to get invoice data
+            var docRecord = record.load({
+                type: 'customrecord_flux_document',
+                id: docId
+            });
+
+            var invoiceData = {
+                vendorId: docRecord.getValue('custrecord_flux_vendor'),
+                totalAmount: docRecord.getValue('custrecord_flux_total_amount'),
+                lineItems: JSON.parse(docRecord.getValue('custrecord_flux_line_items') || '[]')
+            };
+
+            // Perform 2-way match to get detailed variance info
+            var twoWayResult = POMatchingEngine.performTwoWayMatch(invoiceData, poId);
+
+            // Update document with confirmed match
+            var updateValues = {
+                'custrecord_flux_matched_po': poId,
+                'custrecord_flux_po_match_status': POMatchingEngine.MATCH_STATUS.MANUAL,
+                'custrecord_flux_po_match_score': 1, // 100% for manual confirmation
+                'custrecord_flux_po_match_details': JSON.stringify(twoWayResult)
+            };
+
+            if (twoWayResult.success && twoWayResult.headerVariances) {
+                updateValues['custrecord_flux_po_variance'] = twoWayResult.headerVariances.totalVariance;
+            }
+
+            record.submitFields({
+                type: 'customrecord_flux_document',
+                id: docId,
+                values: updateValues
+            });
+
+            return Response.success({
+                confirmed: true,
+                poId: poId,
+                twoWayResult: twoWayResult
+            });
+        } catch (e) {
+            log.error('confirmPOMatch Error', e);
+            return Response.error('CONFIRM_ERROR', e.message);
+        }
+    }
+
+    /**
+     * Re-run PO matching for a document
+     */
+    function rematchPO(context) {
+        var docId = context.docId || context.id;
+
+        if (!docId) {
+            return Response.error('MISSING_PARAM', 'Document ID is required');
+        }
+
+        try {
+            // Clear existing match data first
+            record.submitFields({
+                type: 'customrecord_flux_document',
+                id: docId,
+                values: {
+                    'custrecord_flux_matched_po': '',
+                    'custrecord_flux_po_match_status': '',
+                    'custrecord_flux_po_match_score': '',
+                    'custrecord_flux_po_match_details': '',
+                    'custrecord_flux_po_variance': '',
+                    'custrecord_flux_po_candidates': ''
+                }
+            });
+
+            // Perform fresh match
+            return getPOMatchResult(docId);
+        } catch (e) {
+            log.error('rematchPO Error', e);
+            return Response.error('REMATCH_ERROR', e.message);
+        }
+    }
+
+    /**
+     * Clear PO match for a document
+     */
+    function clearPOMatch(context) {
+        var docId = context.docId || context.id;
+
+        if (!docId) {
+            return Response.error('MISSING_PARAM', 'Document ID is required');
+        }
+
+        try {
+            record.submitFields({
+                type: 'customrecord_flux_document',
+                id: docId,
+                values: {
+                    'custrecord_flux_matched_po': '',
+                    'custrecord_flux_po_match_status': POMatchingEngine.MATCH_STATUS.NO_PO,
+                    'custrecord_flux_po_match_score': '',
+                    'custrecord_flux_po_match_details': '',
+                    'custrecord_flux_po_variance': '',
+                    'custrecord_flux_po_candidates': ''
+                }
+            });
+
+            return Response.success({ cleared: true });
+        } catch (e) {
+            log.error('clearPOMatch Error', e);
+            return Response.error('CLEAR_ERROR', e.message);
+        }
     }
 
     /**

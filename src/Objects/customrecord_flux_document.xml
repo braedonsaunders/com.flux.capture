@@ -360,5 +360,61 @@
             <displaytype>NORMAL</displaytype>
             <showinlist>F</showinlist>
         </customrecordcustomfield>
+
+        <!-- PO Matching Fields -->
+        <customrecordcustomfield scriptid="custrecord_flux_matched_po">
+            <fieldtype>SELECT</fieldtype>
+            <label>Matched PO</label>
+            <description>Linked purchase order from matching</description>
+            <ismandatory>F</ismandatory>
+            <displaytype>NORMAL</displaytype>
+            <showinlist>F</showinlist>
+            <selectrecordtype>-30</selectrecordtype>
+        </customrecordcustomfield>
+
+        <customrecordcustomfield scriptid="custrecord_flux_po_match_status">
+            <fieldtype>INTEGER</fieldtype>
+            <label>PO Match Status</label>
+            <description>Match status: 1=Pending, 2=Matched, 3=Partial, 4=Exception, 5=No PO, 6=Manual</description>
+            <ismandatory>F</ismandatory>
+            <displaytype>NORMAL</displaytype>
+            <showinlist>F</showinlist>
+        </customrecordcustomfield>
+
+        <customrecordcustomfield scriptid="custrecord_flux_po_match_score">
+            <fieldtype>PERCENT</fieldtype>
+            <label>PO Match Score</label>
+            <description>Confidence score of PO match (0-100%)</description>
+            <ismandatory>F</ismandatory>
+            <displaytype>NORMAL</displaytype>
+            <showinlist>F</showinlist>
+        </customrecordcustomfield>
+
+        <customrecordcustomfield scriptid="custrecord_flux_po_match_details">
+            <fieldtype>CLOBTEXT</fieldtype>
+            <label>PO Match Details</label>
+            <description>Detailed matching results as JSON including variances and line matches</description>
+            <ismandatory>F</ismandatory>
+            <displaytype>HIDDEN</displaytype>
+            <showinlist>F</showinlist>
+        </customrecordcustomfield>
+
+        <customrecordcustomfield scriptid="custrecord_flux_po_variance">
+            <fieldtype>CURRENCY</fieldtype>
+            <label>PO Variance</label>
+            <description>Total variance amount between invoice and matched PO</description>
+            <ismandatory>F</ismandatory>
+            <displaytype>NORMAL</displaytype>
+            <showinlist>F</showinlist>
+        </customrecordcustomfield>
+
+        <customrecordcustomfield scriptid="custrecord_flux_po_candidates">
+            <fieldtype>TEXTAREA</fieldtype>
+            <label>PO Candidates</label>
+            <description>Potential PO matches as JSON array with scores</description>
+            <ismandatory>F</ismandatory>
+            <displaytype>HIDDEN</displaytype>
+            <showinlist>F</showinlist>
+        </customrecordcustomfield>
     </customrecordcustomfields>
 </customrecordtype>

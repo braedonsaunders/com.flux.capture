@@ -2071,6 +2071,345 @@
     background: rgba(217, 119, 6, 0.1);
 }
 
+/* ==========================================
+   PO MATCHING STYLES
+   ========================================== */
+
+/* PO Metric Indicator States */
+.header-metric.po-metric {
+    cursor: pointer;
+}
+
+.header-metric.po-metric .po-icon {
+    position: relative;
+}
+
+.header-metric.po-metric .po-badge {
+    position: absolute;
+    top: -4px;
+    right: -8px;
+    min-width: 18px;
+    height: 18px;
+    font-size: 10px;
+    font-weight: 600;
+    border-radius: 9px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0 4px;
+}
+
+.header-metric.po-matched {
+    color: var(--color-success);
+}
+
+.header-metric.po-matched .po-badge {
+    background: var(--color-success);
+    color: white;
+}
+
+.header-metric.po-partial {
+    color: var(--color-warning);
+}
+
+.header-metric.po-partial .po-badge {
+    background: var(--color-warning);
+    color: white;
+}
+
+.header-metric.po-exception {
+    color: var(--color-error);
+}
+
+.header-metric.po-exception .po-badge {
+    background: var(--color-error);
+    color: white;
+}
+
+.header-metric.po-pending {
+    color: var(--color-primary);
+}
+
+.header-metric.po-pending .po-badge {
+    background: var(--color-primary);
+    color: white;
+}
+
+.header-metric.po-none {
+    color: var(--text-tertiary);
+}
+
+/* PO Dropdown Panel */
+.po-dropdown {
+    position: absolute;
+    top: 100%;
+    left: 0;
+    right: 0;
+    background: var(--surface-card);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-lg);
+    margin-top: var(--space-xs);
+    z-index: 100;
+    max-height: 400px;
+    overflow-y: auto;
+}
+
+.po-dropdown-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: var(--space-sm) var(--space-md);
+    background: var(--gray-50);
+    border-bottom: 1px solid var(--border-color);
+    border-radius: var(--radius-lg) var(--radius-lg) 0 0;
+}
+
+.po-header-left {
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
+    color: var(--text-primary);
+    font-weight: 500;
+}
+
+.po-header-left i {
+    color: var(--color-primary);
+}
+
+.po-header-title {
+    font-size: var(--font-size-sm);
+}
+
+.po-extracted-ref {
+    font-size: var(--font-size-xs);
+    color: var(--text-secondary);
+    background: var(--surface-card);
+    padding: 2px 8px;
+    border-radius: var(--radius-sm);
+    border: 1px solid var(--border-color);
+}
+
+/* Current Match Display */
+.po-current-match {
+    padding: var(--space-md);
+    background: rgba(34, 197, 94, 0.05);
+    border-bottom: 1px solid var(--border-color);
+}
+
+.po-match-info {
+    display: flex;
+    align-items: center;
+    gap: var(--space-md);
+    margin-bottom: var(--space-sm);
+}
+
+.po-link {
+    display: flex;
+    align-items: center;
+    gap: var(--space-xs);
+    color: var(--color-primary);
+    font-weight: 600;
+    text-decoration: none;
+}
+
+.po-link:hover {
+    text-decoration: underline;
+}
+
+.po-link i {
+    font-size: 10px;
+}
+
+.po-match-score {
+    font-size: var(--font-size-xs);
+    color: var(--color-success);
+    background: rgba(34, 197, 94, 0.1);
+    padding: 2px 8px;
+    border-radius: var(--radius-sm);
+}
+
+.po-variance {
+    display: flex;
+    align-items: center;
+    gap: var(--space-xs);
+    font-size: var(--font-size-sm);
+    margin-bottom: var(--space-sm);
+}
+
+.po-variance.variance-ok {
+    color: var(--color-success);
+}
+
+.po-variance.variance-over {
+    color: var(--color-error);
+}
+
+.po-variance.variance-under {
+    color: var(--color-warning);
+}
+
+.po-match-actions {
+    display: flex;
+    gap: var(--space-sm);
+}
+
+.po-match-actions .btn-ghost {
+    padding: 4px 8px;
+    font-size: var(--font-size-xs);
+    color: var(--text-secondary);
+}
+
+.po-match-actions .btn-ghost:hover {
+    color: var(--text-primary);
+    background: var(--gray-100);
+}
+
+/* PO Search Section */
+.po-search-section {
+    padding: var(--space-md);
+    border-bottom: 1px solid var(--border-color);
+}
+
+.po-search-wrapper {
+    display: flex;
+    gap: var(--space-sm);
+}
+
+.po-search-input {
+    flex: 1;
+    padding: var(--space-sm) var(--space-md);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-md);
+    font-size: var(--font-size-sm);
+    background: var(--surface-card);
+    color: var(--text-primary);
+}
+
+.po-search-input:focus {
+    outline: none;
+    border-color: var(--color-primary);
+    box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1);
+}
+
+/* PO Candidates Section */
+.po-candidates-section {
+    padding: var(--space-sm);
+}
+
+.po-candidates-header {
+    font-size: var(--font-size-xs);
+    font-weight: 600;
+    color: var(--text-secondary);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    padding: var(--space-xs) var(--space-sm);
+}
+
+.po-candidates-list {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-xs);
+}
+
+.po-candidate {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    padding: var(--space-sm) var(--space-md);
+    background: var(--surface-card);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-md);
+    cursor: pointer;
+    transition: all var(--transition);
+}
+
+.po-candidate:hover {
+    background: var(--gray-50);
+    border-color: var(--color-primary);
+}
+
+.po-candidate.selected {
+    background: rgba(37, 99, 235, 0.05);
+    border-color: var(--color-primary);
+}
+
+.po-candidate-main {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+}
+
+.po-candidate-number {
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+.po-candidate-score {
+    font-size: var(--font-size-xs);
+    font-weight: 600;
+    color: var(--color-primary);
+    background: rgba(37, 99, 235, 0.1);
+    padding: 2px 8px;
+    border-radius: var(--radius-sm);
+}
+
+.po-candidate-details {
+    display: flex;
+    gap: var(--space-md);
+    font-size: var(--font-size-xs);
+    color: var(--text-secondary);
+}
+
+.po-candidate-variance {
+    font-size: var(--font-size-xs);
+    color: var(--text-tertiary);
+}
+
+.po-candidate-variance.over {
+    color: var(--color-error);
+}
+
+.po-candidate-variance.under {
+    color: var(--color-warning);
+}
+
+.po-candidate-variance.ok {
+    color: var(--color-success);
+}
+
+.po-candidates-empty {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: var(--space-sm);
+    padding: var(--space-lg);
+    color: var(--text-tertiary);
+    text-align: center;
+}
+
+.po-candidates-empty i {
+    font-size: 24px;
+    opacity: 0.5;
+}
+
+.po-candidates-empty p {
+    margin: 0;
+    font-size: var(--font-size-sm);
+}
+
+/* PO Loading State */
+.po-loading {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: var(--space-sm);
+    padding: var(--space-lg);
+    color: var(--text-secondary);
+    font-size: var(--font-size-sm);
+}
+
 .dropdown-empty {
     display: flex;
     align-items: center;
