@@ -948,20 +948,33 @@ Do not include account, department, class, or location fields in line items.
                             if (originalItem) {
                                 const keptItem = { ...originalItem };
                                 // Apply field suggestions (account, department, etc.) if guessing is enabled
+                                // v4.2: Also set display values for UI rendering
                                 if (this.guessAccounts && aiItem.account && confidence >= 0.7) {
                                     keptItem.account = aiItem.account;
+                                    if (aiItem.account_display) {
+                                        keptItem.account_display = aiItem.account_display;
+                                    }
                                     keptItem._accountSuggested = true;
                                 }
                                 if (this.guessDepartments && aiItem.department && confidence >= 0.7) {
                                     keptItem.department = aiItem.department;
+                                    if (aiItem.department_display) {
+                                        keptItem.department_display = aiItem.department_display;
+                                    }
                                     keptItem._departmentSuggested = true;
                                 }
                                 if (this.guessClasses && aiItem.class && confidence >= 0.7) {
                                     keptItem.class = aiItem.class;
+                                    if (aiItem.class_display) {
+                                        keptItem.class_display = aiItem.class_display;
+                                    }
                                     keptItem._classSuggested = true;
                                 }
                                 if (this.guessLocations && aiItem.location && confidence >= 0.7) {
                                     keptItem.location = aiItem.location;
+                                    if (aiItem.location_display) {
+                                        keptItem.location_display = aiItem.location_display;
+                                    }
                                     keptItem._locationSuggested = true;
                                 }
                                 enhancedLineItems.push(keptItem);
@@ -1331,6 +1344,8 @@ Do not include account, department, class, or location fields in line items.
                 );
                 if (matchedAccount) {
                     validated.account = matchedAccount.id;
+                    // v4.2 FIX: Set display value for UI rendering
+                    validated.account_display = matchedAccount.display || matchedAccount.name;
                     validated._accountName = matchedAccount.name;
                     validated._accountValidated = true;
                 } else {
@@ -1350,6 +1365,8 @@ Do not include account, department, class, or location fields in line items.
                 );
                 if (matchedDept) {
                     validated.department = matchedDept.id;
+                    // v4.2 FIX: Set display value for UI rendering
+                    validated.department_display = matchedDept.name;
                     validated._departmentName = matchedDept.name;
                     validated._departmentValidated = true;
                 } else {
@@ -1368,6 +1385,8 @@ Do not include account, department, class, or location fields in line items.
                 );
                 if (matchedClass) {
                     validated.class = matchedClass.id;
+                    // v4.2 FIX: Set display value for UI rendering
+                    validated.class_display = matchedClass.name;
                     validated._className = matchedClass.name;
                     validated._classValidated = true;
                 } else {
@@ -1386,6 +1405,8 @@ Do not include account, department, class, or location fields in line items.
                 );
                 if (matchedLoc) {
                     validated.location = matchedLoc.id;
+                    // v4.2 FIX: Set display value for UI rendering
+                    validated.location_display = matchedLoc.name;
                     validated._locationName = matchedLoc.name;
                     validated._locationValidated = true;
                 } else {
@@ -1476,17 +1497,30 @@ Do not include account, department, class, or location fields in line items.
             }
 
             // Sublist-level fields (only if guessing is enabled and values provided)
+            // v4.2: Also copy display values for UI rendering
             if (aiItem.account) {
                 item.account = aiItem.account;
+                if (aiItem.account_display) {
+                    item.account_display = aiItem.account_display;
+                }
             }
             if (aiItem.department) {
                 item.department = aiItem.department;
+                if (aiItem.department_display) {
+                    item.department_display = aiItem.department_display;
+                }
             }
             if (aiItem.class) {
                 item.class = aiItem.class;
+                if (aiItem.class_display) {
+                    item.class_display = aiItem.class_display;
+                }
             }
             if (aiItem.location) {
                 item.location = aiItem.location;
+                if (aiItem.location_display) {
+                    item.location_display = aiItem.location_display;
+                }
             }
 
             // Metadata
