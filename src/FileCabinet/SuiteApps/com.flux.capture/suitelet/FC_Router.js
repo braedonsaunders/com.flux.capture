@@ -4238,7 +4238,60 @@ define([
             }
         }
 
-        return txnRecord ? txnRecord.save() : null;
+        if (!txnRecord) {
+            return null;
+        }
+
+        // Validate required fields before save
+        var validationErrors = [];
+
+        // Check for line items
+        var expenseCount = txnRecord.getLineCount({ sublistId: 'expense' });
+        var itemCount = 0;
+        try { itemCount = txnRecord.getLineCount({ sublistId: 'item' }); } catch (e) { /* item sublist may not exist */ }
+
+        if (expenseCount === 0 && itemCount === 0) {
+            validationErrors.push({ field: 'sublists', message: 'At least one expense or item line is required' });
+        }
+
+        // Check expense lines have account
+        for (var i = 0; i < expenseCount; i++) {
+            var account = txnRecord.getSublistValue({ sublistId: 'expense', fieldId: 'account', line: i });
+            if (!account) {
+                validationErrors.push({ field: 'expense[' + i + '].account', message: 'Account is required for expense line ' + (i + 1) });
+            }
+        }
+
+        // Check item lines have item
+        for (var j = 0; j < itemCount; j++) {
+            var item = txnRecord.getSublistValue({ sublistId: 'item', fieldId: 'item', line: j });
+            if (!item) {
+                validationErrors.push({ field: 'item[' + j + '].item', message: 'Item is required for item line ' + (j + 1) });
+            }
+        }
+
+        if (validationErrors.length > 0) {
+            var validationError = error.create({
+                name: 'VALIDATION_ERROR',
+                message: 'Transaction validation failed'
+            });
+            validationError.type = 'VALIDATION_ERROR';
+            validationError.errors = validationErrors;
+            throw validationError;
+        }
+
+        // Try to save and capture detailed error
+        try {
+            return txnRecord.save();
+        } catch (saveError) {
+            log.error('Transaction save failed', {
+                name: saveError.name,
+                message: saveError.message,
+                id: saveError.id,
+                stack: saveError.stack
+            });
+            throw saveError;
+        }
     }
 
     // ==================== Provider Configuration Handlers ====================
