@@ -3387,10 +3387,16 @@ body.topbar-minimized .view-review.split-view .review-content {
 }
 
 .sublist-table {
-    min-width: max-content; /* Allow table to expand beyond container for horizontal scroll */
+    width: 100%; /* Default: fit to container width */
     font-size: var(--font-size-sm);
     table-layout: auto; /* Allow columns to size based on content and explicit widths */
     border-collapse: collapse;
+}
+
+/* When table has many columns, allow horizontal scroll */
+.sublist-table.scrollable {
+    width: auto;
+    min-width: 100%;
 }
 
 .sublist-table th {
