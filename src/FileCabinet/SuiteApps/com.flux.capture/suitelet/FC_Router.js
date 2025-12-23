@@ -4425,7 +4425,15 @@ define([
                 warnings: warnings
             }, 'Document approved');
         } catch (e) {
-            log.error('Approve error', { name: e.name, message: e.message, stack: e.stack, id: e.id });
+            log.error('Approve error', {
+                name: e.name,
+                message: e.message,
+                stack: e.stack,
+                id: e.id,
+                failedFields: e.failedFields,
+                transactionType: e.transactionType
+            });
+
             // Check for validation error type
             if (e.type === 'VALIDATION_ERROR') {
                 return Response.error('VALIDATION_FAILED', e.message, {
@@ -4433,15 +4441,28 @@ define([
                     warnings: e.warnings || []
                 });
             }
-            // Include more error details for debugging
+
+            // Build detailed error information
             var errorMessage = e.message || 'Unknown error';
-            if (e.name && e.name !== 'Error') {
-                errorMessage = e.name + ': ' + errorMessage;
+            var errors = [{ field: null, message: errorMessage }];
+
+            // Add failed fields as individual errors for better UI display
+            if (e.failedFields && e.failedFields.length > 0) {
+                e.failedFields.forEach(function(ff) {
+                    errors.push({
+                        field: ff.field,
+                        message: 'Failed to set ' + ff.field + ': ' + ff.reason
+                    });
+                });
             }
+
             return Response.error('APPROVE_FAILED', errorMessage, {
-                errors: [{ field: null, message: errorMessage }],
+                errors: errors,
                 errorType: e.name,
-                errorId: e.id || null
+                errorId: e.id || null,
+                transactionType: e.transactionType,
+                failedFields: e.failedFields || [],
+                originalError: e.originalError
             });
         }
     }
@@ -5034,6 +5055,9 @@ define([
             return dateFields.indexOf(lowerFieldId) !== -1 || lowerFieldId.match(/date$/);
         }
 
+        // Track fields that were set successfully and those that failed
+        var fieldSetResults = { success: [], failed: [] };
+
         // Helper to set body field value safely
         function setBodyField(txn, fieldId, value) {
             if (!fieldId || value === undefined || value === null || value === '') return;
@@ -5046,12 +5070,15 @@ define([
                     valueToSet = parseDateValue(value);
                     if (!valueToSet) {
                         log.debug('setBodyField', 'Could not parse date for ' + fieldId + ': ' + value);
+                        fieldSetResults.failed.push({ field: fieldId, reason: 'date parse failed', value: String(value).substring(0, 50) });
                         return;
                     }
                 }
                 txn.setValue({ fieldId: fieldId, value: valueToSet });
+                fieldSetResults.success.push(fieldId);
             } catch (e) {
                 log.debug('setBodyField', 'Could not set ' + fieldId + ': ' + e.message);
+                fieldSetResults.failed.push({ field: fieldId, reason: e.message, value: String(value).substring(0, 50) });
             }
         }
 
@@ -5067,12 +5094,14 @@ define([
                     valueToSet = parseDateValue(value);
                     if (!valueToSet) {
                         log.debug('setSublistField', 'Could not parse date for ' + sublistId + '.' + fieldId + ': ' + value);
+                        fieldSetResults.failed.push({ field: sublistId + '.' + fieldId, reason: 'date parse failed', value: String(value).substring(0, 50) });
                         return;
                     }
                 }
                 txn.setCurrentSublistValue({ sublistId: sublistId, fieldId: fieldId, value: valueToSet });
             } catch (e) {
                 log.debug('setSublistField', 'Could not set ' + sublistId + '.' + fieldId + ': ' + e.message);
+                fieldSetResults.failed.push({ field: sublistId + '.' + fieldId, reason: e.message, value: String(value).substring(0, 50) });
             }
         }
 
@@ -5221,17 +5250,83 @@ define([
             throw validationError;
         }
 
+        // Log transaction state before save for debugging
+        log.debug('createTransaction.preSave', {
+            transactionType: transactionType,
+            entity: txnRecord.getValue('entity'),
+            trandate: txnRecord.getValue('trandate'),
+            expenseLineCount: expenseCount,
+            itemLineCount: itemCount,
+            fieldsSetCount: fieldSetResults.success.length,
+            fieldsFailedCount: fieldSetResults.failed.length
+        });
+
+        // Log failed fields if any
+        if (fieldSetResults.failed.length > 0) {
+            log.audit('createTransaction.failedFields', fieldSetResults.failed);
+        }
+
         // Try to save and capture detailed error
         try {
             return txnRecord.save();
         } catch (saveError) {
-            log.error('Transaction save failed', {
+            // Extract as much detail as possible from the error
+            var errorDetails = {
                 name: saveError.name,
                 message: saveError.message,
                 id: saveError.id,
-                stack: saveError.stack
+                cause: saveError.cause,
+                type: saveError.type,
+                code: saveError.code,
+                details: saveError.details,
+                failedFields: fieldSetResults.failed
+            };
+
+            // Try to get additional error properties
+            try {
+                var errorKeys = Object.keys(saveError);
+                errorDetails.allProperties = errorKeys;
+                errorKeys.forEach(function(key) {
+                    if (!errorDetails[key] && key !== 'stack') {
+                        errorDetails[key] = saveError[key];
+                    }
+                });
+            } catch (e) { /* ignore */ }
+
+            log.error('Transaction save failed', errorDetails);
+
+            // Create a more informative error for the user
+            var userMessage = saveError.message || 'Transaction save failed';
+            var failedFieldsMsg = '';
+
+            // Add failed fields info if any
+            if (fieldSetResults.failed.length > 0) {
+                failedFieldsMsg = ' Failed to set: ' + fieldSetResults.failed.map(function(f) {
+                    return f.field + ' (' + f.reason + ')';
+                }).join(', ') + '.';
+            }
+
+            // Check for common NetSuite error patterns and provide helpful messages
+            if (userMessage.indexOf('UNEXPECTED_ERROR') !== -1) {
+                userMessage = 'NetSuite rejected the transaction. This usually means a required field is missing or has an invalid value.' + failedFieldsMsg;
+                if (!failedFieldsMsg) {
+                    userMessage += ' Check the NetSuite execution log for error ID: ' + (saveError.id || 'unknown');
+                }
+            }
+
+            // Create enhanced error with more details
+            var enhancedError = error.create({
+                name: saveError.name || 'SAVE_FAILED',
+                message: userMessage
             });
-            throw saveError;
+            enhancedError.id = saveError.id;
+            enhancedError.originalError = saveError.name + ': ' + saveError.message;
+            enhancedError.transactionType = transactionType;
+            enhancedError.expenseLineCount = expenseCount;
+            enhancedError.itemLineCount = itemCount;
+            enhancedError.failedFields = fieldSetResults.failed;
+
+            throw enhancedError;
         }
     }
 
