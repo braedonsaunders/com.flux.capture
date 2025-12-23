@@ -681,17 +681,27 @@
             // Collect sublist data from sublistData (already tracked)
             // Filter out empty/default rows that have no meaningful data
             if (this.sublistData) {
+                console.log('[Flux] collectFormData - sublistData keys:', Object.keys(this.sublistData));
                 Object.keys(this.sublistData).forEach(function(sublistId) {
                     var normalizedId = sublistId.toLowerCase();
                     var lines = self.sublistData[sublistId] || [];
+
+                    console.log('[Flux] collectFormData - sublist "' + sublistId + '" has ' + lines.length + ' lines');
+                    if (lines.length > 0) {
+                        console.log('[Flux] collectFormData - first line keys:', Object.keys(lines[0]));
+                        console.log('[Flux] collectFormData - first line data:', JSON.stringify(lines[0]));
+                    }
 
                     // Filter out empty lines
                     var nonEmptyLines = lines.filter(function(line) {
                         return self.isSublistLinePopulated(normalizedId, line);
                     });
 
+                    console.log('[Flux] collectFormData - after filter: ' + nonEmptyLines.length + ' non-empty lines');
                     sublists[normalizedId] = nonEmptyLines;
                 });
+            } else {
+                console.log('[Flux] collectFormData - NO sublistData!');
             }
 
             // Merge tracked changes into bodyFields
