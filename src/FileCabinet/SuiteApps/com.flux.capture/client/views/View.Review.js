@@ -2437,29 +2437,47 @@
             var isSubtotalRequired = this.isFieldMandatory('subtotal', bodyFields);
             var isTaxRequired = this.isFieldMandatory('taxAmount', bodyFields) || this.isFieldMandatory('taxtotal', bodyFields);
             var isTotalRequired = this.isFieldMandatory('totalAmount', bodyFields) || this.isFieldMandatory('usertotal', bodyFields) || this.isFieldMandatory('total', bodyFields);
-            html += '<div class="form-section amounts-section">' +
-                '<h4><i class="fas fa-calculator"></i> Amounts</h4>' +
-                '<div class="form-row">' +
-                    '<div class="form-field' + (isSubtotalRequired ? ' is-required' : '') + '">' +
-                        '<label>Subtotal ' + this.renderConfidenceBadge('subtotal') + (isSubtotalRequired ? ' <span class="required">*</span>' : '') + '</label>' +
-                        '<div class="input-with-prefix">' +
-                            '<span class="input-prefix">$</span>' +
-                            '<input type="number" step="0.01" id="field-subtotal" data-field="subtotal" value="' + (doc.subtotal || 0).toFixed(2) + '">' +
-                        '</div>' +
-                    '</div>' +
-                    '<div class="form-field' + (isTaxRequired ? ' is-required' : '') + '">' +
-                        '<label>Tax ' + this.renderConfidenceBadge('taxAmount') + (isTaxRequired ? ' <span class="required">*</span>' : '') + '</label>' +
-                        '<div class="input-with-prefix">' +
-                            '<span class="input-prefix">$</span>' +
-                            '<input type="number" step="0.01" id="field-taxAmount" data-field="taxtotal" value="' + (doc.taxAmount || 0).toFixed(2) + '">' +
-                        '</div>' +
-                    '</div>' +
+            html += '<div class="amounts-summary-card">' +
+                '<div class="amounts-header">' +
+                    '<div class="amounts-header-icon"><i class="fas fa-receipt"></i></div>' +
+                    '<span class="amounts-header-title">Summary</span>' +
                 '</div>' +
-                '<div class="form-field total-field' + (isTotalRequired ? ' is-required' : '') + '">' +
-                    '<label>Total Amount ' + this.renderConfidenceBadge('totalAmount') + (isTotalRequired ? ' <span class="required">*</span>' : '') + '</label>' +
-                    '<div class="input-with-prefix total-input">' +
-                        '<span class="input-prefix">$</span>' +
-                        '<input type="number" step="0.01" id="field-totalAmount" data-field="total" value="' + (doc.totalAmount || 0).toFixed(2) + '">' +
+                '<div class="amounts-body">' +
+                    '<div class="amounts-line-items">' +
+                        '<div class="amount-row' + (isSubtotalRequired ? ' is-required' : '') + '">' +
+                            '<div class="amount-label">' +
+                                '<span class="amount-label-text">Subtotal</span>' +
+                                this.renderConfidenceBadge('subtotal') +
+                                (isSubtotalRequired ? '<span class="required">*</span>' : '') +
+                            '</div>' +
+                            '<div class="amount-value">' +
+                                '<span class="currency-symbol">$</span>' +
+                                '<input type="number" step="0.01" id="field-subtotal" data-field="subtotal" value="' + (doc.subtotal || 0).toFixed(2) + '">' +
+                            '</div>' +
+                        '</div>' +
+                        '<div class="amount-row' + (isTaxRequired ? ' is-required' : '') + '">' +
+                            '<div class="amount-label">' +
+                                '<span class="amount-label-text">Tax</span>' +
+                                this.renderConfidenceBadge('taxAmount') +
+                                (isTaxRequired ? '<span class="required">*</span>' : '') +
+                            '</div>' +
+                            '<div class="amount-value">' +
+                                '<span class="currency-symbol">$</span>' +
+                                '<input type="number" step="0.01" id="field-taxAmount" data-field="taxtotal" value="' + (doc.taxAmount || 0).toFixed(2) + '">' +
+                            '</div>' +
+                        '</div>' +
+                    '</div>' +
+                    '<div class="amounts-divider"></div>' +
+                    '<div class="amount-total-row' + (isTotalRequired ? ' is-required' : '') + '">' +
+                        '<div class="amount-total-label">' +
+                            '<span class="amount-total-label-text">Total</span>' +
+                            this.renderConfidenceBadge('totalAmount') +
+                            (isTotalRequired ? '<span class="required">*</span>' : '') +
+                        '</div>' +
+                        '<div class="amount-total-value">' +
+                            '<span class="currency-symbol">$</span>' +
+                            '<input type="number" step="0.01" id="field-totalAmount" data-field="total" value="' + (doc.totalAmount || 0).toFixed(2) + '">' +
+                        '</div>' +
                     '</div>' +
                 '</div>' +
             '</div>';
