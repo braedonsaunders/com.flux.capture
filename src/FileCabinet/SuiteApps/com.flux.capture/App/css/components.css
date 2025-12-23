@@ -3642,15 +3642,15 @@ body.topbar-minimized .view-review.split-view .review-content {
 
 /* Fill popover menu */
 .fill-popover {
-    position: absolute;
-    top: 100%;
-    right: 0;
-    margin-top: 4px;
+    position: fixed;
+    top: 0;
+    left: 0;
+    margin-top: 0;
     background: var(--surface-card);
     border: 1px solid var(--border-color);
     border-radius: var(--radius-md);
     box-shadow: var(--shadow-lg);
-    z-index: 10002;
+    z-index: 12050;
     min-width: 180px;
     opacity: 0;
     transform: translateY(-4px);
