@@ -550,7 +550,22 @@ define(['N/log', 'N/query', 'N/search', '../FC_Debug'], function(log, query, sea
                 }
             }
 
-            // CHECK 2: Candidate name is a substring of search (or vice versa)
+            // CHECK 2: Candidate name starts with search term
+            // "MAMMOET" should match "Mammoet Canada Eastern Ltd." with high confidence
+            if (finalScore === 0 && normalizedSearch.length >= 3) {
+                if (normalizedCandidate.startsWith(normalizedSearch)) {
+                    // Search term is the beginning of candidate - very strong match
+                    // e.g., "mammoet" matches "mammoet canada eastern"
+                    finalScore = 0.92;
+                    matchReason = 'CANDIDATE_STARTS_WITH_SEARCH';
+                } else if (normalizedSearch.startsWith(normalizedCandidate)) {
+                    // Candidate is the beginning of search - also strong
+                    finalScore = 0.88;
+                    matchReason = 'SEARCH_STARTS_WITH_CANDIDATE';
+                }
+            }
+
+            // CHECK 3: Candidate name is a substring of search (or vice versa)
             // "Xplore Inc" in "Xplore Business, a division of Xplore Inc" should match highly
             if (finalScore === 0 && normalizedCandidate.length >= 4) {
                 if (normalizedSearch.includes(normalizedCandidate)) {
@@ -566,7 +581,7 @@ define(['N/log', 'N/query', 'N/search', '../FC_Debug'], function(log, query, sea
                 }
             }
 
-            // CHECK 3: All candidate tokens found in search
+            // CHECK 4: All candidate tokens found in search
             // If candidate is "Xplore" and search contains "xplore", that's a strong match
             if (finalScore === 0 && candidateTokens.length > 0) {
                 const candidateTokensInSearch = candidateTokens.filter(ct =>
@@ -582,7 +597,7 @@ define(['N/log', 'N/query', 'N/search', '../FC_Debug'], function(log, query, sea
                 }
             }
 
-            // CHECK 4: Traditional scoring (fallback)
+            // CHECK 5: Traditional scoring (fallback)
             if (finalScore === 0) {
                 const tokenScore = this.calculateTokenScore(searchTokens, candidateTokens);
                 const levenshteinScore = this.calculateLevenshteinScore(normalizedSearch, normalizedCandidate);
@@ -778,12 +793,16 @@ define(['N/log', 'N/query', 'N/search', '../FC_Debug'], function(log, query, sea
 
         /**
          * Normalize vendor name
+         * Includes unicode normalization to handle diacritics (ë→e, é→e, etc.)
          */
         normalizeVendorName(name) {
             if (!name) return '';
 
             return String(name)
                 .toLowerCase()
+                // Normalize unicode and remove diacritics (ë→e, é→e, ñ→n, etc.)
+                .normalize('NFD')
+                .replace(/[\u0300-\u036f]/g, '')
                 .replace(/[.,'"!?()]/g, '')
                 .replace(new RegExp(`\\b(${this.COMPANY_SUFFIXES.join('|')})\\.?\\b`, 'gi'), '')
                 .replace(/\s+/g, ' ')
