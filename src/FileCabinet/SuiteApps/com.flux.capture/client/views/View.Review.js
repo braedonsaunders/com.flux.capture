@@ -1954,6 +1954,8 @@
                             '<span class="metric-label">Alert' + (totalAlerts > 1 ? 's' : '') + '</span>' +
                             '<i class="fas fa-chevron-down metric-chevron"></i>' +
                         '</div>' : '') +
+                    // PO Matching indicator (subtle integration)
+                    this.renderPOMatchIndicator(doc) +
                     // Spacer
                     '<div class="header-spacer"></div>' +
                     // Additional fields indicator (if any)
@@ -2109,6 +2111,8 @@
                     '</div>' : '') +
                 // Extraction pool dropdown
                 (unmatchedCount > 0 ? this.renderExtractionPoolDropdown() : '') +
+                // PO Match dropdown (shown when PO indicator is clicked)
+                this.renderPOMatchDropdown(doc) +
             '</div>';
 
             // ========== ENTITY SECTION (vendor for bills, employee for expense reports) ==========
@@ -3279,6 +3283,62 @@
 
                 // Bind chip actions within pool dropdown
                 self.bindPoolChipEvents();
+            }
+
+            // Toggle PO match dropdown in unified header
+            var poToggle = el('#po-match-toggle');
+            if (poToggle) {
+                poToggle.onclick = function(e) {
+                    e.stopPropagation();
+                    var dropdown = el('#po-dropdown');
+                    var alertDetails = el('#alert-details');
+                    var poolDropdown = el('#pool-dropdown');
+                    var chevron = poToggle.querySelector('.metric-chevron');
+
+                    // Close other dropdowns if open
+                    if (alertDetails && alertDetails.style.display !== 'none') {
+                        alertDetails.style.display = 'none';
+                        var alertToggleEl = el('#alert-status-toggle');
+                        if (alertToggleEl) {
+                            alertToggleEl.classList.remove('active');
+                            var alertChevron = alertToggleEl.querySelector('.metric-chevron');
+                            if (alertChevron) {
+                                alertChevron.classList.remove('fa-chevron-up');
+                                alertChevron.classList.add('fa-chevron-down');
+                            }
+                        }
+                    }
+                    if (poolDropdown && poolDropdown.style.display !== 'none') {
+                        poolDropdown.style.display = 'none';
+                        var poolToggleEl = el('#pool-header-toggle');
+                        if (poolToggleEl) {
+                            poolToggleEl.classList.remove('active');
+                            var poolChevron = poolToggleEl.querySelector('.metric-chevron');
+                            if (poolChevron) {
+                                poolChevron.classList.remove('fa-chevron-up');
+                                poolChevron.classList.add('fa-chevron-down');
+                            }
+                        }
+                    }
+
+                    if (dropdown) {
+                        var isHidden = dropdown.style.display === 'none';
+                        dropdown.style.display = isHidden ? 'block' : 'none';
+                        poToggle.classList.toggle('active', isHidden);
+                        if (chevron) {
+                            chevron.classList.toggle('fa-chevron-down', !isHidden);
+                            chevron.classList.toggle('fa-chevron-up', isHidden);
+                        }
+
+                        // Load PO match data when first opened
+                        if (isHidden && (!self.data.poCandidates || self.data.poCandidates.length === 0)) {
+                            self.loadPOMatchData();
+                        }
+                    }
+                };
+
+                // Bind PO dropdown events
+                self.bindPODropdownEvents();
             }
 
             // Track all field changes
@@ -7096,6 +7156,470 @@
             html += '</div>'; // close extraction-pool-panel
 
             return html;
+        },
+
+        // ==================== PO MATCHING UI ====================
+
+        /**
+         * Render the PO matching indicator in the header bar
+         * Subtle integration - only shows when relevant
+         */
+        renderPOMatchIndicator: function(doc) {
+            // Only show for vendor bills and similar transaction types (not expense reports)
+            if (this.transactionType === 'expensereport') {
+                return '';
+            }
+
+            // Check if there's a PO number extracted or existing match
+            var hasPONumber = doc.poNumber || (doc.extractedData && doc.extractedData.poNumber);
+            var hasMatch = doc.matchedPO || doc.poMatchStatus;
+            var matchScore = doc.poMatchScore ? Math.round(parseFloat(doc.poMatchScore) * 100) : 0;
+            var matchStatus = parseInt(doc.poMatchStatus) || 0;
+
+            // PO Match Status: 1=Pending, 2=Matched, 3=Partial, 4=Exception, 5=No PO, 6=Manual
+            var statusInfo = this.getPOMatchStatusInfo(matchStatus, matchScore, hasPONumber);
+
+            // If no PO data at all and no extracted PO number, just show search option
+            if (!hasPONumber && !hasMatch && matchStatus === 0) {
+                return '<div class="header-metric po-metric po-none" id="po-match-toggle" title="Link to Purchase Order">' +
+                    '<div class="metric-icon po-icon">' +
+                        '<i class="fas fa-file-invoice"></i>' +
+                    '</div>' +
+                    '<span class="metric-label">Link PO</span>' +
+                    '<i class="fas fa-chevron-down metric-chevron"></i>' +
+                '</div>';
+            }
+
+            return '<div class="header-metric po-metric ' + statusInfo.cssClass + '" id="po-match-toggle" title="' + statusInfo.tooltip + '">' +
+                '<div class="metric-icon po-icon">' +
+                    '<i class="fas fa-' + statusInfo.icon + '"></i>' +
+                    (matchScore > 0 && matchStatus !== 5 ? '<span class="metric-badge po-badge">' + matchScore + '</span>' : '') +
+                '</div>' +
+                '<span class="metric-label">' + statusInfo.label + '</span>' +
+                '<i class="fas fa-chevron-down metric-chevron"></i>' +
+            '</div>';
+        },
+
+        /**
+         * Get status info for PO match display
+         */
+        getPOMatchStatusInfo: function(status, score, hasPONumber) {
+            var info = {
+                icon: 'file-invoice',
+                label: 'PO Match',
+                cssClass: 'po-pending',
+                tooltip: 'Click to view PO matching details'
+            };
+
+            switch (status) {
+                case 2: // Matched
+                    info.icon = 'link';
+                    info.label = 'PO Linked';
+                    info.cssClass = 'po-matched';
+                    info.tooltip = 'Invoice matched to Purchase Order (' + score + '% confidence)';
+                    break;
+                case 3: // Partial
+                    info.icon = 'unlink';
+                    info.label = 'Partial';
+                    info.cssClass = 'po-partial';
+                    info.tooltip = 'Partial match - review recommended';
+                    break;
+                case 4: // Exception
+                    info.icon = 'exclamation-circle';
+                    info.label = 'Exception';
+                    info.cssClass = 'po-exception';
+                    info.tooltip = 'PO matching exception - manual review required';
+                    break;
+                case 5: // No PO
+                    info.icon = 'file-invoice';
+                    info.label = 'No PO';
+                    info.cssClass = 'po-none';
+                    info.tooltip = 'No purchase order linked';
+                    break;
+                case 6: // Manual
+                    info.icon = 'user-check';
+                    info.label = 'Manual';
+                    info.cssClass = 'po-matched';
+                    info.tooltip = 'Manually matched to Purchase Order';
+                    break;
+                default: // Pending or unknown
+                    if (hasPONumber) {
+                        info.icon = 'search';
+                        info.label = 'Find PO';
+                        info.cssClass = 'po-pending';
+                        info.tooltip = 'PO reference found - click to match';
+                    }
+                    break;
+            }
+
+            return info;
+        },
+
+        /**
+         * Render the PO match dropdown panel
+         */
+        renderPOMatchDropdown: function(doc) {
+            if (this.transactionType === 'expensereport') {
+                return '';
+            }
+
+            var poNumber = doc.poNumber || (doc.extractedData && doc.extractedData.poNumber) || '';
+            var matchStatus = parseInt(doc.poMatchStatus) || 0;
+            var matchedPO = doc.matchedPO;
+            var matchedPONumber = doc.matchedPONumber || '';
+            var matchScore = doc.poMatchScore ? Math.round(parseFloat(doc.poMatchScore) * 100) : 0;
+            var variance = doc.poVariance || 0;
+            var candidates = doc.poCandidates || [];
+
+            var html = '<div class="header-dropdown po-dropdown" id="po-dropdown" style="display:none;">';
+
+            // Header with extracted PO reference
+            html += '<div class="po-dropdown-header">' +
+                '<div class="po-header-left">' +
+                    '<i class="fas fa-file-invoice"></i>' +
+                    '<span class="po-header-title">Purchase Order Matching</span>' +
+                '</div>' +
+                (poNumber ? '<span class="po-extracted-ref" title="Extracted from invoice">Ref: ' + escapeHtml(poNumber) + '</span>' : '') +
+            '</div>';
+
+            // Current match status
+            if (matchedPO && matchStatus !== 5) {
+                var varianceClass = variance > 0 ? 'variance-over' : (variance < 0 ? 'variance-under' : 'variance-ok');
+                html += '<div class="po-current-match">' +
+                    '<div class="po-match-info">' +
+                        '<a href="/app/accounting/transactions/purchord.nl?id=' + matchedPO + '" target="_blank" class="po-link">' +
+                            '<i class="fas fa-external-link-alt"></i> ' + escapeHtml(matchedPONumber) +
+                        '</a>' +
+                        '<span class="po-match-score">' + matchScore + '% match</span>' +
+                    '</div>' +
+                    (variance !== 0 ? '<div class="po-variance ' + varianceClass + '">' +
+                        '<i class="fas fa-' + (variance > 0 ? 'arrow-up' : 'arrow-down') + '"></i> ' +
+                        '$' + Math.abs(variance).toFixed(2) + ' variance' +
+                    '</div>' : '<div class="po-variance variance-ok"><i class="fas fa-check"></i> Exact match</div>') +
+                    '<div class="po-match-actions">' +
+                        '<button class="btn btn-sm btn-ghost" id="btn-po-rematch" title="Find different PO">' +
+                            '<i class="fas fa-sync-alt"></i> Rematch' +
+                        '</button>' +
+                        '<button class="btn btn-sm btn-ghost" id="btn-po-clear" title="Remove PO link">' +
+                            '<i class="fas fa-unlink"></i> Unlink' +
+                        '</button>' +
+                    '</div>' +
+                '</div>';
+            } else {
+                // Show search/match interface
+                html += '<div class="po-search-section">' +
+                    '<div class="po-search-wrapper">' +
+                        '<input type="text" id="po-search-input" class="po-search-input" ' +
+                            'placeholder="Search by PO number..." value="' + escapeHtml(poNumber) + '">' +
+                        '<button class="btn btn-sm btn-primary" id="btn-po-search">' +
+                            '<i class="fas fa-search"></i>' +
+                        '</button>' +
+                    '</div>' +
+                '</div>';
+            }
+
+            // Candidates list
+            html += '<div class="po-candidates-section" id="po-candidates-container">';
+            if (candidates.length > 0) {
+                html += '<div class="po-candidates-header">Suggested matches</div>';
+                html += '<div class="po-candidates-list">';
+                candidates.forEach(function(c) {
+                    var isSelected = matchedPO && c.id == matchedPO;
+                    html += '<div class="po-candidate' + (isSelected ? ' selected' : '') + '" data-po-id="' + c.id + '">' +
+                        '<div class="po-candidate-main">' +
+                            '<span class="po-candidate-number">' + escapeHtml(c.poNumber) + '</span>' +
+                            '<span class="po-candidate-score">' + c.score + '%</span>' +
+                        '</div>' +
+                        '<div class="po-candidate-details">' +
+                            '<span class="po-candidate-total">$' + (c.total || 0).toFixed(2) + '</span>' +
+                            '<span class="po-candidate-date">' + (c.poDate || '') + '</span>' +
+                        '</div>' +
+                        (c.amountVariance !== null ? '<div class="po-candidate-variance">' +
+                            'Var: ' + (c.amountVariance >= 0 ? '+' : '') + '$' + (c.amountVariance || 0).toFixed(2) +
+                        '</div>' : '') +
+                    '</div>';
+                });
+                html += '</div>';
+            } else if (!matchedPO) {
+                html += '<div class="po-candidates-empty">' +
+                    '<i class="fas fa-search"></i>' +
+                    '<p>Click search or enter a PO number to find matches</p>' +
+                '</div>';
+            }
+            html += '</div>';
+
+            // Loading state placeholder
+            html += '<div class="po-loading" id="po-loading" style="display:none;">' +
+                '<div class="loading-spinner"></div>' +
+                '<span>Finding matches...</span>' +
+            '</div>';
+
+            html += '</div>';
+
+            return html;
+        },
+
+        /**
+         * Load PO match data for current document
+         */
+        loadPOMatchData: function() {
+            var self = this;
+            var loadingEl = el('#po-loading');
+            var candidatesContainer = el('#po-candidates-container');
+
+            if (loadingEl) loadingEl.style.display = 'flex';
+            if (candidatesContainer) candidatesContainer.style.display = 'none';
+
+            API.get('pomatch', { id: this.docId })
+                .then(function(result) {
+                    if (loadingEl) loadingEl.style.display = 'none';
+                    if (candidatesContainer) candidatesContainer.style.display = 'block';
+
+                    if (result && result.candidates) {
+                        self.data.poCandidates = result.candidates;
+                        self.data.poMatchStatus = result.matchStatus;
+                        self.data.poMatchScore = result.matchScore;
+                        self.updatePOCandidatesUI(result.candidates);
+                    }
+
+                    // Update the header indicator
+                    self.updatePOIndicator(result);
+                })
+                .catch(function(err) {
+                    if (loadingEl) loadingEl.style.display = 'none';
+                    if (candidatesContainer) candidatesContainer.style.display = 'block';
+                    console.error('[PO Match] Error:', err);
+                    UI.toast('Failed to load PO matches', 'error');
+                });
+        },
+
+        /**
+         * Update PO candidates in the UI
+         */
+        updatePOCandidatesUI: function(candidates) {
+            var container = el('#po-candidates-container');
+            if (!container) return;
+
+            if (!candidates || candidates.length === 0) {
+                container.innerHTML = '<div class="po-candidates-empty">' +
+                    '<i class="fas fa-inbox"></i>' +
+                    '<p>No matching POs found for this vendor</p>' +
+                '</div>';
+                return;
+            }
+
+            var matchedPO = this.data.matchedPO;
+            var html = '<div class="po-candidates-header">Suggested matches (' + candidates.length + ')</div>';
+            html += '<div class="po-candidates-list">';
+
+            candidates.forEach(function(c) {
+                var isSelected = matchedPO && c.id == matchedPO;
+                html += '<div class="po-candidate' + (isSelected ? ' selected' : '') + '" data-po-id="' + c.id + '">' +
+                    '<div class="po-candidate-main">' +
+                        '<span class="po-candidate-number">' + escapeHtml(c.poNumber) + '</span>' +
+                        '<span class="po-candidate-score">' + c.score + '%</span>' +
+                    '</div>' +
+                    '<div class="po-candidate-details">' +
+                        '<span class="po-candidate-total">$' + (c.total || 0).toFixed(2) + '</span>' +
+                        '<span class="po-candidate-date">' + (c.poDate || '') + '</span>' +
+                    '</div>' +
+                    (c.amountVariance !== null ? '<div class="po-candidate-variance ' +
+                        (c.amountVariance > 0 ? 'over' : (c.amountVariance < 0 ? 'under' : 'ok')) + '">' +
+                        (c.amountVariance >= 0 ? '+' : '') + '$' + (c.amountVariance || 0).toFixed(2) +
+                    '</div>' : '') +
+                '</div>';
+            });
+
+            html += '</div>';
+            container.innerHTML = html;
+
+            // Rebind click events
+            this.bindPOCandidateClicks();
+        },
+
+        /**
+         * Update the PO indicator in the header
+         */
+        updatePOIndicator: function(matchResult) {
+            var indicator = el('#po-match-toggle');
+            if (!indicator) return;
+
+            var status = matchResult.matchStatus || 0;
+            var score = matchResult.topMatch ? matchResult.topMatch.score : 0;
+            var hasPONumber = this.data.poNumber || (this.data.extractedData && this.data.extractedData.poNumber);
+            var statusInfo = this.getPOMatchStatusInfo(status, score, hasPONumber);
+
+            // Update classes
+            indicator.className = 'header-metric po-metric ' + statusInfo.cssClass;
+            indicator.title = statusInfo.tooltip;
+
+            // Update content
+            var iconEl = indicator.querySelector('.metric-icon i');
+            var labelEl = indicator.querySelector('.metric-label');
+            var badgeEl = indicator.querySelector('.metric-badge');
+
+            if (iconEl) iconEl.className = 'fas fa-' + statusInfo.icon;
+            if (labelEl) labelEl.textContent = statusInfo.label;
+
+            if (score > 0 && status !== 5) {
+                if (badgeEl) {
+                    badgeEl.textContent = score;
+                    badgeEl.style.display = '';
+                } else {
+                    var metricIcon = indicator.querySelector('.metric-icon');
+                    if (metricIcon) {
+                        metricIcon.insertAdjacentHTML('beforeend', '<span class="metric-badge po-badge">' + score + '</span>');
+                    }
+                }
+            } else if (badgeEl) {
+                badgeEl.style.display = 'none';
+            }
+        },
+
+        /**
+         * Bind PO candidate click events
+         */
+        bindPOCandidateClicks: function() {
+            var self = this;
+            var candidates = document.querySelectorAll('.po-candidate');
+
+            candidates.forEach(function(candidateEl) {
+                candidateEl.addEventListener('click', function() {
+                    var poId = this.getAttribute('data-po-id');
+                    self.confirmPOMatch(poId);
+                });
+            });
+        },
+
+        /**
+         * Confirm PO match selection
+         */
+        confirmPOMatch: function(poId) {
+            var self = this;
+
+            // Mark as saving
+            UI.toast('Linking to PO...', 'info');
+
+            API.put('confirmmatch', { id: this.docId, poId: poId })
+                .then(function(result) {
+                    if (result && result.confirmed) {
+                        self.data.matchedPO = poId;
+                        self.data.poMatchStatus = 6; // Manual
+
+                        // Find the PO number from candidates
+                        var candidate = (self.data.poCandidates || []).find(function(c) {
+                            return c.id == poId;
+                        });
+                        if (candidate) {
+                            self.data.matchedPONumber = candidate.poNumber;
+                            self.data.poMatchScore = candidate.score / 100;
+                        }
+
+                        UI.toast('Successfully linked to PO', 'success');
+
+                        // Refresh the dropdown UI
+                        self.refreshPODropdown();
+                        self.updatePOIndicator({ matchStatus: 6, topMatch: { score: 100 } });
+                    }
+                })
+                .catch(function(err) {
+                    console.error('[PO Match] Confirm error:', err);
+                    UI.toast('Failed to link PO: ' + err.message, 'error');
+                });
+        },
+
+        /**
+         * Clear PO match
+         */
+        clearPOMatch: function() {
+            var self = this;
+
+            API.put('clearmatch', { id: this.docId })
+                .then(function(result) {
+                    if (result && result.cleared) {
+                        self.data.matchedPO = null;
+                        self.data.matchedPONumber = '';
+                        self.data.poMatchStatus = 5;
+                        self.data.poMatchScore = 0;
+
+                        UI.toast('PO link removed', 'success');
+
+                        self.refreshPODropdown();
+                        self.updatePOIndicator({ matchStatus: 5 });
+                    }
+                })
+                .catch(function(err) {
+                    console.error('[PO Match] Clear error:', err);
+                    UI.toast('Failed to clear PO link', 'error');
+                });
+        },
+
+        /**
+         * Refresh the PO dropdown content
+         */
+        refreshPODropdown: function() {
+            var dropdown = el('#po-dropdown');
+            if (dropdown) {
+                dropdown.innerHTML = '';
+                // Re-render the dropdown content
+                var content = this.renderPOMatchDropdown(this.data);
+                // Extract inner content (remove outer div)
+                var temp = document.createElement('div');
+                temp.innerHTML = content;
+                var innerContent = temp.querySelector('.po-dropdown');
+                if (innerContent) {
+                    dropdown.innerHTML = innerContent.innerHTML;
+                }
+                this.bindPODropdownEvents();
+            }
+        },
+
+        /**
+         * Bind PO dropdown events
+         */
+        bindPODropdownEvents: function() {
+            var self = this;
+
+            // Rematch button
+            var rematchBtn = el('#btn-po-rematch');
+            if (rematchBtn) {
+                rematchBtn.addEventListener('click', function(e) {
+                    e.stopPropagation();
+                    self.loadPOMatchData();
+                });
+            }
+
+            // Clear button
+            var clearBtn = el('#btn-po-clear');
+            if (clearBtn) {
+                clearBtn.addEventListener('click', function(e) {
+                    e.stopPropagation();
+                    self.clearPOMatch();
+                });
+            }
+
+            // Search button
+            var searchBtn = el('#btn-po-search');
+            if (searchBtn) {
+                searchBtn.addEventListener('click', function(e) {
+                    e.stopPropagation();
+                    self.loadPOMatchData();
+                });
+            }
+
+            // Search input enter key
+            var searchInput = el('#po-search-input');
+            if (searchInput) {
+                searchInput.addEventListener('keypress', function(e) {
+                    if (e.key === 'Enter') {
+                        e.preventDefault();
+                        self.loadPOMatchData();
+                    }
+                });
+            }
+
+            // Candidate clicks
+            this.bindPOCandidateClicks();
         },
 
         /**
