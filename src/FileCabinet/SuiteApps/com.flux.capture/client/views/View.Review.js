@@ -6433,15 +6433,23 @@
 
         // Position dropdown using fixed positioning to avoid container clipping
         positionDropdown: function(dropdown, input) {
-            if (!dropdown || !input) return;
+            if (!dropdown || !input) {
+                FCDebug.log('[Typeahead] positionDropdown: missing dropdown or input');
+                return;
+            }
 
             // Check if inside a sublist table
             var isInSublist = input.closest('.sublist-table');
+            FCDebug.log('[Typeahead] positionDropdown: isInSublist =', !!isInSublist);
+
             if (!isInSublist) return; // Use default CSS positioning for non-sublist
 
             // Get input position
             var rect = input.getBoundingClientRect();
             var viewportHeight = window.innerHeight;
+            var viewportWidth = window.innerWidth;
+
+            FCDebug.log('[Typeahead] Input rect:', rect.left, rect.top, rect.width, rect.height);
 
             // Calculate available space below and above
             var spaceBelow = viewportHeight - rect.bottom - 10;
@@ -6450,34 +6458,49 @@
             // Determine dropdown height (max 220px)
             var dropdownHeight = Math.min(220, Math.max(spaceBelow, spaceAbove));
 
+            // Ensure minimum width
+            var dropdownWidth = Math.max(200, rect.width);
+
             // Position dropdown with fixed positioning
             dropdown.style.position = 'fixed';
-            dropdown.style.width = rect.width + 'px';
+            dropdown.style.width = dropdownWidth + 'px';
             dropdown.style.minWidth = '200px';
-            dropdown.style.left = rect.left + 'px';
+            dropdown.style.left = Math.min(rect.left, viewportWidth - dropdownWidth - 10) + 'px';
             dropdown.style.right = 'auto'; // Override CSS right: 0
             dropdown.style.maxHeight = dropdownHeight + 'px';
+            dropdown.style.zIndex = '10001'; // Ensure it's on top
 
             // Show above or below depending on space
             if (spaceBelow >= 150 || spaceBelow >= spaceAbove) {
                 // Show below
                 dropdown.style.top = rect.bottom + 2 + 'px';
                 dropdown.style.bottom = 'auto';
+                FCDebug.log('[Typeahead] Positioned below at top:', rect.bottom + 2);
             } else {
                 // Show above
                 dropdown.style.bottom = (viewportHeight - rect.top + 2) + 'px';
                 dropdown.style.top = 'auto';
+                FCDebug.log('[Typeahead] Positioned above at bottom:', viewportHeight - rect.top + 2);
             }
         },
 
         searchDatasource: function(type, query, wrapper, input, options) {
             var self = this;
-            var dropdown = wrapper.querySelector('.typeahead-dropdown');
-            if (!dropdown) return;
+            FCDebug.log('[Typeahead] searchDatasource called:', type, query);
+
+            var dropdown = wrapper ? wrapper.querySelector('.typeahead-dropdown') : null;
+            if (!dropdown) {
+                FCDebug.log('[Typeahead] ERROR: dropdown not found in wrapper');
+                return;
+            }
+
+            FCDebug.log('[Typeahead] Found dropdown element');
 
             // Show loading state
             dropdown.innerHTML = '<div class="typeahead-loading"><i class="fas fa-spinner fa-spin"></i> Searching...</div>';
             dropdown.style.display = 'block';
+
+            FCDebug.log('[Typeahead] Set display block, positioning...');
 
             // Position dropdown using fixed positioning to avoid container clipping
             this.positionDropdown(dropdown, input);
@@ -6492,19 +6515,26 @@
                 .then(function(result) {
                     var data = result.data || result;
                     // Handle both formats: array or { options: [], defaultValue }
-                    var options = Array.isArray(data) ? data : (data.options || data);
-                    self.renderTypeaheadResults(dropdown, options, wrapper, input);
+                    var opts = Array.isArray(data) ? data : (data.options || data);
+                    self.renderTypeaheadResults(dropdown, opts, wrapper, input);
+                    // Ensure dropdown is visible and positioned after content render
+                    dropdown.style.display = 'block';
+                    self.positionDropdown(dropdown, input);
                 })
                 .catch(function(err) {
                     dropdown.innerHTML = '<div class="typeahead-error">Error loading options</div>';
+                    dropdown.style.display = 'block';
                 });
         },
 
         renderTypeaheadResults: function(dropdown, results, wrapper, input) {
+            FCDebug.log('[Typeahead] renderTypeaheadResults called with', results ? results.length : 0, 'results');
+
             // Handle both array and object with options
             var options = Array.isArray(results) ? results : (results.options || results);
             if (!options || options.length === 0) {
                 dropdown.innerHTML = '<div class="typeahead-empty">No results found</div>';
+                FCDebug.log('[Typeahead] No results to render');
                 return;
             }
 
@@ -6525,6 +6555,7 @@
             }).join('');
 
             dropdown.innerHTML = html;
+            FCDebug.log('[Typeahead] Rendered', options.length, 'options, dropdown HTML length:', html.length);
         },
 
         selectTypeaheadOption: function(wrapper, option) {
