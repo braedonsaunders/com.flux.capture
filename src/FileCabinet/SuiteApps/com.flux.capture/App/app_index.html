@@ -711,11 +711,15 @@
                         <button class="btn btn-ghost btn-icon" id="btn-doc-prev" title="Previous (←)" disabled>
                             <i class="fas fa-chevron-left"></i>
                         </button>
-                        <div class="queue-position" id="queue-position">
-                            <span class="position-current" id="position-current">1</span>
-                            <span class="position-separator">of</span>
-                            <span class="position-total" id="position-total">1</span>
-                            <span class="position-label">to review</span>
+                        <div class="doc-selector-dropdown" id="doc-selector-dropdown">
+                            <button class="queue-position" id="queue-position">
+                                <span class="position-current" id="position-current">1</span>
+                                <span class="position-separator">of</span>
+                                <span class="position-total" id="position-total">1</span>
+                                <span class="position-label">to review</span>
+                                <i class="fas fa-chevron-down position-arrow"></i>
+                            </button>
+                            <div class="doc-selector-options" id="doc-selector-options"></div>
                         </div>
                         <button class="btn btn-ghost btn-icon" id="btn-doc-next" title="Next (→)" disabled>
                             <i class="fas fa-chevron-right"></i>

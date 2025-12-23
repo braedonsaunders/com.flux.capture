@@ -31,6 +31,7 @@
     // ==========================================
     var sharedQueueState = {
         queueIds: [],
+        queueDocs: [], // Full document data for dropdown display
         lastFetch: 0
     };
 
@@ -51,6 +52,7 @@
         vendorSuggestions: [],
         entitySuggestions: [],
         queueIds: [],
+        queueDocs: [], // Full document data for dropdown display
         queueIndex: -1,
         isLoading: false,
         isSaving: false,
@@ -147,6 +149,7 @@
             // Restore shared queue state if available (prevents flicker on navigation)
             if (sharedQueueState.queueIds.length > 0) {
                 this.queueIds = sharedQueueState.queueIds;
+                this.queueDocs = sharedQueueState.queueDocs || [];
                 this.queueIndex = this.docId ? this.queueIds.indexOf(parseInt(this.docId, 10)) : 0;
             }
 
@@ -197,8 +200,10 @@
                 .then(function(data) {
                     if (data && data.length > 0) {
                         self.queueIds = data.map(function(d) { return d.id; });
+                        self.queueDocs = data; // Store full document data for dropdown
                         // Update shared state
                         sharedQueueState.queueIds = self.queueIds;
+                        sharedQueueState.queueDocs = data;
                         sharedQueueState.lastFetch = Date.now();
 
                         self.docId = self.queueIds[0];
@@ -332,13 +337,16 @@
                 .then(function(data) {
                     if (data && data.length > 0) {
                         self.queueIds = data.map(function(d) { return d.id; });
+                        self.queueDocs = data; // Store full document data for dropdown
                         self.queueIndex = self.queueIds.indexOf(parseInt(self.docId, 10));
 
                         // Update shared state for future navigations
                         sharedQueueState.queueIds = self.queueIds;
+                        sharedQueueState.queueDocs = data;
                         sharedQueueState.lastFetch = Date.now();
 
                         self.updateNavigationButtons();
+                        self.renderDocumentSelector(); // Update dropdown with document list
                     }
                 })
                 .catch(function() {
@@ -797,10 +805,41 @@
                 if (dropdown) dropdown.classList.remove('open');
             });
 
+            // Document selector dropdown
+            this.on('#queue-position', 'click', function(e) {
+                e.stopPropagation();
+                var dropdown = el('#doc-selector-dropdown');
+                if (dropdown) {
+                    dropdown.classList.toggle('open');
+                    // Render document options when opening
+                    if (dropdown.classList.contains('open')) {
+                        self.renderDocumentSelector();
+                    }
+                }
+            });
+
+            this.on('#doc-selector-options', 'click', function(e) {
+                var option = e.target.closest('.doc-selector-option');
+                if (!option) return;
+
+                var docId = option.dataset.docId;
+                if (docId) {
+                    self.navigateToDocument(docId);
+                }
+
+                var dropdown = el('#doc-selector-dropdown');
+                if (dropdown) dropdown.classList.remove('open');
+            });
+
             // Close dropdown when clicking outside
             document.addEventListener('click', function(e) {
                 if (!e.target.closest('#doc-type-dropdown')) {
                     var dropdown = el('#doc-type-dropdown');
+                    if (dropdown) dropdown.classList.remove('open');
+                }
+                // Close document selector dropdown when clicking outside
+                if (!e.target.closest('#doc-selector-dropdown')) {
+                    var dropdown = el('#doc-selector-dropdown');
                     if (dropdown) dropdown.classList.remove('open');
                 }
                 // Close transform dropdowns when clicking outside
@@ -813,8 +852,23 @@
 
             // Keyboard shortcuts for Transform Hub
             document.addEventListener('keydown', function(e) {
-                // Escape to close Transform Hub
+                // Escape to close dropdowns
                 if (e.key === 'Escape') {
+                    // Close document selector dropdown
+                    var docSelectorDropdown = el('#doc-selector-dropdown');
+                    if (docSelectorDropdown && docSelectorDropdown.classList.contains('open')) {
+                        docSelectorDropdown.classList.remove('open');
+                        e.preventDefault();
+                        return;
+                    }
+                    // Close doc type dropdown
+                    var docTypeDropdown = el('#doc-type-dropdown');
+                    if (docTypeDropdown && docTypeDropdown.classList.contains('open')) {
+                        docTypeDropdown.classList.remove('open');
+                        e.preventDefault();
+                        return;
+                    }
+                    // Close transform dropdowns
                     var openDropdown = document.querySelector('.transform-dropdown.open');
                     if (openDropdown) {
                         openDropdown.classList.remove('open');
@@ -6971,6 +7025,56 @@
             var prevId = this.queueIds[this.queueIndex - 1];
             // Use internal transition to keep toolbar/divider static with skeleton loaders
             this.transitionToDocument(prevId);
+        },
+
+        navigateToDocument: function(docId) {
+            // Navigate to a specific document by ID
+            var targetIndex = this.queueIds.indexOf(parseInt(docId, 10));
+            if (targetIndex < 0) return;
+
+            // Use internal transition to keep toolbar/divider static with skeleton loaders
+            this.transitionToDocument(docId);
+        },
+
+        renderDocumentSelector: function() {
+            var optionsEl = el('#doc-selector-options');
+            if (!optionsEl) return;
+
+            var self = this;
+            var html = '';
+
+            // Use queueDocs if available, otherwise fall back to queueIds
+            if (this.queueDocs && this.queueDocs.length > 0) {
+                this.queueDocs.forEach(function(doc, index) {
+                    var isSelected = index === self.queueIndex;
+                    var docName = doc.fileName || doc.name || ('Document ' + doc.id);
+                    // Truncate long names
+                    if (docName.length > 35) {
+                        docName = docName.substring(0, 32) + '...';
+                    }
+                    html += '<div class="doc-selector-option' + (isSelected ? ' selected' : '') + '" data-doc-id="' + doc.id + '">' +
+                        '<span class="doc-option-index">' + (index + 1) + '</span>' +
+                        '<span class="doc-option-name">' + escapeHtml(docName) + '</span>' +
+                    '</div>';
+                });
+            } else if (this.queueIds && this.queueIds.length > 0) {
+                // Fallback to just IDs
+                this.queueIds.forEach(function(id, index) {
+                    var isSelected = index === self.queueIndex;
+                    html += '<div class="doc-selector-option' + (isSelected ? ' selected' : '') + '" data-doc-id="' + id + '">' +
+                        '<span class="doc-option-index">' + (index + 1) + '</span>' +
+                        '<span class="doc-option-name">Document ' + id + '</span>' +
+                    '</div>';
+                });
+            }
+
+            optionsEl.innerHTML = html;
+
+            // Scroll to selected item
+            var selectedOption = optionsEl.querySelector('.doc-selector-option.selected');
+            if (selectedOption) {
+                selectedOption.scrollIntoView({ block: 'nearest' });
+            }
         },
 
         updateNavigationButtons: function() {

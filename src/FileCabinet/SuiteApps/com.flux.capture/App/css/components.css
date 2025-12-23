@@ -8751,6 +8751,12 @@ tr.doc-row.deleting::after {
     border-radius: 0 2px 2px 0;
 }
 
+/* Document Selector Dropdown */
+.doc-selector-dropdown {
+    position: relative;
+    display: inline-block;
+}
+
 /* Queue Position Indicator - Compact */
 .queue-position {
     display: flex;
@@ -8758,9 +8764,16 @@ tr.doc-row.deleting::after {
     gap: 4px;
     padding: 2px 8px;
     background: var(--gray-100);
+    border: 1px solid transparent;
     border-radius: var(--radius-sm);
     font-size: 12px;
     line-height: 1.2;
+    cursor: pointer;
+    transition: all 0.15s ease;
+}
+.queue-position:hover {
+    background: var(--color-primary-bg);
+    border-color: var(--color-primary);
 }
 .position-current {
     font-weight: 700;
@@ -8775,6 +8788,84 @@ tr.doc-row.deleting::after {
 }
 .position-label {
     color: var(--text-tertiary);
+}
+.position-arrow {
+    font-size: 8px;
+    color: var(--text-tertiary);
+    margin-left: 2px;
+    transition: transform 0.15s ease;
+}
+.doc-selector-dropdown.open .position-arrow {
+    transform: rotate(180deg);
+}
+
+.doc-selector-options {
+    position: absolute;
+    top: 100%;
+    left: 50%;
+    transform: translateX(-50%);
+    margin-top: 4px;
+    background: var(--surface-card);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-md);
+    box-shadow: var(--shadow-lg);
+    z-index: 9999;
+    min-width: 220px;
+    max-width: 320px;
+    max-height: 300px;
+    overflow-y: auto;
+    display: none;
+}
+.doc-selector-dropdown.open .doc-selector-options {
+    display: block;
+    animation: dropdownIn 0.15s ease;
+}
+.doc-selector-option {
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
+    padding: var(--space-sm) var(--space-md);
+    font-size: var(--font-size-sm);
+    cursor: pointer;
+    transition: background 0.1s ease;
+    border-bottom: 1px solid var(--border-light);
+}
+.doc-selector-option:last-child {
+    border-bottom: none;
+}
+.doc-selector-option:hover {
+    background: var(--color-primary-bg);
+}
+.doc-selector-option.selected {
+    background: var(--color-primary);
+    color: white;
+}
+.doc-selector-option.selected .doc-option-index,
+.doc-selector-option.selected .doc-option-name {
+    color: white;
+}
+.doc-option-index {
+    flex-shrink: 0;
+    width: 24px;
+    height: 24px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: var(--gray-100);
+    border-radius: var(--radius-sm);
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--text-secondary);
+}
+.doc-selector-option.selected .doc-option-index {
+    background: rgba(255,255,255,0.2);
+}
+.doc-option-name {
+    flex: 1;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    color: var(--text-primary);
 }
 
 /* Review Toolbar - Compact Version */
