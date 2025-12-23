@@ -3806,7 +3806,7 @@
         deleteLearning: function(learningId) {
             var self = this;
 
-            API._delete('learning', { id: learningId })
+            API.delete('learning', { id: learningId })
                 .then(function() {
                     UI.toast('Learning deleted successfully', 'success');
                     self.loadLearnings();
@@ -4099,6 +4099,7 @@
         },
 
         renderDateFormatFields: function(data) {
+            var format = data.format || '';
             return '<div class="form-group">' +
                 '<label>Vendor (optional)</label>' +
                 '<div class="typeahead-select modal-typeahead" data-lookup="vendors">' +
@@ -4110,9 +4111,34 @@
             '<div class="form-group">' +
                 '<label>Date Format <span class="required">*</span></label>' +
                 '<select id="learning-date-format">' +
-                    '<option value="MDY"' + (data.format === 'MDY' ? ' selected' : '') + '>MM/DD/YYYY (US)</option>' +
-                    '<option value="DMY"' + (data.format === 'DMY' ? ' selected' : '') + '>DD/MM/YYYY (International)</option>' +
+                    '<optgroup label="Month First (US)">' +
+                        '<option value="MDY"' + (format === 'MDY' ? ' selected' : '') + '>MM/DD/YYYY (01/31/2025)</option>' +
+                        '<option value="MDY_DASH"' + (format === 'MDY_DASH' ? ' selected' : '') + '>MM-DD-YYYY (01-31-2025)</option>' +
+                        '<option value="MDY_DOT"' + (format === 'MDY_DOT' ? ' selected' : '') + '>MM.DD.YYYY (01.31.2025)</option>' +
+                    '</optgroup>' +
+                    '<optgroup label="Day First (Europe, UK, Australia)">' +
+                        '<option value="DMY"' + (format === 'DMY' ? ' selected' : '') + '>DD/MM/YYYY (31/01/2025)</option>' +
+                        '<option value="DMY_DASH"' + (format === 'DMY_DASH' ? ' selected' : '') + '>DD-MM-YYYY (31-01-2025)</option>' +
+                        '<option value="DMY_DOT"' + (format === 'DMY_DOT' ? ' selected' : '') + '>DD.MM.YYYY (31.01.2025)</option>' +
+                    '</optgroup>' +
+                    '<optgroup label="Year First (ISO, Asia)">' +
+                        '<option value="YMD"' + (format === 'YMD' ? ' selected' : '') + '>YYYY/MM/DD (2025/01/31)</option>' +
+                        '<option value="YMD_DASH"' + (format === 'YMD_DASH' ? ' selected' : '') + '>YYYY-MM-DD (2025-01-31)</option>' +
+                        '<option value="YMD_DOT"' + (format === 'YMD_DOT' ? ' selected' : '') + '>YYYY.MM.DD (2025.01.31)</option>' +
+                    '</optgroup>' +
+                    '<optgroup label="Text Month Formats">' +
+                        '<option value="DMY_TEXT"' + (format === 'DMY_TEXT' ? ' selected' : '') + '>DD Mon YYYY (31 Jan 2025)</option>' +
+                        '<option value="MDY_TEXT"' + (format === 'MDY_TEXT' ? ' selected' : '') + '>Mon DD, YYYY (Jan 31, 2025)</option>' +
+                        '<option value="DMY_TEXT_FULL"' + (format === 'DMY_TEXT_FULL' ? ' selected' : '') + '>DD Month YYYY (31 January 2025)</option>' +
+                        '<option value="MDY_TEXT_FULL"' + (format === 'MDY_TEXT_FULL' ? ' selected' : '') + '>Month DD, YYYY (January 31, 2025)</option>' +
+                    '</optgroup>' +
+                    '<optgroup label="No Separator">' +
+                        '<option value="YYYYMMDD"' + (format === 'YYYYMMDD' ? ' selected' : '') + '>YYYYMMDD (20250131)</option>' +
+                        '<option value="DDMMYYYY"' + (format === 'DDMMYYYY' ? ' selected' : '') + '>DDMMYYYY (31012025)</option>' +
+                        '<option value="MMDDYYYY"' + (format === 'MMDDYYYY' ? ' selected' : '') + '>MMDDYYYY (01312025)</option>' +
+                    '</optgroup>' +
                 '</select>' +
+                '<small>Select the date format used in documents from this vendor</small>' +
             '</div>' +
             '<div class="form-group">' +
                 '<label>Confidence</label>' +

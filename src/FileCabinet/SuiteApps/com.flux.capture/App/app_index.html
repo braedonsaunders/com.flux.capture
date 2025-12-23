@@ -2276,78 +2276,55 @@
             <!-- TAB: Learning -->
             <div class="settings-tab-panel" id="settings-panel-learning" style="display:none;">
                 <div class="settings-layout">
-                    <!-- Learning Management Header -->
-                    <div class="settings-card settings-card-full">
-                        <div class="settings-card-header">
-                            <i class="fas fa-brain"></i>
-                            <div>
-                                <h3>Learning Management</h3>
-                                <p>View, edit, and create learned patterns from document corrections</p>
+                    <!-- Learning Management Header with Filters -->
+                    <div class="settings-card settings-card-full learning-header-card">
+                        <div class="learning-header">
+                            <div class="learning-header-left">
+                                <div class="learning-title">
+                                    <i class="fas fa-brain"></i>
+                                    <h3>Learning Management</h3>
+                                </div>
+                                <div class="learning-stats-inline" id="learning-stats">
+                                    <span class="stat-inline"><strong id="stat-total-learnings">0</strong> total</span>
+                                    <span class="stat-divider">|</span>
+                                    <span class="stat-inline"><strong id="stat-vendor-aliases">0</strong> aliases</span>
+                                    <span class="stat-divider">|</span>
+                                    <span class="stat-inline"><strong id="stat-account-mappings">0</strong> accounts</span>
+                                    <span class="stat-divider">|</span>
+                                    <span class="stat-inline"><strong id="stat-segment-mappings">0</strong> segments</span>
+                                </div>
+                            </div>
+                            <div class="learning-header-right">
+                                <button class="btn btn-ghost btn-sm" id="btn-refresh-learnings" title="Refresh">
+                                    <i class="fas fa-sync-alt"></i>
+                                </button>
+                                <button class="btn btn-primary btn-sm" id="btn-create-learning">
+                                    <i class="fas fa-plus"></i> New
+                                </button>
                             </div>
                         </div>
-                        <div class="settings-card-body">
-                            <!-- Stats Row -->
-                            <div class="learning-stats" id="learning-stats">
-                                <div class="learning-stat">
-                                    <span class="stat-value" id="stat-total-learnings">0</span>
-                                    <span class="stat-label">Total Learnings</span>
-                                </div>
-                                <div class="learning-stat">
-                                    <span class="stat-value" id="stat-vendor-aliases">0</span>
-                                    <span class="stat-label">Vendor Aliases</span>
-                                </div>
-                                <div class="learning-stat">
-                                    <span class="stat-value" id="stat-account-mappings">0</span>
-                                    <span class="stat-label">Account Mappings</span>
-                                </div>
-                                <div class="learning-stat">
-                                    <span class="stat-value" id="stat-segment-mappings">0</span>
-                                    <span class="stat-label">Segment Mappings</span>
-                                </div>
+                        <div class="learning-filters-row">
+                            <select id="learning-filter-type" class="filter-input">
+                                <option value="">All Types</option>
+                                <option value="vendor_alias">Vendor Alias</option>
+                                <option value="account_mapping">Account Mapping</option>
+                                <option value="department_mapping">Department</option>
+                                <option value="class_mapping">Class</option>
+                                <option value="location_mapping">Location</option>
+                                <option value="vendor_defaults">Vendor Defaults</option>
+                                <option value="item_mapping">Item Mapping</option>
+                                <option value="date_format">Date Format</option>
+                                <option value="amount_format">Amount Format</option>
+                                <option value="custom_field_mapping">Custom Field</option>
+                            </select>
+                            <div class="typeahead-select filter-input" id="learning-filter-vendor-wrapper">
+                                <input type="hidden" id="learning-filter-vendor-id" value="">
+                                <input type="text" id="learning-filter-vendor" placeholder="Filter by vendor..." class="typeahead-input">
+                                <div class="typeahead-dropdown"></div>
                             </div>
-                        </div>
-                    </div>
-
-                    <!-- Filters and Actions -->
-                    <div class="settings-card settings-card-full">
-                        <div class="learning-toolbar">
-                            <div class="learning-filters">
-                                <div class="filter-group">
-                                    <label>Type</label>
-                                    <select id="learning-filter-type">
-                                        <option value="">All Types</option>
-                                        <option value="vendor_alias">Vendor Alias</option>
-                                        <option value="account_mapping">Account Mapping</option>
-                                        <option value="department_mapping">Department</option>
-                                        <option value="class_mapping">Class</option>
-                                        <option value="location_mapping">Location</option>
-                                        <option value="vendor_defaults">Vendor Defaults</option>
-                                        <option value="item_mapping">Item Mapping</option>
-                                        <option value="date_format">Date Format</option>
-                                        <option value="amount_format">Amount Format</option>
-                                        <option value="custom_field_mapping">Custom Field</option>
-                                    </select>
-                                </div>
-                                <div class="filter-group">
-                                    <label>Vendor</label>
-                                    <div class="typeahead-select" id="learning-filter-vendor-wrapper">
-                                        <input type="hidden" id="learning-filter-vendor-id" value="">
-                                        <input type="text" id="learning-filter-vendor" placeholder="All Vendors" class="typeahead-input">
-                                        <div class="typeahead-dropdown"></div>
-                                    </div>
-                                </div>
-                                <div class="filter-group">
-                                    <label>Search</label>
-                                    <input type="text" id="learning-search" placeholder="Search keywords...">
-                                </div>
-                            </div>
-                            <div class="learning-actions">
-                                <button class="btn btn-ghost" id="btn-refresh-learnings">
-                                    <i class="fas fa-sync-alt"></i> Refresh
-                                </button>
-                                <button class="btn btn-primary" id="btn-create-learning">
-                                    <i class="fas fa-plus"></i> Create New
-                                </button>
+                            <div class="search-input-wrapper filter-input filter-input-grow">
+                                <i class="fas fa-search"></i>
+                                <input type="text" id="learning-search" placeholder="Search keywords...">
                             </div>
                         </div>
                     </div>
