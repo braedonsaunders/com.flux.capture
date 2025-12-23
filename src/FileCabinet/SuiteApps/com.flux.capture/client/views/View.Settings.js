@@ -102,6 +102,22 @@
                 });
             });
 
+            // General subtabs
+            els('[data-general-subtab]').forEach(function(tab) {
+                tab.addEventListener('click', function() {
+                    var targetSubtab = this.dataset.generalSubtab;
+                    self.switchGeneralSubtab(targetSubtab);
+                });
+            });
+
+            // Extraction subtabs
+            els('[data-extraction-subtab]').forEach(function(tab) {
+                tab.addEventListener('click', function() {
+                    var targetSubtab = this.dataset.extractionSubtab;
+                    self.switchExtractionSubtab(targetSubtab);
+                });
+            });
+
             // Save button
             var saveBtn = el('#btn-save-settings');
             if (saveBtn) {
@@ -501,6 +517,50 @@
             } else if (tabId === 'learning') {
                 this.initLearningTab();
             }
+        },
+
+        switchGeneralSubtab: function(subtabId) {
+            // Update subtab buttons
+            els('[data-general-subtab]').forEach(function(tab) {
+                tab.classList.toggle('active', tab.dataset.generalSubtab === subtabId);
+            });
+
+            // Update subtab panels
+            var panels = ['processing', 'anomaly', 'transactions'];
+            panels.forEach(function(panelId) {
+                var panel = el('#general-subtab-' + panelId);
+                if (panel) {
+                    if (panelId === subtabId) {
+                        panel.classList.add('active');
+                        panel.style.display = 'block';
+                    } else {
+                        panel.classList.remove('active');
+                        panel.style.display = 'none';
+                    }
+                }
+            });
+        },
+
+        switchExtractionSubtab: function(subtabId) {
+            // Update subtab buttons
+            els('[data-extraction-subtab]').forEach(function(tab) {
+                tab.classList.toggle('active', tab.dataset.extractionSubtab === subtabId);
+            });
+
+            // Update subtab panels
+            var panels = ['provider', 'ai-verification'];
+            panels.forEach(function(panelId) {
+                var panel = el('#extraction-subtab-' + panelId);
+                if (panel) {
+                    if (panelId === subtabId) {
+                        panel.classList.add('active');
+                        panel.style.display = 'block';
+                    } else {
+                        panel.classList.remove('active');
+                        panel.style.display = 'none';
+                    }
+                }
+            });
         },
 
         // ==========================================
