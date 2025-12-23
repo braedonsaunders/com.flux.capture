@@ -4139,7 +4139,10 @@ define([
             // These are derived from formData but stored separately for queries
             var bodyFields = formData.bodyFields || {};
 
-            if (bodyFields.entity) {
+            // Only set custrecord_flux_vendor for non-expense-report documents
+            // For expense reports, entity is an employee ID, not a vendor ID
+            var transactionType = formData._meta && formData._meta.transactionType;
+            if (bodyFields.entity && transactionType !== 'expensereport') {
                 values['custrecord_flux_vendor'] = bodyFields.entity;
             }
             if (bodyFields.tranid) {
