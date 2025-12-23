@@ -2483,9 +2483,10 @@
             '</div>';
 
             // ========== ACTION BUTTONS ==========
+            var hasUnsavedChanges = this.changes && Object.keys(this.changes).length > 0;
             html += '<div class="form-section action-section">' +
-                '<button class="btn btn-secondary btn-block" id="btn-save">' +
-                    '<i class="fas fa-save"></i> Save Changes <span class="shortcut-hint">Ctrl+S</span>' +
+                '<button class="btn btn-secondary btn-block' + (hasUnsavedChanges ? ' has-changes' : '') + '" id="btn-save">' +
+                    '<i class="fas fa-save"></i> Save Changes' + (hasUnsavedChanges ? '*' : '') + ' <span class="shortcut-hint">Ctrl+S</span>' +
                 '</button>' +
             '</div>';
 

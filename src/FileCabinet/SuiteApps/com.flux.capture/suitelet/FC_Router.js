@@ -4167,6 +4167,13 @@ define([
                     values['custrecord_flux_currency'] = resolvedCurrency;
                 }
             }
+            // Update document type if changed
+            if (bodyFields.documentType) {
+                var docTypeValue = parseInt(bodyFields.documentType, 10);
+                if (!isNaN(docTypeValue) && docTypeValue > 0) {
+                    values['custrecord_flux_document_type'] = docTypeValue;
+                }
+            }
 
             record.submitFields({
                 type: 'customrecord_flux_document',
