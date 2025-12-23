@@ -96,6 +96,21 @@
                     setSelect('#submit-mode-expensereport', submitModes.expensereport);
                     setSelect('#submit-mode-vendorcredit', submitModes.vendorcredit);
                     setSelect('#submit-mode-purchaseorder', submitModes.purchaseorder);
+
+                    // Workflow Integration Settings
+                    var workflowSettings = settings.workflowSettings || {};
+                    var setInput = function(id, value) {
+                        var elem = el(id);
+                        if (elem) elem.value = value || '';
+                    };
+                    setInput('#workflow-vendorbill-id', workflowSettings.vendorbill && workflowSettings.vendorbill.workflowId);
+                    setInput('#workflow-vendorbill-action', workflowSettings.vendorbill && workflowSettings.vendorbill.actionId);
+                    setInput('#workflow-expensereport-id', workflowSettings.expensereport && workflowSettings.expensereport.workflowId);
+                    setInput('#workflow-expensereport-action', workflowSettings.expensereport && workflowSettings.expensereport.actionId);
+                    setInput('#workflow-vendorcredit-id', workflowSettings.vendorcredit && workflowSettings.vendorcredit.workflowId);
+                    setInput('#workflow-vendorcredit-action', workflowSettings.vendorcredit && workflowSettings.vendorcredit.actionId);
+                    setInput('#workflow-purchaseorder-id', workflowSettings.purchaseorder && workflowSettings.purchaseorder.workflowId);
+                    setInput('#workflow-purchaseorder-action', workflowSettings.purchaseorder && workflowSettings.purchaseorder.actionId);
                 })
                 .catch(function(err) {
                     console.warn('Could not load settings:', err);
@@ -2666,6 +2681,25 @@
                     expensereport: getSelectValue('#submit-mode-expensereport'),
                     vendorcredit: getSelectValue('#submit-mode-vendorcredit'),
                     purchaseorder: getSelectValue('#submit-mode-purchaseorder')
+                },
+                // Workflow Integration Settings (per transaction type)
+                workflowSettings: {
+                    vendorbill: {
+                        workflowId: (el('#workflow-vendorbill-id') && el('#workflow-vendorbill-id').value) || '',
+                        actionId: (el('#workflow-vendorbill-action') && el('#workflow-vendorbill-action').value) || ''
+                    },
+                    expensereport: {
+                        workflowId: (el('#workflow-expensereport-id') && el('#workflow-expensereport-id').value) || '',
+                        actionId: (el('#workflow-expensereport-action') && el('#workflow-expensereport-action').value) || ''
+                    },
+                    vendorcredit: {
+                        workflowId: (el('#workflow-vendorcredit-id') && el('#workflow-vendorcredit-id').value) || '',
+                        actionId: (el('#workflow-vendorcredit-action') && el('#workflow-vendorcredit-action').value) || ''
+                    },
+                    purchaseorder: {
+                        workflowId: (el('#workflow-purchaseorder-id') && el('#workflow-purchaseorder-id').value) || '',
+                        actionId: (el('#workflow-purchaseorder-action') && el('#workflow-purchaseorder-action').value) || ''
+                    }
                 },
                 // Anomaly Detection Settings (grouped)
                 anomalyDetection: {

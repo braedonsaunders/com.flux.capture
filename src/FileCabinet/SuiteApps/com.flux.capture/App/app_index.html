@@ -1380,6 +1380,64 @@
                         </div>
                     </div>
                 </div>
+
+                <!-- Workflow Integration Settings -->
+                <div class="settings-card">
+                    <div class="settings-card-header">
+                        <i class="fas fa-project-diagram"></i>
+                        <div>
+                            <h3>Workflow Integration</h3>
+                            <p>Configure NetSuite workflow actions to trigger when submitting for approval. Leave blank to only set approval status without triggering a workflow action.</p>
+                        </div>
+                    </div>
+                    <div class="settings-card-body">
+                        <div class="setting-row">
+                            <div class="setting-label">
+                                <span>Vendor Bill Workflow</span>
+                                <small>Workflow ID and Action ID for vendor bill approval</small>
+                            </div>
+                            <div class="setting-control setting-control-dual">
+                                <input type="text" id="workflow-vendorbill-id" class="setting-input" placeholder="Workflow ID (e.g., customworkflow_bill_approval)">
+                                <input type="text" id="workflow-vendorbill-action" class="setting-input" placeholder="Action ID (e.g., submit)">
+                            </div>
+                        </div>
+                        <div class="setting-row">
+                            <div class="setting-label">
+                                <span>Expense Report Workflow</span>
+                                <small>Workflow ID and Action ID for expense report approval</small>
+                            </div>
+                            <div class="setting-control setting-control-dual">
+                                <input type="text" id="workflow-expensereport-id" class="setting-input" placeholder="Workflow ID">
+                                <input type="text" id="workflow-expensereport-action" class="setting-input" placeholder="Action ID">
+                            </div>
+                        </div>
+                        <div class="setting-row">
+                            <div class="setting-label">
+                                <span>Vendor Credit Workflow</span>
+                                <small>Workflow ID and Action ID for vendor credit approval</small>
+                            </div>
+                            <div class="setting-control setting-control-dual">
+                                <input type="text" id="workflow-vendorcredit-id" class="setting-input" placeholder="Workflow ID">
+                                <input type="text" id="workflow-vendorcredit-action" class="setting-input" placeholder="Action ID">
+                            </div>
+                        </div>
+                        <div class="setting-row">
+                            <div class="setting-label">
+                                <span>Purchase Order Workflow</span>
+                                <small>Workflow ID and Action ID for purchase order approval</small>
+                            </div>
+                            <div class="setting-control setting-control-dual">
+                                <input type="text" id="workflow-purchaseorder-id" class="setting-input" placeholder="Workflow ID">
+                                <input type="text" id="workflow-purchaseorder-action" class="setting-input" placeholder="Action ID">
+                            </div>
+                        </div>
+                        <div class="setting-info">
+                            <i class="fas fa-info-circle"></i>
+                            <span><strong>Workflow ID:</strong> The script ID of your NetSuite workflow (e.g., customworkflow_vendor_bill_approval).<br>
+                            <strong>Action ID:</strong> The script ID of the workflow action to trigger (e.g., workflowaction_submit). Find these in Customization &gt; Workflows.</span>
+                        </div>
+                    </div>
+                </div>
                 </div>
                 </div>
             </div>

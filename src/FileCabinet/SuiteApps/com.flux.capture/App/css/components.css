@@ -1435,6 +1435,18 @@ body.topbar-minimized .view-review.split-view .review-content {
     box-shadow: 0 0 0 3px var(--color-primary-bg);
 }
 
+/* Dual input control (e.g., workflow ID + action ID) */
+.setting-control-dual {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-xs);
+}
+
+.setting-control-dual input {
+    width: 100%;
+    min-width: 280px;
+}
+
 /* Settings Category (for grouping related settings) */
 .settings-category {
     margin-bottom: var(--space-lg);

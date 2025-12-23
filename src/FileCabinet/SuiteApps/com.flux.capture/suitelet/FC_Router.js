@@ -22,12 +22,13 @@ define([
     'N/email',
     'N/format',
     'N/task',
+    'N/workflow',
     '/SuiteApps/com.flux.capture/lib/FC_Engine',
     '/SuiteApps/com.flux.capture/lib/FC_Debug',
     '/SuiteApps/com.flux.capture/suitelet/FC_FormSchemaExtractor',
     '/SuiteApps/com.flux.capture/lib/llm/GeminiVerifier',
     '/SuiteApps/com.flux.capture/lib/matching/POMatchingEngine'
-], function(file, record, search, query, runtime, errorModule, log, encode, email, format, task, FC_Engine, fcDebug, FormSchemaExtractor, GeminiVerifierModule, POMatchingEngine) {
+], function(file, record, search, query, runtime, errorModule, log, encode, email, format, task, workflow, FC_Engine, fcDebug, FormSchemaExtractor, GeminiVerifierModule, POMatchingEngine) {
 
     const API_VERSION = '2.0.0';
 
@@ -2430,6 +2431,27 @@ define([
             purchaseorder: savedSubmitModes.purchaseorder || 'create'
         };
 
+        // Build workflow settings per-transaction-type (optional - for triggering NS workflow actions)
+        var savedWorkflowSettings = savedSettings.workflowSettings || {};
+        var workflowSettingsDefaults = {
+            vendorbill: {
+                workflowId: savedWorkflowSettings.vendorbill?.workflowId || '',
+                actionId: savedWorkflowSettings.vendorbill?.actionId || ''
+            },
+            expensereport: {
+                workflowId: savedWorkflowSettings.expensereport?.workflowId || '',
+                actionId: savedWorkflowSettings.expensereport?.actionId || ''
+            },
+            vendorcredit: {
+                workflowId: savedWorkflowSettings.vendorcredit?.workflowId || '',
+                actionId: savedWorkflowSettings.vendorcredit?.actionId || ''
+            },
+            purchaseorder: {
+                workflowId: savedWorkflowSettings.purchaseorder?.workflowId || '',
+                actionId: savedWorkflowSettings.purchaseorder?.actionId || ''
+            }
+        };
+
         var settings = {
             defaultDocumentType: savedSettings.defaultDocumentType || 'auto',
             emailImportEnabled: true,
@@ -2446,7 +2468,9 @@ define([
             attachFileToTransaction: savedSettings.attachFileToTransaction === true, // Default OFF
             deleteDocumentOnSuccess: savedSettings.deleteDocumentOnSuccess !== false, // Default ON
             // Submit button mode per transaction type: 'create', 'submit_for_approval', or 'both'
-            submitButtonMode: submitButtonModeDefaults
+            submitButtonMode: submitButtonModeDefaults,
+            // Workflow settings for triggering approval workflows (optional)
+            workflowSettings: workflowSettingsDefaults
         };
 
         return Response.success(settings);
@@ -2456,6 +2480,7 @@ define([
         try {
             var anomaly = context.anomalyDetection || {};
             var submitModes = context.submitButtonMode || {};
+            var workflowSettings = context.workflowSettings || {};
             var settingsData = {
                 defaultDocumentType: context.defaultDocumentType || 'auto',
                 defaultLineSublist: context.defaultLineSublist || 'auto',
@@ -2472,6 +2497,25 @@ define([
                     expensereport: submitModes.expensereport || 'create',
                     vendorcredit: submitModes.vendorcredit || 'create',
                     purchaseorder: submitModes.purchaseorder || 'create'
+                },
+                // Workflow settings for triggering approval workflows (optional)
+                workflowSettings: {
+                    vendorbill: {
+                        workflowId: (workflowSettings.vendorbill && workflowSettings.vendorbill.workflowId) || '',
+                        actionId: (workflowSettings.vendorbill && workflowSettings.vendorbill.actionId) || ''
+                    },
+                    expensereport: {
+                        workflowId: (workflowSettings.expensereport && workflowSettings.expensereport.workflowId) || '',
+                        actionId: (workflowSettings.expensereport && workflowSettings.expensereport.actionId) || ''
+                    },
+                    vendorcredit: {
+                        workflowId: (workflowSettings.vendorcredit && workflowSettings.vendorcredit.workflowId) || '',
+                        actionId: (workflowSettings.vendorcredit && workflowSettings.vendorcredit.actionId) || ''
+                    },
+                    purchaseorder: {
+                        workflowId: (workflowSettings.purchaseorder && workflowSettings.purchaseorder.workflowId) || '',
+                        actionId: (workflowSettings.purchaseorder && workflowSettings.purchaseorder.actionId) || ''
+                    }
                 },
                 anomalyDetection: {
                     // Duplicate Detection
@@ -4353,6 +4397,7 @@ define([
             // Note: If submitMode is neither, we leave approvalstatus as-is from form data
 
             // ===== CREATE TRANSACTION =====
+            var workflowTriggered = false;
             if (createTransaction && (vendorId || actualTransactionType === 'expensereport')) {
                 transactionId = createTransactionFromDocument(docRecord, actualTransactionType, formData);
 
@@ -4365,6 +4410,46 @@ define([
                     } catch (attachErr) {
                         log.error('approveDocument.fileAttachment', attachErr);
                         warnings.push({ field: 'file', message: 'Could not attach file: ' + attachErr.message });
+                    }
+                }
+
+                // ===== TRIGGER WORKFLOW ACTION (if configured and submitting for approval) =====
+                if (transactionId && submittedForApproval) {
+                    var workflowConfig = settings.workflowSettings && settings.workflowSettings[actualTransactionType];
+                    if (workflowConfig && workflowConfig.workflowId && workflowConfig.actionId) {
+                        try {
+                            // Map transaction type to NetSuite record type
+                            var recordTypeMap = {
+                                'vendorbill': record.Type.VENDOR_BILL,
+                                'expensereport': record.Type.EXPENSE_REPORT,
+                                'vendorcredit': record.Type.VENDOR_CREDIT,
+                                'purchaseorder': record.Type.PURCHASE_ORDER
+                            };
+                            var nsRecordType = recordTypeMap[actualTransactionType] || actualTransactionType;
+
+                            log.debug('approveDocument.workflow', 'Triggering workflow action: ' + JSON.stringify({
+                                recordType: nsRecordType,
+                                recordId: transactionId,
+                                workflowId: workflowConfig.workflowId,
+                                actionId: workflowConfig.actionId
+                            }));
+
+                            workflow.trigger({
+                                recordType: nsRecordType,
+                                recordId: transactionId,
+                                workflowId: workflowConfig.workflowId,
+                                actionId: workflowConfig.actionId
+                            });
+
+                            workflowTriggered = true;
+                            log.audit('approveDocument.workflow', 'Successfully triggered workflow action for transaction ' + transactionId);
+                        } catch (wfErr) {
+                            log.error('approveDocument.workflow', 'Failed to trigger workflow: ' + wfErr.message);
+                            warnings.push({
+                                field: 'workflow',
+                                message: 'Transaction created but workflow action failed: ' + wfErr.message
+                            });
+                        }
                     }
                 }
             }
@@ -4461,8 +4546,9 @@ define([
                 fileAttached: fileAttached,
                 documentDeleted: documentDeleted,
                 submittedForApproval: submittedForApproval,
+                workflowTriggered: workflowTriggered,
                 warnings: warnings
-            }, submittedForApproval ? 'Transaction submitted for approval' : 'Transaction created');
+            }, submittedForApproval ? (workflowTriggered ? 'Transaction submitted for approval (workflow triggered)' : 'Transaction submitted for approval') : 'Transaction created');
         } catch (e) {
             log.error('Approve error', {
                 name: e.name,
