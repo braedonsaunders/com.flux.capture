@@ -92,6 +92,11 @@
         pdfScale: 1.5,
         annotationOverlay: null,
 
+        // Image preview state
+        imageElement: null,
+        imageNaturalWidth: null,
+        imageNaturalHeight: null,
+
         // Quick assign palette state
         quickAssignOpen: false,
         quickAssignTargetField: null,
@@ -435,6 +440,9 @@
             this.lineItems = [];
             this.pdfDoc = null;
             this.pdfPage = null;
+            this.imageElement = null;
+            this.imageNaturalWidth = null;
+            this.imageNaturalHeight = null;
             this.isLoading = true;
 
             // Reset coding suggestions
@@ -1278,7 +1286,13 @@
 
             var fileUrl = this.data.fileUrl || (this.data.sourceFile ? '/core/media/media.nl?id=' + this.data.sourceFile : null);
 
-            if (fileUrl && typeof pdfjsLib !== 'undefined') {
+            // Check if file is an image based on URL or file extension
+            var isImage = this.isImageFile(fileUrl);
+
+            if (fileUrl && isImage) {
+                // Render image with zoom/pan support
+                this.renderImageWithZoom(viewport, fileUrl);
+            } else if (fileUrl && typeof pdfjsLib !== 'undefined') {
                 // Use PDF.js for rendering with annotation support
                 this.renderPdfWithAnnotations(viewport, fileUrl);
             } else if (fileUrl) {
@@ -1308,11 +1322,172 @@
             }
         },
 
+        // Check if a URL points to an image file
+        isImageFile: function(url) {
+            if (!url) return false;
+            var imageExtensions = /\.(jpg|jpeg|png|gif|webp|bmp|tiff|tif)(\?|#|$)/i;
+            return imageExtensions.test(url);
+        },
+
+        // Render image with zoom and pan support (similar to PDF rendering)
+        renderImageWithZoom: function(viewport, fileUrl) {
+            var self = this;
+
+            // Clear any previous PDF state
+            this.pdfDoc = null;
+            this.imageElement = null;
+
+            // Create container structure similar to PDF
+            viewport.innerHTML = '<div class="pdf-container" id="pdf-container">' +
+                '<div class="pdf-loading"><div class="loading-spinner"></div><span>Loading image...</span></div>' +
+                '<div class="pdf-pages-container" id="pdf-pages-container"></div>' +
+            '</div>';
+
+            var container = el('#pdf-container');
+            var pagesContainer = el('#pdf-pages-container');
+            var loadingEl = viewport.querySelector('.pdf-loading');
+
+            if (!pagesContainer) return;
+
+            // Store reference for scroll handling
+            this.pdfPagesContainer = pagesContainer;
+            this.pageElements = [];
+            this.totalPages = 1;
+            this.currentPage = 1;
+
+            // Create image element
+            var img = new Image();
+            img.onload = function() {
+                // Hide loading
+                if (loadingEl) loadingEl.style.display = 'none';
+
+                // Store original dimensions
+                self.imageNaturalWidth = img.naturalWidth;
+                self.imageNaturalHeight = img.naturalHeight;
+
+                // Render the image at current zoom level
+                self.renderImagePage(img, pagesContainer);
+
+                // Setup pan handler
+                self.setupPanHandler(viewport);
+                self.updatePanCursor();
+
+                // Update page display
+                var pageDisplay = el('#page-display');
+                if (pageDisplay) {
+                    pageDisplay.textContent = '1 / 1';
+                }
+            };
+
+            img.onerror = function() {
+                console.error('[Image] Error loading image:', fileUrl);
+                // Fallback to iframe
+                viewport.innerHTML = '<iframe src="' + fileUrl + '" id="doc-preview" ' +
+                    'style="width:100%;height:100%;border:none;background:white;"></iframe>';
+            };
+
+            img.src = fileUrl;
+            this.imageElement = img;
+        },
+
+        // Render image at current zoom level
+        renderImagePage: function(img, pagesContainer) {
+            var self = this;
+            if (!pagesContainer) pagesContainer = this.pdfPagesContainer;
+            if (!pagesContainer) return;
+
+            // Clear existing content
+            pagesContainer.innerHTML = '';
+            this.pageElements = [];
+
+            // Calculate scale to fit container width (same as PDF)
+            var container = el('#pdf-container');
+            var containerWidth = container ? container.clientWidth - 40 : 600;
+            var baseScale = containerWidth / this.imageNaturalWidth;
+            var scaledWidth = this.imageNaturalWidth * baseScale * this.zoom;
+            var scaledHeight = this.imageNaturalHeight * baseScale * this.zoom;
+
+            // Apply rotation to dimensions
+            var displayWidth = scaledWidth;
+            var displayHeight = scaledHeight;
+            if (this.rotation === 90 || this.rotation === 270) {
+                displayWidth = scaledHeight;
+                displayHeight = scaledWidth;
+            }
+
+            // Create page wrapper (same structure as PDF)
+            var pageWrapper = document.createElement('div');
+            pageWrapper.className = 'pdf-page-wrapper';
+            pageWrapper.dataset.page = 1;
+            pageWrapper.style.width = displayWidth + 'px';
+            pageWrapper.style.height = displayHeight + 'px';
+            pageWrapper.style.overflow = 'hidden';
+
+            // Create image element
+            var imgEl = document.createElement('img');
+            imgEl.src = img.src;
+            imgEl.className = 'image-preview-content';
+            imgEl.style.width = scaledWidth + 'px';
+            imgEl.style.height = scaledHeight + 'px';
+            imgEl.style.display = 'block';
+            imgEl.style.transform = 'rotate(' + this.rotation + 'deg)';
+            imgEl.style.transformOrigin = 'center center';
+
+            // Adjust position for rotation
+            if (this.rotation === 90) {
+                imgEl.style.transform = 'rotate(90deg) translateY(-100%)';
+                imgEl.style.transformOrigin = 'top left';
+            } else if (this.rotation === 180) {
+                imgEl.style.transform = 'rotate(180deg)';
+                imgEl.style.transformOrigin = 'center center';
+            } else if (this.rotation === 270) {
+                imgEl.style.transform = 'rotate(270deg) translateX(-100%)';
+                imgEl.style.transformOrigin = 'top left';
+            }
+
+            // Create annotation overlay for this page (for extraction annotations)
+            var annotationOverlay = document.createElement('div');
+            annotationOverlay.className = 'annotation-overlay';
+            annotationOverlay.dataset.page = 1;
+            annotationOverlay.style.width = displayWidth + 'px';
+            annotationOverlay.style.height = displayHeight + 'px';
+
+            // Append elements
+            pageWrapper.appendChild(imgEl);
+            pageWrapper.appendChild(annotationOverlay);
+            pagesContainer.appendChild(pageWrapper);
+
+            // Store reference
+            this.pageElements.push({
+                wrapper: pageWrapper,
+                image: imgEl,
+                overlay: annotationOverlay,
+                pageNum: 1,
+                viewport: {
+                    width: displayWidth,
+                    height: displayHeight
+                }
+            });
+
+            // Render annotations if enabled
+            if (this.extractionPool.showAnnotations) {
+                this.renderPageAnnotations(1, annotationOverlay, {
+                    width: displayWidth,
+                    height: displayHeight
+                });
+            }
+        },
+
         // ==========================================
         // PDF.JS RENDERING WITH ANNOTATIONS
         // ==========================================
         renderPdfWithAnnotations: function(viewport, fileUrl) {
             var self = this;
+
+            // Clear any previous image state
+            this.imageElement = null;
+            this.imageNaturalWidth = null;
+            this.imageNaturalHeight = null;
 
             // Create container structure for continuous scrolling - all pages in one scrollable container
             viewport.innerHTML = '<div class="pdf-container" id="pdf-container">' +
@@ -6814,6 +6989,9 @@
             // If using PDF.js, re-render the page at new zoom
             if (this.pdfDoc) {
                 this.renderPdfPage(this.currentPage);
+            } else if (this.imageElement && this.imageNaturalWidth) {
+                // Re-render image at new zoom level
+                this.renderImagePage(this.imageElement);
             } else {
                 // Fallback to iframe transform
                 var iframe = el('#doc-preview');
@@ -6829,6 +7007,9 @@
             // If using PDF.js, re-render the page with new rotation
             if (this.pdfDoc) {
                 this.renderPdfPage(this.currentPage);
+            } else if (this.imageElement && this.imageNaturalWidth) {
+                // Re-render image with new rotation
+                this.renderImagePage(this.imageElement);
             } else {
                 // Fallback to iframe transform
                 var iframe = el('#doc-preview');
@@ -9310,6 +9491,10 @@
             this.fillUndoState = null;
             this.fillDragState = null;
             this.hideFillPopover();
+            // Image preview cleanup
+            this.imageElement = null;
+            this.imageNaturalWidth = null;
+            this.imageNaturalHeight = null;
         }
     };
 
