@@ -2529,7 +2529,8 @@
                                     // Merge DOM extraction data into schema field
                                     if (domField) {
                                         nsField.label = domField.label || nsField.label;
-                                        nsField.type = domField.type || nsField.type;
+                                        // Schema type from NetSuite is authoritative - only use layout type as fallback
+                                        nsField.type = nsField.type || domField.type;
                                         nsField.mandatory = domField.mandatory || domField.required || nsField.mandatory;
                                         nsField.isDisplay = domField.mode !== 'hidden' && domField.visible !== false;
                                         // Merge default values from layout field config
