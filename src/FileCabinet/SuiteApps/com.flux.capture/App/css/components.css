@@ -1268,6 +1268,59 @@ body.topbar-minimized .view-review.split-view .review-content {
     }
 }
 
+/* Settings Subtabs Navigation */
+.settings-subtabs-nav {
+    display: flex;
+    gap: var(--space-xs);
+    padding: var(--space-sm) var(--space-xl);
+    background: var(--gray-50);
+    border-bottom: 1px solid var(--border-color);
+    margin-bottom: var(--space-lg);
+}
+
+.settings-subtab {
+    display: flex;
+    align-items: center;
+    gap: var(--space-xs);
+    padding: var(--space-sm) var(--space-md);
+    background: transparent;
+    border: 1px solid transparent;
+    border-radius: var(--radius-md);
+    color: var(--text-secondary);
+    font-size: var(--font-size-sm);
+    font-weight: 500;
+    font-family: var(--font-family);
+    cursor: pointer;
+    transition: all var(--transition);
+}
+
+.settings-subtab:hover {
+    color: var(--text-primary);
+    background: var(--surface-card);
+}
+
+.settings-subtab.active {
+    background: var(--surface-card);
+    color: var(--color-primary);
+    border-color: var(--border-color);
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+}
+
+.settings-subtab i {
+    font-size: 14px;
+}
+
+/* Settings Subtab Panels */
+.settings-subtab-panel {
+    display: none;
+    padding: 0 var(--space-xl) var(--space-xl);
+    animation: settingsTabFadeIn 0.2s ease;
+}
+
+.settings-subtab-panel.active {
+    display: block;
+}
+
 .settings-layout {
     display: grid;
     gap: var(--space-lg);
