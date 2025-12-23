@@ -6634,10 +6634,17 @@
 
         hideTypeaheadDropdown: function(wrapper) {
             if (!wrapper) return;
+
+            // CRITICAL: Never hide sublist typeahead dropdowns via this function
+            // Sublist dropdowns are managed separately via mousedown-outside handler
+            if (wrapper.closest('.sublist-table')) {
+                FCDebug.log('[Typeahead] hideTypeaheadDropdown BLOCKED for sublist dropdown');
+                return;
+            }
+
             var dropdown = wrapper.querySelector('.typeahead-dropdown');
             if (dropdown) {
-                FCDebug.log('[Typeahead] hideTypeaheadDropdown called');
-                console.trace('[Typeahead] hideTypeaheadDropdown stack trace');
+                FCDebug.log('[Typeahead] hideTypeaheadDropdown called for non-sublist');
                 dropdown.style.display = 'none';
             }
         },
