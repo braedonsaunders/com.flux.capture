@@ -12123,87 +12123,148 @@ textarea.ai-corrected {
    LEARNING MANAGEMENT STYLES
    ========================================== */
 
-/* Learning Stats */
-.learning-stats {
-    display: flex;
-    gap: var(--space-lg);
-    padding: var(--space-md) 0;
+/* Compact Learning Header */
+.learning-header-card {
+    padding: 0 !important;
 }
 
-.learning-stat {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    padding: var(--space-md) var(--space-lg);
-    background: var(--gray-50);
-    border-radius: var(--radius-md);
-    min-width: 120px;
-}
-
-.learning-stat .stat-value {
-    font-size: 28px;
-    font-weight: 700;
-    color: var(--color-primary);
-    line-height: 1.2;
-}
-
-.learning-stat .stat-label {
-    font-size: 12px;
-    color: var(--text-secondary);
-    margin-top: 4px;
-}
-
-/* Learning Toolbar */
-.learning-toolbar {
+.learning-header {
     display: flex;
     justify-content: space-between;
-    align-items: flex-end;
-    gap: var(--space-lg);
-    padding: var(--space-md);
+    align-items: center;
+    padding: 12px 16px;
+    border-bottom: 1px solid var(--border-color);
+    background: var(--gray-50);
+}
+
+.learning-header-left {
+    display: flex;
+    align-items: center;
+    gap: 20px;
     flex-wrap: wrap;
 }
 
-.learning-filters {
+.learning-title {
     display: flex;
-    gap: var(--space-md);
-    align-items: flex-end;
-    flex-wrap: wrap;
+    align-items: center;
+    gap: 10px;
 }
 
-.learning-filters .filter-group {
-    display: flex;
-    flex-direction: column;
-    gap: 4px;
+.learning-title i {
+    font-size: 18px;
+    color: var(--color-primary);
 }
 
-.learning-filters .filter-group label {
-    font-size: 11px;
+.learning-title h3 {
+    margin: 0;
+    font-size: 16px;
     font-weight: 600;
-    color: var(--text-secondary);
-    text-transform: uppercase;
-    letter-spacing: 0.5px;
 }
 
-.learning-filters .filter-group select,
-.learning-filters .filter-group input {
-    min-width: 160px;
-    padding: 8px 12px;
+.learning-stats-inline {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 13px;
+    color: var(--text-secondary);
+}
+
+.learning-stats-inline .stat-inline strong {
+    color: var(--text-primary);
+    font-weight: 600;
+}
+
+.learning-stats-inline .stat-divider {
+    color: var(--gray-300);
+}
+
+.learning-header-right {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+/* Compact Filters Row */
+.learning-filters-row {
+    display: flex;
+    gap: 12px;
+    padding: 12px 16px;
+    background: white;
+    align-items: center;
+    flex-wrap: wrap;
+}
+
+.learning-filters-row .filter-input {
+    height: 36px;
+}
+
+.learning-filters-row select.filter-input {
+    min-width: 140px;
+    padding: 0 12px;
     border: 1px solid var(--border-color);
     border-radius: var(--radius-sm);
     font-size: 13px;
     background: white;
+    cursor: pointer;
 }
 
-.learning-filters .filter-group select:focus,
-.learning-filters .filter-group input:focus {
+.learning-filters-row select.filter-input:focus {
     outline: none;
     border-color: var(--color-primary);
-    box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+    box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.1);
 }
 
-.learning-actions {
+.learning-filters-row .typeahead-select.filter-input {
+    min-width: 180px;
+}
+
+.learning-filters-row .typeahead-select.filter-input .typeahead-input {
+    width: 100%;
+    height: 36px;
+    padding: 0 12px;
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-sm);
+    font-size: 13px;
+}
+
+.learning-filters-row .typeahead-select.filter-input .typeahead-input:focus {
+    outline: none;
+    border-color: var(--color-primary);
+    box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.1);
+}
+
+.search-input-wrapper {
+    position: relative;
     display: flex;
-    gap: var(--space-sm);
+    align-items: center;
+}
+
+.search-input-wrapper i {
+    position: absolute;
+    left: 12px;
+    color: var(--gray-400);
+    font-size: 13px;
+    pointer-events: none;
+}
+
+.search-input-wrapper input {
+    width: 100%;
+    height: 36px;
+    padding: 0 12px 0 36px;
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-sm);
+    font-size: 13px;
+}
+
+.search-input-wrapper input:focus {
+    outline: none;
+    border-color: var(--color-primary);
+    box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.1);
+}
+
+.filter-input-grow {
+    flex: 1;
+    min-width: 200px;
 }
 
 /* Learning Table */
