@@ -6966,7 +6966,11 @@
                     // Build success message based on whether submitted for approval or created
                     var message;
                     if (result.submittedForApproval) {
-                        message = 'Transaction #' + result.transactionId + ' submitted for approval!';
+                        if (result.workflowTriggered) {
+                            message = 'Transaction #' + result.transactionId + ' submitted for approval (workflow triggered)!';
+                        } else {
+                            message = 'Transaction #' + result.transactionId + ' submitted for approval!';
+                        }
                     } else {
                         message = 'Transaction #' + result.transactionId + ' created!';
                     }
