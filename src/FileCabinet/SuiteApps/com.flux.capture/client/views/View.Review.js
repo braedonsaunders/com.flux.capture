@@ -4112,7 +4112,7 @@
                     if (!input.classList.contains('typeahead-input')) return;
 
                     var wrapper = input.closest('.typeahead-select');
-                    var dropdown = wrapper ? wrapper.querySelector('.typeahead-dropdown') : null;
+                    var dropdown = wrapper ? self.getDropdownElement(wrapper) : null;
                     if (!dropdown || dropdown.style.display === 'none') return;
 
                     var options = dropdown.querySelectorAll('.typeahead-option');
@@ -4145,6 +4145,28 @@
                     }
                 });
             });
+
+            // Ensure portaled sublist dropdown options remain clickable
+            if (!this._portaledTypeaheadDocHandlerBound) {
+                this._portaledTypeaheadDocHandlerBound = true;
+
+                document.addEventListener('click', function(e) {
+                    var option = e.target.closest('.typeahead-option');
+                    if (!option) return;
+
+                    var dropdownEl = option.closest('.typeahead-dropdown');
+                    if (!dropdownEl || dropdownEl.dataset.portaled !== 'true') return;
+
+                    var wrapper = option.closest('.typeahead-select');
+                    if (!wrapper && dropdownEl.dataset.ownerId) {
+                        wrapper = document.querySelector('.typeahead-select[data-dropdown-owner-id="' + dropdownEl.dataset.ownerId + '"]');
+                    }
+
+                    if (wrapper) {
+                        self.selectTypeaheadOption(wrapper, option);
+                    }
+                });
+            }
 
             // ========== BODY FIELD TYPEAHEAD HANDLERS ==========
             this.bindBodyFieldTypeahead();
@@ -4254,7 +4276,7 @@
                 if (input.closest('.sublist-table')) return;
 
                 var wrapper = input.closest('.typeahead-select');
-                var dropdown = wrapper ? wrapper.querySelector('.typeahead-dropdown') : null;
+                var dropdown = wrapper ? self.getDropdownElement(wrapper) : null;
                 if (!dropdown || dropdown.style.display === 'none') return;
 
                 var options = dropdown.querySelectorAll('.typeahead-option');
@@ -4292,7 +4314,7 @@
         selectBodyFieldTypeahead: function(wrapper, option) {
             var hiddenInput = wrapper.querySelector('input[type="hidden"]');
             var displayInput = wrapper.querySelector('.typeahead-input');
-            var dropdown = wrapper.querySelector('.typeahead-dropdown');
+            var dropdown = this.getDropdownElement(wrapper);
 
             var value = option.dataset.value;
             var text = option.dataset.text;
@@ -4403,7 +4425,7 @@
                     // Skip if typeahead dropdown is open (arrow keys navigate dropdown)
                     var wrapper = input.closest('.typeahead-select');
                     if (wrapper) {
-                        var dropdown = wrapper.querySelector('.typeahead-dropdown');
+                        var dropdown = self.getDropdownElement(wrapper);
                         if (dropdown && dropdown.style.display !== 'none' && dropdown.children.length > 0) {
                             return; // Let existing typeahead handler deal with it
                         }
@@ -4987,7 +5009,7 @@
 
             // Use fixed positioning relative to the viewport so the menu isn't clipped by the table
             popover.style.position = 'fixed';
-            popover.style.zIndex = '11002';
+            popover.style.zIndex = '15010';
             document.body.appendChild(popover);
 
             // Position adjustment if needed
@@ -6512,13 +6534,16 @@
             var self = this;
             FCDebug.log('[Typeahead] searchDatasource called:', type, query);
 
-            var dropdown = wrapper ? wrapper.querySelector('.typeahead-dropdown') : null;
+            var dropdown = wrapper ? this.getDropdownElement(wrapper) : null;
             if (!dropdown) {
                 FCDebug.log('[Typeahead] ERROR: dropdown not found in wrapper');
                 return;
             }
 
             FCDebug.log('[Typeahead] Found dropdown element');
+
+            // Ensure sublist dropdowns render at document level to avoid clipping
+            this.portalDropdownIfNeeded(wrapper, dropdown);
 
             // Show loading state
             dropdown.innerHTML = '<div class="typeahead-loading"><i class="fas fa-spinner fa-spin"></i> Searching...</div>';
@@ -6582,10 +6607,80 @@
             FCDebug.log('[Typeahead] Rendered', options.length, 'options, dropdown HTML length:', html.length);
         },
 
+        // Get dropdown element even when it has been moved out of the wrapper
+        getDropdownElement: function(wrapper) {
+            if (!wrapper) return null;
+
+            // Cache reference so we can still find it after portaling to <body>
+            if (wrapper._dropdownElement && wrapper._dropdownElement.parentNode) {
+                return wrapper._dropdownElement;
+            }
+
+            var dropdown = wrapper.querySelector('.typeahead-dropdown');
+            if (dropdown) {
+                wrapper._dropdownElement = dropdown;
+            }
+            return dropdown;
+        },
+
+        // Move sublist dropdowns to body so they are never clipped by table overflow
+        getDropdownPortalLayer: function() {
+            var layer = document.querySelector('.typeahead-portal-layer');
+            if (!layer) {
+                layer = document.createElement('div');
+                layer.className = 'typeahead-portal-layer';
+                document.body.appendChild(layer);
+            }
+            return layer;
+        },
+
+        portalDropdownIfNeeded: function(wrapper, dropdown) {
+            if (!wrapper || !dropdown) return;
+
+            // Only portal sublist dropdowns
+            if (!wrapper.closest('.sublist-table')) return;
+
+            if (!wrapper.dataset.dropdownOwnerId) {
+                wrapper.dataset.dropdownOwnerId = 'dropdown-' + Date.now() + '-' + Math.random().toString(36).slice(2);
+            }
+
+            dropdown.dataset.ownerId = wrapper.dataset.dropdownOwnerId;
+            dropdown.dataset.portaled = 'true';
+            dropdown.classList.add('typeahead-portaled');
+            wrapper._dropdownElement = dropdown;
+
+            var portalLayer = this.getDropdownPortalLayer();
+
+            if (dropdown.parentNode !== portalLayer) {
+                dropdown.style.pointerEvents = 'auto';
+                portalLayer.appendChild(dropdown);
+            }
+        },
+
+        restoreDropdownToWrapper: function(wrapper, dropdown) {
+            if (!wrapper || !dropdown) return;
+
+            if (dropdown.dataset.portaled === 'true' && dropdown.parentNode !== wrapper) {
+                dropdown.classList.remove('typeahead-portaled');
+                dropdown.style.pointerEvents = '';
+                wrapper.appendChild(dropdown);
+            }
+        },
+
         selectTypeaheadOption: function(wrapper, option) {
+            // Locate wrapper when dropdown is portaled to body
+            if (!wrapper && option) {
+                var dropdownEl = option.closest('.typeahead-dropdown');
+                if (dropdownEl && dropdownEl.dataset.ownerId) {
+                    wrapper = document.querySelector('.typeahead-select[data-dropdown-owner-id="' + dropdownEl.dataset.ownerId + '"]');
+                }
+            }
+
+            if (!wrapper) return;
+
             var hiddenInput = wrapper.querySelector('input[type="hidden"]');
             var displayInput = wrapper.querySelector('.typeahead-input');
-            var dropdown = wrapper.querySelector('.typeahead-dropdown');
+            var dropdown = this.getDropdownElement(wrapper);
 
             var value = option.dataset.value;
             var text = option.dataset.text;
@@ -6603,6 +6698,7 @@
             if (hiddenInput) hiddenInput.value = value;
             if (displayInput) displayInput.value = text;
             if (dropdown) dropdown.style.display = 'none';
+            if (dropdown) this.restoreDropdownToWrapper(wrapper, dropdown);
 
             // Trigger line update
             var row = wrapper.closest('tr');
@@ -6665,10 +6761,11 @@
                 return;
             }
 
-            var dropdown = wrapper.querySelector('.typeahead-dropdown');
+            var dropdown = this.getDropdownElement(wrapper);
             if (dropdown) {
                 FCDebug.log('[Typeahead] hideTypeaheadDropdown called for non-sublist');
                 dropdown.style.display = 'none';
+                this.restoreDropdownToWrapper(wrapper, dropdown);
             }
         },
 
@@ -7807,7 +7904,7 @@
                     if (!input.classList.contains('typeahead-input')) return;
 
                     var wrapper = input.closest('.typeahead-select');
-                    var dropdown = wrapper ? wrapper.querySelector('.typeahead-dropdown') : null;
+                    var dropdown = wrapper ? self.getDropdownElement(wrapper) : null;
                     if (!dropdown || dropdown.style.display === 'none') return;
 
                     var options = dropdown.querySelectorAll('.typeahead-option');
@@ -9806,11 +9903,22 @@
                 // If mousedown is on a typeahead-input, don't hide
                 if (e.target.classList && e.target.classList.contains('typeahead-input')) return;
 
-                // Hide all visible sublist typeahead dropdowns
-                document.querySelectorAll('.sublist-table .typeahead-dropdown').forEach(function(dropdown) {
+                // Hide all visible sublist typeahead dropdowns (including portaled ones)
+                document.querySelectorAll('.typeahead-dropdown').forEach(function(dropdown) {
+                    var isSublistDropdown = dropdown.dataset.portaled === 'true' || dropdown.closest('.sublist-table');
+                    if (!isSublistDropdown) return;
+
                     if (dropdown.style.display !== 'none') {
                         FCDebug.log('[Typeahead] Hiding dropdown via mousedown outside');
                         dropdown.style.display = 'none';
+
+                        if (dropdown.dataset.ownerId) {
+                            var owner = document.querySelector('.typeahead-select[data-dropdown-owner-id="' + dropdown.dataset.ownerId + '"]');
+                            if (owner && owner._dropdownElement) {
+                                owner._dropdownElement = dropdown;
+                                if (dropdown.parentNode !== owner) owner.appendChild(dropdown);
+                            }
+                        }
                     }
                 });
             });

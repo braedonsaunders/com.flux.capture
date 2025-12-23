@@ -3650,7 +3650,7 @@ body.topbar-minimized .view-review.split-view .review-content {
     border: 1px solid var(--border-color);
     border-radius: var(--radius-md);
     box-shadow: var(--shadow-lg);
-    z-index: 10002;
+    z-index: 15010;
     min-width: 180px;
     opacity: 0;
     transform: translateY(-4px);
@@ -9044,6 +9044,20 @@ tr.doc-row.deleting::after {
     box-shadow: var(--shadow-lg);
     margin-top: 2px;
     display: none;
+}
+
+/* Portaled sublist dropdown container */
+.typeahead-portal-layer {
+    position: fixed;
+    inset: 0;
+    z-index: 15000;
+    pointer-events: none;
+}
+
+.typeahead-dropdown.typeahead-portaled {
+    position: fixed;
+    z-index: 15000;
+    pointer-events: auto;
 }
 
 .typeahead-dropdown:not(:empty) {
