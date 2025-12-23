@@ -3888,6 +3888,7 @@ define([
 
     /**
      * Validate form data before transaction creation
+     * Uses form schema to check all mandatory fields
      * @param {Object} formData - The form data to validate
      * @param {string} transactionType - Type of transaction to create
      * @returns {Object} Validation result with valid, errors, and warnings arrays
@@ -3898,28 +3899,60 @@ define([
         var bodyFields = formData.bodyFields || {};
         var sublists = formData.sublists || {};
 
-        // ===== REQUIRED FIELD VALIDATION =====
+        // Load form schema to get mandatory field definitions
+        var FormSchemaModule = null;
+        try {
+            FormSchemaModule = require('./FC_FormSchemaExtractor');
+        } catch (e) {
+            log.debug('validateForTransaction', 'Could not load FormSchemaExtractor: ' + e.message);
+        }
 
-        // Entity is always required (except expense reports use current user)
-        if (transactionType !== 'expensereport') {
-            if (!bodyFields.entity) {
-                errors.push({ field: 'entity', message: 'Vendor is required' });
+        var schema = null;
+        if (FormSchemaModule && FormSchemaModule.getSchema) {
+            try {
+                schema = FormSchemaModule.getSchema(transactionType);
+            } catch (e) {
+                log.debug('validateForTransaction', 'Could not get schema: ' + e.message);
             }
         }
 
-        // Date is required
-        if (!bodyFields.trandate) {
-            errors.push({ field: 'trandate', message: 'Transaction date is required' });
+        // ===== SCHEMA-BASED MANDATORY FIELD VALIDATION =====
+        if (schema && schema.bodyFields) {
+            schema.bodyFields.forEach(function(fieldDef) {
+                if (fieldDef.mandatory && fieldDef.id) {
+                    var value = bodyFields[fieldDef.id];
+                    // Check if value is empty
+                    if (value === undefined || value === null || value === '') {
+                        errors.push({
+                            field: fieldDef.id,
+                            message: (fieldDef.label || fieldDef.id) + ' is required'
+                        });
+                    }
+                }
+            });
         }
 
-        // Total amount validation
+        // ===== FALLBACK CORE FIELD VALIDATION (if no schema) =====
+        if (!schema) {
+            // Entity is always required
+            if (!bodyFields.entity) {
+                var entityLabel = transactionType === 'expensereport' ? 'Employee' : 'Vendor';
+                errors.push({ field: 'entity', message: entityLabel + ' is required' });
+            }
+
+            // Date is required
+            if (!bodyFields.trandate) {
+                errors.push({ field: 'trandate', message: 'Transaction date is required' });
+            }
+        }
+
+        // Total amount validation (always check)
         var total = parseFloat(bodyFields.total) || parseFloat(bodyFields.usertotal) || 0;
         if (total <= 0) {
             errors.push({ field: 'total', message: 'Total amount must be greater than zero' });
         }
 
         // ===== LINE ITEM VALIDATION =====
-
         var expenseLines = sublists.expense || [];
         var itemLines = sublists.item || [];
         var hasLines = expenseLines.length > 0 || itemLines.length > 0;
@@ -3928,14 +3961,43 @@ define([
             // No lines - will use fallback single line with total
             warnings.push({ field: 'sublists', message: 'No line items - will create single expense line with total amount' });
         } else {
-            // Validate each expense line has required fields
+            // Get sublist field definitions from schema
+            var expenseFieldDefs = [];
+            var itemFieldDefs = [];
+            if (schema && schema.sublists) {
+                schema.sublists.forEach(function(sl) {
+                    if (sl.id === 'expense' && sl.fields) {
+                        expenseFieldDefs = sl.fields;
+                    } else if (sl.id === 'item' && sl.fields) {
+                        itemFieldDefs = sl.fields;
+                    }
+                });
+            }
+
+            // Validate each expense line
             expenseLines.forEach(function(line, idx) {
-                if (!line.account && !line.category) {
-                    errors.push({
-                        field: 'expense[' + idx + '].account',
-                        message: 'Expense line ' + (idx + 1) + ' requires an account or category'
-                    });
+                // Check mandatory fields from schema
+                expenseFieldDefs.forEach(function(fieldDef) {
+                    if (fieldDef.mandatory && fieldDef.id) {
+                        var value = line[fieldDef.id];
+                        if (value === undefined || value === null || value === '') {
+                            errors.push({
+                                field: 'expense[' + idx + '].' + fieldDef.id,
+                                message: 'Expense line ' + (idx + 1) + ': ' + (fieldDef.label || fieldDef.id) + ' is required'
+                            });
+                        }
+                    }
+                });
+                // Fallback: ensure account or category
+                if (expenseFieldDefs.length === 0) {
+                    if (!line.account && !line.category) {
+                        errors.push({
+                            field: 'expense[' + idx + '].account',
+                            message: 'Expense line ' + (idx + 1) + ' requires an account or category'
+                        });
+                    }
                 }
+                // Amount validation
                 var lineAmount = parseFloat(line.amount) || 0;
                 if (lineAmount <= 0) {
                     errors.push({
@@ -3945,13 +4007,28 @@ define([
                 }
             });
 
-            // Validate each item line has required fields
+            // Validate each item line
             itemLines.forEach(function(line, idx) {
-                if (!line.item) {
-                    errors.push({
-                        field: 'item[' + idx + '].item',
-                        message: 'Item line ' + (idx + 1) + ' requires an item'
-                    });
+                // Check mandatory fields from schema
+                itemFieldDefs.forEach(function(fieldDef) {
+                    if (fieldDef.mandatory && fieldDef.id) {
+                        var value = line[fieldDef.id];
+                        if (value === undefined || value === null || value === '') {
+                            errors.push({
+                                field: 'item[' + idx + '].' + fieldDef.id,
+                                message: 'Item line ' + (idx + 1) + ': ' + (fieldDef.label || fieldDef.id) + ' is required'
+                            });
+                        }
+                    }
+                });
+                // Fallback: ensure item is set
+                if (itemFieldDefs.length === 0) {
+                    if (!line.item) {
+                        errors.push({
+                            field: 'item[' + idx + '].item',
+                            message: 'Item line ' + (idx + 1) + ' requires an item'
+                        });
+                    }
                 }
             });
 
@@ -4209,14 +4286,9 @@ define([
         } else if (transactionType === 'expensereport') {
             txnRecord = record.create({ type: record.Type.EXPENSE_REPORT, isDynamic: true });
 
-            // Expense reports use current user as entity
-            txnRecord.setValue('entity', runtime.getCurrentUser().id);
-
-            // Set other body fields
+            // Set all body fields from formData (entity can be any employee)
             Object.keys(bodyFields).forEach(function(fieldId) {
-                if (fieldId !== 'entity') { // Don't override entity
-                    setBodyField(txnRecord, fieldId, bodyFields[fieldId]);
-                }
+                setBodyField(txnRecord, fieldId, bodyFields[fieldId]);
             });
 
             if (sublists.expense && sublists.expense.length > 0) {
@@ -4238,7 +4310,60 @@ define([
             }
         }
 
-        return txnRecord ? txnRecord.save() : null;
+        if (!txnRecord) {
+            return null;
+        }
+
+        // Validate required fields before save
+        var validationErrors = [];
+
+        // Check for line items
+        var expenseCount = txnRecord.getLineCount({ sublistId: 'expense' });
+        var itemCount = 0;
+        try { itemCount = txnRecord.getLineCount({ sublistId: 'item' }); } catch (e) { /* item sublist may not exist */ }
+
+        if (expenseCount === 0 && itemCount === 0) {
+            validationErrors.push({ field: 'sublists', message: 'At least one expense or item line is required' });
+        }
+
+        // Check expense lines have account
+        for (var i = 0; i < expenseCount; i++) {
+            var account = txnRecord.getSublistValue({ sublistId: 'expense', fieldId: 'account', line: i });
+            if (!account) {
+                validationErrors.push({ field: 'expense[' + i + '].account', message: 'Account is required for expense line ' + (i + 1) });
+            }
+        }
+
+        // Check item lines have item
+        for (var j = 0; j < itemCount; j++) {
+            var item = txnRecord.getSublistValue({ sublistId: 'item', fieldId: 'item', line: j });
+            if (!item) {
+                validationErrors.push({ field: 'item[' + j + '].item', message: 'Item is required for item line ' + (j + 1) });
+            }
+        }
+
+        if (validationErrors.length > 0) {
+            var validationError = error.create({
+                name: 'VALIDATION_ERROR',
+                message: 'Transaction validation failed'
+            });
+            validationError.type = 'VALIDATION_ERROR';
+            validationError.errors = validationErrors;
+            throw validationError;
+        }
+
+        // Try to save and capture detailed error
+        try {
+            return txnRecord.save();
+        } catch (saveError) {
+            log.error('Transaction save failed', {
+                name: saveError.name,
+                message: saveError.message,
+                id: saveError.id,
+                stack: saveError.stack
+            });
+            throw saveError;
+        }
     }
 
     // ==================== Provider Configuration Handlers ====================
