@@ -4940,13 +4940,33 @@ define([
             });
         }
 
+        // Known date fields that need conversion
+        var dateFields = ['trandate', 'duedate', 'postingperiod', 'startdate', 'enddate', 'expensedate', 'expectedreceiptdate'];
+
+        // Helper to check if a field is a date field
+        function isDateField(fieldId) {
+            if (!fieldId) return false;
+            var lowerFieldId = fieldId.toLowerCase();
+            // Check known date fields or fields ending in 'date'
+            return dateFields.indexOf(lowerFieldId) !== -1 || lowerFieldId.match(/date$/);
+        }
+
         // Helper to set body field value safely
         function setBodyField(txn, fieldId, value) {
             if (!fieldId || value === undefined || value === null || value === '') return;
             if (shouldSkipField(fieldId)) return;
 
             try {
-                txn.setValue({ fieldId: fieldId, value: value });
+                var valueToSet = value;
+                // Convert date fields to proper Date objects
+                if (isDateField(fieldId) && !(value instanceof Date)) {
+                    valueToSet = parseDateValue(value);
+                    if (!valueToSet) {
+                        log.debug('setBodyField', 'Could not parse date for ' + fieldId + ': ' + value);
+                        return;
+                    }
+                }
+                txn.setValue({ fieldId: fieldId, value: valueToSet });
             } catch (e) {
                 log.debug('setBodyField', 'Could not set ' + fieldId + ': ' + e.message);
             }
@@ -4958,7 +4978,16 @@ define([
             if (shouldSkipField(fieldId)) return;
 
             try {
-                txn.setCurrentSublistValue({ sublistId: sublistId, fieldId: fieldId, value: value });
+                var valueToSet = value;
+                // Convert date fields to proper Date objects
+                if (isDateField(fieldId) && !(value instanceof Date)) {
+                    valueToSet = parseDateValue(value);
+                    if (!valueToSet) {
+                        log.debug('setSublistField', 'Could not parse date for ' + sublistId + '.' + fieldId + ': ' + value);
+                        return;
+                    }
+                }
+                txn.setCurrentSublistValue({ sublistId: sublistId, fieldId: fieldId, value: valueToSet });
             } catch (e) {
                 log.debug('setSublistField', 'Could not set ' + sublistId + '.' + fieldId + ': ' + e.message);
             }

@@ -696,7 +696,7 @@
                     '<div class="shortcuts-grid">' +
                         '<div class="shortcut-section">' +
                             '<div class="shortcut-section-title">Actions</div>' +
-                            '<div class="shortcut-item"><kbd>A</kbd> <span>Approve & next</span></div>' +
+                            '<div class="shortcut-item"><kbd>A</kbd> <span>Approve & create</span></div>' +
                             '<div class="shortcut-item"><kbd>R</kbd> <span>Reject document</span></div>' +
                             '<div class="shortcut-item"><kbd>S</kbd> <span>Skip to next</span></div>' +
                             '<div class="shortcut-item"><kbd>Esc</kbd> <span>Back to documents</span></div>' +
