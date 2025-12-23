@@ -22,6 +22,9 @@
         });
     }
 
+    // Expose globally for use by other modules
+    window.updateReviewBadge = updateReviewBadge;
+
     /**
      * Initialize navigation click handlers
      */
