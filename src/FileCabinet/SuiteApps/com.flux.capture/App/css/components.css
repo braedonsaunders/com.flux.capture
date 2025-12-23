@@ -11285,6 +11285,16 @@ body.extraction-selecting .form-field:hover {
     padding: 0;
 }
 
+/* Pan/drag cursor when zoomed in */
+.preview-viewport.can-pan {
+    cursor: grab;
+}
+
+.preview-viewport.can-pan:active,
+.preview-viewport.is-panning {
+    cursor: grabbing;
+}
+
 /* Subtle scrollbar - hidden by default, shows on hover */
 .preview-viewport::-webkit-scrollbar {
     width: 6px;

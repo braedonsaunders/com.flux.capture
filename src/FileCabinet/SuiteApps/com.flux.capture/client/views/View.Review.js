@@ -1406,6 +1406,65 @@
                     self.updateCurrentPageFromScroll();
                 }, 50);
             });
+
+            // Setup pan/drag functionality
+            this.setupPanHandler(previewViewport);
+        },
+
+        setupPanHandler: function(viewport) {
+            var self = this;
+            var isPanning = false;
+            var startX, startY, scrollLeft, scrollTop;
+
+            viewport.addEventListener('mousedown', function(e) {
+                // Only pan when zoomed in and not clicking on interactive elements
+                if (self.zoom <= 1) return;
+                if (e.target.closest('button, input, select, textarea, a, .extraction-annotation')) return;
+
+                isPanning = true;
+                viewport.classList.add('is-panning');
+                startX = e.pageX - viewport.offsetLeft;
+                startY = e.pageY - viewport.offsetTop;
+                scrollLeft = viewport.scrollLeft;
+                scrollTop = viewport.scrollTop;
+                e.preventDefault();
+            });
+
+            viewport.addEventListener('mousemove', function(e) {
+                if (!isPanning) return;
+
+                var x = e.pageX - viewport.offsetLeft;
+                var y = e.pageY - viewport.offsetTop;
+                var walkX = (x - startX) * 1.5; // Multiplier for faster panning
+                var walkY = (y - startY) * 1.5;
+
+                viewport.scrollLeft = scrollLeft - walkX;
+                viewport.scrollTop = scrollTop - walkY;
+            });
+
+            viewport.addEventListener('mouseup', function() {
+                isPanning = false;
+                viewport.classList.remove('is-panning');
+            });
+
+            viewport.addEventListener('mouseleave', function() {
+                isPanning = false;
+                viewport.classList.remove('is-panning');
+            });
+
+            // Update cursor based on zoom level
+            this.updatePanCursor();
+        },
+
+        updatePanCursor: function() {
+            var viewport = el('#preview-viewport');
+            if (!viewport) return;
+
+            if (this.zoom > 1) {
+                viewport.classList.add('can-pan');
+            } else {
+                viewport.classList.remove('can-pan');
+            }
         },
 
         updateCurrentPageFromScroll: function() {
@@ -6423,6 +6482,9 @@
             if (zoomDisplay) {
                 zoomDisplay.textContent = Math.round(this.zoom * 100) + '%';
             }
+
+            // Update pan cursor state
+            this.updatePanCursor();
 
             // If using PDF.js, re-render the page at new zoom
             if (this.pdfDoc) {
