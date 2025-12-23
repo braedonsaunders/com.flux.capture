@@ -6629,13 +6629,6 @@
             if (!layer) {
                 layer = document.createElement('div');
                 layer.className = 'typeahead-portal-layer';
-                layer.style.position = 'absolute';
-                layer.style.top = '0';
-                layer.style.left = '0';
-                layer.style.width = '0';
-                layer.style.height = '0';
-                layer.style.zIndex = '15000';
-                layer.style.pointerEvents = 'none';
                 document.body.appendChild(layer);
             }
             return layer;

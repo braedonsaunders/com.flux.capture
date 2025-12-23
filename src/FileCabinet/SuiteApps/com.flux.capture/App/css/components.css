@@ -9048,11 +9048,8 @@ tr.doc-row.deleting::after {
 
 /* Portaled sublist dropdown container */
 .typeahead-portal-layer {
-    position: absolute;
-    top: 0;
-    left: 0;
-    width: 0;
-    height: 0;
+    position: fixed;
+    inset: 0;
     z-index: 15000;
     pointer-events: none;
 }
