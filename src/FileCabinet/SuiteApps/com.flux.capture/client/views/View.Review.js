@@ -4985,10 +4985,30 @@
                     '<i class="fas fa-undo"></i> Undo last fill' +
                 '</button>';
 
-            cell.appendChild(popover);
+            // Use fixed positioning relative to the viewport so the menu isn't clipped by the table
+            popover.style.position = 'fixed';
+            popover.style.zIndex = '11002';
+            document.body.appendChild(popover);
 
             // Position adjustment if needed
             requestAnimationFrame(function() {
+                var trigger = cell.querySelector('.fill-menu-btn') || cell;
+                var rect = trigger.getBoundingClientRect();
+                var popoverWidth = popover.offsetWidth;
+                var popoverHeight = popover.offsetHeight;
+                var viewportWidth = window.innerWidth;
+                var viewportHeight = window.innerHeight;
+
+                var left = Math.min(rect.right - popoverWidth, viewportWidth - popoverWidth - 8);
+                if (left < 8) left = Math.max(8, rect.left);
+
+                var top = rect.bottom + 6;
+                if (top + popoverHeight > viewportHeight - 8) {
+                    top = Math.max(8, rect.top - popoverHeight - 6);
+                }
+
+                popover.style.left = left + 'px';
+                popover.style.top = top + 'px';
                 popover.classList.add('visible');
             });
 
@@ -6469,7 +6489,10 @@
             dropdown.style.left = Math.min(rect.left, viewportWidth - dropdownWidth - 10) + 'px';
             dropdown.style.right = 'auto'; // Override CSS right: 0
             dropdown.style.maxHeight = dropdownHeight + 'px';
-            dropdown.style.zIndex = '10001'; // Ensure it's on top
+            dropdown.style.zIndex = '11000'; // Ensure it's on top of sublist containers
+            dropdown.style.visibility = 'visible';
+            dropdown.style.opacity = '1';
+            dropdown.style.pointerEvents = 'auto';
 
             // Show above or below depending on space
             if (spaceBelow >= 150 || spaceBelow >= spaceAbove) {
