@@ -4748,16 +4748,19 @@ define([
                 });
 
                 // ALWAYS check for account/category - required for all expense lines
-                // Check all possible field names used for expense account
-                var hasAccount = line.account || line.expenseaccount || line.category || line.expensecategory;
+                // Check all possible field names used for expense account (case-insensitive)
+                var hasAccount = line.account || line.ACCOUNT ||
+                                 line.expenseaccount || line.EXPENSEACCOUNT ||
+                                 line.category || line.CATEGORY ||
+                                 line.expensecategory || line.EXPENSECATEGORY;
                 if (!hasAccount) {
                     errors.push({
                         field: 'expense[' + idx + '].account',
                         message: 'Expense line ' + (idx + 1) + ' requires an account or category'
                     });
                 }
-                // Amount validation
-                var lineAmount = parseFloat(line.amount) || 0;
+                // Amount validation (case-insensitive)
+                var lineAmount = parseFloat(line.amount || line.AMOUNT) || 0;
                 if (lineAmount <= 0) {
                     errors.push({
                         field: 'expense[' + idx + '].amount',
@@ -5020,9 +5023,13 @@ define([
                 txn.selectNewLine({ sublistId: sublistId });
 
                 Object.keys(line).forEach(function(fieldId) {
-                    // Skip display fields (e.g., account_display)
-                    if (fieldId.indexOf('_display') !== -1) return;
-                    setSublistField(txn, sublistId, fieldId, line[fieldId]);
+                    // Skip display fields (e.g., account_display, ACCOUNT_display)
+                    if (fieldId.toLowerCase().indexOf('_display') !== -1) return;
+                    // Skip internal fields
+                    if (fieldId.indexOf('_') === 0) return;
+                    // Normalize field ID to lowercase for NetSuite
+                    var normalizedFieldId = fieldId.toLowerCase();
+                    setSublistField(txn, sublistId, normalizedFieldId, line[fieldId]);
                 });
 
                 txn.commitLine({ sublistId: sublistId });
@@ -5032,9 +5039,13 @@ define([
         if (transactionType === 'vendorbill') {
             txnRecord = record.create({ type: record.Type.VENDOR_BILL, isDynamic: true });
 
-            // Set all body fields from formData
+            // Set all body fields from formData (normalize field IDs to lowercase)
             Object.keys(bodyFields).forEach(function(fieldId) {
-                setBodyField(txnRecord, fieldId, bodyFields[fieldId]);
+                // Skip display fields and internal fields
+                if (fieldId.toLowerCase().indexOf('_display') !== -1) return;
+                if (fieldId.indexOf('_') === 0) return;
+                var normalizedFieldId = fieldId.toLowerCase();
+                setBodyField(txnRecord, normalizedFieldId, bodyFields[fieldId]);
             });
 
             // Add expense lines
@@ -5061,7 +5072,10 @@ define([
             txnRecord = record.create({ type: record.Type.VENDOR_CREDIT, isDynamic: true });
 
             Object.keys(bodyFields).forEach(function(fieldId) {
-                setBodyField(txnRecord, fieldId, bodyFields[fieldId]);
+                if (fieldId.toLowerCase().indexOf('_display') !== -1) return;
+                if (fieldId.indexOf('_') === 0) return;
+                var normalizedFieldId = fieldId.toLowerCase();
+                setBodyField(txnRecord, normalizedFieldId, bodyFields[fieldId]);
             });
 
             if (sublists.expense && sublists.expense.length > 0) {
@@ -5074,9 +5088,12 @@ define([
         } else if (transactionType === 'expensereport') {
             txnRecord = record.create({ type: record.Type.EXPENSE_REPORT, isDynamic: true });
 
-            // Set all body fields from formData (entity can be any employee)
+            // Set all body fields from formData (normalize field IDs to lowercase)
             Object.keys(bodyFields).forEach(function(fieldId) {
-                setBodyField(txnRecord, fieldId, bodyFields[fieldId]);
+                if (fieldId.toLowerCase().indexOf('_display') !== -1) return;
+                if (fieldId.indexOf('_') === 0) return;
+                var normalizedFieldId = fieldId.toLowerCase();
+                setBodyField(txnRecord, normalizedFieldId, bodyFields[fieldId]);
             });
 
             if (sublists.expense && sublists.expense.length > 0) {
@@ -5087,7 +5104,10 @@ define([
             txnRecord = record.create({ type: record.Type.PURCHASE_ORDER, isDynamic: true });
 
             Object.keys(bodyFields).forEach(function(fieldId) {
-                setBodyField(txnRecord, fieldId, bodyFields[fieldId]);
+                if (fieldId.toLowerCase().indexOf('_display') !== -1) return;
+                if (fieldId.indexOf('_') === 0) return;
+                var normalizedFieldId = fieldId.toLowerCase();
+                setBodyField(txnRecord, normalizedFieldId, bodyFields[fieldId]);
             });
 
             if (sublists.item && sublists.item.length > 0) {
