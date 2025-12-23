@@ -4103,19 +4103,8 @@
                     self.selectTypeaheadOption(wrapper, option);
                 });
 
-                // Hide typeahead on blur
-                lineSection.addEventListener('focusout', function(e) {
-                    if (!e.target.classList.contains('typeahead-input')) return;
-
-                    var wrapper = e.target.closest('.typeahead-select');
-                    setTimeout(function() {
-                        // Only hide if focus has truly left the wrapper
-                        // (not just moved to the dropdown or another element within)
-                        if (wrapper && !wrapper.contains(document.activeElement)) {
-                            self.hideTypeaheadDropdown(wrapper);
-                        }
-                    }, 200);
-                });
+                // Hide typeahead when clicking outside (more reliable than focusout)
+                // Note: focusout was causing issues with dropdown hiding during DOM updates
 
                 // Keyboard navigation for typeahead
                 lineSection.addEventListener('keydown', function(e) {
@@ -7779,18 +7768,8 @@
                     self.selectTypeaheadOption(wrapper, option);
                 });
 
-                // Hide typeahead on blur
-                tbody.addEventListener('focusout', function(e) {
-                    if (!e.target.classList.contains('typeahead-input')) return;
-
-                    var wrapper = e.target.closest('.typeahead-select');
-                    setTimeout(function() {
-                        // Only hide if focus has truly left the wrapper
-                        if (wrapper && !wrapper.contains(document.activeElement)) {
-                            self.hideTypeaheadDropdown(wrapper);
-                        }
-                    }, 200);
-                });
+                // Note: focusout removed - using document click handler instead
+                // (focusout was causing issues with dropdown hiding during DOM updates)
 
                 // Keyboard navigation for typeahead
                 tbody.addEventListener('keydown', function(e) {
@@ -9784,6 +9763,21 @@
             // Only bind once using document-level event delegation
             if (this._sublistColumnEventsBound) return;
             this._sublistColumnEventsBound = true;
+
+            // Hide sublist typeahead dropdowns when clicking outside
+            document.addEventListener('click', function(e) {
+                // If click is inside a typeahead-select, don't hide
+                if (e.target.closest('.typeahead-select')) return;
+                // If click is on a typeahead option, don't hide (selection will handle it)
+                if (e.target.closest('.typeahead-option')) return;
+
+                // Hide all visible sublist typeahead dropdowns
+                document.querySelectorAll('.sublist-table .typeahead-dropdown').forEach(function(dropdown) {
+                    if (dropdown.style.display !== 'none') {
+                        dropdown.style.display = 'none';
+                    }
+                });
+            });
 
             // Use direct event listeners on all elements (not delegated via .on())
             // because .on() only binds to the first matching element
