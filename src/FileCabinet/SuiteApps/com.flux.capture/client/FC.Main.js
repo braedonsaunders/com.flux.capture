@@ -154,11 +154,24 @@
                 minimizeBtn.classList.add('active');
             }
 
-            minimizeBtn.addEventListener('click', function() {
+            minimizeBtn.addEventListener('click', function(e) {
+                e.stopPropagation();
+                var willMinimize = !document.body.classList.contains('topbar-minimized');
                 document.body.classList.toggle('topbar-minimized');
                 this.classList.toggle('active');
-                var isMinimized = document.body.classList.contains('topbar-minimized');
-                localStorage.setItem('fc_topbarMinimized', isMinimized);
+                localStorage.setItem('fc_topbarMinimized', willMinimize);
+
+                // Force immediate minimize by temporarily disabling hover
+                if (willMinimize) {
+                    var topbar = document.querySelector('.app-topbar');
+                    if (topbar) {
+                        topbar.classList.add('no-hover');
+                        this.blur();
+                        setTimeout(function() {
+                            topbar.classList.remove('no-hover');
+                        }, 300);
+                    }
+                }
             });
         }
     }
