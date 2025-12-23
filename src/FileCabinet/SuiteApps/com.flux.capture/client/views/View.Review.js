@@ -5345,8 +5345,9 @@
             var line = this.sublistData[sublistId][idx];
             if (!line) return;
 
-            // Convert numeric fields
-            if (fieldId === 'amount' || fieldId === 'rate' || fieldId === 'quantity') {
+            // Convert numeric fields (case-insensitive check)
+            var lowerFieldId = (fieldId || '').toLowerCase();
+            if (lowerFieldId === 'amount' || lowerFieldId === 'rate' || lowerFieldId === 'quantity') {
                 value = parseFloat(value) || 0;
             }
             // Convert checkbox values to T/F format (same as header-level checkboxes)
@@ -5356,11 +5357,17 @@
 
             line[fieldId] = value;
 
+            // When amount is directly edited, update all case variants to ensure consistency
+            if (lowerFieldId === 'amount') {
+                line.amount = value;
+                line.Amount = value;
+                line.AMOUNT = value;
+            }
+
             // Auto-calculate amount when quantity or rate changes, but only if all three columns are visible
             // This allows the feature to work on any sublist that displays quantity, rate, and amount
             // Amount can still be manually overridden by directly editing the amount field
-            var normalizedFieldId = (fieldId || '').toLowerCase();
-            if ((normalizedFieldId === 'quantity' || normalizedFieldId === 'rate') && this.hasAutoCalculateColumns(sublistId, idx)) {
+            if ((lowerFieldId === 'quantity' || lowerFieldId === 'rate') && this.hasAutoCalculateColumns(sublistId, idx)) {
                 // Get quantity and rate values - check all case variants (lowercase, Capitalized, UPPERCASE)
                 var qty = parseFloat(line.quantity) || parseFloat(line.Quantity) || parseFloat(line.QUANTITY) || 0;
                 var rate = parseFloat(line.rate) || parseFloat(line.Rate) || parseFloat(line.RATE) || 0;
@@ -5416,8 +5423,9 @@
         updateSublistTotal: function(sublistId) {
             if (!this.sublistData || !this.sublistData[sublistId]) return;
 
+            // Check all case variants of amount (lowercase, Capitalized, UPPERCASE)
             var total = this.sublistData[sublistId].reduce(function(sum, item) {
-                return sum + (parseFloat(item.amount) || 0);
+                return sum + (parseFloat(item.amount) || parseFloat(item.Amount) || parseFloat(item.AMOUNT) || 0);
             }, 0);
 
             var totalEl = document.querySelector('#sublist-' + sublistId + ' .line-items-total strong');
