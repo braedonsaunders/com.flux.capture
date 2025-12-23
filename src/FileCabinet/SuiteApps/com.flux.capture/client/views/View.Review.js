@@ -6365,7 +6365,7 @@
             }
 
             // If using PDF.js, re-render the page at new zoom
-            if (this.pdfDoc && this.pdfPage) {
+            if (this.pdfDoc) {
                 this.renderPdfPage(this.currentPage);
             } else {
                 // Fallback to iframe transform
@@ -6380,7 +6380,7 @@
             this.rotation = (this.rotation + 90) % 360;
 
             // If using PDF.js, re-render the page with new rotation
-            if (this.pdfDoc && this.pdfPage) {
+            if (this.pdfDoc) {
                 this.renderPdfPage(this.currentPage);
             } else {
                 // Fallback to iframe transform
