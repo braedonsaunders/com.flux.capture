@@ -337,15 +337,15 @@ body.topbar-minimized .app-topbar::after {
     left: 0;
     right: 0;
     height: 16px;
-    background: #1a1a1a;
+    background: #475569;
     display: flex;
     align-items: center;
     justify-content: center;
     font-size: 9px;
     font-weight: 600;
     letter-spacing: 2px;
-    color: rgba(255, 255, 255, 0.4);
-    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+    color: rgba(255, 255, 255, 0.7);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.2);
 }
 
 body.topbar-minimized .app-topbar:not(.no-hover):hover,
