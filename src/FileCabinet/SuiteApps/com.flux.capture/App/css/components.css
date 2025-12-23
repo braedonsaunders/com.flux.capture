@@ -3364,14 +3364,33 @@ body.topbar-minimized .view-review.split-view .review-content {
     overflow-x: auto;
     overflow-y: visible; /* Allow dropdowns to overflow vertically */
     max-width: 100%;
+    /* Subtle scrollbar styling */
+    scrollbar-width: thin;
+    scrollbar-color: var(--gray-300) transparent;
+}
+
+.sublist-table-wrapper::-webkit-scrollbar {
+    height: 8px;
+}
+
+.sublist-table-wrapper::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+.sublist-table-wrapper::-webkit-scrollbar-thumb {
+    background: var(--gray-300);
+    border-radius: 4px;
+}
+
+.sublist-table-wrapper::-webkit-scrollbar-thumb:hover {
+    background: var(--gray-400);
 }
 
 .sublist-table {
-    width: 100%;
-    min-width: 100%;
-    max-width: 100%;
+    min-width: max-content; /* Allow table to expand beyond container for horizontal scroll */
     font-size: var(--font-size-sm);
-    table-layout: fixed; /* CRITICAL: Forces table to respect width constraints */
+    table-layout: auto; /* Allow columns to size based on content and explicit widths */
+    border-collapse: collapse;
 }
 
 .sublist-table th {
@@ -3384,9 +3403,81 @@ body.topbar-minimized .view-review.split-view .review-content {
     letter-spacing: 0.5px;
     border-bottom: 1px solid var(--border-color);
     background: var(--gray-50);
+    white-space: nowrap;
+    position: relative;
+    min-width: 80px;
+}
+
+/* Sortable header styling */
+.sublist-table th.sortable-header {
+    cursor: pointer;
+    user-select: none;
+    transition: background-color var(--transition);
+}
+
+.sublist-table th.sortable-header:hover {
+    background: var(--gray-100);
+}
+
+.sublist-table th.sortable-header .th-content {
+    display: flex;
+    align-items: center;
+    gap: var(--space-xs);
+}
+
+.sublist-table th.sortable-header .th-label {
+    flex: 1;
     overflow: hidden;
     text-overflow: ellipsis;
-    white-space: nowrap;
+}
+
+.sublist-table th.sortable-header .sort-icon {
+    font-size: 10px;
+    color: var(--gray-400);
+    opacity: 0.5;
+    transition: opacity var(--transition), color var(--transition);
+    flex-shrink: 0;
+}
+
+.sublist-table th.sortable-header:hover .sort-icon {
+    opacity: 1;
+}
+
+.sublist-table th.sortable-header .sort-icon.active {
+    opacity: 1;
+    color: var(--color-primary);
+}
+
+.sublist-table th.sortable-header.sorted {
+    background: rgba(99, 102, 241, 0.05);
+}
+
+/* Resize handle styling */
+.sublist-table th.resizable-header .resize-handle {
+    position: absolute;
+    top: 0;
+    right: 0;
+    width: 6px;
+    height: 100%;
+    cursor: col-resize;
+    background: transparent;
+    transition: background-color var(--transition);
+    z-index: 1;
+}
+
+.sublist-table th.resizable-header .resize-handle:hover,
+.sublist-table th.resizable-header.resizing .resize-handle {
+    background: var(--color-primary);
+}
+
+.sublist-table th.resizable-header.resizing {
+    background: rgba(99, 102, 241, 0.1);
+}
+
+/* Action column (delete button) - fixed width, no resize */
+.sublist-table th.action-col {
+    min-width: 40px;
+    width: 40px;
 }
 
 .sublist-table td {
@@ -8868,12 +8959,16 @@ tr.doc-row.deleting::after {
 .line-section,
 .sublist-container,
 .line-items-table,
-.sublist-table-wrapper,
-.sublist-table,
 .sublist-table tbody,
 .sublist-table td,
 .select-cell {
     overflow: visible !important;
+}
+
+/* Allow horizontal scrolling on table wrapper while keeping vertical overflow for dropdowns */
+.sublist-table-wrapper {
+    overflow-x: auto !important;
+    overflow-y: visible !important;
 }
 
 .typeahead-option {
