@@ -781,6 +781,43 @@
                 }
             });
 
+            // Keyboard shortcuts for Transform Hub
+            document.addEventListener('keydown', function(e) {
+                // Escape to close Transform Hub
+                if (e.key === 'Escape') {
+                    var openDropdown = document.querySelector('.transform-dropdown.open');
+                    if (openDropdown) {
+                        openDropdown.classList.remove('open');
+                        e.preventDefault();
+                        return;
+                    }
+                }
+
+                // Quick keyboard shortcuts when Transform Hub is open
+                var openDropdown = document.querySelector('.transform-dropdown.open');
+                if (openDropdown) {
+                    var action = null;
+                    var sublistId = openDropdown.id.replace('transform-dropdown-', '');
+
+                    switch (e.key.toLowerCase()) {
+                        case 'c': action = 'collapse'; break;
+                        case '1': action = openDropdown.querySelector('[data-action^="by-account"], [data-action^="by-item"]') ?
+                                    openDropdown.querySelector('[data-action^="by-account"], [data-action^="by-item"]').dataset.action : null; break;
+                        case '2': action = 'by-department'; break;
+                        case '3': action = 'by-class'; break;
+                        case '4': action = 'by-location'; break;
+                        case 's': action = 'split-equal'; break;
+                        case 'd': action = 'apply-defaults'; break;
+                    }
+
+                    if (action) {
+                        openDropdown.classList.remove('open');
+                        self.transformSublist(sublistId, action);
+                        e.preventDefault();
+                    }
+                }
+            });
+
             // Approve button
             this.on('#btn-approve', 'click', function() {
                 self.approveDocument();
@@ -2544,59 +2581,105 @@
             var groupByIcon = isExpense ? 'fa-book' : 'fa-box';
 
             return '<div class="transform-dropdown" id="transform-dropdown-' + sublistId + '">' +
+                // Backdrop for closing when clicking outside
+                '<div class="transform-hub-backdrop" data-sublist="' + sublistId + '"></div>' +
+                // Transform button (becomes center hub when open)
                 '<button class="btn btn-ghost btn-sm btn-transform" data-sublist="' + sublistId + '">' +
-                    '<i class="fas fa-wand-magic-sparkles"></i> Transform ' +
+                    '<i class="fas fa-wand-magic-sparkles"></i>' +
+                    '<span class="transform-text">Transform</span>' +
                     '<i class="fas fa-chevron-down transform-arrow"></i>' +
                 '</button>' +
-                '<div class="transform-menu">' +
-                    '<div class="transform-section">' +
-                        '<div class="transform-section-label">Consolidate</div>' +
+                // Transform Hub - Radial menu container
+                '<div class="transform-hub" id="transform-hub-' + sublistId + '">' +
+                    // Decorative center ring
+                    '<div class="transform-hub-center"></div>' +
+
+                    // Top-Left Pod: Consolidate
+                    '<div class="transform-pod" data-position="top-left">' +
+                        '<div class="transform-pod-header">' +
+                            '<div class="transform-pod-icon consolidate"><i class="fas fa-compress"></i></div>' +
+                            '<span class="transform-pod-title">Consolidate</span>' +
+                        '</div>' +
                         '<div class="transform-option" data-action="collapse" data-sublist="' + sublistId + '">' +
-                            '<i class="fas fa-compress"></i> Collapse to One Line' +
+                            '<i class="fas fa-compress"></i> Collapse to One' +
+                            '<span class="transform-option-key">C</span>' +
                         '</div>' +
                     '</div>' +
-                    '<div class="transform-section">' +
-                        '<div class="transform-section-label">Group By</div>' +
+
+                    // Top-Right Pod: Group By
+                    '<div class="transform-pod" data-position="top-right">' +
+                        '<div class="transform-pod-header">' +
+                            '<div class="transform-pod-icon group"><i class="fas fa-layer-group"></i></div>' +
+                            '<span class="transform-pod-title">Group By</span>' +
+                        '</div>' +
                         '<div class="transform-option" data-action="by-' + groupByField + '" data-sublist="' + sublistId + '">' +
-                            '<i class="fas ' + groupByIcon + '"></i> By ' + groupByLabel +
+                            '<i class="fas ' + groupByIcon + '"></i> ' + groupByLabel +
+                            '<span class="transform-option-key">1</span>' +
                         '</div>' +
                         '<div class="transform-option" data-action="by-department" data-sublist="' + sublistId + '">' +
-                            '<i class="fas fa-sitemap"></i> By Department' +
+                            '<i class="fas fa-sitemap"></i> Department' +
+                            '<span class="transform-option-key">2</span>' +
                         '</div>' +
                         '<div class="transform-option" data-action="by-class" data-sublist="' + sublistId + '">' +
-                            '<i class="fas fa-tags"></i> By Class' +
+                            '<i class="fas fa-tags"></i> Class' +
+                            '<span class="transform-option-key">3</span>' +
                         '</div>' +
                         '<div class="transform-option" data-action="by-location" data-sublist="' + sublistId + '">' +
+                            '<i class="fas fa-map-marker-alt"></i> Location' +
+                            '<span class="transform-option-key">4</span>' +
+                        '</div>' +
+                    '</div>' +
+
+                    // Bottom-Left Pod: Split
+                    '<div class="transform-pod" data-position="bottom-left">' +
+                        '<div class="transform-pod-header">' +
+                            '<div class="transform-pod-icon split"><i class="fas fa-divide"></i></div>' +
+                            '<span class="transform-pod-title">Split</span>' +
+                        '</div>' +
+                        '<div class="transform-option" data-action="split-equal" data-sublist="' + sublistId + '">' +
+                            '<i class="fas fa-divide"></i> Split Equally' +
+                            '<span class="transform-option-key">S</span>' +
+                        '</div>' +
+                        '<div class="transform-option" data-action="apply-defaults" data-sublist="' + sublistId + '">' +
+                            '<i class="fas fa-fill-drip"></i> Apply Defaults' +
+                            '<span class="transform-option-key">D</span>' +
+                        '</div>' +
+                    '</div>' +
+
+                    // Bottom-Right Pod: Distribute By
+                    '<div class="transform-pod" data-position="bottom-right">' +
+                        '<div class="transform-pod-header">' +
+                            '<div class="transform-pod-icon distribute"><i class="fas fa-share-alt"></i></div>' +
+                            '<span class="transform-pod-title">Distribute</span>' +
+                        '</div>' +
+                        '<div class="transform-option" data-action="distribute-department" data-sublist="' + sublistId + '">' +
+                            '<i class="fas fa-sitemap"></i> By Department' +
+                        '</div>' +
+                        '<div class="transform-option" data-action="distribute-class" data-sublist="' + sublistId + '">' +
+                            '<i class="fas fa-tags"></i> By Class' +
+                        '</div>' +
+                        '<div class="transform-option" data-action="distribute-location" data-sublist="' + sublistId + '">' +
                             '<i class="fas fa-map-marker-alt"></i> By Location' +
                         '</div>' +
                     '</div>' +
-                    '<div class="transform-section">' +
-                        '<div class="transform-section-label">Split</div>' +
-                        '<div class="transform-option" data-action="split-equal" data-sublist="' + sublistId + '">' +
-                            '<i class="fas fa-divide"></i> Split Equally...' +
+
+                    // Bottom-Center Pod: Actions
+                    '<div class="transform-pod" data-position="bottom-center">' +
+                        '<div class="transform-pod-header">' +
+                            '<div class="transform-pod-icon actions"><i class="fas fa-bolt"></i></div>' +
+                            '<span class="transform-pod-title">Actions</span>' +
                         '</div>' +
-                        '<div class="transform-option" data-action="apply-defaults" data-sublist="' + sublistId + '">' +
-                            '<i class="fas fa-fill-drip"></i> Apply Header Defaults' +
+                        '<div class="transform-option" data-action="duplicate-all" data-sublist="' + sublistId + '">' +
+                            '<i class="fas fa-copy"></i> Duplicate All' +
                         '</div>' +
-                    '</div>' +
-                    '<div class="transform-section">' +
-                        '<div class="transform-section-label">Distribute By</div>' +
-                        '<div class="transform-option" data-action="distribute-department" data-sublist="' + sublistId + '">' +
-                            '<i class="fas fa-sitemap"></i> By Department...' +
-                        '</div>' +
-                        '<div class="transform-option" data-action="distribute-class" data-sublist="' + sublistId + '">' +
-                            '<i class="fas fa-tags"></i> By Class...' +
-                        '</div>' +
-                        '<div class="transform-option" data-action="distribute-location" data-sublist="' + sublistId + '">' +
-                            '<i class="fas fa-map-marker-alt"></i> By Location...' +
+                        '<div class="transform-option transform-danger" data-action="clear-all" data-sublist="' + sublistId + '">' +
+                            '<i class="fas fa-trash"></i> Clear All' +
                         '</div>' +
                     '</div>' +
-                    '<div class="transform-divider"></div>' +
-                    '<div class="transform-option" data-action="duplicate-all" data-sublist="' + sublistId + '">' +
-                        '<i class="fas fa-copy"></i> Duplicate All Lines' +
-                    '</div>' +
-                    '<div class="transform-option transform-danger" data-action="clear-all" data-sublist="' + sublistId + '">' +
-                        '<i class="fas fa-trash"></i> Clear All Lines' +
+
+                    // Hint at bottom
+                    '<div class="transform-hub-hint">' +
+                        'Click option or press <kbd>Esc</kbd> to close' +
                     '</div>' +
                 '</div>' +
             '</div>' +
@@ -3562,6 +3645,14 @@
                         return;
                     }
 
+                    // Transform Hub backdrop click - close the hub
+                    var backdrop = e.target.closest('.transform-hub-backdrop');
+                    if (backdrop) {
+                        var dropdown = backdrop.closest('.transform-dropdown');
+                        if (dropdown) dropdown.classList.remove('open');
+                        return;
+                    }
+
                     // Transform dropdown toggle
                     var transformBtn = e.target.closest('.btn-transform');
                     if (transformBtn) {
@@ -3572,7 +3663,14 @@
                             document.querySelectorAll('.transform-dropdown.open').forEach(function(d) {
                                 if (d !== dropdown) d.classList.remove('open');
                             });
+
+                            var isOpening = !dropdown.classList.contains('open');
                             dropdown.classList.toggle('open');
+
+                            // Position the hub around the button when opening
+                            if (isOpening) {
+                                self.positionTransformHub(dropdown, transformBtn);
+                            }
                         }
                         return;
                     }
@@ -4933,6 +5031,96 @@
             this.refreshSublist(sublistId);
             this.updateTabCounts();
             UI.toast('Transform undone', 'success');
+        },
+
+        // Position Transform Hub radially around the button
+        positionTransformHub: function(dropdown, button) {
+            var hub = dropdown.querySelector('.transform-hub');
+            if (!hub) return;
+
+            var btnRect = button.getBoundingClientRect();
+            var centerX = btnRect.left + btnRect.width / 2;
+            var centerY = btnRect.top + btnRect.height / 2;
+
+            // Set hub position centered on button
+            hub.style.left = centerX + 'px';
+            hub.style.top = centerY + 'px';
+            hub.style.transform = 'translate(-50%, -50%)';
+
+            // Calculate viewport boundaries
+            var viewportWidth = window.innerWidth;
+            var viewportHeight = window.innerHeight;
+
+            // Pod positioning - arranged in a radial pattern around center
+            // Distance from center to pod edge
+            var radius = 100;
+
+            // Get all pods
+            var pods = hub.querySelectorAll('.transform-pod');
+            pods.forEach(function(pod) {
+                var position = pod.dataset.position;
+                var podWidth = 170;
+                var podHeight = pod.offsetHeight || 120;
+
+                var left, top;
+
+                switch (position) {
+                    case 'top-left':
+                        left = -radius - podWidth + 20;
+                        top = -radius - podHeight + 30;
+                        break;
+                    case 'top-right':
+                        left = radius - 20;
+                        top = -radius - podHeight + 30;
+                        break;
+                    case 'bottom-left':
+                        left = -radius - podWidth + 20;
+                        top = radius - 30;
+                        break;
+                    case 'bottom-right':
+                        left = radius - 20;
+                        top = radius - 30;
+                        break;
+                    case 'bottom-center':
+                        left = -podWidth / 2;
+                        top = radius + 60;
+                        break;
+                    default:
+                        left = 0;
+                        top = 0;
+                }
+
+                // Adjust for viewport boundaries
+                var absoluteLeft = centerX + left;
+                var absoluteTop = centerY + top;
+
+                // Prevent overflow right
+                if (absoluteLeft + podWidth > viewportWidth - 20) {
+                    left = viewportWidth - 20 - centerX - podWidth;
+                }
+                // Prevent overflow left
+                if (absoluteLeft < 20) {
+                    left = 20 - centerX;
+                }
+                // Prevent overflow bottom
+                if (absoluteTop + podHeight > viewportHeight - 20) {
+                    top = viewportHeight - 20 - centerY - podHeight;
+                }
+                // Prevent overflow top
+                if (absoluteTop < 20) {
+                    top = 20 - centerY;
+                }
+
+                pod.style.left = left + 'px';
+                pod.style.top = top + 'px';
+            });
+
+            // Position hint at bottom of the hub area
+            var hint = hub.querySelector('.transform-hub-hint');
+            if (hint) {
+                hint.style.bottom = 'auto';
+                hint.style.top = (radius + 180) + 'px';
+            }
         },
 
         // Main transform dispatcher
