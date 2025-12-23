@@ -6567,23 +6567,16 @@
 
         // Position dropdown using fixed positioning to avoid container clipping
         positionDropdown: function(dropdown, input) {
-            if (!dropdown || !input) {
-                FCDebug.log('[Typeahead] positionDropdown: missing dropdown or input');
-                return;
-            }
+            if (!dropdown || !input) return;
 
             // Check if inside a sublist table
             var isInSublist = input.closest('.sublist-table');
-            FCDebug.log('[Typeahead] positionDropdown: isInSublist =', !!isInSublist);
-
             if (!isInSublist) return; // Use default CSS positioning for non-sublist
 
             // Get input position
             var rect = input.getBoundingClientRect();
             var viewportHeight = window.innerHeight;
             var viewportWidth = window.innerWidth;
-
-            FCDebug.log('[Typeahead] Input rect:', rect.left, rect.top, rect.width, rect.height);
 
             // Calculate available space below and above
             var spaceBelow = viewportHeight - rect.bottom - 10;
@@ -6612,26 +6605,18 @@
                 // Show below
                 dropdown.style.top = rect.bottom + 2 + 'px';
                 dropdown.style.bottom = 'auto';
-                FCDebug.log('[Typeahead] Positioned below at top:', rect.bottom + 2);
             } else {
                 // Show above
                 dropdown.style.bottom = (viewportHeight - rect.top + 2) + 'px';
                 dropdown.style.top = 'auto';
-                FCDebug.log('[Typeahead] Positioned above at bottom:', viewportHeight - rect.top + 2);
             }
         },
 
         searchDatasource: function(type, query, wrapper, input, options) {
             var self = this;
-            FCDebug.log('[Typeahead] searchDatasource called:', type, query);
 
             var dropdown = wrapper ? this.getDropdownElement(wrapper) : null;
-            if (!dropdown) {
-                FCDebug.log('[Typeahead] ERROR: dropdown not found in wrapper');
-                return;
-            }
-
-            FCDebug.log('[Typeahead] Found dropdown element');
+            if (!dropdown) return;
 
             // Ensure sublist dropdowns render at document level to avoid clipping
             this.portalDropdownIfNeeded(wrapper, dropdown);
@@ -6639,8 +6624,6 @@
             // Show loading state
             dropdown.innerHTML = '<div class="typeahead-loading"><i class="fas fa-spinner fa-spin"></i> Searching...</div>';
             dropdown.style.display = 'block';
-
-            FCDebug.log('[Typeahead] Set display block, positioning...');
 
             // Position dropdown using fixed positioning to avoid container clipping
             this.positionDropdown(dropdown, input);
@@ -6668,13 +6651,10 @@
         },
 
         renderTypeaheadResults: function(dropdown, results, wrapper, input) {
-            FCDebug.log('[Typeahead] renderTypeaheadResults called with', results ? results.length : 0, 'results');
-
             // Handle both array and object with options
             var options = Array.isArray(results) ? results : (results.options || results);
             if (!options || options.length === 0) {
                 dropdown.innerHTML = '<div class="typeahead-empty">No results found</div>';
-                FCDebug.log('[Typeahead] No results to render');
                 return;
             }
 
@@ -6695,7 +6675,6 @@
             }).join('');
 
             dropdown.innerHTML = html;
-            FCDebug.log('[Typeahead] Rendered', options.length, 'options, dropdown HTML length:', html.length);
         },
 
         // Get dropdown element even when it has been moved out of the wrapper
@@ -6890,14 +6869,10 @@
 
             // CRITICAL: Never hide sublist typeahead dropdowns via this function
             // Sublist dropdowns are managed separately via mousedown-outside handler
-            if (wrapper.closest('.sublist-table')) {
-                FCDebug.log('[Typeahead] hideTypeaheadDropdown BLOCKED for sublist dropdown');
-                return;
-            }
+            if (wrapper.closest('.sublist-table')) return;
 
             var dropdown = this.getDropdownElement(wrapper);
             if (dropdown) {
-                FCDebug.log('[Typeahead] hideTypeaheadDropdown called for non-sublist');
                 dropdown.style.display = 'none';
                 this.restoreDropdownToWrapper(wrapper, dropdown);
             }
@@ -10067,7 +10042,6 @@
                     if (!isSublistDropdown) return;
 
                     if (dropdown.style.display !== 'none') {
-                        FCDebug.log('[Typeahead] Hiding dropdown via mousedown outside');
                         dropdown.style.display = 'none';
 
                         if (dropdown.dataset.ownerId) {

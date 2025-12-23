@@ -1049,7 +1049,7 @@ define([
             var result = {
                 id: categoryId,
                 name: categoryRecord.getValue({ fieldId: 'name' }),
-                expenseAccount: categoryRecord.getValue({ fieldId: 'expenseaccount' }),
+                expenseAccount: categoryRecord.getValue({ fieldId: 'expenseacct' }),
                 expenseAccountName: null
             };
 
