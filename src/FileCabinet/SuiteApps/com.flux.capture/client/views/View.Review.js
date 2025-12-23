@@ -513,6 +513,12 @@
                         self.renderPreview();
                         self.renderExtractionForm();
 
+                        // Configure submit buttons based on settings for new transaction type
+                        self.configureSubmitButtons();
+
+                        // Update navigation buttons with new queue state
+                        self.updateNavigationButtons();
+
                         // Auto-select single options (like subsidiary) and resolve posting period
                         self.autoSelectSingleOptions();
 
@@ -6969,24 +6975,60 @@
                     }
                     UI.toast(message, 'success');
 
-                    // Remove current doc from queue if it was deleted
-                    if (result.documentDeleted && self.queueIds && self.queueIds.length > 0) {
+                    // Always remove current doc from queue - it's no longer "needs review"
+                    // (whether it was deleted or just marked completed)
+                    if (self.queueIds && self.queueIds.length > 0) {
                         var currentIdx = self.queueIds.indexOf(String(self.docId));
+                        if (currentIdx === -1) {
+                            currentIdx = self.queueIds.indexOf(parseInt(self.docId, 10));
+                        }
                         if (currentIdx > -1) {
                             self.queueIds.splice(currentIdx, 1);
+                            // Also remove from queueDocs if present
+                            if (self.queueDocs && self.queueDocs.length > currentIdx) {
+                                self.queueDocs.splice(currentIdx, 1);
+                            }
+                            // Update shared state
+                            sharedQueueState.queueIds = self.queueIds;
+                            sharedQueueState.queueDocs = self.queueDocs;
                             // Adjust queue index if needed
                             if (self.queueIndex > currentIdx) {
                                 self.queueIndex--;
+                            } else if (self.queueIndex === currentIdx && self.queueIndex >= self.queueIds.length) {
+                                // We were at the last item which is now removed
+                                self.queueIndex = self.queueIds.length - 1;
                             }
                         }
                     }
 
+                    // Update sidebar badge count
+                    if (window.updateReviewBadge) {
+                        window.updateReviewBadge();
+                    }
+
+                    // Reset button states before transitioning
+                    if (approveBtn) {
+                        approveBtn.disabled = false;
+                        var approveBtnIcon = approveBtn.querySelector('i');
+                        var approveBtnText = approveBtn.querySelector('.btn-text');
+                        if (approveBtnIcon) approveBtnIcon.className = 'fas fa-check';
+                        if (approveBtnText) approveBtnText.textContent = 'Create Transaction';
+                    }
+                    if (submitApprovalBtn) {
+                        submitApprovalBtn.disabled = false;
+                        var submitBtnIcon = submitApprovalBtn.querySelector('i');
+                        var submitBtnText = submitApprovalBtn.querySelector('.btn-text');
+                        if (submitBtnIcon) submitBtnIcon.className = 'fas fa-paper-plane';
+                        if (submitBtnText) submitBtnText.textContent = 'Submit for Approval';
+                    }
+
                     // Go to next document or back to documents list
-                    if (self.queueIndex >= 0 && self.queueIndex < self.queueIds.length - 1) {
+                    if (self.queueIds.length > 0 && self.queueIndex >= 0 && self.queueIndex < self.queueIds.length) {
+                        // There are still documents in queue
                         self.goToNextDocument();
                     } else {
-                        // Last document - celebrate and go back
-                        if (self.queueIds && self.queueIds.length > 0) {
+                        // No more documents - celebrate and go back
+                        if (self.queueIds && self.queueIds.length === 0) {
                             UI.toast('Queue complete! Great work!', 'success');
                         }
                         setTimeout(function() {
