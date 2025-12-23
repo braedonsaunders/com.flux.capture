@@ -326,18 +326,19 @@ body {
 
 /* Minimized topbar state */
 body.topbar-minimized .app-topbar {
-    transform: translateY(calc(-100% + 6px));
-    opacity: 0.4;
+    transform: translateY(calc(-100% + 12px));
+    opacity: 0.7;
 }
 
-body.topbar-minimized .app-topbar:hover {
+body.topbar-minimized .app-topbar:hover,
+body.topbar-minimized .app-topbar:focus-within {
     transform: translateY(0);
     opacity: 1;
 }
 
 body.topbar-minimized .app-main {
-    margin-top: 6px;
-    min-height: calc(100vh - 6px);
+    margin-top: 12px;
+    min-height: calc(100vh - 12px);
 }
 
 body.topbar-minimized #btn-minimize-topbar i {

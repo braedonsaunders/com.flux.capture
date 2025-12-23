@@ -891,11 +891,11 @@
 }
 
 body.topbar-minimized .view-review {
-    height: calc(100vh - 6px);
+    height: calc(100vh - 12px);
 }
 
 body.topbar-minimized .view-review.split-view .review-content {
-    height: calc(100vh - 6px - 64px);
+    height: calc(100vh - 12px - 64px);
 }
 
 .review-content {
