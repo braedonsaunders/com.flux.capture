@@ -5009,7 +5009,7 @@
 
             // Use fixed positioning relative to the viewport so the menu isn't clipped by the table
             popover.style.position = 'fixed';
-            popover.style.zIndex = '12050';
+            popover.style.zIndex = '15010';
             document.body.appendChild(popover);
 
             // Position adjustment if needed
@@ -6624,6 +6624,23 @@
         },
 
         // Move sublist dropdowns to body so they are never clipped by table overflow
+        getDropdownPortalLayer: function() {
+            var layer = document.querySelector('.typeahead-portal-layer');
+            if (!layer) {
+                layer = document.createElement('div');
+                layer.className = 'typeahead-portal-layer';
+                layer.style.position = 'absolute';
+                layer.style.top = '0';
+                layer.style.left = '0';
+                layer.style.width = '0';
+                layer.style.height = '0';
+                layer.style.zIndex = '15000';
+                layer.style.pointerEvents = 'none';
+                document.body.appendChild(layer);
+            }
+            return layer;
+        },
+
         portalDropdownIfNeeded: function(wrapper, dropdown) {
             if (!wrapper || !dropdown) return;
 
@@ -6636,10 +6653,14 @@
 
             dropdown.dataset.ownerId = wrapper.dataset.dropdownOwnerId;
             dropdown.dataset.portaled = 'true';
+            dropdown.classList.add('typeahead-portaled');
             wrapper._dropdownElement = dropdown;
 
-            if (dropdown.parentNode !== document.body) {
-                document.body.appendChild(dropdown);
+            var portalLayer = this.getDropdownPortalLayer();
+
+            if (dropdown.parentNode !== portalLayer) {
+                dropdown.style.pointerEvents = 'auto';
+                portalLayer.appendChild(dropdown);
             }
         },
 
@@ -6647,6 +6668,8 @@
             if (!wrapper || !dropdown) return;
 
             if (dropdown.dataset.portaled === 'true' && dropdown.parentNode !== wrapper) {
+                dropdown.classList.remove('typeahead-portaled');
+                dropdown.style.pointerEvents = '';
                 wrapper.appendChild(dropdown);
             }
         },
