@@ -1278,8 +1278,8 @@
 
             var fileUrl = this.data.fileUrl || (this.data.sourceFile ? '/core/media/media.nl?id=' + this.data.sourceFile : null);
 
-            // Check if file is an image based on URL or file extension
-            var isImage = this.isImageFile(fileUrl);
+            // Check if file is an image based on fileType, fileName, or URL
+            var isImage = this.isImageFile(this.data.fileType, this.data.fileName, fileUrl);
 
             if (fileUrl && isImage) {
                 // Render image with zoom/pan support
@@ -1314,11 +1314,37 @@
             }
         },
 
-        // Check if a URL points to an image file
-        isImageFile: function(url) {
-            if (!url) return false;
-            var imageExtensions = /\.(jpg|jpeg|png|gif|webp|bmp|tiff|tif)(\?|#|$)/i;
-            return imageExtensions.test(url);
+        // Check if a file is an image based on fileType, fileName, or URL
+        isImageFile: function(fileType, fileName, url) {
+            // Check NetSuite file type (e.g., 'JPGIMAGE', 'PNGIMAGE', 'GIFIMAGE', 'BMPIMAGE', 'TIFFIMAGE')
+            if (fileType) {
+                var imageTypes = ['JPGIMAGE', 'PNGIMAGE', 'GIFIMAGE', 'BMPIMAGE', 'TIFFIMAGE'];
+                if (imageTypes.indexOf(fileType) !== -1) {
+                    return true;
+                }
+                // Also check if it explicitly says PDF
+                if (fileType === 'PDF' || fileType === 'PDFFILE') {
+                    return false;
+                }
+            }
+
+            // Check file extension from fileName
+            if (fileName) {
+                var imageExtensions = /\.(jpg|jpeg|png|gif|webp|bmp|tiff|tif)$/i;
+                if (imageExtensions.test(fileName)) {
+                    return true;
+                }
+            }
+
+            // Fallback: check URL for extension
+            if (url) {
+                var urlExtensions = /\.(jpg|jpeg|png|gif|webp|bmp|tiff|tif)(\?|#|$)/i;
+                if (urlExtensions.test(url)) {
+                    return true;
+                }
+            }
+
+            return false;
         },
 
         // Render image with zoom and pan support (similar to PDF rendering)
