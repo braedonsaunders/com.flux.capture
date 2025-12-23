@@ -5281,18 +5281,29 @@
 
             var slType = (sublistId || '').toLowerCase();
 
-            // For expense lines: must have account or category selected
+            // Check for common meaningful data fields that indicate a populated line
+            // These fields apply to any sublist type
+            var hasAmount = line.amount && parseFloat(line.amount) !== 0;
+            var hasDescription = line.description && String(line.description).trim() !== '';
+            var hasMemo = line.memo && String(line.memo).trim() !== '';
+            var hasQuantity = line.quantity && parseFloat(line.quantity) !== 0;
+            var hasCustomer = line.customer && String(line.customer).trim() !== '';
+            var hasProject = (line.project && String(line.project).trim() !== '') ||
+                             (line.job && String(line.job).trim() !== '');
+
+            // For expense lines: check account/category OR any meaningful data
             if (slType === 'expense') {
                 var hasAccount = line.account && String(line.account).trim() !== '';
                 var hasCategory = line.category && String(line.category).trim() !== '';
                 var hasExpenseCategory = line.expensecategory && String(line.expensecategory).trim() !== '';
-                return hasAccount || hasCategory || hasExpenseCategory;
+                return hasAccount || hasCategory || hasExpenseCategory ||
+                       hasAmount || hasDescription || hasMemo || hasCustomer || hasProject;
             }
 
-            // For item lines: must have item selected
+            // For item lines: check item OR any meaningful data
             if (slType === 'item') {
                 var hasItem = line.item && String(line.item).trim() !== '';
-                return hasItem;
+                return hasItem || hasAmount || hasDescription || hasMemo || hasQuantity || hasCustomer || hasProject;
             }
 
             // For other sublists: check if any non-default value exists
