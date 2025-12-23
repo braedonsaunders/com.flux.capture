@@ -828,17 +828,6 @@
             }).length;
 
             UI.updateBadge(reviewCount);
-
-            // Update documents badge in nav
-            var docsBadge = el('#documents-badge');
-            if (docsBadge) {
-                if (reviewCount > 0) {
-                    docsBadge.textContent = reviewCount;
-                    docsBadge.style.display = 'inline-flex';
-                } else {
-                    docsBadge.style.display = 'none';
-                }
-            }
         },
 
         // ==========================================

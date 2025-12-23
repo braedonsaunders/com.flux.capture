@@ -519,11 +519,11 @@
         },
 
         /**
-         * Update documents badge count in sidebar navigation
+         * Update review badge count in topbar navigation
          * @param {number} count - Badge count
          */
         updateBadge: function(count) {
-            var badge = el('#documents-badge');
+            var badge = el('#review-badge');
             if (badge) {
                 badge.textContent = count;
                 badge.style.display = count > 0 ? 'inline-flex' : 'none';
