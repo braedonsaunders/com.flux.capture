@@ -6544,7 +6544,11 @@
         hideTypeaheadDropdown: function(wrapper) {
             if (!wrapper) return;
             var dropdown = wrapper.querySelector('.typeahead-dropdown');
-            if (dropdown) dropdown.style.display = 'none';
+            if (dropdown) {
+                FCDebug.log('[Typeahead] hideTypeaheadDropdown called');
+                console.trace('[Typeahead] hideTypeaheadDropdown stack trace');
+                dropdown.style.display = 'none';
+            }
         },
 
         // Fetch expense account associated with an expense category
