@@ -6,6 +6,23 @@
     'use strict';
 
     /**
+     * Fetch and update review badge count on page load
+     * Status values: 3=EXTRACTED, 4=NEEDS_REVIEW, 7=ERROR
+     */
+    function updateReviewBadge() {
+        API.get('queue', { page: 1, pageSize: 500 }).then(function(data) {
+            var documents = (data && data.queue) || [];
+            var reviewCount = documents.filter(function(d) {
+                var s = String(d.status);
+                return s === '4' || s === '3' || s === '7'; // NEEDS_REVIEW, EXTRACTED, ERROR
+            }).length;
+            UI.updateBadge(reviewCount);
+        }).catch(function(err) {
+            FCDebug.log('[FC.Main] Failed to update review badge:', err);
+        });
+    }
+
+    /**
      * Initialize navigation click handlers
      */
     function initNavigation() {
@@ -157,6 +174,9 @@
 
         // Initialize UI controls (dark mode, fullscreen)
         initUIControls();
+
+        // Update review badge count on page load
+        updateReviewBadge();
 
         // Navigate to default route (Ingest)
         Router.navigate('ingest');
