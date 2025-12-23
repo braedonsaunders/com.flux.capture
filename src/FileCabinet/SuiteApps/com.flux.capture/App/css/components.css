@@ -1685,8 +1685,8 @@
     border: 1px solid var(--border-color);
     border-radius: var(--radius-lg);
     margin-bottom: var(--space-md);
-    overflow: hidden;
     box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+    position: relative;
 }
 
 .review-header-bar {
@@ -2141,18 +2141,11 @@
 
 /* PO Dropdown Panel */
 .po-dropdown {
-    position: absolute;
-    top: 100%;
-    left: 0;
-    right: 0;
+    border-top: 1px solid var(--border-color);
     background: var(--surface-card);
-    border: 1px solid var(--border-color);
-    border-radius: var(--radius-lg);
-    box-shadow: var(--shadow-lg);
-    margin-top: var(--space-xs);
-    z-index: 100;
     max-height: 400px;
     overflow-y: auto;
+    animation: slideDown 0.15s ease;
 }
 
 .po-dropdown-header {
@@ -2162,7 +2155,6 @@
     padding: var(--space-sm) var(--space-md);
     background: var(--gray-50);
     border-bottom: 1px solid var(--border-color);
-    border-radius: var(--radius-lg) var(--radius-lg) 0 0;
 }
 
 .po-header-left {
