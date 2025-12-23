@@ -5241,10 +5241,8 @@ define([
         }
 
         if (validationErrors.length > 0) {
-            var validationError = errorModule.create({
-                name: 'VALIDATION_ERROR',
-                message: 'Transaction validation failed'
-            });
+            var validationError = new Error('Transaction validation failed');
+            validationError.name = 'VALIDATION_ERROR';
             validationError.type = 'VALIDATION_ERROR';
             validationError.errors = validationErrors;
             throw validationError;
@@ -5314,11 +5312,9 @@ define([
                 }
             }
 
-            // Create enhanced error with more details
-            var enhancedError = errorModule.create({
-                name: saveError.name || 'SAVE_FAILED',
-                message: userMessage
-            });
+            // Create enhanced error with more details (use plain Error to avoid errorModule issues)
+            var enhancedError = new Error(userMessage);
+            enhancedError.name = 'TRANSACTION_SAVE_FAILED';
             enhancedError.id = saveError.id;
             enhancedError.originalError = saveError.name + ': ' + saveError.message;
             enhancedError.transactionType = transactionType;
