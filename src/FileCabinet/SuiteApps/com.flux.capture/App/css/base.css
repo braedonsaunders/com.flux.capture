@@ -326,27 +326,29 @@ body {
 
 /* Minimized topbar state - sleek thin strip */
 body.topbar-minimized .app-topbar {
-    transform: translateY(calc(-100% + 4px)) !important;
+    transform: translateY(calc(-100% + 16px)) !important;
     opacity: 1 !important;
-    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
 }
 
 body.topbar-minimized .app-topbar::after {
-    content: '';
+    content: 'TOOLBAR';
     position: absolute;
     bottom: 0;
     left: 0;
     right: 0;
-    height: 4px;
-    background: linear-gradient(90deg,
-        transparent 0%,
-        rgba(255,255,255,0.1) 20%,
-        rgba(255,255,255,0.2) 50%,
-        rgba(255,255,255,0.1) 80%,
-        transparent 100%);
+    height: 16px;
+    background: #1a1a1a;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 9px;
+    font-weight: 600;
+    letter-spacing: 2px;
+    color: rgba(255, 255, 255, 0.4);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
 }
 
-body.topbar-minimized .app-topbar:hover,
+body.topbar-minimized .app-topbar:not(.no-hover):hover,
 body.topbar-minimized .app-topbar:focus-within {
     transform: translateY(0) !important;
     opacity: 1 !important;
@@ -357,9 +359,14 @@ body.topbar-minimized .app-topbar:focus-within::after {
     display: none;
 }
 
+/* Disable hover when minimizing via button click */
+body.topbar-minimized .app-topbar.no-hover {
+    transform: translateY(calc(-100% + 16px)) !important;
+}
+
 body.topbar-minimized .app-main {
-    margin-top: 4px;
-    min-height: calc(100vh - 4px);
+    margin-top: 16px;
+    min-height: calc(100vh - 16px);
 }
 
 body.topbar-minimized #btn-minimize-topbar i {
