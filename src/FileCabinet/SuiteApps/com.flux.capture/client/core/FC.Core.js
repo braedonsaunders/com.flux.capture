@@ -372,9 +372,9 @@
                 return;
             }
 
-            // Update active nav link immediately
-            els('.nav-link').forEach(function(link) {
-                link.classList.toggle('active', link.dataset.route === route);
+            // Update active topbar tab immediately
+            els('.topbar-tab').forEach(function(tab) {
+                tab.classList.toggle('active', tab.dataset.route === route);
             });
 
             // Call cleanup for previous route

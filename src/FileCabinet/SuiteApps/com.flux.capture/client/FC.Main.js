@@ -9,9 +9,9 @@
      * Initialize navigation click handlers
      */
     function initNavigation() {
-        // Sidebar nav links
-        els('.nav-link').forEach(function(link) {
-            link.addEventListener('click', function(e) {
+        // Topbar tabs
+        els('.topbar-tab').forEach(function(tab) {
+            tab.addEventListener('click', function(e) {
                 e.preventDefault();
                 var route = this.dataset.route;
                 if (route) {
@@ -20,10 +20,21 @@
             });
         });
 
-        // Handle card action links with data-route
+        // Topbar control buttons with data-route (settings)
+        els('.topbar-control[data-route]').forEach(function(btn) {
+            btn.addEventListener('click', function(e) {
+                e.preventDefault();
+                var route = this.dataset.route;
+                if (route) {
+                    Router.navigate(route);
+                }
+            });
+        });
+
+        // Handle other card action links with data-route
         document.addEventListener('click', function(e) {
             var link = e.target.closest('[data-route]');
-            if (link && !link.classList.contains('nav-link')) {
+            if (link && !link.classList.contains('topbar-tab') && !link.classList.contains('topbar-control')) {
                 e.preventDefault();
                 var route = link.dataset.route;
                 if (route) {
@@ -34,21 +45,20 @@
     }
 
     /**
-     * Initialize UI controls (dark mode, sidebar, fullscreen)
+     * Initialize UI controls (dark mode, fullscreen)
      */
     function initUIControls() {
-        // Load saved preferences
+        // Load saved dark mode preference
         var darkMode = localStorage.getItem('fc_darkMode') === 'true';
-        var sidebarCollapsed = localStorage.getItem('fc_sidebarCollapsed') === 'true';
 
         if (darkMode) {
             document.body.classList.add('dark-mode');
             var btn = el('#btn-dark-mode');
-            if (btn) btn.classList.add('active');
-        }
-
-        if (sidebarCollapsed) {
-            document.body.classList.add('sidebar-collapsed');
+            if (btn) {
+                btn.classList.add('active');
+                var icon = btn.querySelector('i');
+                if (icon) icon.className = 'fas fa-sun';
+            }
         }
 
         // Dark mode toggle
@@ -87,7 +97,6 @@
                             var icon = btn.querySelector('i');
                             if (icon) icon.className = 'fas fa-compress';
                         }).catch(function(err) {
-                            // Fullscreen might be blocked in iframe - try opening in new window
                             FCDebug.log('[Fullscreen] Failed:', err.message);
                             UI.toast('Fullscreen not available in this context', 'warning');
                         });
@@ -118,24 +127,6 @@
             document.addEventListener('fullscreenchange', fsChangeHandler);
             document.addEventListener('webkitfullscreenchange', fsChangeHandler);
         }
-
-        // Collapse sidebar
-        var collapseBtn = el('#btn-collapse-sidebar');
-        if (collapseBtn) {
-            collapseBtn.addEventListener('click', function() {
-                document.body.classList.add('sidebar-collapsed');
-                localStorage.setItem('fc_sidebarCollapsed', 'true');
-            });
-        }
-
-        // Expand sidebar
-        var expandBtn = el('#btn-expand-sidebar');
-        if (expandBtn) {
-            expandBtn.addEventListener('click', function() {
-                document.body.classList.remove('sidebar-collapsed');
-                localStorage.setItem('fc_sidebarCollapsed', 'false');
-            });
-        }
     }
 
     /**
@@ -147,11 +138,11 @@
         // Set up navigation
         initNavigation();
 
-        // Initialize UI controls (dark mode, sidebar, fullscreen)
+        // Initialize UI controls (dark mode, fullscreen)
         initUIControls();
 
-        // Navigate to default route
-        Router.navigate('dashboard');
+        // Navigate to default route (Ingest)
+        Router.navigate('ingest');
 
         // Hide loading screen
         UI.hideLoading();
