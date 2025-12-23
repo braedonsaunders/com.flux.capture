@@ -39,7 +39,7 @@
     /* Surface Colors */
     --surface-body: #f8fafc;
     --surface-card: #ffffff;
-    --surface-sidebar: linear-gradient(180deg, #0f172a 0%, #1e293b 100%);
+    --surface-topbar: linear-gradient(180deg, #0f172a 0%, #1e293b 100%);
     --border-color: #e2e8f0;
 
     /* Text Colors */
@@ -47,11 +47,9 @@
     --text-secondary: #475569;
     --text-tertiary: #94a3b8;
     --text-inverse: #ffffff;
-    --text-sidebar: rgba(255, 255, 255, 0.65);
-    --text-sidebar-hover: rgba(255, 255, 255, 0.9);
 
     /* Layout */
-    --sidebar-width: 200px;
+    --topbar-height: 56px;
 
     /* Spacing */
     --space-xs: 4px;
@@ -115,194 +113,215 @@ body {
 /* ==========================================
    SIDEBAR
    ========================================== */
-.app-sidebar {
-    width: var(--sidebar-width);
-    background: var(--surface-sidebar);
-    color: var(--text-sidebar);
+/* ==========================================
+   TOPBAR NAVIGATION
+   ========================================== */
+.app-topbar {
+    height: var(--topbar-height, 56px);
+    background: var(--surface-topbar, linear-gradient(180deg, #0f172a 0%, #1e293b 100%));
+    color: rgba(255, 255, 255, 0.85);
     display: flex;
-    flex-direction: column;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0 var(--space-lg);
     position: fixed;
     top: 0;
     left: 0;
-    bottom: 0;
+    right: 0;
     z-index: 100;
     /* Hidden until color resolved */
     opacity: 0;
-    transform: translateX(-10px);
+    transform: translateY(-10px);
     transition: opacity 0.4s ease, transform 0.4s ease;
 }
 
-.app-sidebar.sidebar-ready {
+.app-topbar.topbar-ready {
     opacity: 1;
-    transform: translateX(0);
+    transform: translateY(0);
 }
 
-.sidebar-header {
-    padding: var(--space-lg);
+/* Logo & Brand */
+.topbar-brand {
     display: flex;
     align-items: center;
-    gap: var(--space-md);
+    gap: var(--space-sm);
 }
 
-.sidebar-logo {
-    width: 40px;
-    height: 40px;
+.topbar-logo {
+    width: 32px;
+    height: 32px;
     background: var(--color-primary);
-    border-radius: 10px;
+    border-radius: 8px;
     display: flex;
     align-items: center;
     justify-content: center;
 }
 
-.sidebar-logo svg {
-    width: 24px;
-    height: 24px;
-    color: var(--text-inverse);
+.topbar-logo svg {
+    width: 18px;
+    height: 18px;
+    color: white;
 }
 
-.sidebar-brand {
-    display: flex;
-    flex-direction: column;
-}
-
-.brand-name {
-    font-size: var(--font-size-xl);
+.topbar-brand .brand-name {
+    font-size: var(--font-size-lg);
     font-weight: 700;
-    color: var(--text-inverse);
+    color: white;
 }
 
-.brand-tagline {
-    font-size: var(--font-size-xs);
-    color: var(--text-sidebar);
-    text-transform: uppercase;
-    letter-spacing: 0.5px;
-}
-
-/* Navigation */
-.nav-list {
-    flex: 1;
-    list-style: none;
-    padding: var(--space-sm) var(--space-md);
-    overflow-y: auto;
-}
-
-.nav-section-title {
-    font-size: var(--font-size-xs);
-    font-weight: 600;
-    text-transform: uppercase;
-    letter-spacing: 0.5px;
-    color: var(--gray-500);
-    padding: var(--space-md) var(--space-md) var(--space-sm);
-    margin-top: var(--space-md);
-}
-
-.nav-section-title:first-child {
-    margin-top: 0;
-}
-
-.nav-item {
-    margin-bottom: 2px;
-}
-
-.nav-link {
+/* Workflow Tabs */
+.topbar-tabs {
     display: flex;
     align-items: center;
-    gap: var(--space-md);
-    padding: 10px var(--space-md);
-    border-radius: var(--radius-md);
-    color: var(--text-sidebar);
+    gap: var(--space-xs);
+    margin: 0 auto;
+}
+
+.topbar-tab {
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
+    padding: var(--space-sm) var(--space-lg);
+    border-radius: var(--radius-lg);
+    color: rgba(255, 255, 255, 0.65);
     text-decoration: none;
-    transition: all var(--transition);
+    font-size: var(--font-size-sm);
+    font-weight: 500;
+    transition: all 0.2s ease;
     cursor: pointer;
+    position: relative;
 }
 
-.nav-link:hover {
-    background: var(--sidebar-bg-hover, rgba(255, 255, 255, 0.08));
-    color: var(--text-sidebar-hover);
+.topbar-tab:hover {
+    background: var(--topbar-bg-hover, rgba(255, 255, 255, 0.1));
+    color: rgba(255, 255, 255, 0.95);
 }
 
-.nav-link.active {
-    background: var(--color-primary);
-    color: var(--text-inverse);
+.topbar-tab.active {
+    background: var(--topbar-active, rgba(255, 255, 255, 0.2));
+    color: white;
 }
 
-.nav-link i {
+.topbar-tab .tab-number {
     width: 20px;
-    text-align: center;
+    height: 20px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(255, 255, 255, 0.15);
+    border-radius: 50%;
+    font-size: 11px;
+    font-weight: 600;
+}
+
+.topbar-tab.active .tab-number {
+    background: var(--color-primary);
+    color: white;
+}
+
+.topbar-tab i {
+    font-size: var(--font-size-base);
+}
+
+.topbar-tab .tab-label {
+    font-weight: 600;
+}
+
+.tab-connector {
+    color: rgba(255, 255, 255, 0.3);
+    font-size: 10px;
 }
 
 .nav-badge {
     background: var(--color-danger);
-    color: var(--text-inverse);
-    font-size: var(--font-size-xs);
+    color: white;
+    font-size: 10px;
     font-weight: 600;
     padding: 2px 6px;
     border-radius: 10px;
-    margin-left: auto;
+    min-width: 18px;
+    text-align: center;
 }
 
-/* Sidebar Footer */
-.sidebar-footer {
-    padding: var(--space-md);
-    border-top: 1px solid var(--sidebar-border, rgba(255, 255, 255, 0.08));
+.nav-badge-pulse {
+    animation: badge-pulse 2s ease infinite;
 }
 
-/* Light theme sidebar (when NS navbar is light colored) */
-.app-sidebar.light-theme {
-    color: rgba(0, 0, 0, 0.65);
+@keyframes badge-pulse {
+    0%, 100% { transform: scale(1); }
+    50% { transform: scale(1.1); }
 }
 
-.app-sidebar.light-theme .brand-name,
-.app-sidebar.light-theme .user-name {
-    color: rgba(0, 0, 0, 0.9);
-}
-
-.app-sidebar.light-theme .brand-tagline,
-.app-sidebar.light-theme .user-role,
-.app-sidebar.light-theme .nav-section-title {
-    color: rgba(0, 0, 0, 0.5);
-}
-
-.app-sidebar.light-theme .nav-link {
-    color: rgba(0, 0, 0, 0.65);
-}
-
-.app-sidebar.light-theme .nav-link:hover {
-    color: rgba(0, 0, 0, 0.9);
-}
-
-.app-sidebar.light-theme .sidebar-footer {
-    border-top-color: rgba(0, 0, 0, 0.08);
-}
-
-.sidebar-user {
+/* Topbar Controls */
+.topbar-controls {
     display: flex;
     align-items: center;
-    gap: var(--space-md);
+    gap: var(--space-xs);
 }
 
-.user-avatar {
+.topbar-control {
     width: 36px;
     height: 36px;
-    border-radius: var(--radius-md);
-    background: var(--color-primary);
-    color: var(--text-inverse);
     display: flex;
     align-items: center;
     justify-content: center;
-    font-weight: 600;
-    font-size: var(--font-size-sm);
+    background: rgba(255, 255, 255, 0.08);
+    border: none;
+    border-radius: var(--radius-md);
+    color: rgba(255, 255, 255, 0.7);
+    cursor: pointer;
+    transition: all 0.15s ease;
 }
 
-.user-name {
-    font-weight: 500;
-    color: var(--text-inverse);
-    font-size: var(--font-size-sm);
+.topbar-control:hover {
+    background: rgba(255, 255, 255, 0.15);
+    color: white;
 }
 
-.user-role {
-    font-size: var(--font-size-xs);
-    color: var(--text-sidebar);
+.topbar-control.active {
+    background: var(--color-primary);
+    color: white;
+}
+
+/* Light theme topbar */
+.app-topbar.light-theme {
+    color: rgba(0, 0, 0, 0.75);
+}
+
+.app-topbar.light-theme .brand-name {
+    color: rgba(0, 0, 0, 0.9);
+}
+
+.app-topbar.light-theme .topbar-tab {
+    color: rgba(0, 0, 0, 0.6);
+}
+
+.app-topbar.light-theme .topbar-tab:hover {
+    background: rgba(0, 0, 0, 0.06);
+    color: rgba(0, 0, 0, 0.9);
+}
+
+.app-topbar.light-theme .topbar-tab.active {
+    background: rgba(0, 0, 0, 0.1);
+    color: rgba(0, 0, 0, 0.95);
+}
+
+.app-topbar.light-theme .topbar-tab .tab-number {
+    background: rgba(0, 0, 0, 0.1);
+}
+
+.app-topbar.light-theme .tab-connector {
+    color: rgba(0, 0, 0, 0.25);
+}
+
+.app-topbar.light-theme .topbar-control {
+    background: rgba(0, 0, 0, 0.06);
+    color: rgba(0, 0, 0, 0.6);
+}
+
+.app-topbar.light-theme .topbar-control:hover {
+    background: rgba(0, 0, 0, 0.1);
+    color: rgba(0, 0, 0, 0.9);
 }
 
 /* ==========================================
@@ -310,8 +329,8 @@ body {
    ========================================== */
 .app-main {
     flex: 1;
-    margin-left: var(--sidebar-width);
-    min-height: 100vh;
+    margin-top: var(--topbar-height, 56px);
+    min-height: calc(100vh - var(--topbar-height, 56px));
     display: flex;
     flex-direction: column;
 }

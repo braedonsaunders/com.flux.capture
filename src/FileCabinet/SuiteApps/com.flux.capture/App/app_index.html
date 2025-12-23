@@ -419,45 +419,35 @@
         }
     </style>
 
-    <!-- NetSuite navbar color sync script - detects NS header color and syncs sidebar -->
+    <!-- NetSuite navbar color sync script - detects NS header color and syncs topbar -->
     <script>
         (function() {
             'use strict';
 
             /**
-             * Detects NetSuite's header bar color and syncs the sidebar
+             * Detects NetSuite's header bar color and syncs the topbar
              * Works whether app is in an iframe or embedded directly
              */
             function syncNetSuiteColor() {
                 try {
-                    // Try parent document first, fall back to current document
                     var docs = [];
                     try {
                         if (window.parent && window.parent.document) {
                             docs.push({ doc: window.parent.document, win: window.parent, name: 'parent' });
                         }
-                    } catch (e) {
-                        // Cross-origin, can't access parent
-                    }
+                    } catch (e) {}
                     docs.push({ doc: document, win: window, name: 'current' });
 
-                    // NetSuite header container selectors
                     var headerContainers = [
-                        '#div__header',          // Redwood theme header
-                        '#ns-header',            // Modern NetSuite header
-                        '#ns_navigation',        // Navigation bar
-                        '.uir-page-header',      // Classic UI header
-                        '#nscm'                  // NetSuite Center Menu
+                        '#div__header', '#ns-header', '#ns_navigation', '.uir-page-header', '#nscm'
                     ];
 
                     var detectedColor = null;
 
-                    // Try each document
                     for (var d = 0; d < docs.length; d++) {
                         if (detectedColor) break;
                         var docInfo = docs[d];
 
-                        // Scan header containers and their descendants
                         for (var h = 0; h < headerContainers.length; h++) {
                             if (detectedColor) break;
                             try {
@@ -474,18 +464,14 @@
                                     var bgColor = computedStyle.backgroundColor;
 
                                     if (bgColor && bgColor !== 'transparent' &&
-                                        bgColor !== 'rgba(0, 0, 0, 0)' &&
-                                        !isLightOrGrey(bgColor)) {
+                                        bgColor !== 'rgba(0, 0, 0, 0)' && !isLightOrGrey(bgColor)) {
                                         detectedColor = bgColor;
                                         break;
                                     }
                                 }
-                            } catch (err) {
-                                continue;
-                            }
+                            } catch (err) { continue; }
                         }
 
-                        // Fallback: elementsFromPoint at nav bar height
                         if (!detectedColor) {
                             try {
                                 var yPositions = [80, 60, 100, 40];
@@ -495,14 +481,9 @@
                                     for (var i = 0; i < elements.length; i++) {
                                         var el = elements[i];
                                         if (el.tagName === 'BODY' || el.tagName === 'HTML') continue;
-                                        if (el.id && el.id.indexOf('skeleton') !== -1) continue;
-
                                         var style = docInfo.win.getComputedStyle(el);
                                         var bg = style.backgroundColor;
-
-                                        if (bg && bg !== 'transparent' &&
-                                            bg !== 'rgba(0, 0, 0, 0)' &&
-                                            !isLightOrGrey(bg)) {
+                                        if (bg && bg !== 'transparent' && bg !== 'rgba(0, 0, 0, 0)' && !isLightOrGrey(bg)) {
                                             detectedColor = bg;
                                             break;
                                         }
@@ -512,18 +493,11 @@
                         }
                     }
 
-                    if (detectedColor) {
-                        return applyDetectedColor(detectedColor);
-                    }
+                    if (detectedColor) return applyDetectedColor(detectedColor);
                     return false;
-                } catch (e) {
-                    return false;
-                }
+                } catch (e) { return false; }
             }
 
-            /**
-             * Retry with exponential backoff for async-loaded themes
-             */
             function syncNetSuiteColorWithRetry(maxRetries, initialDelay) {
                 maxRetries = maxRetries || 5;
                 initialDelay = initialDelay || 100;
@@ -531,163 +505,107 @@
 
                 function attempt() {
                     attempts++;
-                    var success = syncNetSuiteColor();
-
-                    if (success) return;
-
+                    if (syncNetSuiteColor()) return;
                     if (attempts < maxRetries) {
-                        var delay = initialDelay * Math.pow(2, attempts - 1);
-                        setTimeout(attempt, delay);
+                        setTimeout(attempt, initialDelay * Math.pow(2, attempts - 1));
                     } else {
-                        // Apply default dark sidebar
                         applyDetectedColor('rgb(30, 41, 59)');
                     }
                 }
                 attempt();
             }
 
-            /**
-             * Check if color is light or grey (skip light backgrounds, we want the dark nav bar)
-             * More aggressive filtering to skip the lighter top section and match the darker nav
-             */
             function isLightOrGrey(color) {
                 var rgb = parseRgb(color);
                 if (!rgb) return false;
-
                 var luminance = (0.299 * rgb.r + 0.587 * rgb.g + 0.114 * rgb.b) / 255;
                 var max = Math.max(rgb.r, rgb.g, rgb.b);
                 var min = Math.min(rgb.r, rgb.g, rgb.b);
                 var saturation = max === 0 ? 0 : (max - min) / max;
-
-                // Skip if luminance > 0.5 (we want dark colors only, like the nav bar)
                 if (luminance > 0.5) return true;
-
-                // Skip if very unsaturated (grey)
                 if (saturation < 0.1 && luminance > 0.3) return true;
-
                 return false;
             }
 
-            /**
-             * Parse RGB color string
-             */
             function parseRgb(color) {
-                var rgbMatch = color.match(/rgb\((\d+),\s*(\d+),\s*(\d+)\)/);
-                if (rgbMatch) {
-                    return { r: parseInt(rgbMatch[1], 10), g: parseInt(rgbMatch[2], 10), b: parseInt(rgbMatch[3], 10) };
-                }
-                var rgbaMatch = color.match(/rgba\((\d+),\s*(\d+),\s*(\d+),\s*[\d.]+\)/);
-                if (rgbaMatch) {
-                    return { r: parseInt(rgbaMatch[1], 10), g: parseInt(rgbaMatch[2], 10), b: parseInt(rgbaMatch[3], 10) };
-                }
-                return null;
+                var m = color.match(/rgba?\((\d+),\s*(\d+),\s*(\d+)/);
+                return m ? { r: parseInt(m[1], 10), g: parseInt(m[2], 10), b: parseInt(m[3], 10) } : null;
             }
 
-            /**
-             * Get luminance (0 = black, 1 = white)
-             */
             function getLuminance(rgb) {
                 return (0.299 * rgb.r + 0.587 * rgb.g + 0.114 * rgb.b) / 255;
             }
 
-            /**
-             * Adjust brightness (-1 to 1)
-             */
             function adjustBrightness(rgb, amount) {
                 if (amount < 0) {
-                    var factor = 1 + amount;
-                    return {
-                        r: Math.round(Math.max(0, rgb.r * factor)),
-                        g: Math.round(Math.max(0, rgb.g * factor)),
-                        b: Math.round(Math.max(0, rgb.b * factor))
-                    };
-                } else {
-                    return {
-                        r: Math.round(Math.min(255, rgb.r + (255 - rgb.r) * amount)),
-                        g: Math.round(Math.min(255, rgb.g + (255 - rgb.g) * amount)),
-                        b: Math.round(Math.min(255, rgb.b + (255 - rgb.b) * amount))
-                    };
+                    var f = 1 + amount;
+                    return { r: Math.round(Math.max(0, rgb.r * f)), g: Math.round(Math.max(0, rgb.g * f)), b: Math.round(Math.max(0, rgb.b * f)) };
                 }
+                return { r: Math.round(Math.min(255, rgb.r + (255 - rgb.r) * amount)),
+                         g: Math.round(Math.min(255, rgb.g + (255 - rgb.g) * amount)),
+                         b: Math.round(Math.min(255, rgb.b + (255 - rgb.b) * amount)) };
             }
 
-            /**
-             * Apply detected color to sidebar
-             */
             function applyDetectedColor(color) {
                 var rgb = parseRgb(color);
                 if (!rgb) return false;
 
                 var root = document.documentElement;
-                var sidebar = document.querySelector('.app-sidebar');
+                var topbar = document.querySelector('.app-topbar');
 
-                // Lighten detected color by 15% for sidebar
-                var sidebarRgb = adjustBrightness(rgb, 0.15);
-                var sidebarColor = 'rgb(' + sidebarRgb.r + ', ' + sidebarRgb.g + ', ' + sidebarRgb.b + ')';
+                // Lighten detected color slightly for topbar
+                var topbarRgb = adjustBrightness(rgb, 0.1);
+                var topbarColor = 'rgb(' + topbarRgb.r + ', ' + topbarRgb.g + ', ' + topbarRgb.b + ')';
 
-                // Check luminance for text contrast
-                var sidebarLuminance = getLuminance(sidebarRgb);
-                var needsLightTheme = sidebarLuminance > 0.5;
+                var topbarLuminance = getLuminance(topbarRgb);
+                var needsLightTheme = topbarLuminance > 0.5;
 
-                // Calculate hover and border colors
-                var hoverRgb, borderRgb;
+                var hoverRgb, borderRgb, activeRgb;
                 if (needsLightTheme) {
-                    hoverRgb = adjustBrightness(sidebarRgb, -0.08);
-                    borderRgb = adjustBrightness(sidebarRgb, -0.12);
-                    if (sidebar) sidebar.classList.add('light-theme');
+                    hoverRgb = adjustBrightness(topbarRgb, -0.06);
+                    borderRgb = adjustBrightness(topbarRgb, -0.1);
+                    activeRgb = adjustBrightness(topbarRgb, -0.15);
+                    if (topbar) topbar.classList.add('light-theme');
                 } else {
-                    hoverRgb = adjustBrightness(sidebarRgb, 0.15);
-                    borderRgb = adjustBrightness(sidebarRgb, 0.20);
-                    if (sidebar) sidebar.classList.remove('light-theme');
+                    hoverRgb = adjustBrightness(topbarRgb, 0.12);
+                    borderRgb = adjustBrightness(topbarRgb, 0.18);
+                    activeRgb = adjustBrightness(topbarRgb, 0.25);
+                    if (topbar) topbar.classList.remove('light-theme');
                 }
 
-                // Apply CSS variables
-                root.style.setProperty('--surface-sidebar', sidebarColor);
-                root.style.setProperty('--sidebar-bg-hover', 'rgb(' + hoverRgb.r + ', ' + hoverRgb.g + ', ' + hoverRgb.b + ')');
-                root.style.setProperty('--sidebar-border', 'rgb(' + borderRgb.r + ', ' + borderRgb.g + ', ' + borderRgb.b + ')');
+                root.style.setProperty('--surface-topbar', topbarColor);
+                root.style.setProperty('--topbar-bg-hover', 'rgb(' + hoverRgb.r + ', ' + hoverRgb.g + ', ' + hoverRgb.b + ')');
+                root.style.setProperty('--topbar-border', 'rgb(' + borderRgb.r + ', ' + borderRgb.g + ', ' + borderRgb.b + ')');
+                root.style.setProperty('--topbar-active', 'rgb(' + activeRgb.r + ', ' + activeRgb.g + ', ' + activeRgb.b + ')');
 
-                // Apply directly to sidebar
-                if (sidebar) {
-                    sidebar.style.background = sidebarColor;
-
-                    // Reveal sidebar with animation after color is applied
-                    requestAnimationFrame(function() {
-                        sidebar.classList.add('sidebar-ready');
-                    });
+                if (topbar) {
+                    topbar.style.background = topbarColor;
+                    requestAnimationFrame(function() { topbar.classList.add('topbar-ready'); });
                 }
 
-                // Mark color as ready globally
                 window.FC_COLOR_READY = true;
-
-                console.log('[FC] Sidebar color synced with NetSuite navbar:', color, '->', sidebarColor);
+                console.log('[FC] Topbar color synced:', color, '->', topbarColor);
                 return true;
             }
 
-            /**
-             * Reveal sidebar (called after color detection or as fallback)
-             */
-            function revealSidebar() {
-                var sidebar = document.querySelector('.app-sidebar');
-                if (sidebar && !sidebar.classList.contains('sidebar-ready')) {
-                    sidebar.classList.add('sidebar-ready');
+            function revealTopbar() {
+                var topbar = document.querySelector('.app-topbar');
+                if (topbar && !topbar.classList.contains('topbar-ready')) {
+                    topbar.classList.add('topbar-ready');
                 }
             }
 
-            // Also listen for postMessage as fallback
             window.addEventListener('message', function(event) {
                 if (event.data && event.data.type === 'FC_NAVBAR_COLOR' && event.data.color) {
                     applyDetectedColor(event.data.color);
                 }
             });
 
-            // Run color detection immediately
             syncNetSuiteColorWithRetry();
 
-            // Safety net: reveal sidebar after max wait time even if detection fails
             setTimeout(function() {
-                if (!window.FC_COLOR_READY) {
-                    applyDetectedColor('rgb(30, 41, 59)'); // Default dark color
-                }
-                revealSidebar();
+                if (!window.FC_COLOR_READY) applyDetectedColor('rgb(30, 41, 59)');
+                revealTopbar();
             }, 2000);
         })();
     </script>
@@ -696,79 +614,54 @@
 </head>
 <body>
     <div class="app-wrapper">
-        <!-- SIDEBAR NAVIGATION -->
-        <nav class="app-sidebar">
-            <div class="sidebar-header">
-                <div class="sidebar-logo">
+        <!-- TOPBAR NAVIGATION -->
+        <nav class="app-topbar">
+            <!-- Logo & Brand -->
+            <div class="topbar-brand">
+                <div class="topbar-logo">
                     <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
                         <path d="M13 2L3 14H12L11 22L21 10H12L13 2Z" fill="currentColor"/>
                     </svg>
                 </div>
-                <div class="sidebar-brand">
-                    <span class="brand-name">Flux</span>
-                    <span class="brand-tagline">Document Intelligence</span>
-                </div>
+                <span class="brand-name">Flux</span>
             </div>
 
-            <ul class="nav-list">
-                <li class="nav-section-title">Overview</li>
-                <li class="nav-item">
-                    <a href="#" class="nav-link active" data-route="dashboard">
-                        <i class="fas fa-gauge-high"></i>
-                        <span>Mission Control</span>
-                    </a>
-                </li>
+            <!-- Workflow Tabs (Left to Right Flow) -->
+            <div class="topbar-tabs">
+                <a href="#" class="topbar-tab active" data-route="ingest">
+                    <span class="tab-number">1</span>
+                    <i class="fas fa-cloud-upload-alt"></i>
+                    <span class="tab-label">Ingest</span>
+                    <span class="nav-badge nav-badge-pulse" id="ingest-processing-badge" style="display:none;">0</span>
+                </a>
+                <div class="tab-connector"><i class="fas fa-chevron-right"></i></div>
+                <a href="#" class="topbar-tab" data-route="review">
+                    <span class="tab-number">2</span>
+                    <i class="fas fa-search-plus"></i>
+                    <span class="tab-label">Review</span>
+                </a>
+                <div class="tab-connector"><i class="fas fa-chevron-right"></i></div>
+                <a href="#" class="topbar-tab" data-route="documents">
+                    <span class="tab-number">3</span>
+                    <i class="fas fa-check-circle"></i>
+                    <span class="tab-label">Documents</span>
+                    <span class="nav-badge" id="documents-badge" style="display:none;">0</span>
+                </a>
+            </div>
 
-                <li class="nav-section-title">Workflow</li>
-                <li class="nav-item">
-                    <a href="#" class="nav-link" data-route="ingest">
-                        <i class="fas fa-upload"></i>
-                        <span>Ingest</span>
-                        <span class="nav-badge nav-badge-pulse" id="ingest-processing-badge" style="display:none;">0</span>
-                    </a>
-                </li>
-                <li class="nav-item">
-                    <a href="#" class="nav-link" data-route="review">
-                        <i class="fas fa-eye"></i>
-                        <span>Review</span>
-                    </a>
-                </li>
-                <li class="nav-item">
-                    <a href="#" class="nav-link" data-route="documents">
-                        <i class="fas fa-inbox"></i>
-                        <span>Documents</span>
-                        <span class="nav-badge" id="documents-badge" style="display:none;">0</span>
-                    </a>
-                </li>
-
-                <li class="nav-section-title">System</li>
-                <li class="nav-item">
-                    <a href="#" class="nav-link" data-route="settings">
-                        <i class="fas fa-sliders"></i>
-                        <span>Settings</span>
-                    </a>
-                </li>
-            </ul>
-
-            <div class="sidebar-footer">
-                <div class="sidebar-controls">
-                    <button class="sidebar-control" id="btn-dark-mode" title="Toggle Dark Mode">
-                        <i class="fas fa-moon"></i>
-                    </button>
-                    <button class="sidebar-control" id="btn-fullscreen" title="Toggle Fullscreen">
-                        <i class="fas fa-expand"></i>
-                    </button>
-                    <button class="sidebar-control" id="btn-collapse-sidebar" title="Collapse Sidebar">
-                        <i class="fas fa-angles-left"></i>
-                    </button>
-                </div>
+            <!-- Controls (Right Side) -->
+            <div class="topbar-controls">
+                <button class="topbar-control" data-route="settings" title="Settings">
+                    <i class="fas fa-cog"></i>
+                </button>
+                <button class="topbar-control" id="btn-dark-mode" title="Toggle Dark Mode">
+                    <i class="fas fa-moon"></i>
+                </button>
+                <button class="topbar-control" id="btn-fullscreen" title="Toggle Fullscreen">
+                    <i class="fas fa-expand"></i>
+                </button>
             </div>
         </nav>
-
-        <!-- Collapsed sidebar expand button -->
-        <button class="sidebar-expand-btn" id="btn-expand-sidebar" title="Expand Sidebar">
-            <i class="fas fa-angles-right"></i>
-        </button>
 
         <!-- MAIN CONTENT AREA -->
         <main class="app-main">
@@ -823,263 +716,6 @@
     <!-- ============================================
          VIEW TEMPLATES
          ============================================ -->
-
-    <!-- MISSION CONTROL TEMPLATE - Action-First Smart Dashboard -->
-    <script type="text/template" id="tpl-dashboard">
-        <div class="view-mission-control mc-redesign" data-layout="focused">
-            <!-- =====================================================
-                 PROPOSAL 1: FOCUSED FLOW
-                 Single-column, one-document-at-a-time workflow
-                 Clean, minimal, action-oriented
-                 ===================================================== -->
-
-            <!-- Compact Status Bar -->
-            <div class="mc-status-bar">
-                <div class="mc-status-left">
-                    <span class="mc-logo"><i class="fas fa-bolt"></i></span>
-                    <span class="mc-status-count" id="status-count">
-                        <strong id="stat-to-review-v2">0</strong> to review
-                    </span>
-                    <span class="mc-status-divider"></span>
-                    <span class="mc-status-amount" id="stat-pending-v2">$0</span>
-                </div>
-                <div class="mc-status-right">
-                    <div class="mc-layout-switcher" id="layout-switcher">
-                        <button class="layout-btn active" data-layout="focused" title="Focused">
-                            <i class="fas fa-square"></i>
-                        </button>
-                        <button class="layout-btn" data-layout="grid" title="Grid">
-                            <i class="fas fa-th"></i>
-                        </button>
-                        <button class="layout-btn" data-layout="kanban" title="Pipeline">
-                            <i class="fas fa-columns"></i>
-                        </button>
-                    </div>
-                    <kbd class="mc-kbd-hint">?</kbd>
-                    <button class="btn btn-primary btn-sm" id="btn-go-to-flow">
-                        <i class="fas fa-plus"></i> Upload
-                    </button>
-                </div>
-            </div>
-
-            <!-- LAYOUT: FOCUSED FLOW -->
-            <div class="mc-layout mc-layout-focused" id="layout-focused">
-                <!-- Hero Document -->
-                <div class="mc-hero" id="mc-hero">
-                    <div class="mc-hero-empty" id="mc-hero-empty" style="display:none;">
-                        <div class="hero-empty-icon"><i class="fas fa-check-circle"></i></div>
-                        <h2>All Clear</h2>
-                        <p>No documents need your attention</p>
-                        <button class="btn btn-primary" id="btn-upload-hero">
-                            <i class="fas fa-cloud-upload-alt"></i> Upload Documents
-                        </button>
-                    </div>
-                    <div class="mc-hero-doc" id="mc-hero-doc">
-                        <div class="hero-badge" id="hero-badge"></div>
-                        <div class="hero-preview" id="hero-preview">
-                            <img src="" alt="" id="hero-img">
-                        </div>
-                        <div class="hero-info">
-                            <div class="hero-vendor" id="hero-vendor">Vendor Name</div>
-                            <div class="hero-meta">
-                                <span class="hero-invoice" id="hero-invoice">#INV-001</span>
-                                <span class="hero-amount" id="hero-amount">$1,234.56</span>
-                            </div>
-                            <div class="hero-confidence" id="hero-confidence">
-                                <div class="conf-bar"><div class="conf-fill" id="hero-conf-fill"></div></div>
-                                <span id="hero-conf-text">95%</span>
-                            </div>
-                            <div class="hero-due" id="hero-due"></div>
-                        </div>
-                        <div class="hero-actions">
-                            <button class="hero-btn hero-btn-approve" id="hero-approve" title="Approve (A)">
-                                <i class="fas fa-check"></i>
-                                <span>Approve</span>
-                            </button>
-                            <button class="hero-btn hero-btn-reject" id="hero-reject" title="Reject (R)">
-                                <i class="fas fa-times"></i>
-                                <span>Reject</span>
-                            </button>
-                            <button class="hero-btn hero-btn-open" id="hero-open" title="Review Details (Enter)">
-                                <i class="fas fa-expand"></i>
-                                <span>Review</span>
-                            </button>
-                            <button class="hero-btn hero-btn-skip" id="hero-skip" title="Skip (S)">
-                                <i class="fas fa-forward"></i>
-                            </button>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- Queue Strip -->
-                <div class="mc-queue-strip" id="mc-queue-strip">
-                    <div class="queue-strip-header">
-                        <span class="queue-strip-title">Up Next</span>
-                        <span class="queue-strip-count" id="queue-count-v2">0</span>
-                        <button class="btn btn-sm btn-ghost" id="btn-approve-all-v2" style="margin-left:auto;">
-                            <i class="fas fa-check-double"></i> Approve All Ready
-                        </button>
-                    </div>
-                    <div class="queue-strip-items" id="queue-strip-items">
-                        <!-- Queue thumbnails render here -->
-                    </div>
-                </div>
-            </div>
-
-            <!-- LAYOUT: DENSE GRID -->
-            <div class="mc-layout mc-layout-grid" id="layout-grid" style="display:none;">
-                <div class="grid-toolbar">
-                    <div class="grid-filters" id="grid-filters">
-                        <button class="grid-filter active" data-filter="all">All <span id="filter-count-all">0</span></button>
-                        <button class="grid-filter" data-filter="ready">Ready <span id="filter-count-ready">0</span></button>
-                        <button class="grid-filter urgent" data-filter="urgent">Urgent <span id="filter-count-urgent">0</span></button>
-                        <button class="grid-filter" data-filter="review">Needs Review <span id="filter-count-review">0</span></button>
-                    </div>
-                    <div class="grid-actions">
-                        <button class="btn btn-sm btn-success" id="btn-approve-selected-grid" disabled>
-                            <i class="fas fa-check"></i> Approve Selected
-                        </button>
-                    </div>
-                </div>
-                <div class="grid-container" id="grid-container">
-                    <!-- Grid items render here -->
-                </div>
-                <div class="grid-empty" id="grid-empty" style="display:none;">
-                    <i class="fas fa-inbox"></i>
-                    <span>No documents to display</span>
-                </div>
-            </div>
-
-            <!-- LAYOUT: KANBAN PIPELINE -->
-            <div class="mc-layout mc-layout-kanban" id="layout-kanban" style="display:none;">
-                <div class="kanban-board" id="kanban-board">
-                    <div class="kanban-column" data-stage="processing">
-                        <div class="kanban-header">
-                            <span class="kanban-dot processing"></span>
-                            <span class="kanban-title">Processing</span>
-                            <span class="kanban-count" id="kanban-count-processing">0</span>
-                        </div>
-                        <div class="kanban-items" id="kanban-processing">
-                            <!-- Items render here -->
-                        </div>
-                    </div>
-                    <div class="kanban-column" data-stage="ready">
-                        <div class="kanban-header">
-                            <span class="kanban-dot ready"></span>
-                            <span class="kanban-title">Ready to Approve</span>
-                            <span class="kanban-count" id="kanban-count-ready">0</span>
-                            <button class="btn btn-xs btn-success kanban-approve-all" id="kanban-approve-ready">
-                                <i class="fas fa-check-double"></i>
-                            </button>
-                        </div>
-                        <div class="kanban-items" id="kanban-ready">
-                            <!-- Items render here -->
-                        </div>
-                    </div>
-                    <div class="kanban-column" data-stage="review">
-                        <div class="kanban-header">
-                            <span class="kanban-dot review"></span>
-                            <span class="kanban-title">Needs Review</span>
-                            <span class="kanban-count" id="kanban-count-review">0</span>
-                        </div>
-                        <div class="kanban-items" id="kanban-review">
-                            <!-- Items render here -->
-                        </div>
-                    </div>
-                    <div class="kanban-column" data-stage="done">
-                        <div class="kanban-header">
-                            <span class="kanban-dot done"></span>
-                            <span class="kanban-title">Done Today</span>
-                            <span class="kanban-count" id="kanban-count-done">0</span>
-                        </div>
-                        <div class="kanban-items" id="kanban-done">
-                            <!-- Items render here -->
-                        </div>
-                    </div>
-                </div>
-            </div>
-
-            <!-- Shared: Bulk Selection Bar -->
-            <div class="mc-bulk-bar" id="mc-bulk-bar" style="display:none;">
-                <span class="bulk-bar-count"><strong id="bulk-count">0</strong> selected</span>
-                <div class="bulk-bar-actions">
-                    <button class="btn btn-success btn-sm" id="btn-bulk-approve">
-                        <i class="fas fa-check"></i> Approve
-                    </button>
-                    <button class="btn btn-danger btn-sm" id="btn-bulk-reject">
-                        <i class="fas fa-times"></i> Reject
-                    </button>
-                    <button class="btn btn-ghost btn-sm" id="btn-clear-selection">
-                        <i class="fas fa-times"></i> Clear
-                    </button>
-                </div>
-            </div>
-
-            <!-- Context Menu (shared) -->
-            <div class="context-menu" id="context-menu" style="display:none;">
-                <div class="context-menu-item" data-action="approve">
-                    <i class="fas fa-check"></i> Approve <kbd>A</kbd>
-                </div>
-                <div class="context-menu-item" data-action="reject">
-                    <i class="fas fa-times"></i> Reject <kbd>R</kbd>
-                </div>
-                <div class="context-menu-item" data-action="open">
-                    <i class="fas fa-expand"></i> Open <kbd>Enter</kbd>
-                </div>
-                <div class="context-menu-divider"></div>
-                <div class="context-menu-item" data-action="skip">
-                    <i class="fas fa-forward"></i> Skip <kbd>S</kbd>
-                </div>
-            </div>
-
-            <!-- Command Palette (shared) -->
-            <div class="command-palette-overlay" id="command-palette-overlay" style="display:none;">
-                <div class="command-palette" id="command-palette">
-                    <div class="command-input-wrapper">
-                        <i class="fas fa-search"></i>
-                        <input type="text" id="command-input" placeholder="Search documents or commands..." autocomplete="off">
-                        <kbd>ESC</kbd>
-                    </div>
-                    <div class="command-results" id="command-results"></div>
-                    <div class="command-footer">
-                        <span><kbd>&uarr;</kbd><kbd>&darr;</kbd> Navigate</span>
-                        <span><kbd>Enter</kbd> Select</span>
-                    </div>
-                </div>
-            </div>
-
-            <!-- Keyboard Help (shared) -->
-            <div class="keyboard-help-overlay" id="keyboard-help-overlay" style="display:none;">
-                <div class="keyboard-help">
-                    <div class="keyboard-help-header">
-                        <h2>Keyboard Shortcuts</h2>
-                        <button class="btn-icon" id="close-keyboard-help"><i class="fas fa-times"></i></button>
-                    </div>
-                    <div class="keyboard-help-content">
-                        <div class="shortcut-group">
-                            <h3>Actions</h3>
-                            <div class="shortcut"><kbd>A</kbd> Approve</div>
-                            <div class="shortcut"><kbd>R</kbd> Reject</div>
-                            <div class="shortcut"><kbd>S</kbd> Skip</div>
-                            <div class="shortcut"><kbd>Enter</kbd> Open</div>
-                        </div>
-                        <div class="shortcut-group">
-                            <h3>Navigation</h3>
-                            <div class="shortcut"><kbd>J</kbd> / <kbd>K</kbd> Next/Prev</div>
-                            <div class="shortcut"><kbd>1</kbd><kbd>2</kbd><kbd>3</kbd> Switch layout</div>
-                            <div class="shortcut"><kbd>&#8984;K</kbd> Command palette</div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-
-            <!-- Toast -->
-            <div class="action-toast" id="action-toast" style="display:none;">
-                <i class="fas fa-check-circle"></i>
-                <span id="action-toast-message">Done</span>
-            </div>
-        </div>
-    </script>
 
     <!-- QUEUE TEMPLATE -->
     <script type="text/template" id="tpl-queue">

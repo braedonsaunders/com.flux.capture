@@ -7127,48 +7127,7 @@ body.dark-mode #btn-dark-mode i::before {
 }
 
 /* Responsive */
-@media (max-width: 1200px) {
-    .action-main {
-        grid-template-columns: 1fr;
-    }
-
-    .action-sidebar {
-        flex-direction: row;
-        gap: var(--space-lg);
-    }
-
-    .sidebar-card {
-        flex: 1;
-    }
-}
-
 @media (max-width: 768px) {
-    .action-dashboard .mc-header {
-        grid-template-columns: 1fr;
-        gap: var(--space-md);
-    }
-
-    .mc-header-center {
-        order: 3;
-    }
-
-    .mc-quick-stats {
-        width: 100%;
-        justify-content: space-around;
-    }
-
-    .digest-items {
-        grid-template-columns: repeat(2, 1fr);
-    }
-
-    .action-cards {
-        grid-template-columns: 1fr;
-    }
-
-    .action-sidebar {
-        flex-direction: column;
-    }
-
     .keyboard-help-content {
         grid-template-columns: 1fr;
     }
