@@ -5032,10 +5032,13 @@ define([
         var sublists = formData.sublists || {};
         var txnRecord;
 
-        // Fields to skip when setting body fields (handled specially or not applicable)
+        // Fields to skip when setting any fields
         var skipFields = ['_display', 'customform'];
+        // Additional fields to skip only at body level (not sublists)
+        // Note: 'account' at body level is the AP account - skip it as NetSuite uses default
+        var bodyOnlySkipFields = ['account'];
 
-        // Helper to check if a field should be skipped
+        // Helper to check if a field should be skipped (for all contexts)
         function shouldSkipField(fieldId) {
             if (!fieldId) return true;
             var lowerFieldId = fieldId.toLowerCase();
@@ -5044,8 +5047,18 @@ define([
             });
         }
 
-        // Known date fields that need conversion
-        var dateFields = ['trandate', 'duedate', 'postingperiod', 'startdate', 'enddate', 'expensedate', 'expectedreceiptdate'];
+        // Helper to check if a body field should be skipped
+        function shouldSkipBodyField(fieldId) {
+            if (shouldSkipField(fieldId)) return true;
+            var lowerFieldId = fieldId.toLowerCase();
+            return bodyOnlySkipFields.indexOf(lowerFieldId) !== -1;
+        }
+
+        // Known date fields that need conversion (NOT postingperiod - that's a select field)
+        var dateFields = ['trandate', 'duedate', 'startdate', 'enddate', 'expensedate', 'expectedreceiptdate'];
+
+        // Known checkbox fields that need boolean conversion
+        var checkboxFields = ['paymenthold', 'landedcostperline', 'isbasecurrency'];
 
         // Helper to check if a field is a date field
         function isDateField(fieldId) {
@@ -5055,18 +5068,105 @@ define([
             return dateFields.indexOf(lowerFieldId) !== -1 || lowerFieldId.match(/date$/);
         }
 
+        // Helper to check if a field is a checkbox field
+        function isCheckboxField(fieldId) {
+            if (!fieldId) return false;
+            var lowerFieldId = fieldId.toLowerCase();
+            return checkboxFields.indexOf(lowerFieldId) !== -1;
+        }
+
+        // Helper to convert checkbox value to boolean
+        function toBoolean(value) {
+            if (typeof value === 'boolean') return value;
+            if (value === 'T' || value === 'true' || value === '1' || value === 1) return true;
+            if (value === 'F' || value === 'false' || value === '0' || value === 0) return false;
+            return false;
+        }
+
+        // Helper to check if value looks like text (not an ID)
+        function isTextValue(value) {
+            if (typeof value !== 'string') return false;
+            // If it's a string with spaces or non-numeric, it's likely display text
+            return value.indexOf(' ') !== -1 || isNaN(parseInt(value, 10));
+        }
+
+        // Cache for resolved lookups
+        var lookupCache = {};
+
+        // Helper to resolve terms text to internal ID
+        function resolveTermsId(textValue) {
+            if (!textValue || !isTextValue(textValue)) return textValue; // Already an ID
+
+            var cacheKey = 'terms:' + textValue.toLowerCase();
+            if (lookupCache[cacheKey] !== undefined) return lookupCache[cacheKey];
+
+            try {
+                var termSearch = search.create({
+                    type: 'term',
+                    filters: [['name', 'is', textValue]],
+                    columns: ['internalid']
+                });
+                var results = termSearch.run().getRange({ start: 0, end: 1 });
+                if (results && results.length > 0) {
+                    var termId = results[0].getValue('internalid');
+                    lookupCache[cacheKey] = termId;
+                    log.debug('resolveTermsId', 'Resolved "' + textValue + '" to ID: ' + termId);
+                    return termId;
+                }
+            } catch (e) {
+                log.debug('resolveTermsId', 'Could not resolve terms "' + textValue + '": ' + e.message);
+            }
+
+            lookupCache[cacheKey] = null;
+            return null;
+        }
+
+        // Helper to resolve currency text/code to internal ID
+        function resolveCurrencyIdForField(textValue) {
+            if (!textValue || !isTextValue(textValue)) return textValue; // Already an ID
+
+            // Try using the existing resolveCurrencyId function
+            var resolved = resolveCurrencyId(textValue);
+            if (resolved) return resolved;
+
+            return null;
+        }
+
         // Track fields that were set successfully and those that failed
         var fieldSetResults = { success: [], failed: [] };
 
         // Helper to set body field value safely
         function setBodyField(txn, fieldId, value) {
             if (!fieldId || value === undefined || value === null || value === '') return;
-            if (shouldSkipField(fieldId)) return;
+            if (shouldSkipBodyField(fieldId)) return;
+
+            var lowerFieldId = fieldId.toLowerCase();
 
             try {
                 var valueToSet = value;
+
+                // Resolve terms text to internal ID
+                if (lowerFieldId === 'terms' && isTextValue(value)) {
+                    valueToSet = resolveTermsId(value);
+                    if (!valueToSet) {
+                        log.debug('setBodyField', 'Could not resolve terms: ' + value);
+                        return; // Skip if can't resolve
+                    }
+                }
+                // Resolve currency text/code to internal ID
+                else if (lowerFieldId === 'currency' && isTextValue(value)) {
+                    valueToSet = resolveCurrencyIdForField(value);
+                    if (!valueToSet) {
+                        log.debug('setBodyField', 'Could not resolve currency: ' + value);
+                        return; // Skip if can't resolve
+                    }
+                }
+                // Convert checkbox fields to boolean
+                else if (isCheckboxField(fieldId)) {
+                    valueToSet = toBoolean(value);
+                }
                 // Convert date fields to proper Date objects
-                if (isDateField(fieldId) && !(value instanceof Date)) {
+                else if (isDateField(fieldId) && !(value instanceof Date)) {
                     valueToSet = parseDateValue(value);
                     if (!valueToSet) {
                         log.debug('setBodyField', 'Could not parse date for ' + fieldId + ': ' + value);
@@ -5074,6 +5174,7 @@ define([
                         return;
                     }
                 }
+
                 txn.setValue({ fieldId: fieldId, value: valueToSet });
                 fieldSetResults.success.push(fieldId);
             } catch (e) {
@@ -5089,8 +5190,13 @@ define([
 
             try {
                 var valueToSet = value;
+
+                // Convert checkbox fields to boolean
+                if (isCheckboxField(fieldId)) {
+                    valueToSet = toBoolean(value);
+                }
                 // Convert date fields to proper Date objects
-                if (isDateField(fieldId) && !(value instanceof Date)) {
+                else if (isDateField(fieldId) && !(value instanceof Date)) {
                     valueToSet = parseDateValue(value);
                     if (!valueToSet) {
                         log.debug('setSublistField', 'Could not parse date for ' + sublistId + '.' + fieldId + ': ' + value);
@@ -5098,6 +5204,7 @@ define([
                         return;
                     }
                 }
+
                 txn.setCurrentSublistValue({ sublistId: sublistId, fieldId: fieldId, value: valueToSet });
             } catch (e) {
                 log.debug('setSublistField', 'Could not set ' + sublistId + '.' + fieldId + ': ' + e.message);
