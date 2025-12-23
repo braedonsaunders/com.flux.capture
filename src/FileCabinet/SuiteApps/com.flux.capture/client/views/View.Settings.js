@@ -85,6 +85,17 @@
                     // Transaction Creation Settings
                     setCheckboxOff('#attach-file-to-transaction', settings.attachFileToTransaction);
                     setCheckbox('#delete-document-on-success', settings.deleteDocumentOnSuccess);
+
+                    // Submit Button Mode Settings (per transaction type)
+                    var submitModes = settings.submitButtonMode || {};
+                    var setSelect = function(id, value) {
+                        var elem = el(id);
+                        if (elem && value) elem.value = value;
+                    };
+                    setSelect('#submit-mode-vendorbill', submitModes.vendorbill);
+                    setSelect('#submit-mode-expensereport', submitModes.expensereport);
+                    setSelect('#submit-mode-vendorcredit', submitModes.vendorcredit);
+                    setSelect('#submit-mode-purchaseorder', submitModes.purchaseorder);
                 })
                 .catch(function(err) {
                     console.warn('Could not load settings:', err);
@@ -2638,6 +2649,10 @@
             };
 
             var maxPagesVal = el('#max-extraction-pages') ? parseInt(el('#max-extraction-pages').value, 10) : 0;
+            var getSelectValue = function(id) {
+                var elem = el(id);
+                return elem ? elem.value : 'create';
+            };
             var settings = {
                 defaultDocumentType: el('#default-type').value || 'auto',
                 defaultLineSublist: el('#default-line-sublist') ? el('#default-line-sublist').value : 'auto',
@@ -2645,6 +2660,13 @@
                 // Transaction Creation Settings
                 attachFileToTransaction: getChecked('#attach-file-to-transaction'),
                 deleteDocumentOnSuccess: getChecked('#delete-document-on-success'),
+                // Submit Button Mode Settings (per transaction type)
+                submitButtonMode: {
+                    vendorbill: getSelectValue('#submit-mode-vendorbill'),
+                    expensereport: getSelectValue('#submit-mode-expensereport'),
+                    vendorcredit: getSelectValue('#submit-mode-vendorcredit'),
+                    purchaseorder: getSelectValue('#submit-mode-purchaseorder')
+                },
                 // Anomaly Detection Settings (grouped)
                 anomalyDetection: {
                     // Duplicate Detection
