@@ -2420,6 +2420,16 @@ define([
             requireTotalAmount: savedAnomaly.requireTotalAmount !== false
         };
 
+        // Build submitButtonMode per-transaction-type settings with defaults
+        // Options: 'create' (default), 'submit_for_approval', 'both'
+        var savedSubmitModes = savedSettings.submitButtonMode || {};
+        var submitButtonModeDefaults = {
+            vendorbill: savedSubmitModes.vendorbill || 'create',
+            expensereport: savedSubmitModes.expensereport || 'create',
+            vendorcredit: savedSubmitModes.vendorcredit || 'create',
+            purchaseorder: savedSubmitModes.purchaseorder || 'create'
+        };
+
         var settings = {
             defaultDocumentType: savedSettings.defaultDocumentType || 'auto',
             emailImportEnabled: true,
@@ -2434,7 +2444,9 @@ define([
             anomalyDetection: anomalyDefaults,
             // Transaction creation settings
             attachFileToTransaction: savedSettings.attachFileToTransaction === true, // Default OFF
-            deleteDocumentOnSuccess: savedSettings.deleteDocumentOnSuccess !== false // Default ON
+            deleteDocumentOnSuccess: savedSettings.deleteDocumentOnSuccess !== false, // Default ON
+            // Submit button mode per transaction type: 'create', 'submit_for_approval', or 'both'
+            submitButtonMode: submitButtonModeDefaults
         };
 
         return Response.success(settings);
@@ -2443,6 +2455,7 @@ define([
     function saveSettings(context) {
         try {
             var anomaly = context.anomalyDetection || {};
+            var submitModes = context.submitButtonMode || {};
             var settingsData = {
                 defaultDocumentType: context.defaultDocumentType || 'auto',
                 defaultLineSublist: context.defaultLineSublist || 'auto',
@@ -2453,6 +2466,13 @@ define([
                 // Transaction creation settings
                 attachFileToTransaction: context.attachFileToTransaction === true,
                 deleteDocumentOnSuccess: context.deleteDocumentOnSuccess !== false,
+                // Submit button mode per transaction type
+                submitButtonMode: {
+                    vendorbill: submitModes.vendorbill || 'create',
+                    expensereport: submitModes.expensereport || 'create',
+                    vendorcredit: submitModes.vendorcredit || 'create',
+                    purchaseorder: submitModes.purchaseorder || 'create'
+                },
                 anomalyDetection: {
                     // Duplicate Detection
                     detectDuplicateInvoice: anomaly.detectDuplicateInvoice !== false,
@@ -4245,6 +4265,8 @@ define([
         var documentId = context.documentId;
         var createTransaction = context.createTransaction !== false;
         var transactionType = context.transactionType;
+        // submitMode: 'create' (approved status) or 'approval' (pending approval status)
+        var submitMode = context.submitMode || 'create';
 
         if (!documentId) {
             return Response.error('MISSING_PARAM', 'Document ID required');
@@ -4314,9 +4336,25 @@ define([
             }
             warnings = validation.warnings;
 
+            // ===== SET APPROVAL STATUS BASED ON SUBMIT MODE =====
+            // submitMode 'approval' = Pending Approval (1), 'create' = Approved (2)
+            var submittedForApproval = (submitMode === 'approval');
+            if (submittedForApproval) {
+                // Force approval status to Pending Approval for workflow routing
+                formData.bodyFields = formData.bodyFields || {};
+                formData.bodyFields.approvalstatus = '1'; // Pending Approval
+                log.debug('approveDocument', 'Setting approvalstatus to Pending Approval (1) for workflow routing');
+            } else if (submitMode === 'create') {
+                // Force approval status to Approved to bypass workflow
+                formData.bodyFields = formData.bodyFields || {};
+                formData.bodyFields.approvalstatus = '2'; // Approved
+                log.debug('approveDocument', 'Setting approvalstatus to Approved (2) to bypass workflow');
+            }
+            // Note: If submitMode is neither, we leave approvalstatus as-is from form data
+
             // ===== CREATE TRANSACTION =====
             if (createTransaction && (vendorId || actualTransactionType === 'expensereport')) {
-                transactionId = createTransactionFromDocument(docRecord, actualTransactionType);
+                transactionId = createTransactionFromDocument(docRecord, actualTransactionType, formData);
 
                 // ===== FILE ATTACHMENT (if enabled) =====
                 if (transactionId && settings.attachFileToTransaction && fileId) {
@@ -4422,8 +4460,9 @@ define([
                 learned: learningResult ? learningResult.success : false,
                 fileAttached: fileAttached,
                 documentDeleted: documentDeleted,
+                submittedForApproval: submittedForApproval,
                 warnings: warnings
-            }, 'Document approved');
+            }, submittedForApproval ? 'Transaction submitted for approval' : 'Transaction created');
         } catch (e) {
             log.error('Approve error', {
                 name: e.name,
@@ -5008,9 +5047,10 @@ define([
         }
     }
 
-    function createTransactionFromDocument(docRecord, transactionType) {
-        // Load form data - this is the source of truth for transaction creation
-        var formData = JSON.parse(docRecord.getValue('custrecord_flux_form_data') || 'null');
+    function createTransactionFromDocument(docRecord, transactionType, providedFormData) {
+        // Use provided formData if passed, otherwise load from record
+        // This allows callers to pass modified formData (e.g., with approvalstatus set)
+        var formData = providedFormData || JSON.parse(docRecord.getValue('custrecord_flux_form_data') || 'null');
 
         // Fallback to legacy fixed fields if formData doesn't exist (for backwards compatibility)
         if (!formData) {

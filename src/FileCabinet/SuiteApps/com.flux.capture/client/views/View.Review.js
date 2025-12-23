@@ -12,7 +12,8 @@
     var SHORTCUTS = {
         'Tab': { action: 'nextField', description: 'Next field' },
         'Shift+Tab': { action: 'prevField', description: 'Previous field' },
-        'KeyA': { action: 'approve', description: 'Approve & create' },
+        'KeyA': { action: 'approve', description: 'Create transaction' },
+        'Shift+KeyA': { action: 'submitApproval', description: 'Submit for approval', shift: true },
         'KeyR': { action: 'reject', description: 'Reject document' },
         'KeyS': { action: 'skip', description: 'Skip to next' },
         'KeyX': { action: 'reprocess', description: 'Reprocess document' },
@@ -909,9 +910,17 @@
                 }
             });
 
-            // Approve button
+            // Approve button (Create Transaction)
             this.on('#btn-approve', 'click', function() {
-                self.approveDocument();
+                // In 'submit_for_approval' mode, this button submits for approval
+                // In 'create' or 'both' mode, this button creates transaction (approved)
+                var submitMode = self.submitButtonMode === 'submit_for_approval' ? 'approval' : 'create';
+                self.approveDocument(submitMode);
+            });
+
+            // Submit for Approval button (only shown in 'both' mode)
+            this.on('#btn-submit-approval', 'click', function() {
+                self.approveDocument('approval');
             });
 
             // Reject button
@@ -1157,11 +1166,18 @@
                     return;
                 }
 
-                var shortcut = SHORTCUTS[key];
+                // Check for Shift+Key combinations first
+                var shortcut = null;
+                if (e.shiftKey && SHORTCUTS['Shift+' + key]) {
+                    shortcut = SHORTCUTS['Shift+' + key];
+                } else if (!e.shiftKey) {
+                    shortcut = SHORTCUTS[key];
+                }
                 if (!shortcut) return;
 
                 // Check modifier requirements
                 if (shortcut.ctrl && !e.ctrlKey && !e.metaKey) return;
+                if (shortcut.shift && !e.shiftKey) return;
 
                 // Don't trigger action shortcuts if ctrl is pressed (except for zoom reset)
                 if (e.ctrlKey && !shortcut.ctrl && key !== 'Digit0') {
@@ -1173,7 +1189,18 @@
                 switch (shortcut.action) {
                     case 'nextField': self.focusNextField(1); break;
                     case 'prevField': self.focusNextField(-1); break;
-                    case 'approve': self.approveDocument(); break;
+                    case 'approve':
+                        // In 'submit_for_approval' mode, 'A' submits for approval
+                        // Otherwise, 'A' creates transaction (approved)
+                        var submitMode = self.submitButtonMode === 'submit_for_approval' ? 'approval' : 'create';
+                        self.approveDocument(submitMode);
+                        break;
+                    case 'submitApproval':
+                        // Shift+A always submits for approval (only in 'both' mode)
+                        if (self.submitButtonMode === 'both') {
+                            self.approveDocument('approval');
+                        }
+                        break;
                     case 'reject': self.rejectDocument(); break;
                     case 'skip': self.skipDocument(); break;
                     case 'reprocess': self.reprocessDocument(); break;
@@ -1221,6 +1248,70 @@
                 var firstInput = document.querySelector('.extraction-panel input:not([type="hidden"])');
                 if (firstInput) firstInput.focus();
             }, 100);
+
+            // Configure submit buttons based on settings
+            this.configureSubmitButtons();
+        },
+
+        // Configure submit button visibility based on submitButtonMode settings
+        configureSubmitButtons: function() {
+            var approveBtn = el('#btn-approve');
+            var submitApprovalBtn = el('#btn-submit-approval');
+
+            if (!approveBtn) return;
+
+            // Get the submit mode for current transaction type
+            var submitModes = (this.settings && this.settings.submitButtonMode) || {};
+            var mode = submitModes[this.transactionType] || 'create';
+
+            // Store the mode for later use
+            this.submitButtonMode = mode;
+
+            // Configure buttons based on mode
+            if (mode === 'create') {
+                // Only show Create Transaction button
+                approveBtn.style.display = '';
+                approveBtn.title = 'Create Transaction (A)';
+                var approveBtnText = approveBtn.querySelector('.btn-text');
+                if (approveBtnText) approveBtnText.textContent = 'Create Transaction';
+                if (submitApprovalBtn) submitApprovalBtn.style.display = 'none';
+            } else if (mode === 'submit_for_approval') {
+                // Only show Submit for Approval button (use the approve button but change styling)
+                approveBtn.style.display = '';
+                approveBtn.title = 'Submit for Approval (A)';
+                approveBtn.classList.remove('btn-success');
+                approveBtn.classList.add('btn-primary');
+                var approveIcon = approveBtn.querySelector('i');
+                if (approveIcon) approveIcon.className = 'fas fa-paper-plane';
+                var approveBtnText = approveBtn.querySelector('.btn-text');
+                if (approveBtnText) approveBtnText.textContent = 'Submit for Approval';
+                if (submitApprovalBtn) submitApprovalBtn.style.display = 'none';
+                // Hide approvalstatus field since it will be forced
+                this.hideApprovalStatusField();
+            } else if (mode === 'both') {
+                // Show both buttons
+                approveBtn.style.display = '';
+                approveBtn.title = 'Create Transaction (A)';
+                var approveBtnText = approveBtn.querySelector('.btn-text');
+                if (approveBtnText) approveBtnText.textContent = 'Create Transaction';
+                if (submitApprovalBtn) submitApprovalBtn.style.display = '';
+            }
+        },
+
+        // Hide the approval status field when submit mode forces the value
+        hideApprovalStatusField: function() {
+            // Find and hide the approvalstatus field group
+            var approvalStatusField = el('#field-approvalstatus');
+            if (approvalStatusField) {
+                var fieldGroup = approvalStatusField.closest('.form-group');
+                if (fieldGroup) fieldGroup.style.display = 'none';
+            }
+            // Also check for display field variant
+            var approvalStatusDisplay = el('#field-approvalstatus-display');
+            if (approvalStatusDisplay) {
+                var fieldGroup = approvalStatusDisplay.closest('.form-group');
+                if (fieldGroup) fieldGroup.style.display = 'none';
+            }
         },
 
         // Auto-select fields that only have one option (like subsidiary in single-sub accounts)
@@ -6952,8 +7043,11 @@
                          .replace(/[-_]/g, ' ');
         },
 
-        approveDocument: function() {
+        approveDocument: function(submitMode) {
             var self = this;
+            // Default to 'create' if not specified
+            submitMode = submitMode || 'create';
+            var isApprovalMode = (submitMode === 'approval');
 
             // Validate all required fields (client-side)
             var validation = this.validateRequiredFields();
@@ -6966,14 +7060,22 @@
                 return;
             }
 
-            // Show processing state
+            // Show processing state - determine which button was clicked
             var approveBtn = el('#btn-approve');
-            var approveBtnText = approveBtn ? approveBtn.querySelector('.btn-text') : null;
-            var approveBtnIcon = approveBtn ? approveBtn.querySelector('i') : null;
-            if (approveBtn) {
-                approveBtn.disabled = true;
-                if (approveBtnIcon) approveBtnIcon.className = 'fas fa-spinner fa-spin';
-                if (approveBtnText) approveBtnText.textContent = 'Creating Transaction...';
+            var submitApprovalBtn = el('#btn-submit-approval');
+            var activeBtn = isApprovalMode && this.submitButtonMode === 'both' ? submitApprovalBtn : approveBtn;
+            var activeBtnText = activeBtn ? activeBtn.querySelector('.btn-text') : null;
+            var activeBtnIcon = activeBtn ? activeBtn.querySelector('i') : null;
+
+            // Disable both buttons during processing
+            if (approveBtn) approveBtn.disabled = true;
+            if (submitApprovalBtn) submitApprovalBtn.disabled = true;
+
+            if (activeBtn) {
+                if (activeBtnIcon) activeBtnIcon.className = 'fas fa-spinner fa-spin';
+                if (activeBtnText) {
+                    activeBtnText.textContent = isApprovalMode ? 'Submitting for Approval...' : 'Creating Transaction...';
+                }
             }
 
             // Always save current form state before approval to ensure transaction uses latest data
@@ -6987,15 +7089,21 @@
                     return API.put('approve', {
                         documentId: self.docId,
                         createTransaction: true,
-                        transactionType: self.transactionType
+                        transactionType: self.transactionType,
+                        submitMode: submitMode
                     });
                 })
                 .then(function(result) {
                     // Trigger confetti celebration
                     self.triggerConfetti();
 
-                    // Build success message
-                    var message = 'Transaction #' + result.transactionId + ' created!';
+                    // Build success message based on whether submitted for approval or created
+                    var message;
+                    if (result.submittedForApproval) {
+                        message = 'Transaction #' + result.transactionId + ' submitted for approval!';
+                    } else {
+                        message = 'Transaction #' + result.transactionId + ' created!';
+                    }
                     if (result.fileAttached) {
                         message += ' Document attached.';
                     }
@@ -7027,11 +7135,18 @@
                     }
                 })
                 .catch(function(err) {
-                    // Reset button state
-                    if (approveBtn) {
-                        approveBtn.disabled = false;
-                        if (approveBtnIcon) approveBtnIcon.className = 'fas fa-check';
-                        if (approveBtnText) approveBtnText.textContent = 'Approve & Create';
+                    // Reset button states
+                    if (approveBtn) approveBtn.disabled = false;
+                    if (submitApprovalBtn) submitApprovalBtn.disabled = false;
+
+                    // Reset active button text/icon
+                    if (activeBtn) {
+                        if (activeBtnIcon) {
+                            activeBtnIcon.className = isApprovalMode ? 'fas fa-paper-plane' : 'fas fa-check';
+                        }
+                        if (activeBtnText) {
+                            activeBtnText.textContent = isApprovalMode ? 'Submit for Approval' : 'Create Transaction';
+                        }
                     }
 
                     // Handle errors with persistent modal

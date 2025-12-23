@@ -784,10 +784,15 @@
                         <i class="fas fa-xmark"></i>
                         <span class="btn-text">Reject</span>
                     </button>
-                    <button class="btn btn-success btn-approve-next" id="btn-approve" title="Approve & Create (A)">
+                    <button class="btn btn-success btn-approve-next" id="btn-approve" title="Create Transaction (A)">
                         <i class="fas fa-check"></i>
-                        <span class="btn-text">Approve & Create</span>
+                        <span class="btn-text">Create Transaction</span>
                         <kbd class="btn-kbd">A</kbd>
+                    </button>
+                    <button class="btn btn-primary btn-approve-next" id="btn-submit-approval" title="Submit for Approval (Shift+A)" style="display:none;">
+                        <i class="fas fa-paper-plane"></i>
+                        <span class="btn-text">Submit for Approval</span>
+                        <kbd class="btn-kbd">Shift+A</kbd>
                     </button>
                 </div>
             </div>
@@ -1301,6 +1306,77 @@
                                     <span class="toggle-track"><span class="toggle-thumb"></span></span>
                                 </label>
                             </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Submit Button Mode Settings -->
+                <div class="settings-card">
+                    <div class="settings-card-header">
+                        <i class="fas fa-paper-plane"></i>
+                        <div>
+                            <h3>Submit Button Mode</h3>
+                            <p>Configure submission behavior per transaction type. Controls whether transactions are created directly or routed through NetSuite's approval workflow.</p>
+                        </div>
+                    </div>
+                    <div class="settings-card-body">
+                        <div class="setting-row">
+                            <div class="setting-label">
+                                <span>Vendor Bill</span>
+                                <small>Choose how vendor bills are submitted</small>
+                            </div>
+                            <div class="setting-control">
+                                <select id="submit-mode-vendorbill" class="setting-select">
+                                    <option value="create">Create Transaction (Approved)</option>
+                                    <option value="submit_for_approval">Submit for Approval</option>
+                                    <option value="both">Show Both Buttons</option>
+                                </select>
+                            </div>
+                        </div>
+                        <div class="setting-row">
+                            <div class="setting-label">
+                                <span>Expense Report</span>
+                                <small>Choose how expense reports are submitted</small>
+                            </div>
+                            <div class="setting-control">
+                                <select id="submit-mode-expensereport" class="setting-select">
+                                    <option value="create">Create Transaction (Approved)</option>
+                                    <option value="submit_for_approval">Submit for Approval</option>
+                                    <option value="both">Show Both Buttons</option>
+                                </select>
+                            </div>
+                        </div>
+                        <div class="setting-row">
+                            <div class="setting-label">
+                                <span>Vendor Credit</span>
+                                <small>Choose how vendor credits are submitted</small>
+                            </div>
+                            <div class="setting-control">
+                                <select id="submit-mode-vendorcredit" class="setting-select">
+                                    <option value="create">Create Transaction (Approved)</option>
+                                    <option value="submit_for_approval">Submit for Approval</option>
+                                    <option value="both">Show Both Buttons</option>
+                                </select>
+                            </div>
+                        </div>
+                        <div class="setting-row">
+                            <div class="setting-label">
+                                <span>Purchase Order</span>
+                                <small>Choose how purchase orders are submitted</small>
+                            </div>
+                            <div class="setting-control">
+                                <select id="submit-mode-purchaseorder" class="setting-select">
+                                    <option value="create">Create Transaction (Approved)</option>
+                                    <option value="submit_for_approval">Submit for Approval</option>
+                                    <option value="both">Show Both Buttons</option>
+                                </select>
+                            </div>
+                        </div>
+                        <div class="setting-info">
+                            <i class="fas fa-info-circle"></i>
+                            <span><strong>Create Transaction:</strong> Creates with "Approved" status, bypassing approval workflow.<br>
+                            <strong>Submit for Approval:</strong> Creates with "Pending Approval" status to trigger NetSuite workflow. The approval status field will be hidden in the review form.<br>
+                            <strong>Show Both Buttons:</strong> Displays both options, allowing the user to choose per document.</span>
                         </div>
                     </div>
                 </div>
