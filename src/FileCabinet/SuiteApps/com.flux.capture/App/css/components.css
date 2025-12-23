@@ -884,9 +884,18 @@
 .view-review {
     display: flex;
     flex-direction: column;
-    height: 100vh;
+    height: calc(100vh - var(--topbar-height, 56px));
     overflow: hidden;
     max-width: 100%;
+    transition: height 0.3s ease;
+}
+
+body.topbar-minimized .view-review {
+    height: calc(100vh - 6px);
+}
+
+body.topbar-minimized .view-review.split-view .review-content {
+    height: calc(100vh - 6px - 64px);
 }
 
 .review-content {
@@ -3886,7 +3895,7 @@
 /* When split view is active, reorganize the layout */
 .view-review.split-view .review-content {
     flex-direction: column;
-    height: calc(100vh - 120px); /* Account for toolbar */
+    height: calc(100vh - var(--topbar-height, 56px) - 64px); /* Account for topbar + toolbar */
 }
 
 /* Top section: PDF + Form side by side (2/3 height) */
