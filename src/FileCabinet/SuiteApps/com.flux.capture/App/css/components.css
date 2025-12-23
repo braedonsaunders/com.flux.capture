@@ -2808,6 +2808,10 @@ body.topbar-minimized .view-review.split-view .review-content {
     display: inline-block;
 }
 
+.transform-dropdown.open {
+    z-index: 10000;
+}
+
 .sublist-footer .btn-transform {
     display: inline-flex;
     align-items: center;
@@ -2815,13 +2819,13 @@ body.topbar-minimized .view-review.split-view .review-content {
     padding: var(--space-xs) var(--space-sm);
     font-size: var(--font-size-xs) !important;
     position: relative;
-    z-index: 101;
 }
 
 .transform-dropdown.open .btn-transform {
     background: var(--color-primary);
     color: white;
     box-shadow: 0 0 0 3px var(--color-primary-bg);
+    z-index: 10001;
 }
 
 .transform-dropdown.open .btn-transform .transform-arrow {
@@ -2832,10 +2836,9 @@ body.topbar-minimized .view-review.split-view .review-content {
 .transform-hub {
     position: absolute;
     bottom: 100%;
-    left: 50%;
-    transform: translateX(-50%);
+    left: 0;
     margin-bottom: 8px;
-    z-index: 100;
+    z-index: 10002;
     display: none;
 }
 
@@ -2846,9 +2849,9 @@ body.topbar-minimized .view-review.split-view .review-content {
 /* Hub Layout - Grid of pods */
 .transform-hub-inner {
     display: grid;
-    grid-template-columns: repeat(3, auto);
+    grid-template-columns: repeat(3, 1fr);
     gap: 6px;
-    padding: 6px;
+    padding: 8px;
     background: var(--surface-card);
     border: 1px solid var(--border-color);
     border-radius: var(--radius-lg);
@@ -2860,7 +2863,7 @@ body.topbar-minimized .view-review.split-view .review-content {
     background: var(--gray-50);
     border-radius: var(--radius-md);
     padding: 6px;
-    min-width: 120px;
+    width: 130px;
     opacity: 0;
     transform: scale(0.9);
     animation: podIn 0.1s ease forwards;
@@ -2913,14 +2916,14 @@ body.topbar-minimized .view-review.split-view .review-content {
 .transform-option {
     display: flex;
     align-items: center;
-    gap: 6px;
-    padding: 5px 6px;
-    font-size: 12px;
+    gap: 5px;
+    padding: 4px 5px;
+    font-size: 11px;
     cursor: pointer;
     border-radius: 4px;
     transition: all 0.08s ease;
     color: var(--text-primary);
-    white-space: nowrap;
+    overflow: hidden;
 }
 
 .transform-option:hover {
@@ -2929,7 +2932,8 @@ body.topbar-minimized .view-review.split-view .review-content {
 }
 
 .transform-option i {
-    width: 14px;
+    width: 12px;
+    flex-shrink: 0;
     text-align: center;
     color: var(--text-tertiary);
     font-size: 10px;
@@ -2952,16 +2956,18 @@ body.topbar-minimized .view-review.split-view .review-content {
 /* Keyboard shortcut hints */
 .transform-option-key {
     margin-left: auto;
+    flex-shrink: 0;
     font-size: 8px;
-    padding: 1px 4px;
+    padding: 1px 3px;
     background: var(--gray-200);
-    border-radius: 3px;
+    border-radius: 2px;
     color: var(--text-tertiary);
     font-family: var(--font-mono);
+    line-height: 1;
 }
 
 .transform-option:hover .transform-option-key {
-    background: rgba(255,255,255,0.2);
+    background: rgba(255,255,255,0.25);
     color: white;
 }
 
