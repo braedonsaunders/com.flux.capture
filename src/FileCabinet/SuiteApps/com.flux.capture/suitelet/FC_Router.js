@@ -5241,7 +5241,7 @@ define([
         }
 
         if (validationErrors.length > 0) {
-            var validationError = error.create({
+            var validationError = errorModule.create({
                 name: 'VALIDATION_ERROR',
                 message: 'Transaction validation failed'
             });
@@ -5315,7 +5315,7 @@ define([
             }
 
             // Create enhanced error with more details
-            var enhancedError = error.create({
+            var enhancedError = errorModule.create({
                 name: saveError.name || 'SAVE_FAILED',
                 message: userMessage
             });
