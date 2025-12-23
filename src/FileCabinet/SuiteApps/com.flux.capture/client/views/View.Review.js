@@ -2509,14 +2509,17 @@
 
             if (isExpenseReport) {
                 // Employee field for expense reports
+                // Use formData.bodyFields for employee since it's not stored in a dedicated custom record field
+                var employeeDisplay = (this.formData && this.formData.bodyFields && this.formData.bodyFields.entity_display) || doc.employeeName || '';
+                var employeeId = (this.formData && this.formData.bodyFields && this.formData.bodyFields.entity) || doc.employeeId || '';
                 html += '<div class="form-section">' +
                     '<div class="form-field entity-field employee-field' + (isEntityRequired ? ' is-required' : '') + '">' +
                         '<label>Employee Name ' + (isEntityRequired ? ' <span class="required">*</span>' : '') + '</label>' +
                         '<div class="entity-search-wrapper">' +
-                            '<input type="text" id="field-entity" class="entity-input" value="' + escapeHtml(doc.employeeName || '') + '" placeholder="Search or enter employee name..." autocomplete="off">' +
+                            '<input type="text" id="field-entity" class="entity-input" value="' + escapeHtml(employeeDisplay) + '" placeholder="Search or enter employee name..." autocomplete="off">' +
                             '<div class="entity-dropdown" id="entity-dropdown" style="display:none;"></div>' +
                         '</div>' +
-                        (doc.employeeId ? '<input type="hidden" id="field-entityId" value="' + doc.employeeId + '">' : '') +
+                        (employeeId ? '<input type="hidden" id="field-entityId" value="' + employeeId + '">' : '') +
                     '</div>' +
                 '</div>';
             } else {
