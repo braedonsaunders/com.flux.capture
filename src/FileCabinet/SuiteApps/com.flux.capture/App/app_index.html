@@ -826,304 +826,257 @@
 
     <!-- MISSION CONTROL TEMPLATE - Action-First Smart Dashboard -->
     <script type="text/template" id="tpl-dashboard">
-        <div class="view-mission-control action-dashboard">
-            <!-- Header with Quick Stats -->
-            <header class="mc-header">
-                <div class="mc-header-left">
-                    <h1 class="mc-title">Mission Control</h1>
-                    <span class="mc-greeting" id="mc-greeting">Good morning</span>
+        <div class="view-mission-control mc-redesign" data-layout="focused">
+            <!-- =====================================================
+                 PROPOSAL 1: FOCUSED FLOW
+                 Single-column, one-document-at-a-time workflow
+                 Clean, minimal, action-oriented
+                 ===================================================== -->
+
+            <!-- Compact Status Bar -->
+            <div class="mc-status-bar">
+                <div class="mc-status-left">
+                    <span class="mc-logo"><i class="fas fa-bolt"></i></span>
+                    <span class="mc-status-count" id="status-count">
+                        <strong id="stat-to-review-v2">0</strong> to review
+                    </span>
+                    <span class="mc-status-divider"></span>
+                    <span class="mc-status-amount" id="stat-pending-v2">$0</span>
                 </div>
-                <div class="mc-header-center">
-                    <div class="mc-quick-stats">
-                        <div class="quick-stat" id="stat-to-review">
-                            <span class="quick-stat-value">0</span>
-                            <span class="quick-stat-label">To Review</span>
-                        </div>
-                        <div class="quick-stat" id="stat-processing">
-                            <span class="quick-stat-value">0</span>
-                            <span class="quick-stat-label">Processing</span>
-                        </div>
-                        <div class="quick-stat" id="stat-today">
-                            <span class="quick-stat-value">0</span>
-                            <span class="quick-stat-label">Done Today</span>
-                        </div>
-                        <div class="quick-stat accent" id="stat-pending-amount">
-                            <span class="quick-stat-value">$0</span>
-                            <span class="quick-stat-label">Pending</span>
-                        </div>
+                <div class="mc-status-right">
+                    <div class="mc-layout-switcher" id="layout-switcher">
+                        <button class="layout-btn active" data-layout="focused" title="Focused">
+                            <i class="fas fa-square"></i>
+                        </button>
+                        <button class="layout-btn" data-layout="grid" title="Grid">
+                            <i class="fas fa-th"></i>
+                        </button>
+                        <button class="layout-btn" data-layout="kanban" title="Pipeline">
+                            <i class="fas fa-columns"></i>
+                        </button>
                     </div>
-                </div>
-                <div class="mc-header-right">
-                    <div class="keyboard-hint" id="keyboard-hint">
-                        <kbd>&#8984;K</kbd> Commands
-                    </div>
-                    <button class="btn btn-primary btn-glow" id="btn-go-to-flow">
-                        <i class="fas fa-cloud-arrow-up"></i> Upload
+                    <kbd class="mc-kbd-hint">?</kbd>
+                    <button class="btn btn-primary btn-sm" id="btn-go-to-flow">
+                        <i class="fas fa-plus"></i> Upload
                     </button>
                 </div>
-            </header>
-
-            <!-- Daily Action Digest -->
-            <div class="action-digest" id="action-digest">
-                <div class="digest-header">
-                    <div class="digest-title">
-                        <i class="fas fa-bolt"></i>
-                        <span>Your Day at a Glance</span>
-                    </div>
-                    <div class="digest-progress">
-                        <div class="progress-ring" id="digest-progress-ring">
-                            <svg viewBox="0 0 36 36">
-                                <path class="progress-ring-bg" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"/>
-                                <path class="progress-ring-fill" id="progress-fill" stroke-dasharray="0, 100" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"/>
-                            </svg>
-                            <span class="progress-text" id="progress-text">0%</span>
-                        </div>
-                        <span class="progress-label">to inbox zero</span>
-                    </div>
-                </div>
-                <div class="digest-items">
-                    <div class="digest-item" id="digest-quick-wins">
-                        <i class="fas fa-check-circle"></i>
-                        <span class="digest-count">0</span>
-                        <span class="digest-label">Quick Wins</span>
-                        <span class="digest-hint">High confidence, one-click approve</span>
-                    </div>
-                    <div class="digest-item" id="digest-needs-attention">
-                        <i class="fas fa-eye"></i>
-                        <span class="digest-count">0</span>
-                        <span class="digest-label">Need Attention</span>
-                        <span class="digest-hint">Require review before approval</span>
-                    </div>
-                    <div class="digest-item warning" id="digest-urgent">
-                        <i class="fas fa-clock"></i>
-                        <span class="digest-count">0</span>
-                        <span class="digest-label">Urgent</span>
-                        <span class="digest-hint">Due within 48 hours</span>
-                    </div>
-                    <div class="digest-item danger" id="digest-anomalies">
-                        <i class="fas fa-exclamation-triangle"></i>
-                        <span class="digest-count">0</span>
-                        <span class="digest-label">Anomalies</span>
-                        <span class="digest-hint">Errors or duplicates detected</span>
-                    </div>
-                </div>
             </div>
 
-            <!-- Main Action Area -->
-            <div class="action-main">
-                <!-- Quick Wins Section -->
-                <section class="action-section" id="section-quick-wins">
-                    <div class="section-header">
-                        <h2><i class="fas fa-bolt"></i> Quick Wins</h2>
-                        <span class="section-count" id="quick-wins-count">0</span>
-                        <div class="section-actions">
-                            <button class="btn btn-sm btn-success" id="btn-approve-all-quick" disabled>
-                                <i class="fas fa-check-double"></i> Approve All
-                            </button>
+            <!-- LAYOUT: FOCUSED FLOW -->
+            <div class="mc-layout mc-layout-focused" id="layout-focused">
+                <!-- Hero Document -->
+                <div class="mc-hero" id="mc-hero">
+                    <div class="mc-hero-empty" id="mc-hero-empty" style="display:none;">
+                        <div class="hero-empty-icon"><i class="fas fa-check-circle"></i></div>
+                        <h2>All Clear</h2>
+                        <p>No documents need your attention</p>
+                        <button class="btn btn-primary" id="btn-upload-hero">
+                            <i class="fas fa-cloud-upload-alt"></i> Upload Documents
+                        </button>
+                    </div>
+                    <div class="mc-hero-doc" id="mc-hero-doc">
+                        <div class="hero-badge" id="hero-badge"></div>
+                        <div class="hero-preview" id="hero-preview">
+                            <img src="" alt="" id="hero-img">
                         </div>
-                    </div>
-                    <div class="action-cards" id="quick-wins-cards">
-                        <!-- Quick win cards render here -->
-                    </div>
-                </section>
-
-                <!-- Smart Triage Queue -->
-                <section class="action-section" id="section-triage">
-                    <div class="section-header">
-                        <h2><i class="fas fa-layer-group"></i> Smart Triage</h2>
-                        <span class="section-count" id="triage-count">0</span>
-                        <div class="section-actions">
-                            <div class="triage-filters">
-                                <button class="filter-btn active" data-filter="all">All</button>
-                                <button class="filter-btn" data-filter="urgent">Urgent</button>
-                                <button class="filter-btn" data-filter="complex">Complex</button>
-                                <button class="filter-btn" data-filter="skipped">Skipped</button>
+                        <div class="hero-info">
+                            <div class="hero-vendor" id="hero-vendor">Vendor Name</div>
+                            <div class="hero-meta">
+                                <span class="hero-invoice" id="hero-invoice">#INV-001</span>
+                                <span class="hero-amount" id="hero-amount">$1,234.56</span>
                             </div>
-                            <button class="btn btn-sm btn-ghost" id="btn-bulk-select">
-                                <i class="fas fa-check-square"></i> Select
-                            </button>
+                            <div class="hero-confidence" id="hero-confidence">
+                                <div class="conf-bar"><div class="conf-fill" id="hero-conf-fill"></div></div>
+                                <span id="hero-conf-text">95%</span>
+                            </div>
+                            <div class="hero-due" id="hero-due"></div>
                         </div>
-                    </div>
-                    <div class="triage-list" id="triage-list">
-                        <!-- Triage items render here -->
-                    </div>
-                    <div class="triage-empty" id="triage-empty" style="display:none;">
-                        <i class="fas fa-inbox"></i>
-                        <h3>Inbox Zero!</h3>
-                        <p>All documents have been processed. Great work!</p>
-                    </div>
-                </section>
-
-                <!-- Sidebar: Activity & Insights -->
-                <aside class="action-sidebar">
-                    <!-- Selection Actions (hidden until items selected) -->
-                    <div class="bulk-actions" id="bulk-actions" style="display:none;">
-                        <div class="bulk-header">
-                            <span id="bulk-count">0</span> selected
-                            <button class="btn-icon" id="btn-clear-selection" title="Clear selection">
+                        <div class="hero-actions">
+                            <button class="hero-btn hero-btn-approve" id="hero-approve" title="Approve (A)">
+                                <i class="fas fa-check"></i>
+                                <span>Approve</span>
+                            </button>
+                            <button class="hero-btn hero-btn-reject" id="hero-reject" title="Reject (R)">
                                 <i class="fas fa-times"></i>
+                                <span>Reject</span>
+                            </button>
+                            <button class="hero-btn hero-btn-open" id="hero-open" title="Review Details (Enter)">
+                                <i class="fas fa-expand"></i>
+                                <span>Review</span>
+                            </button>
+                            <button class="hero-btn hero-btn-skip" id="hero-skip" title="Skip (S)">
+                                <i class="fas fa-forward"></i>
                             </button>
                         </div>
-                        <div class="bulk-buttons">
-                            <button class="btn btn-success btn-block" id="btn-bulk-approve">
-                                <i class="fas fa-check"></i> Approve Selected
-                            </button>
-                            <button class="btn btn-danger btn-block" id="btn-bulk-reject">
-                                <i class="fas fa-times"></i> Reject Selected
-                            </button>
-                            <button class="btn btn-ghost btn-block" id="btn-bulk-skip">
-                                <i class="fas fa-forward"></i> Skip for Later
-                            </button>
-                        </div>
-                    </div>
-
-                    <!-- Activity Stream -->
-                    <div class="sidebar-card">
-                        <div class="sidebar-card-header">
-                            <span><i class="fas fa-stream"></i> Live Activity</span>
-                        </div>
-                        <div class="activity-stream" id="activity-stream">
-                            <!-- Activity items render here -->
-                        </div>
-                    </div>
-
-                    <!-- Top Vendors -->
-                    <div class="sidebar-card">
-                        <div class="sidebar-card-header">
-                            <span><i class="fas fa-building"></i> Top Vendors</span>
-                        </div>
-                        <div class="top-vendors" id="top-vendors">
-                            <!-- Vendors render here -->
-                        </div>
-                    </div>
-                </aside>
-            </div>
-
-            <!-- Document Preview Panel (slide-in) - Dashboard specific -->
-            <div class="dashboard-preview-panel" id="dashboard-preview-panel">
-                <div class="dashboard-preview-header">
-                    <h3 id="dashboard-preview-title">Document Preview</h3>
-                    <div class="dashboard-preview-actions">
-                        <button class="btn btn-success btn-sm" id="dashboard-preview-approve">
-                            <i class="fas fa-check"></i> Approve
-                        </button>
-                        <button class="btn btn-ghost btn-sm" id="dashboard-preview-open">
-                            <i class="fas fa-external-link-alt"></i> Open
-                        </button>
-                        <button class="btn-icon" id="dashboard-preview-close">
-                            <i class="fas fa-times"></i>
-                        </button>
                     </div>
                 </div>
-                <div class="dashboard-preview-body">
-                    <div class="dashboard-preview-image" id="dashboard-preview-image">
-                        <img src="" alt="Document preview" id="dashboard-preview-img">
+
+                <!-- Queue Strip -->
+                <div class="mc-queue-strip" id="mc-queue-strip">
+                    <div class="queue-strip-header">
+                        <span class="queue-strip-title">Up Next</span>
+                        <span class="queue-strip-count" id="queue-count-v2">0</span>
+                        <button class="btn btn-sm btn-ghost" id="btn-approve-all-v2" style="margin-left:auto;">
+                            <i class="fas fa-check-double"></i> Approve All Ready
+                        </button>
                     </div>
-                    <div class="dashboard-preview-details" id="dashboard-preview-details">
-                        <!-- Details render here -->
+                    <div class="queue-strip-items" id="queue-strip-items">
+                        <!-- Queue thumbnails render here -->
                     </div>
                 </div>
             </div>
 
-            <!-- Context Menu -->
+            <!-- LAYOUT: DENSE GRID -->
+            <div class="mc-layout mc-layout-grid" id="layout-grid" style="display:none;">
+                <div class="grid-toolbar">
+                    <div class="grid-filters" id="grid-filters">
+                        <button class="grid-filter active" data-filter="all">All <span id="filter-count-all">0</span></button>
+                        <button class="grid-filter" data-filter="ready">Ready <span id="filter-count-ready">0</span></button>
+                        <button class="grid-filter urgent" data-filter="urgent">Urgent <span id="filter-count-urgent">0</span></button>
+                        <button class="grid-filter" data-filter="review">Needs Review <span id="filter-count-review">0</span></button>
+                    </div>
+                    <div class="grid-actions">
+                        <button class="btn btn-sm btn-success" id="btn-approve-selected-grid" disabled>
+                            <i class="fas fa-check"></i> Approve Selected
+                        </button>
+                    </div>
+                </div>
+                <div class="grid-container" id="grid-container">
+                    <!-- Grid items render here -->
+                </div>
+                <div class="grid-empty" id="grid-empty" style="display:none;">
+                    <i class="fas fa-inbox"></i>
+                    <span>No documents to display</span>
+                </div>
+            </div>
+
+            <!-- LAYOUT: KANBAN PIPELINE -->
+            <div class="mc-layout mc-layout-kanban" id="layout-kanban" style="display:none;">
+                <div class="kanban-board" id="kanban-board">
+                    <div class="kanban-column" data-stage="processing">
+                        <div class="kanban-header">
+                            <span class="kanban-dot processing"></span>
+                            <span class="kanban-title">Processing</span>
+                            <span class="kanban-count" id="kanban-count-processing">0</span>
+                        </div>
+                        <div class="kanban-items" id="kanban-processing">
+                            <!-- Items render here -->
+                        </div>
+                    </div>
+                    <div class="kanban-column" data-stage="ready">
+                        <div class="kanban-header">
+                            <span class="kanban-dot ready"></span>
+                            <span class="kanban-title">Ready to Approve</span>
+                            <span class="kanban-count" id="kanban-count-ready">0</span>
+                            <button class="btn btn-xs btn-success kanban-approve-all" id="kanban-approve-ready">
+                                <i class="fas fa-check-double"></i>
+                            </button>
+                        </div>
+                        <div class="kanban-items" id="kanban-ready">
+                            <!-- Items render here -->
+                        </div>
+                    </div>
+                    <div class="kanban-column" data-stage="review">
+                        <div class="kanban-header">
+                            <span class="kanban-dot review"></span>
+                            <span class="kanban-title">Needs Review</span>
+                            <span class="kanban-count" id="kanban-count-review">0</span>
+                        </div>
+                        <div class="kanban-items" id="kanban-review">
+                            <!-- Items render here -->
+                        </div>
+                    </div>
+                    <div class="kanban-column" data-stage="done">
+                        <div class="kanban-header">
+                            <span class="kanban-dot done"></span>
+                            <span class="kanban-title">Done Today</span>
+                            <span class="kanban-count" id="kanban-count-done">0</span>
+                        </div>
+                        <div class="kanban-items" id="kanban-done">
+                            <!-- Items render here -->
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Shared: Bulk Selection Bar -->
+            <div class="mc-bulk-bar" id="mc-bulk-bar" style="display:none;">
+                <span class="bulk-bar-count"><strong id="bulk-count">0</strong> selected</span>
+                <div class="bulk-bar-actions">
+                    <button class="btn btn-success btn-sm" id="btn-bulk-approve">
+                        <i class="fas fa-check"></i> Approve
+                    </button>
+                    <button class="btn btn-danger btn-sm" id="btn-bulk-reject">
+                        <i class="fas fa-times"></i> Reject
+                    </button>
+                    <button class="btn btn-ghost btn-sm" id="btn-clear-selection">
+                        <i class="fas fa-times"></i> Clear
+                    </button>
+                </div>
+            </div>
+
+            <!-- Context Menu (shared) -->
             <div class="context-menu" id="context-menu" style="display:none;">
                 <div class="context-menu-item" data-action="approve">
-                    <i class="fas fa-check"></i> Approve
-                    <kbd>A</kbd>
+                    <i class="fas fa-check"></i> Approve <kbd>A</kbd>
                 </div>
                 <div class="context-menu-item" data-action="reject">
-                    <i class="fas fa-times"></i> Reject
-                    <kbd>R</kbd>
+                    <i class="fas fa-times"></i> Reject <kbd>R</kbd>
                 </div>
                 <div class="context-menu-item" data-action="open">
-                    <i class="fas fa-external-link-alt"></i> Open in Review
-                    <kbd>Enter</kbd>
+                    <i class="fas fa-expand"></i> Open <kbd>Enter</kbd>
                 </div>
                 <div class="context-menu-divider"></div>
-                <div class="context-menu-item" data-action="preview">
-                    <i class="fas fa-eye"></i> Preview
-                    <kbd>Space</kbd>
-                </div>
                 <div class="context-menu-item" data-action="skip">
-                    <i class="fas fa-forward"></i> Skip for Later
-                    <kbd>S</kbd>
-                </div>
-                <div class="context-menu-divider"></div>
-                <div class="context-menu-item" data-action="copy-vendor">
-                    <i class="fas fa-copy"></i> Copy Vendor Name
-                </div>
-                <div class="context-menu-item" data-action="copy-amount">
-                    <i class="fas fa-copy"></i> Copy Amount
+                    <i class="fas fa-forward"></i> Skip <kbd>S</kbd>
                 </div>
             </div>
 
-            <!-- Command Palette (Cmd+K) -->
+            <!-- Command Palette (shared) -->
             <div class="command-palette-overlay" id="command-palette-overlay" style="display:none;">
                 <div class="command-palette" id="command-palette">
                     <div class="command-input-wrapper">
                         <i class="fas fa-search"></i>
-                        <input type="text" id="command-input" placeholder="Type a command or search..." autocomplete="off">
+                        <input type="text" id="command-input" placeholder="Search documents or commands..." autocomplete="off">
                         <kbd>ESC</kbd>
                     </div>
-                    <div class="command-results" id="command-results">
-                        <!-- Command results render here -->
-                    </div>
+                    <div class="command-results" id="command-results"></div>
                     <div class="command-footer">
                         <span><kbd>&uarr;</kbd><kbd>&darr;</kbd> Navigate</span>
                         <span><kbd>Enter</kbd> Select</span>
-                        <span><kbd>ESC</kbd> Close</span>
                     </div>
                 </div>
             </div>
 
-            <!-- Keyboard Shortcuts Help (?) -->
+            <!-- Keyboard Help (shared) -->
             <div class="keyboard-help-overlay" id="keyboard-help-overlay" style="display:none;">
                 <div class="keyboard-help">
                     <div class="keyboard-help-header">
                         <h2>Keyboard Shortcuts</h2>
-                        <button class="btn-icon" id="close-keyboard-help">
-                            <i class="fas fa-times"></i>
-                        </button>
+                        <button class="btn-icon" id="close-keyboard-help"><i class="fas fa-times"></i></button>
                     </div>
                     <div class="keyboard-help-content">
                         <div class="shortcut-group">
-                            <h3>Navigation</h3>
-                            <div class="shortcut"><kbd>J</kbd> Next item</div>
-                            <div class="shortcut"><kbd>K</kbd> Previous item</div>
-                            <div class="shortcut"><kbd>G</kbd> <kbd>G</kbd> Go to top</div>
-                            <div class="shortcut"><kbd>Shift</kbd>+<kbd>G</kbd> Go to bottom</div>
-                        </div>
-                        <div class="shortcut-group">
                             <h3>Actions</h3>
-                            <div class="shortcut"><kbd>A</kbd> Approve selected</div>
-                            <div class="shortcut"><kbd>R</kbd> Reject selected</div>
-                            <div class="shortcut"><kbd>Enter</kbd> Open in review</div>
-                            <div class="shortcut"><kbd>Space</kbd> Toggle preview</div>
-                            <div class="shortcut"><kbd>S</kbd> Skip for later</div>
+                            <div class="shortcut"><kbd>A</kbd> Approve</div>
+                            <div class="shortcut"><kbd>R</kbd> Reject</div>
+                            <div class="shortcut"><kbd>S</kbd> Skip</div>
+                            <div class="shortcut"><kbd>Enter</kbd> Open</div>
                         </div>
                         <div class="shortcut-group">
-                            <h3>Selection</h3>
-                            <div class="shortcut"><kbd>X</kbd> Toggle select item</div>
-                            <div class="shortcut"><kbd>Shift</kbd>+<kbd>X</kbd> Select range</div>
-                            <div class="shortcut"><kbd>Ctrl</kbd>+<kbd>A</kbd> Select all</div>
-                            <div class="shortcut"><kbd>ESC</kbd> Clear selection</div>
-                        </div>
-                        <div class="shortcut-group">
-                            <h3>General</h3>
-                            <div class="shortcut"><kbd>&#8984;</kbd>+<kbd>K</kbd> Command palette</div>
-                            <div class="shortcut"><kbd>/</kbd> Quick search</div>
-                            <div class="shortcut"><kbd>?</kbd> Show shortcuts</div>
-                            <div class="shortcut"><kbd>U</kbd> Upload documents</div>
+                            <h3>Navigation</h3>
+                            <div class="shortcut"><kbd>J</kbd> / <kbd>K</kbd> Next/Prev</div>
+                            <div class="shortcut"><kbd>1</kbd><kbd>2</kbd><kbd>3</kbd> Switch layout</div>
+                            <div class="shortcut"><kbd>&#8984;K</kbd> Command palette</div>
                         </div>
                     </div>
                 </div>
             </div>
 
-            <!-- Toast for quick feedback -->
+            <!-- Toast -->
             <div class="action-toast" id="action-toast" style="display:none;">
                 <i class="fas fa-check-circle"></i>
-                <span id="action-toast-message">Document approved</span>
-                <button class="toast-undo" id="toast-undo">Undo</button>
+                <span id="action-toast-message">Done</span>
             </div>
         </div>
     </script>
