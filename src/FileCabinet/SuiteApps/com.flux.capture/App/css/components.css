@@ -9718,12 +9718,13 @@ tr.doc-row.deleting::after {
 /* PDF.js Container - base styles overridden at end of file for review page */
 .pdf-container {
     position: relative;
-    width: 100%;
+    min-width: 100%;
+    width: max-content;
     height: 100%;
     display: flex;
     flex-direction: column;
     align-items: center;
-    overflow: hidden; /* Prevent scrollbars - scrolling handled by preview-viewport */
+    overflow: visible; /* Let parent handle scrolling */
     background: var(--surface-body);
     padding: var(--space-md);
     /* Prevent text blur from transforms */
@@ -9739,7 +9740,8 @@ tr.doc-row.deleting::after {
     align-items: center;
     gap: var(--space-lg);
     padding-bottom: var(--space-xl);
-    width: 100%;
+    min-width: 100%;
+    width: max-content;
 }
 
 /* Wrapper to keep canvas and annotations aligned */
@@ -9753,8 +9755,6 @@ tr.doc-row.deleting::after {
 .pdf-page-canvas {
     box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
     background: white;
-    max-width: 100%;
-    height: auto;
 }
 
 .pdf-loading {
@@ -9772,8 +9772,6 @@ tr.doc-row.deleting::after {
 #pdf-canvas {
     box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
     background: white;
-    max-width: 100%;
-    height: auto;
 }
 
 /* Annotation Overlay */
@@ -10941,7 +10939,7 @@ body.extraction-selecting .form-field:hover {
 .preview-viewport {
     flex: 1;
     overflow-y: scroll;
-    overflow-x: hidden;
+    overflow-x: auto;
     display: block;
     position: relative;
     min-height: 0;
@@ -10951,6 +10949,7 @@ body.extraction-selecting .form-field:hover {
 /* Subtle scrollbar - hidden by default, shows on hover */
 .preview-viewport::-webkit-scrollbar {
     width: 6px;
+    height: 6px;
     background: transparent;
 }
 
@@ -10978,13 +10977,15 @@ body.extraction-selecting .form-field:hover {
     scrollbar-color: rgba(0, 0, 0, 0.15) transparent;
 }
 
-/* PDF container - fills viewport height, no scrollbars */
+/* PDF container - fills viewport height, allows horizontal overflow when zoomed */
 .pdf-container {
     display: flex;
     align-items: flex-start;
     justify-content: center;
     min-height: 100%;
     height: auto;
+    min-width: 100%;
+    width: max-content;
     padding: var(--space-lg);
     padding-bottom: calc(var(--space-lg) + 24px); /* Extra bottom padding for scroll room */
     box-sizing: border-box;
