@@ -8802,15 +8802,14 @@ tr.doc-row.deleting::after {
 .doc-selector-options {
     position: absolute;
     top: 100%;
-    left: 50%;
-    transform: translateX(-50%);
+    left: 0;
     margin-top: 4px;
     background: var(--surface-card);
     border: 1px solid var(--border-color);
     border-radius: var(--radius-md);
     box-shadow: var(--shadow-lg);
     z-index: 9999;
-    min-width: 220px;
+    min-width: 260px;
     max-width: 320px;
     max-height: 300px;
     overflow-y: auto;
@@ -8818,7 +8817,6 @@ tr.doc-row.deleting::after {
 }
 .doc-selector-dropdown.open .doc-selector-options {
     display: block;
-    animation: dropdownIn 0.15s ease;
 }
 .doc-selector-option {
     display: flex;
