@@ -11696,6 +11696,23 @@ body.extraction-selecting .form-field:hover {
     max-width: 100%; /* Prevent horizontal overflow */
 }
 
+/* Pan cursor states for zoomed content */
+.preview-viewport.can-pan {
+    cursor: grab;
+}
+
+.preview-viewport.is-panning {
+    cursor: grabbing;
+    user-select: none;
+}
+
+/* Image preview content styling */
+.image-preview-content {
+    display: block;
+    max-width: none;
+    pointer-events: none; /* Prevent image drag */
+}
+
 /* PDF loading spinner - hidden by default */
 .pdf-loading {
     display: none;
