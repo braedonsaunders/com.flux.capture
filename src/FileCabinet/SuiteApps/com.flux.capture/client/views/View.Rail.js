@@ -352,6 +352,11 @@
 
                 self.updateSummary();
                 self.checkAllComplete();
+
+                // Refresh review badge when documents complete
+                if (window.updateReviewBadge) {
+                    window.updateReviewBadge();
+                }
             }).catch(function(err) {
                 console.error('[Flow] Status check error:', err);
             });

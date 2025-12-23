@@ -133,6 +133,11 @@
             this.itemsData = [];
             this.isLoading = true;
 
+            // Refresh review badge when entering review tab
+            if (window.updateReviewBadge) {
+                window.updateReviewBadge();
+            }
+
             // Restore shared queue state if available (prevents flicker on navigation)
             if (sharedQueueState.queueIds.length > 0) {
                 this.queueIds = sharedQueueState.queueIds;
