@@ -570,10 +570,17 @@
                 }
             });
 
-            // Handle vendor specially - need both ID and display name
+            // Handle entity field - vendor for bills, employee for expense reports
             if (doc.vendor) {
+                // Vendor bill - use vendor field from custom record
                 bodyFields.entity = doc.vendor;
                 bodyFields.entity_display = doc.vendorName || '';
+            } else if (this.transactionType === 'expensereport' && doc.formData && doc.formData.bodyFields) {
+                // Expense report - restore employee from saved formData
+                if (doc.formData.bodyFields.entity) {
+                    bodyFields.entity = doc.formData.bodyFields.entity;
+                    bodyFields.entity_display = doc.formData.bodyFields.entity_display || '';
+                }
             }
 
             // Initialize sublists from lineItems
