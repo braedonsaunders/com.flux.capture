@@ -1917,7 +1917,13 @@
             var extractedData = doc.extractedData || {};
             // Normalize confidence: may be stored as decimal (0-1) or percentage (0-100)
             var rawConf = parseFloat(doc.confidence) || 0;
-            var normalizedConfidence = rawConf <= 1 ? Math.round(rawConf * 100) : Math.round(rawConf);
+            var baseConfidence = rawConf <= 1 ? Math.round(rawConf * 100) : Math.round(rawConf);
+
+            // Check for AI-adjusted confidence score (merged OCR + AI verification)
+            var aiAdjustedConf = extractedData.confidence && extractedData.confidence.adjusted;
+            var isAiAdjusted = aiAdjustedConf !== undefined && aiAdjustedConf !== null;
+            // Use adjusted confidence when AI verification has run, otherwise use base OCR confidence
+            var normalizedConfidence = isAiAdjusted ? Math.round(aiAdjustedConf) : baseConfidence;
             var confClass = getConfidenceClass(normalizedConfidence);
             var anomalies = doc.anomalies || [];
             var formFields = this.formFields || {};
@@ -1983,8 +1989,8 @@
 
             html += '<div class="review-header">' +
                 '<div class="review-header-bar">' +
-                    // Confidence indicator
-                    '<div class="header-metric confidence-metric ' + confClass + '">' +
+                    // Confidence indicator (uses merged AI+OCR score when AI verification is enabled)
+                    '<div class="header-metric confidence-metric ' + confClass + (isAiAdjusted ? ' ai-adjusted' : '') + '">' +
                         '<div class="metric-ring ' + confClass + '">' +
                             '<svg viewBox="0 0 36 36">' +
                                 '<circle cx="18" cy="18" r="15.9" fill="none" stroke="currentColor" stroke-opacity="0.15" stroke-width="3"/>' +
@@ -1993,16 +1999,8 @@
                             '</svg>' +
                             '<span class="metric-value">' + normalizedConfidence + '</span>' +
                         '</div>' +
-                        '<span class="metric-label">Confidence</span>' +
+                        '<span class="metric-label">' + (isAiAdjusted ? '<i class="fas fa-sparkles"></i> AI ' : '') + 'Confidence</span>' +
                     '</div>' +
-                    // AI Verified badge (if verified and no issues)
-                    (hasAiVerification && aiTotalIssues === 0 ?
-                        '<div class="header-metric ai-metric verified-ok">' +
-                            '<div class="metric-icon ai-icon">' +
-                                '<i class="fas fa-shield-check"></i>' +
-                            '</div>' +
-                            '<span class="metric-label">AI Verified ' + aiAccuracy + '%</span>' +
-                        '</div>' : '') +
                     // Unified Alerts indicator (anomalies + AI issues combined)
                     (hasAlerts ?
                         '<div class="header-metric alert-metric' + (hasHighSeverity ? ' has-critical' : '') + '" id="alert-status-toggle">' +
