@@ -6447,11 +6447,12 @@
             // Determine dropdown height (max 220px)
             var dropdownHeight = Math.min(220, Math.max(spaceBelow, spaceAbove));
 
-            // Position dropdown
+            // Position dropdown with fixed positioning
             dropdown.style.position = 'fixed';
             dropdown.style.width = rect.width + 'px';
             dropdown.style.minWidth = '200px';
             dropdown.style.left = rect.left + 'px';
+            dropdown.style.right = 'auto'; // Override CSS right: 0
             dropdown.style.maxHeight = dropdownHeight + 'px';
 
             // Show above or below depending on space

@@ -3503,9 +3503,15 @@ body.topbar-minimized .view-review.split-view .review-content {
     position: relative;
 }
 
+/* Sublist typeahead dropdown - may use fixed positioning via JS */
 .sublist-table td.select-cell .typeahead-dropdown {
     z-index: 10000;
     min-width: 200px;
+    background: var(--surface-card);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-md);
+    box-shadow: var(--shadow-lg);
+    overflow-y: auto;
 }
 
 .sublist-table .line-input {
