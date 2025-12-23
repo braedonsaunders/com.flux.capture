@@ -1425,6 +1425,10 @@
                     <i class="fas fa-cog"></i>
                     <span>System</span>
                 </button>
+                <button class="settings-nav-tab" data-settings-tab="learning">
+                    <i class="fas fa-brain"></i>
+                    <span>Learning</span>
+                </button>
             </div>
 
             <!-- TAB: General -->
@@ -2269,10 +2273,177 @@
                 </div>
             </div>
 
+            <!-- TAB: Learning -->
+            <div class="settings-tab-panel" id="settings-panel-learning" style="display:none;">
+                <div class="settings-layout">
+                    <!-- Learning Management Header -->
+                    <div class="settings-card settings-card-full">
+                        <div class="settings-card-header">
+                            <i class="fas fa-brain"></i>
+                            <div>
+                                <h3>Learning Management</h3>
+                                <p>View, edit, and create learned patterns from document corrections</p>
+                            </div>
+                        </div>
+                        <div class="settings-card-body">
+                            <!-- Stats Row -->
+                            <div class="learning-stats" id="learning-stats">
+                                <div class="learning-stat">
+                                    <span class="stat-value" id="stat-total-learnings">0</span>
+                                    <span class="stat-label">Total Learnings</span>
+                                </div>
+                                <div class="learning-stat">
+                                    <span class="stat-value" id="stat-vendor-aliases">0</span>
+                                    <span class="stat-label">Vendor Aliases</span>
+                                </div>
+                                <div class="learning-stat">
+                                    <span class="stat-value" id="stat-account-mappings">0</span>
+                                    <span class="stat-label">Account Mappings</span>
+                                </div>
+                                <div class="learning-stat">
+                                    <span class="stat-value" id="stat-segment-mappings">0</span>
+                                    <span class="stat-label">Segment Mappings</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Filters and Actions -->
+                    <div class="settings-card settings-card-full">
+                        <div class="learning-toolbar">
+                            <div class="learning-filters">
+                                <div class="filter-group">
+                                    <label>Type</label>
+                                    <select id="learning-filter-type">
+                                        <option value="">All Types</option>
+                                        <option value="vendor_alias">Vendor Alias</option>
+                                        <option value="account_mapping">Account Mapping</option>
+                                        <option value="department_mapping">Department</option>
+                                        <option value="class_mapping">Class</option>
+                                        <option value="location_mapping">Location</option>
+                                        <option value="vendor_defaults">Vendor Defaults</option>
+                                        <option value="item_mapping">Item Mapping</option>
+                                        <option value="date_format">Date Format</option>
+                                        <option value="amount_format">Amount Format</option>
+                                        <option value="custom_field_mapping">Custom Field</option>
+                                    </select>
+                                </div>
+                                <div class="filter-group">
+                                    <label>Vendor</label>
+                                    <div class="typeahead-select" id="learning-filter-vendor-wrapper">
+                                        <input type="hidden" id="learning-filter-vendor-id" value="">
+                                        <input type="text" id="learning-filter-vendor" placeholder="All Vendors" class="typeahead-input">
+                                        <div class="typeahead-dropdown"></div>
+                                    </div>
+                                </div>
+                                <div class="filter-group">
+                                    <label>Search</label>
+                                    <input type="text" id="learning-search" placeholder="Search keywords...">
+                                </div>
+                            </div>
+                            <div class="learning-actions">
+                                <button class="btn btn-ghost" id="btn-refresh-learnings">
+                                    <i class="fas fa-sync-alt"></i> Refresh
+                                </button>
+                                <button class="btn btn-primary" id="btn-create-learning">
+                                    <i class="fas fa-plus"></i> Create New
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Learning Table -->
+                    <div class="settings-card settings-card-full learning-table-container">
+                        <div class="learning-table-wrapper">
+                            <table class="learning-table" id="learning-table">
+                                <thead>
+                                    <tr>
+                                        <th class="col-type">Type</th>
+                                        <th class="col-key">Key / Alias</th>
+                                        <th class="col-value">Value / Mapping</th>
+                                        <th class="col-vendor">Vendor</th>
+                                        <th class="col-usage">Usage</th>
+                                        <th class="col-confidence">Confidence</th>
+                                        <th class="col-updated">Last Updated</th>
+                                        <th class="col-actions">Actions</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="learning-table-body">
+                                    <tr class="loading-row">
+                                        <td colspan="8">
+                                            <div class="loading-indicator">
+                                                <i class="fas fa-spinner fa-spin"></i> Loading learnings...
+                                            </div>
+                                        </td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                        <!-- Pagination -->
+                        <div class="learning-pagination" id="learning-pagination">
+                            <span class="pagination-info" id="pagination-info">Showing 0-0 of 0</span>
+                            <div class="pagination-controls">
+                                <button class="btn btn-ghost btn-sm" id="btn-prev-page" disabled>
+                                    <i class="fas fa-chevron-left"></i>
+                                </button>
+                                <span class="page-indicator" id="page-indicator">Page 1</span>
+                                <button class="btn btn-ghost btn-sm" id="btn-next-page" disabled>
+                                    <i class="fas fa-chevron-right"></i>
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
             <div class="settings-footer">
                 <button class="btn btn-primary btn-lg" id="btn-save-settings">
                     <i class="fas fa-check"></i> Save Changes
                 </button>
+            </div>
+        </div>
+    </script>
+
+    <!-- Learning Edit Modal Template -->
+    <script type="text/template" id="tpl-learning-modal">
+        <div class="modal-overlay learning-modal-overlay" id="learning-modal">
+            <div class="modal learning-modal">
+                <div class="modal-header">
+                    <h2 id="learning-modal-title">Create Learning</h2>
+                    <button class="modal-close" id="btn-close-learning-modal">&times;</button>
+                </div>
+                <div class="modal-body">
+                    <div class="form-group">
+                        <label for="learning-type">Learning Type <span class="required">*</span></label>
+                        <select id="learning-type" required>
+                            <option value="">Select Type...</option>
+                            <option value="vendor_alias">Vendor Alias</option>
+                            <option value="account_mapping">Account Mapping</option>
+                            <option value="department_mapping">Department Mapping</option>
+                            <option value="class_mapping">Class Mapping</option>
+                            <option value="location_mapping">Location Mapping</option>
+                            <option value="vendor_defaults">Vendor Defaults</option>
+                            <option value="item_mapping">Item Mapping</option>
+                            <option value="date_format">Date Format</option>
+                            <option value="amount_format">Amount Format</option>
+                            <option value="custom_field_mapping">Custom Field Mapping</option>
+                        </select>
+                    </div>
+
+                    <!-- Dynamic Form Fields Container -->
+                    <div id="learning-form-fields">
+                        <!-- Fields are dynamically rendered based on type -->
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button class="btn btn-ghost" id="btn-cancel-learning">Cancel</button>
+                    <button class="btn btn-danger" id="btn-delete-learning" style="display:none;">
+                        <i class="fas fa-trash"></i> Delete
+                    </button>
+                    <button class="btn btn-primary" id="btn-save-learning">
+                        <i class="fas fa-check"></i> Save
+                    </button>
+                </div>
             </div>
         </div>
     </script>
