@@ -192,8 +192,17 @@ define([
                     guessLocations: this.guessLocations
                 };
 
-                // Build verification prompt with vendor history context and existing alerts
-                const prompt = this._buildVerificationPrompt(extractionResult, formSchema, vendorHistory, existingAnomalies, lineItemOptions);
+                // v4.2: Load available options for field guessing if any guessing is enabled
+                let availableOptions = null;
+                if (lineItemOptions.guessAccounts || lineItemOptions.guessDepartments ||
+                    lineItemOptions.guessClasses || lineItemOptions.guessLocations) {
+                    availableOptions = this._loadAvailableOptions(lineItemOptions);
+                    // Store on instance for use in applyVerification
+                    this._availableOptions = availableOptions;
+                }
+
+                // Build verification prompt with vendor history context, existing alerts, and available options
+                const prompt = this._buildVerificationPrompt(extractionResult, formSchema, vendorHistory, existingAnomalies, lineItemOptions, availableOptions);
 
                 // Build request body
                 const requestBody = {
@@ -312,9 +321,10 @@ define([
         /**
          * Build the verification prompt for Gemini
          * Enhanced with fraud detection, risk assessment, and high-value insights
+         * v4.2: Added availableOptions parameter for field guessing
          * @private
          */
-        _buildVerificationPrompt(extractionResult, formSchema, vendorHistory = null, existingAlerts = [], lineItemOptions = {}) {
+        _buildVerificationPrompt(extractionResult, formSchema, vendorHistory = null, existingAlerts = [], lineItemOptions = {}, availableOptions = null) {
             const today = new Date();
             const todayIso = today.toISOString().split('T')[0];
 
@@ -436,7 +446,7 @@ ${formFieldsSection}${vendorHistorySection}${existingAlertsSection}
 - Only flag currency issues if you see an EXPLICIT code (USD, EUR, GBP written out)
 - Company is in Canada - assume $ = CAD unless explicitly marked otherwise
 - If you see "US$" or "USD" explicitly, THAT is evidence for a correction
-${this._buildLineItemEnhancementSection(lineItemOptions, vendorHistory)}
+${this._buildLineItemEnhancementSection(lineItemOptions, vendorHistory, availableOptions)}
 === RESPONSE FORMAT ===
 {
     "verification": {
@@ -577,9 +587,10 @@ ${this._buildLineItemEnhancementSection(lineItemOptions, vendorHistory)}
 
         /**
          * Build line item enhancement section for the prompt
+         * v4.2: Now includes available options for accounts, departments, etc.
          * @private
          */
-        _buildLineItemEnhancementSection(lineItemOptions, vendorHistory) {
+        _buildLineItemEnhancementSection(lineItemOptions, vendorHistory, availableOptions = null) {
             if (!lineItemOptions.enhanceLineItems) {
                 return '\n'; // No line item enhancement
             }
@@ -620,43 +631,81 @@ If you omit an item from your response, it may be lost. Return ALL items with ap
             if (guessingFields.length > 0) {
                 section += `
 FIELD GUESSING (ENABLED for: ${guessingFields.join(', ')}):
-You may suggest values for these sublist-level fields based on context clues:
+You MUST select values from the AVAILABLE OPTIONS listed below. Do NOT make up values.
+Return the exact ID or name from the available options.
+
 `;
-                if (lineItemOptions.guessAccounts) {
-                    section += `- account: Suggest an expense/COGS account based on the line item description
-  Examples: "Office Supplies" for pens/paper, "Travel" for flights/hotels, "Software" for subscriptions
+                // v4.2: Include available options in the prompt
+                if (lineItemOptions.guessAccounts && availableOptions?.accounts?.length > 0) {
+                    section += `AVAILABLE ACCOUNTS (use ID or exact name):
 `;
-                }
-                if (lineItemOptions.guessDepartments) {
-                    section += `- department: Suggest a department based on context (e.g., "Marketing", "Engineering", "Sales")
+                    // Show top 30 accounts to avoid prompt overload
+                    const accountsToShow = availableOptions.accounts.slice(0, 30);
+                    accountsToShow.forEach(acc => {
+                        section += `  - ID: ${acc.id}, Name: "${acc.name}"${acc.number ? `, Number: ${acc.number}` : ''}
 `;
-                }
-                if (lineItemOptions.guessClasses) {
-                    section += `- class: Suggest a class/category if apparent from the invoice context
+                    });
+                    if (availableOptions.accounts.length > 30) {
+                        section += `  ... and ${availableOptions.accounts.length - 30} more accounts
 `;
-                }
-                if (lineItemOptions.guessLocations) {
-                    section += `- location: Suggest a location if mentioned or implied in the document
+                    }
+                    section += `
 `;
                 }
 
-                if (vendorHistory) {
+                if (lineItemOptions.guessDepartments && availableOptions?.departments?.length > 0) {
+                    section += `AVAILABLE DEPARTMENTS (use ID or exact name):
+`;
+                    availableOptions.departments.forEach(dept => {
+                        section += `  - ID: ${dept.id}, Name: "${dept.name}"
+`;
+                    });
                     section += `
-VENDOR HISTORY FOR GUESSING:
-This vendor typically uses these classifications (use as guidance):
+`;
+                }
+
+                if (lineItemOptions.guessClasses && availableOptions?.classes?.length > 0) {
+                    section += `AVAILABLE CLASSES (use ID or exact name):
+`;
+                    availableOptions.classes.forEach(cls => {
+                        section += `  - ID: ${cls.id}, Name: "${cls.name}"
+`;
+                    });
+                    section += `
+`;
+                }
+
+                if (lineItemOptions.guessLocations && availableOptions?.locations?.length > 0) {
+                    section += `AVAILABLE LOCATIONS (use ID or exact name):
+`;
+                    availableOptions.locations.forEach(loc => {
+                        section += `  - ID: ${loc.id}, Name: "${loc.name}"
+`;
+                    });
+                    section += `
+`;
+                }
+
+                section += `GUESSING INSTRUCTIONS:
+- For "account": Select the MOST appropriate expense account based on the line item description
+- For "department": Select the department if context clues indicate which department should be charged
+- For "class": Select a class if the invoice context suggests one
+- For "location": Select a location if mentioned or implied in the document
+- Return the ID (preferred) or exact name from the lists above
+- ONLY suggest if confidence >= 0.7
+- Leave as null if you cannot confidently match to an available option
+
+`;
+
+                if (vendorHistory) {
+                    section += `VENDOR HISTORY (this vendor typically uses):
 ${vendorHistory.typicalAccount ? `- Common account: ${vendorHistory.typicalAccount}` : ''}
 ${vendorHistory.typicalDepartment ? `- Common department: ${vendorHistory.typicalDepartment}` : ''}
 ${vendorHistory.typicalClass ? `- Common class: ${vendorHistory.typicalClass}` : ''}
 ${vendorHistory.typicalLocation ? `- Common location: ${vendorHistory.typicalLocation}` : ''}
+
 `;
                 }
-
-                section += `
-GUESSING CONFIDENCE:
-- Only guess fields with confidence >= 0.7
-- Set confidence based on how certain you are about the suggestion
-- Leave fields as null if you can't make a reasonable guess
-`;
             } else {
                 section += `
 FIELD GUESSING: DISABLED
@@ -804,13 +853,22 @@ Do not include account, department, class, or location fields in line items.
                     log.audit('GeminiVerifier', `Filtered ${aiLineItems.length - validAiItems.length} malformed AI line items`);
                 }
 
+                // v4.2 FIX: Validate and map AI-returned account/department values to NetSuite IDs
+                const availableOptions = this._availableOptions || null;
+                const validatedAiItems = validAiItems.map(item => {
+                    if (availableOptions) {
+                        return this._validateAndMapLineItemFields(item, availableOptions);
+                    }
+                    return item;
+                });
+
                 // v4.2 FIX: Safety check - if AI returns empty/invalid array, preserve original items
-                if (validAiItems.length === 0 && originalLineItems.length > 0) {
+                if (validatedAiItems.length === 0 && originalLineItems.length > 0) {
                     log.audit('GeminiVerifier', `AI returned no valid line items - preserving ${originalLineItems.length} original items`);
                     // Don't process - keep original line items as-is
                 } else {
-                    // Use validAiItems instead of aiLineItems for processing
-                    for (const aiItem of validAiItems) {
+                    // Use validatedAiItems (validated and mapped to NetSuite IDs) for processing
+                    for (const aiItem of validatedAiItems) {
                         const action = aiItem._action || 'keep';
                         const confidence = aiItem.confidence || 0;
 
@@ -1137,6 +1195,258 @@ Do not include account, department, class, or location fields in line items.
                 'Description': 'memo'
             };
             return fieldMap[field] || field;
+        }
+
+        /**
+         * v4.2: Load available options for accounts, departments, classes, locations
+         * This provides the LLM with valid NetSuite values to choose from
+         * @private
+         * @param {Object} lineItemOptions - Which fields are enabled for guessing
+         * @returns {Object} Available options for each field type
+         */
+        _loadAvailableOptions(lineItemOptions) {
+            const options = {
+                accounts: [],
+                departments: [],
+                classes: [],
+                locations: []
+            };
+
+            try {
+                // Only load what we need based on enabled guessing
+                if (lineItemOptions.guessAccounts) {
+                    // Get expense accounts (most common for AP)
+                    const accountSearch = search.create({
+                        type: search.Type.ACCOUNT,
+                        filters: [
+                            ['isinactive', 'is', 'F'],
+                            'AND',
+                            ['type', 'anyof', ['Expense', 'OthExpense', 'COGS']]
+                        ],
+                        columns: [
+                            search.createColumn({ name: 'internalid' }),
+                            search.createColumn({ name: 'number' }),
+                            search.createColumn({ name: 'name', sort: search.Sort.ASC })
+                        ]
+                    });
+
+                    accountSearch.run().each(function(result) {
+                        const number = result.getValue('number') || '';
+                        const name = result.getValue('name') || '';
+                        options.accounts.push({
+                            id: result.getValue('internalid'),
+                            number: number,
+                            name: name,
+                            display: number ? `${number} - ${name}` : name
+                        });
+                        return options.accounts.length < 100; // Limit to 100
+                    });
+                }
+
+                if (lineItemOptions.guessDepartments) {
+                    const deptSearch = search.create({
+                        type: search.Type.DEPARTMENT,
+                        filters: [['isinactive', 'is', 'F']],
+                        columns: [
+                            search.createColumn({ name: 'internalid' }),
+                            search.createColumn({ name: 'name', sort: search.Sort.ASC })
+                        ]
+                    });
+
+                    deptSearch.run().each(function(result) {
+                        options.departments.push({
+                            id: result.getValue('internalid'),
+                            name: result.getValue('name')
+                        });
+                        return options.departments.length < 50;
+                    });
+                }
+
+                if (lineItemOptions.guessClasses) {
+                    const classSearch = search.create({
+                        type: search.Type.CLASSIFICATION,
+                        filters: [['isinactive', 'is', 'F']],
+                        columns: [
+                            search.createColumn({ name: 'internalid' }),
+                            search.createColumn({ name: 'name', sort: search.Sort.ASC })
+                        ]
+                    });
+
+                    classSearch.run().each(function(result) {
+                        options.classes.push({
+                            id: result.getValue('internalid'),
+                            name: result.getValue('name')
+                        });
+                        return options.classes.length < 50;
+                    });
+                }
+
+                if (lineItemOptions.guessLocations) {
+                    const locSearch = search.create({
+                        type: search.Type.LOCATION,
+                        filters: [['isinactive', 'is', 'F']],
+                        columns: [
+                            search.createColumn({ name: 'internalid' }),
+                            search.createColumn({ name: 'name', sort: search.Sort.ASC })
+                        ]
+                    });
+
+                    locSearch.run().each(function(result) {
+                        options.locations.push({
+                            id: result.getValue('internalid'),
+                            name: result.getValue('name')
+                        });
+                        return options.locations.length < 50;
+                    });
+                }
+
+                log.audit('GeminiVerifier._loadAvailableOptions',
+                    `Loaded: ${options.accounts.length} accounts, ${options.departments.length} departments, ${options.classes.length} classes, ${options.locations.length} locations`);
+
+            } catch (e) {
+                log.error('GeminiVerifier._loadAvailableOptions', e.message);
+            }
+
+            return options;
+        }
+
+        /**
+         * v4.2: Validate and map AI-returned account/department values to NetSuite IDs
+         * @private
+         * @param {Object} aiItem - Line item from AI response
+         * @param {Object} availableOptions - Available options from _loadAvailableOptions
+         * @returns {Object} AI item with validated/mapped IDs
+         */
+        _validateAndMapLineItemFields(aiItem, availableOptions) {
+            if (!aiItem || !availableOptions) return aiItem;
+
+            const validated = { ...aiItem };
+
+            // Validate account
+            if (aiItem.account && availableOptions.accounts.length > 0) {
+                const matchedAccount = this._findMatchingOption(
+                    aiItem.account,
+                    availableOptions.accounts,
+                    ['id', 'number', 'name', 'display']
+                );
+                if (matchedAccount) {
+                    validated.account = matchedAccount.id;
+                    validated._accountName = matchedAccount.name;
+                    validated._accountValidated = true;
+                } else {
+                    // AI returned invalid account - clear it
+                    log.audit('GeminiVerifier', `Invalid account "${aiItem.account}" - no match found`);
+                    validated.account = null;
+                    validated._accountInvalid = aiItem.account;
+                }
+            }
+
+            // Validate department
+            if (aiItem.department && availableOptions.departments.length > 0) {
+                const matchedDept = this._findMatchingOption(
+                    aiItem.department,
+                    availableOptions.departments,
+                    ['id', 'name']
+                );
+                if (matchedDept) {
+                    validated.department = matchedDept.id;
+                    validated._departmentName = matchedDept.name;
+                    validated._departmentValidated = true;
+                } else {
+                    log.audit('GeminiVerifier', `Invalid department "${aiItem.department}" - no match found`);
+                    validated.department = null;
+                    validated._departmentInvalid = aiItem.department;
+                }
+            }
+
+            // Validate class
+            if (aiItem.class && availableOptions.classes.length > 0) {
+                const matchedClass = this._findMatchingOption(
+                    aiItem.class,
+                    availableOptions.classes,
+                    ['id', 'name']
+                );
+                if (matchedClass) {
+                    validated.class = matchedClass.id;
+                    validated._className = matchedClass.name;
+                    validated._classValidated = true;
+                } else {
+                    log.audit('GeminiVerifier', `Invalid class "${aiItem.class}" - no match found`);
+                    validated.class = null;
+                    validated._classInvalid = aiItem.class;
+                }
+            }
+
+            // Validate location
+            if (aiItem.location && availableOptions.locations.length > 0) {
+                const matchedLoc = this._findMatchingOption(
+                    aiItem.location,
+                    availableOptions.locations,
+                    ['id', 'name']
+                );
+                if (matchedLoc) {
+                    validated.location = matchedLoc.id;
+                    validated._locationName = matchedLoc.name;
+                    validated._locationValidated = true;
+                } else {
+                    log.audit('GeminiVerifier', `Invalid location "${aiItem.location}" - no match found`);
+                    validated.location = null;
+                    validated._locationInvalid = aiItem.location;
+                }
+            }
+
+            return validated;
+        }
+
+        /**
+         * v4.2: Find matching option by ID, name, or fuzzy match
+         * @private
+         */
+        _findMatchingOption(value, options, fields) {
+            if (!value || !options || options.length === 0) return null;
+
+            const searchVal = String(value).toLowerCase().trim();
+
+            // First: exact match on any field
+            for (const opt of options) {
+                for (const field of fields) {
+                    if (opt[field] && String(opt[field]).toLowerCase() === searchVal) {
+                        return opt;
+                    }
+                }
+            }
+
+            // Second: ID match (if value looks like a number)
+            if (/^\d+$/.test(searchVal)) {
+                for (const opt of options) {
+                    if (String(opt.id) === searchVal) {
+                        return opt;
+                    }
+                }
+            }
+
+            // Third: partial match on name (contains)
+            for (const opt of options) {
+                const optName = (opt.name || '').toLowerCase();
+                if (optName.includes(searchVal) || searchVal.includes(optName)) {
+                    return opt;
+                }
+            }
+
+            // Fourth: fuzzy match - check if words overlap significantly
+            const searchWords = searchVal.split(/\s+/).filter(w => w.length > 2);
+            for (const opt of options) {
+                const optName = (opt.name || '').toLowerCase();
+                const optWords = optName.split(/\s+/).filter(w => w.length > 2);
+                const matchCount = searchWords.filter(sw =>
+                    optWords.some(ow => ow.includes(sw) || sw.includes(ow))
+                ).length;
+                if (matchCount >= Math.min(2, searchWords.length) && matchCount > 0) {
+                    return opt;
+                }
+            }
+
+            return null;
         }
 
         /**
