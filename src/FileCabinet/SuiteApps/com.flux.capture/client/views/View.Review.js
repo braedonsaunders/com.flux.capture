@@ -7514,6 +7514,97 @@
 
                     self.updateSublistLine(sublistId, idx, fieldId, value, true);
                 });
+
+                // ========== TYPEAHEAD SEARCH FOR SELECT FIELDS ==========
+                tbody.addEventListener('input', function(e) {
+                    var input = e.target;
+                    if (!input.classList.contains('typeahead-input')) return;
+
+                    var query = input.value.trim();
+                    var wrapper = input.closest('.typeahead-select');
+                    var lookupType = input.dataset.lookup;
+                    var row = input.closest('tr');
+                    var fieldId = (input.dataset.field || '').toLowerCase();
+
+                    clearTimeout(self.typeaheadTimeout);
+
+                    if (query.length < 2) {
+                        self.hideTypeaheadDropdown(wrapper);
+                        return;
+                    }
+
+                    // Determine account type based on field
+                    var options = {};
+                    var searchType = lookupType;
+                    if (lookupType === 'expenseaccounts') {
+                        searchType = 'accounts';
+                        options.accountType = 'Expense';
+                    } else if (lookupType === 'accounts') {
+                        if (fieldId === 'acctcorpcardexp') {
+                            options.accountType = 'CCard';
+                        }
+                    }
+
+                    self.typeaheadTimeout = setTimeout(function() {
+                        self.searchDatasource(searchType, query, wrapper, input, options);
+                    }, 300);
+                });
+
+                // Typeahead option selection
+                tbody.addEventListener('click', function(e) {
+                    var option = e.target.closest('.typeahead-option');
+                    if (!option) return;
+
+                    var wrapper = option.closest('.typeahead-select');
+                    self.selectTypeaheadOption(wrapper, option);
+                });
+
+                // Hide typeahead on blur
+                tbody.addEventListener('focusout', function(e) {
+                    if (!e.target.classList.contains('typeahead-input')) return;
+
+                    setTimeout(function() {
+                        var wrapper = e.target.closest('.typeahead-select');
+                        self.hideTypeaheadDropdown(wrapper);
+                    }, 200);
+                });
+
+                // Keyboard navigation for typeahead
+                tbody.addEventListener('keydown', function(e) {
+                    var input = e.target;
+                    if (!input.classList.contains('typeahead-input')) return;
+
+                    var wrapper = input.closest('.typeahead-select');
+                    var dropdown = wrapper ? wrapper.querySelector('.typeahead-dropdown') : null;
+                    if (!dropdown || dropdown.style.display === 'none') return;
+
+                    var options = dropdown.querySelectorAll('.typeahead-option');
+                    if (options.length === 0) return;
+
+                    var highlighted = dropdown.querySelector('.typeahead-option.highlighted');
+                    var currentIdx = highlighted ? Array.prototype.indexOf.call(options, highlighted) : -1;
+
+                    if (e.key === 'ArrowDown') {
+                        e.preventDefault();
+                        if (highlighted) highlighted.classList.remove('highlighted');
+                        var nextIdx = currentIdx < options.length - 1 ? currentIdx + 1 : 0;
+                        options[nextIdx].classList.add('highlighted');
+                        options[nextIdx].scrollIntoView({ block: 'nearest' });
+                    } else if (e.key === 'ArrowUp') {
+                        e.preventDefault();
+                        if (highlighted) highlighted.classList.remove('highlighted');
+                        var prevIdx = currentIdx > 0 ? currentIdx - 1 : options.length - 1;
+                        options[prevIdx].classList.add('highlighted');
+                        options[prevIdx].scrollIntoView({ block: 'nearest' });
+                    } else if (e.key === 'Enter') {
+                        e.preventDefault();
+                        if (highlighted) {
+                            self.selectTypeaheadOption(wrapper, highlighted);
+                        }
+                    } else if (e.key === 'Escape') {
+                        self.hideTypeaheadDropdown(wrapper);
+                    }
+                });
             });
         },
 
