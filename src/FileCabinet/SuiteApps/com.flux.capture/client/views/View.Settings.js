@@ -2275,6 +2275,7 @@
             if (id === 'taxcode') return 'taxcodes';
             if (id === 'category' || id === 'expensecategory') return 'expensecategories';
             if (id === 'projecttask') return 'projecttasks';
+            if (id === 'acctcorpcardexp') return 'accounts';
             return 'generic';
         },
 
@@ -2283,7 +2284,8 @@
             var selectFields = [
                 'entity', 'vendor', 'subsidiary', 'department', 'class', 'location',
                 'account', 'terms', 'currency', 'postingperiod', 'employee', 'nextapprover',
-                'approvalstatus', 'item', 'customer', 'nexus', 'taxcode', 'expenseaccount', 'salesrep'
+                'approvalstatus', 'item', 'customer', 'nexus', 'taxcode', 'expenseaccount', 'salesrep',
+                'acctcorpcardexp'
             ];
             return selectFields.indexOf(id) !== -1 || id.indexOf('custbody') === 0;
         },

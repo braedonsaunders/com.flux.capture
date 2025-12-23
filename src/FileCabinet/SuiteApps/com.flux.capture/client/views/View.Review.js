@@ -3432,6 +3432,7 @@
             if (normalizedId === 'approvalstatus') return 'approvalstatuses';
             if (normalizedId === 'nextapprover') return 'employees';
             if (normalizedId === 'projecttask') return 'projecttasks';
+            if (normalizedId === 'acctcorpcardexp') return 'accounts';
             return 'generic';
         },
 
@@ -3443,7 +3444,7 @@
                 'entity', 'customer', 'vendor', 'employee', 'item',
                 'currency', 'terms', 'taxcode', 'postingperiod',
                 'approvalstatus', 'nextapprover', 'category', 'expensecategory',
-                'job', 'project', 'projecttask', 'customform'
+                'job', 'project', 'projecttask', 'customform', 'acctcorpcardexp'
             ];
             return selectFields.indexOf(normalizedId) !== -1;
         },
@@ -3976,6 +3977,10 @@
                         if (fieldId === 'expenseaccount') {
                             options.accountType = 'Expense';
                         }
+                        // 'acctcorpcardexp' field → Credit Card accounts only
+                        if (fieldId === 'acctcorpcardexp') {
+                            options.accountType = 'CCard';
+                        }
                         // For 'account' field, don't set accountType - returns all accounts
                     }
 
@@ -4080,6 +4085,10 @@
                 if (lookupType === 'accounts' && fieldId === 'account') {
                     // Body-level account field on vendor bill = AP accounts
                     options.accountType = 'AcctPay';
+                }
+                if (lookupType === 'accounts' && fieldId === 'acctcorpcardexp') {
+                    // Corporate card expense account = Credit Card accounts only
+                    options.accountType = 'CCard';
                 }
 
                 self.typeaheadTimeout = setTimeout(function() {
