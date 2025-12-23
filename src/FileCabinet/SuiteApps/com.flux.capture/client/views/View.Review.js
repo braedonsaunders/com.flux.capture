@@ -5557,12 +5557,12 @@
             var hasProject = (line.project && String(line.project).trim() !== '') ||
                              (line.job && String(line.job).trim() !== '');
 
-            // For expense lines: check account/category OR any meaningful data
+            // For expense lines: check account/category OR any meaningful data (case-insensitive)
             if (slType === 'expense') {
-                var hasAccount = line.account && String(line.account).trim() !== '';
-                var hasExpenseAccount = line.expenseaccount && String(line.expenseaccount).trim() !== '';
-                var hasCategory = line.category && String(line.category).trim() !== '';
-                var hasExpenseCategory = line.expensecategory && String(line.expensecategory).trim() !== '';
+                var hasAccount = (line.account || line.ACCOUNT) && String(line.account || line.ACCOUNT).trim() !== '';
+                var hasExpenseAccount = (line.expenseaccount || line.EXPENSEACCOUNT) && String(line.expenseaccount || line.EXPENSEACCOUNT).trim() !== '';
+                var hasCategory = (line.category || line.CATEGORY) && String(line.category || line.CATEGORY).trim() !== '';
+                var hasExpenseCategory = (line.expensecategory || line.EXPENSECATEGORY) && String(line.expensecategory || line.EXPENSECATEGORY).trim() !== '';
                 return hasAccount || hasExpenseAccount || hasCategory || hasExpenseCategory ||
                        hasAmount || hasDescription || hasMemo || hasCustomer || hasProject;
             }
