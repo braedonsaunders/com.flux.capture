@@ -5436,32 +5436,6 @@ body.sidebar-collapsed .sidebar-expand-btn {
     color: white;
 }
 
-/* Sidebar Animation - High class smooth transition */
-.app-sidebar {
-    transition: width 0.35s cubic-bezier(0.4, 0, 0.2, 1),
-                padding 0.35s cubic-bezier(0.4, 0, 0.2, 1),
-                transform 0.35s cubic-bezier(0.4, 0, 0.2, 1);
-}
-
-.app-main {
-    transition: margin-left 0.35s cubic-bezier(0.4, 0, 0.2, 1);
-}
-
-/* Collapsed sidebar state */
-body.sidebar-collapsed .app-sidebar {
-    width: 0;
-    padding: 0;
-    overflow: hidden;
-    transform: translateX(-100%);
-}
-
-body.sidebar-collapsed .sidebar-expand-btn {
-    display: flex;
-}
-
-body.sidebar-collapsed .app-main {
-    margin-left: 0;
-}
 
 /* ==========================================
    DARK MODE
@@ -5485,16 +5459,8 @@ body.dark-mode .app-main {
     background: var(--surface-bg);
 }
 
-body.dark-mode .app-sidebar {
-    background: linear-gradient(180deg, #0a0a12 0%, #111827 100%);
-}
-
-body.dark-mode .sidebar-controls {
-    border-color: rgba(255,255,255,0.05);
-}
-
-body.dark-mode .sidebar-footer {
-    border-color: rgba(255,255,255,0.05);
+body.dark-mode .app-topbar {
+    background: linear-gradient(90deg, #0a0a12 0%, #111827 100%);
 }
 
 body.dark-mode .surface-card,
