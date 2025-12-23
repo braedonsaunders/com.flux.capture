@@ -301,6 +301,11 @@
                     if (self.data && self.data.vendorId) {
                         self.fetchCodingSuggestions(self.data.vendorId);
                     }
+
+                    // Auto-load PO match data for vendor bills
+                    if (self.transactionType === 'vendorbill' && self.data && self.data.vendorId) {
+                        self.loadPOMatchData();
+                    }
                 })
                 .catch(function(err) {
                     console.error('[Review] Load error:', err);
@@ -778,6 +783,43 @@
                     document.querySelectorAll('.transform-dropdown.open').forEach(function(d) {
                         d.classList.remove('open');
                     });
+                }
+            });
+
+            // Keyboard shortcuts for Transform Hub
+            document.addEventListener('keydown', function(e) {
+                // Escape to close Transform Hub
+                if (e.key === 'Escape') {
+                    var openDropdown = document.querySelector('.transform-dropdown.open');
+                    if (openDropdown) {
+                        openDropdown.classList.remove('open');
+                        e.preventDefault();
+                        return;
+                    }
+                }
+
+                // Quick keyboard shortcuts when Transform Hub is open
+                var openDropdown = document.querySelector('.transform-dropdown.open');
+                if (openDropdown) {
+                    var action = null;
+                    var sublistId = openDropdown.id.replace('transform-dropdown-', '');
+
+                    switch (e.key.toLowerCase()) {
+                        case 'c': action = 'collapse'; break;
+                        case '1': action = openDropdown.querySelector('[data-action^="by-account"], [data-action^="by-item"]') ?
+                                    openDropdown.querySelector('[data-action^="by-account"], [data-action^="by-item"]').dataset.action : null; break;
+                        case '2': action = 'by-department'; break;
+                        case '3': action = 'by-class'; break;
+                        case '4': action = 'by-location'; break;
+                        case 's': action = 'split-equal'; break;
+                        case 'd': action = 'apply-defaults'; break;
+                    }
+
+                    if (action) {
+                        openDropdown.classList.remove('open');
+                        self.transformSublist(sublistId, action);
+                        e.preventDefault();
+                    }
                 }
             });
 
@@ -1917,7 +1959,13 @@
             var extractedData = doc.extractedData || {};
             // Normalize confidence: may be stored as decimal (0-1) or percentage (0-100)
             var rawConf = parseFloat(doc.confidence) || 0;
-            var normalizedConfidence = rawConf <= 1 ? Math.round(rawConf * 100) : Math.round(rawConf);
+            var baseConfidence = rawConf <= 1 ? Math.round(rawConf * 100) : Math.round(rawConf);
+
+            // Check for AI-adjusted confidence score (merged OCR + AI verification)
+            var aiAdjustedConf = extractedData.confidence && extractedData.confidence.adjusted;
+            var isAiAdjusted = aiAdjustedConf !== undefined && aiAdjustedConf !== null;
+            // Use adjusted confidence when AI verification has run, otherwise use base OCR confidence
+            var normalizedConfidence = isAiAdjusted ? Math.round(aiAdjustedConf) : baseConfidence;
             var confClass = getConfidenceClass(normalizedConfidence);
             var anomalies = doc.anomalies || [];
             var formFields = this.formFields || {};
@@ -1983,8 +2031,8 @@
 
             html += '<div class="review-header">' +
                 '<div class="review-header-bar">' +
-                    // Confidence indicator
-                    '<div class="header-metric confidence-metric ' + confClass + '">' +
+                    // Confidence indicator (uses merged AI+OCR score when AI verification is enabled)
+                    '<div class="header-metric confidence-metric ' + confClass + (isAiAdjusted ? ' ai-adjusted' : '') + '">' +
                         '<div class="metric-ring ' + confClass + '">' +
                             '<svg viewBox="0 0 36 36">' +
                                 '<circle cx="18" cy="18" r="15.9" fill="none" stroke="currentColor" stroke-opacity="0.15" stroke-width="3"/>' +
@@ -1993,16 +2041,8 @@
                             '</svg>' +
                             '<span class="metric-value">' + normalizedConfidence + '</span>' +
                         '</div>' +
-                        '<span class="metric-label">Confidence</span>' +
+                        '<span class="metric-label">' + (isAiAdjusted ? '<i class="fas fa-sparkles"></i> AI ' : '') + 'Confidence</span>' +
                     '</div>' +
-                    // AI Verified badge (if verified and no issues)
-                    (hasAiVerification && aiTotalIssues === 0 ?
-                        '<div class="header-metric ai-metric verified-ok">' +
-                            '<div class="metric-icon ai-icon">' +
-                                '<i class="fas fa-shield-check"></i>' +
-                            '</div>' +
-                            '<span class="metric-label">AI Verified ' + aiAccuracy + '%</span>' +
-                        '</div>' : '') +
                     // Unified Alerts indicator (anomalies + AI issues combined)
                     (hasAlerts ?
                         '<div class="header-metric alert-metric' + (hasHighSeverity ? ' has-critical' : '') + '" id="alert-status-toggle">' +
@@ -2546,59 +2586,105 @@
             var groupByIcon = isExpense ? 'fa-book' : 'fa-box';
 
             return '<div class="transform-dropdown" id="transform-dropdown-' + sublistId + '">' +
+                // Backdrop for closing when clicking outside
+                '<div class="transform-hub-backdrop" data-sublist="' + sublistId + '"></div>' +
+                // Transform button (becomes center hub when open)
                 '<button class="btn btn-ghost btn-sm btn-transform" data-sublist="' + sublistId + '">' +
-                    '<i class="fas fa-wand-magic-sparkles"></i> Transform ' +
+                    '<i class="fas fa-wand-magic-sparkles"></i>' +
+                    '<span class="transform-text">Transform</span>' +
                     '<i class="fas fa-chevron-down transform-arrow"></i>' +
                 '</button>' +
-                '<div class="transform-menu">' +
-                    '<div class="transform-section">' +
-                        '<div class="transform-section-label">Consolidate</div>' +
+                // Transform Hub - Radial menu container
+                '<div class="transform-hub" id="transform-hub-' + sublistId + '">' +
+                    // Decorative center ring
+                    '<div class="transform-hub-center"></div>' +
+
+                    // Top-Left Pod: Consolidate
+                    '<div class="transform-pod" data-position="top-left">' +
+                        '<div class="transform-pod-header">' +
+                            '<div class="transform-pod-icon consolidate"><i class="fas fa-compress"></i></div>' +
+                            '<span class="transform-pod-title">Consolidate</span>' +
+                        '</div>' +
                         '<div class="transform-option" data-action="collapse" data-sublist="' + sublistId + '">' +
-                            '<i class="fas fa-compress"></i> Collapse to One Line' +
+                            '<i class="fas fa-compress"></i> Collapse to One' +
+                            '<span class="transform-option-key">C</span>' +
                         '</div>' +
                     '</div>' +
-                    '<div class="transform-section">' +
-                        '<div class="transform-section-label">Group By</div>' +
+
+                    // Top-Right Pod: Group By
+                    '<div class="transform-pod" data-position="top-right">' +
+                        '<div class="transform-pod-header">' +
+                            '<div class="transform-pod-icon group"><i class="fas fa-layer-group"></i></div>' +
+                            '<span class="transform-pod-title">Group By</span>' +
+                        '</div>' +
                         '<div class="transform-option" data-action="by-' + groupByField + '" data-sublist="' + sublistId + '">' +
-                            '<i class="fas ' + groupByIcon + '"></i> By ' + groupByLabel +
+                            '<i class="fas ' + groupByIcon + '"></i> ' + groupByLabel +
+                            '<span class="transform-option-key">1</span>' +
                         '</div>' +
                         '<div class="transform-option" data-action="by-department" data-sublist="' + sublistId + '">' +
-                            '<i class="fas fa-sitemap"></i> By Department' +
+                            '<i class="fas fa-sitemap"></i> Department' +
+                            '<span class="transform-option-key">2</span>' +
                         '</div>' +
                         '<div class="transform-option" data-action="by-class" data-sublist="' + sublistId + '">' +
-                            '<i class="fas fa-tags"></i> By Class' +
+                            '<i class="fas fa-tags"></i> Class' +
+                            '<span class="transform-option-key">3</span>' +
                         '</div>' +
                         '<div class="transform-option" data-action="by-location" data-sublist="' + sublistId + '">' +
+                            '<i class="fas fa-map-marker-alt"></i> Location' +
+                            '<span class="transform-option-key">4</span>' +
+                        '</div>' +
+                    '</div>' +
+
+                    // Bottom-Left Pod: Split
+                    '<div class="transform-pod" data-position="bottom-left">' +
+                        '<div class="transform-pod-header">' +
+                            '<div class="transform-pod-icon split"><i class="fas fa-divide"></i></div>' +
+                            '<span class="transform-pod-title">Split</span>' +
+                        '</div>' +
+                        '<div class="transform-option" data-action="split-equal" data-sublist="' + sublistId + '">' +
+                            '<i class="fas fa-divide"></i> Split Equally' +
+                            '<span class="transform-option-key">S</span>' +
+                        '</div>' +
+                        '<div class="transform-option" data-action="apply-defaults" data-sublist="' + sublistId + '">' +
+                            '<i class="fas fa-fill-drip"></i> Apply Defaults' +
+                            '<span class="transform-option-key">D</span>' +
+                        '</div>' +
+                    '</div>' +
+
+                    // Bottom-Right Pod: Distribute By
+                    '<div class="transform-pod" data-position="bottom-right">' +
+                        '<div class="transform-pod-header">' +
+                            '<div class="transform-pod-icon distribute"><i class="fas fa-share-alt"></i></div>' +
+                            '<span class="transform-pod-title">Distribute</span>' +
+                        '</div>' +
+                        '<div class="transform-option" data-action="distribute-department" data-sublist="' + sublistId + '">' +
+                            '<i class="fas fa-sitemap"></i> By Department' +
+                        '</div>' +
+                        '<div class="transform-option" data-action="distribute-class" data-sublist="' + sublistId + '">' +
+                            '<i class="fas fa-tags"></i> By Class' +
+                        '</div>' +
+                        '<div class="transform-option" data-action="distribute-location" data-sublist="' + sublistId + '">' +
                             '<i class="fas fa-map-marker-alt"></i> By Location' +
                         '</div>' +
                     '</div>' +
-                    '<div class="transform-section">' +
-                        '<div class="transform-section-label">Split</div>' +
-                        '<div class="transform-option" data-action="split-equal" data-sublist="' + sublistId + '">' +
-                            '<i class="fas fa-divide"></i> Split Equally...' +
+
+                    // Bottom-Center Pod: Actions
+                    '<div class="transform-pod" data-position="bottom-center">' +
+                        '<div class="transform-pod-header">' +
+                            '<div class="transform-pod-icon actions"><i class="fas fa-bolt"></i></div>' +
+                            '<span class="transform-pod-title">Actions</span>' +
                         '</div>' +
-                        '<div class="transform-option" data-action="apply-defaults" data-sublist="' + sublistId + '">' +
-                            '<i class="fas fa-fill-drip"></i> Apply Header Defaults' +
+                        '<div class="transform-option" data-action="duplicate-all" data-sublist="' + sublistId + '">' +
+                            '<i class="fas fa-copy"></i> Duplicate All' +
                         '</div>' +
-                    '</div>' +
-                    '<div class="transform-section">' +
-                        '<div class="transform-section-label">Distribute By</div>' +
-                        '<div class="transform-option" data-action="distribute-department" data-sublist="' + sublistId + '">' +
-                            '<i class="fas fa-sitemap"></i> By Department...' +
-                        '</div>' +
-                        '<div class="transform-option" data-action="distribute-class" data-sublist="' + sublistId + '">' +
-                            '<i class="fas fa-tags"></i> By Class...' +
-                        '</div>' +
-                        '<div class="transform-option" data-action="distribute-location" data-sublist="' + sublistId + '">' +
-                            '<i class="fas fa-map-marker-alt"></i> By Location...' +
+                        '<div class="transform-option transform-danger" data-action="clear-all" data-sublist="' + sublistId + '">' +
+                            '<i class="fas fa-trash"></i> Clear All' +
                         '</div>' +
                     '</div>' +
-                    '<div class="transform-divider"></div>' +
-                    '<div class="transform-option" data-action="duplicate-all" data-sublist="' + sublistId + '">' +
-                        '<i class="fas fa-copy"></i> Duplicate All Lines' +
-                    '</div>' +
-                    '<div class="transform-option transform-danger" data-action="clear-all" data-sublist="' + sublistId + '">' +
-                        '<i class="fas fa-trash"></i> Clear All Lines' +
+
+                    // Hint at bottom
+                    '<div class="transform-hub-hint">' +
+                        'Click option or press <kbd>Esc</kbd> to close' +
                     '</div>' +
                 '</div>' +
             '</div>' +
@@ -2933,7 +3019,7 @@
                 visibleFields.forEach(function(f) {
                     html += self.renderSublistCell(f, item, idx, sublistId);
                 });
-                html += '<td><button class="btn btn-ghost btn-icon btn-sm btn-remove-line" data-sublist="' + sublistId + '" title="Remove"><i class="fas fa-times"></i></button></td>';
+                html += '<td><button class="btn btn-ghost btn-icon btn-sm btn-remove-line" data-sublist="' + sublistId + '" title="Remove" tabindex="-1"><i class="fas fa-times"></i></button></td>';
                 html += '</tr>';
             });
 
@@ -3034,7 +3120,7 @@
 
             // Fill handle element - appears on cell hover/focus
             var fillHandle = '<div class="fill-handle" title="Drag to fill cells below"></div>' +
-                '<button type="button" class="fill-menu-btn" title="Fill options"><i class="fas fa-ellipsis-v"></i></button>';
+                '<button type="button" class="fill-menu-btn" title="Fill options" tabindex="-1"><i class="fas fa-ellipsis-v"></i></button>';
 
             // Detect if this is a select field (by type or by known field ID)
             var isSelectField = field.type === 'select' || this.isSelectField(normalizedFieldId);
@@ -3204,6 +3290,17 @@
             if (fieldType === 'integer' || fieldType === 'INTEGER') return 'integer';
 
             return fieldType || 'text';
+        },
+
+        // Get the focusable input element from a cell
+        getInputInCell: function(cell) {
+            if (!cell) return null;
+            // For typeahead cells, get the visible input (typeahead-input), not the hidden one
+            var typeaheadInput = cell.querySelector('.typeahead-input');
+            if (typeaheadInput) return typeaheadInput;
+            // For regular cells, get the line-input
+            var lineInput = cell.querySelector('.line-input');
+            return lineInput;
         },
 
         // Initialize sublist data structure
@@ -3553,6 +3650,14 @@
                         return;
                     }
 
+                    // Transform Hub backdrop click - close the hub
+                    var backdrop = e.target.closest('.transform-hub-backdrop');
+                    if (backdrop) {
+                        var dropdown = backdrop.closest('.transform-dropdown');
+                        if (dropdown) dropdown.classList.remove('open');
+                        return;
+                    }
+
                     // Transform dropdown toggle
                     var transformBtn = e.target.closest('.btn-transform');
                     if (transformBtn) {
@@ -3563,7 +3668,14 @@
                             document.querySelectorAll('.transform-dropdown.open').forEach(function(d) {
                                 if (d !== dropdown) d.classList.remove('open');
                             });
+
+                            var isOpening = !dropdown.classList.contains('open');
                             dropdown.classList.toggle('open');
+
+                            // Position the hub around the button when opening
+                            if (isOpening) {
+                                self.positionTransformHub(dropdown, transformBtn);
+                            }
                         }
                         return;
                     }
@@ -3947,6 +4059,140 @@
                     if (e.ctrlKey && e.shiftKey && e.key === 'D') {
                         e.preventDefault();
                         self.fillDown(cell, true);
+                        return;
+                    }
+
+                    // ========== ARROW KEY NAVIGATION ==========
+                    // Skip if typeahead dropdown is open (arrow keys navigate dropdown)
+                    var wrapper = input.closest('.typeahead-select');
+                    if (wrapper) {
+                        var dropdown = wrapper.querySelector('.typeahead-dropdown');
+                        if (dropdown && dropdown.style.display !== 'none' && dropdown.children.length > 0) {
+                            return; // Let existing typeahead handler deal with it
+                        }
+                    }
+
+                    var row = cell.closest('tr');
+                    var table = row.closest('table');
+                    var rows = table.querySelectorAll('tbody tr');
+                    var cells = row.querySelectorAll('.fill-cell');
+                    var cellIndex = Array.prototype.indexOf.call(cells, cell);
+                    var rowIndex = Array.prototype.indexOf.call(rows, row);
+
+                    // Tab key - move to next cell in table
+                    if (e.key === 'Tab' && !e.ctrlKey && !e.metaKey) {
+                        var nextInput = null;
+
+                        if (e.shiftKey) {
+                            // Shift+Tab - move backwards
+                            if (cellIndex > 0) {
+                                nextInput = self.getInputInCell(cells[cellIndex - 1]);
+                            } else if (rowIndex > 0) {
+                                var prevRow = rows[rowIndex - 1];
+                                var prevCells = prevRow.querySelectorAll('.fill-cell');
+                                if (prevCells.length > 0) {
+                                    nextInput = self.getInputInCell(prevCells[prevCells.length - 1]);
+                                }
+                            }
+                        } else {
+                            // Tab - move forwards
+                            if (cellIndex < cells.length - 1) {
+                                nextInput = self.getInputInCell(cells[cellIndex + 1]);
+                            } else if (rowIndex < rows.length - 1) {
+                                var nextRow = rows[rowIndex + 1];
+                                var nextCells = nextRow.querySelectorAll('.fill-cell');
+                                if (nextCells.length > 0) {
+                                    nextInput = self.getInputInCell(nextCells[0]);
+                                }
+                            }
+                        }
+
+                        if (nextInput) {
+                            e.preventDefault();
+                            nextInput.focus();
+                            if (nextInput.select) nextInput.select();
+                        }
+                        return;
+                    }
+
+                    // Arrow keys for navigation
+                    if (e.key === 'ArrowRight' && !e.ctrlKey && !e.metaKey) {
+                        // Only navigate if cursor is at end of input or input is not a text field
+                        var isAtEnd = input.type !== 'text' || input.selectionStart === input.value.length;
+                        if (isAtEnd && cellIndex < cells.length - 1) {
+                            e.preventDefault();
+                            var nextInput = self.getInputInCell(cells[cellIndex + 1]);
+                            if (nextInput) {
+                                nextInput.focus();
+                                if (nextInput.select) nextInput.select();
+                            }
+                        }
+                        return;
+                    }
+
+                    if (e.key === 'ArrowLeft' && !e.ctrlKey && !e.metaKey) {
+                        // Only navigate if cursor is at start of input or input is not a text field
+                        var isAtStart = input.type !== 'text' || input.selectionStart === 0;
+                        if (isAtStart && cellIndex > 0) {
+                            e.preventDefault();
+                            var prevInput = self.getInputInCell(cells[cellIndex - 1]);
+                            if (prevInput) {
+                                prevInput.focus();
+                                if (prevInput.select) prevInput.select();
+                            }
+                        }
+                        return;
+                    }
+
+                    if (e.key === 'ArrowDown' && !e.ctrlKey && !e.metaKey) {
+                        if (rowIndex < rows.length - 1) {
+                            e.preventDefault();
+                            var nextRow = rows[rowIndex + 1];
+                            var nextCells = nextRow.querySelectorAll('.fill-cell');
+                            if (nextCells[cellIndex]) {
+                                var nextInput = self.getInputInCell(nextCells[cellIndex]);
+                                if (nextInput) {
+                                    nextInput.focus();
+                                    if (nextInput.select) nextInput.select();
+                                }
+                            }
+                        }
+                        return;
+                    }
+
+                    if (e.key === 'ArrowUp' && !e.ctrlKey && !e.metaKey) {
+                        if (rowIndex > 0) {
+                            e.preventDefault();
+                            var prevRow = rows[rowIndex - 1];
+                            var prevCells = prevRow.querySelectorAll('.fill-cell');
+                            if (prevCells[cellIndex]) {
+                                var prevInput = self.getInputInCell(prevCells[cellIndex]);
+                                if (prevInput) {
+                                    prevInput.focus();
+                                    if (prevInput.select) prevInput.select();
+                                }
+                            }
+                        }
+                        return;
+                    }
+
+                    // Enter key - move to next row, same column
+                    if (e.key === 'Enter' && !e.ctrlKey && !e.metaKey && !e.shiftKey) {
+                        // Skip for typeahead inputs (Enter selects option)
+                        if (input.classList.contains('typeahead-input')) return;
+
+                        if (rowIndex < rows.length - 1) {
+                            e.preventDefault();
+                            var nextRow = rows[rowIndex + 1];
+                            var nextCells = nextRow.querySelectorAll('.fill-cell');
+                            if (nextCells[cellIndex]) {
+                                var nextInput = self.getInputInCell(nextCells[cellIndex]);
+                                if (nextInput) {
+                                    nextInput.focus();
+                                    if (nextInput.select) nextInput.select();
+                                }
+                            }
+                        }
                         return;
                     }
                 });
@@ -4790,6 +5036,96 @@
             this.refreshSublist(sublistId);
             this.updateTabCounts();
             UI.toast('Transform undone', 'success');
+        },
+
+        // Position Transform Hub radially around the button
+        positionTransformHub: function(dropdown, button) {
+            var hub = dropdown.querySelector('.transform-hub');
+            if (!hub) return;
+
+            var btnRect = button.getBoundingClientRect();
+            var centerX = btnRect.left + btnRect.width / 2;
+            var centerY = btnRect.top + btnRect.height / 2;
+
+            // Set hub position centered on button
+            hub.style.left = centerX + 'px';
+            hub.style.top = centerY + 'px';
+            hub.style.transform = 'translate(-50%, -50%)';
+
+            // Calculate viewport boundaries
+            var viewportWidth = window.innerWidth;
+            var viewportHeight = window.innerHeight;
+
+            // Pod positioning - arranged in a radial pattern around center
+            // Distance from center to pod edge
+            var radius = 100;
+
+            // Get all pods
+            var pods = hub.querySelectorAll('.transform-pod');
+            pods.forEach(function(pod) {
+                var position = pod.dataset.position;
+                var podWidth = 170;
+                var podHeight = pod.offsetHeight || 120;
+
+                var left, top;
+
+                switch (position) {
+                    case 'top-left':
+                        left = -radius - podWidth + 20;
+                        top = -radius - podHeight + 30;
+                        break;
+                    case 'top-right':
+                        left = radius - 20;
+                        top = -radius - podHeight + 30;
+                        break;
+                    case 'bottom-left':
+                        left = -radius - podWidth + 20;
+                        top = radius - 30;
+                        break;
+                    case 'bottom-right':
+                        left = radius - 20;
+                        top = radius - 30;
+                        break;
+                    case 'bottom-center':
+                        left = -podWidth / 2;
+                        top = radius + 60;
+                        break;
+                    default:
+                        left = 0;
+                        top = 0;
+                }
+
+                // Adjust for viewport boundaries
+                var absoluteLeft = centerX + left;
+                var absoluteTop = centerY + top;
+
+                // Prevent overflow right
+                if (absoluteLeft + podWidth > viewportWidth - 20) {
+                    left = viewportWidth - 20 - centerX - podWidth;
+                }
+                // Prevent overflow left
+                if (absoluteLeft < 20) {
+                    left = 20 - centerX;
+                }
+                // Prevent overflow bottom
+                if (absoluteTop + podHeight > viewportHeight - 20) {
+                    top = viewportHeight - 20 - centerY - podHeight;
+                }
+                // Prevent overflow top
+                if (absoluteTop < 20) {
+                    top = 20 - centerY;
+                }
+
+                pod.style.left = left + 'px';
+                pod.style.top = top + 'px';
+            });
+
+            // Position hint at bottom of the hub area
+            var hint = hub.querySelector('.transform-hub-hint');
+            if (hint) {
+                hint.style.bottom = 'auto';
+                hint.style.top = (radius + 180) + 'px';
+            }
         },
 
         // Main transform dispatcher
