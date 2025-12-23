@@ -6722,18 +6722,61 @@
                 if (normalizedFieldId === 'category' || normalizedFieldId === 'expensecategory') {
                     this.fetchCategoryExpenseAccount(value, function(expenseAccountData) {
                         if (expenseAccountData && expenseAccountData.value) {
-                            // Update the expenseaccount field in this row
-                            self.updateSublistLine(sublistId, idx, 'expenseaccount', expenseAccountData.value);
-                            if (self.sublistData && self.sublistData[sublistId] && self.sublistData[sublistId][idx]) {
-                                self.sublistData[sublistId][idx].expenseaccount = expenseAccountData.value;
-                                self.sublistData[sublistId][idx].expenseaccount_display = expenseAccountData.text;
+                            // Find the expense account field case-insensitively
+                            // First, try to find it from the sublist schema
+                            var schema = self.getSublistSchema(sublistId);
+                            var actualFieldId = null;
+
+                            // Check schema fields for expenseaccount (case-insensitive)
+                            if (schema && schema.fields) {
+                                for (var i = 0; i < schema.fields.length; i++) {
+                                    var schemaFieldId = schema.fields[i].id || '';
+                                    if (schemaFieldId.toLowerCase() === 'expenseaccount') {
+                                        actualFieldId = schemaFieldId;
+                                        break;
+                                    }
+                                }
                             }
 
-                            // Update the DOM input if visible
-                            var expenseAccountInput = row.querySelector('input[data-field="expenseaccount"]');
-                            var expenseAccountDisplay = row.querySelector('.typeahead-input[data-field="expenseaccount"]');
-                            if (expenseAccountInput) expenseAccountInput.value = expenseAccountData.value;
-                            if (expenseAccountDisplay) expenseAccountDisplay.value = expenseAccountData.text;
+                            // Fallback: search DOM for the field (case-insensitive)
+                            var expenseAccountInput = null;
+                            var expenseAccountDisplay = null;
+
+                            // Search for hidden input with expenseaccount field
+                            var hiddenInputs = row.querySelectorAll('input[type="hidden"][data-field]');
+                            for (var j = 0; j < hiddenInputs.length; j++) {
+                                var hiddenFieldAttr = (hiddenInputs[j].dataset.field || '').toLowerCase();
+                                if (hiddenFieldAttr === 'expenseaccount') {
+                                    expenseAccountInput = hiddenInputs[j];
+                                    if (!actualFieldId) actualFieldId = hiddenInputs[j].dataset.field;
+                                    break;
+                                }
+                            }
+
+                            // Search for display input with expenseaccount field
+                            var displayInputs = row.querySelectorAll('.typeahead-input[data-field]');
+                            for (var k = 0; k < displayInputs.length; k++) {
+                                var displayFieldAttr = (displayInputs[k].dataset.field || '').toLowerCase();
+                                if (displayFieldAttr === 'expenseaccount') {
+                                    expenseAccountDisplay = displayInputs[k];
+                                    if (!actualFieldId) actualFieldId = displayInputs[k].dataset.field;
+                                    break;
+                                }
+                            }
+
+                            // Only update if we found the field
+                            if (actualFieldId) {
+                                // Update the sublist data using the actual field ID
+                                self.updateSublistLine(sublistId, idx, actualFieldId, expenseAccountData.value);
+                                if (self.sublistData && self.sublistData[sublistId] && self.sublistData[sublistId][idx]) {
+                                    self.sublistData[sublistId][idx][actualFieldId] = expenseAccountData.value;
+                                    self.sublistData[sublistId][idx][actualFieldId + '_display'] = expenseAccountData.text;
+                                }
+
+                                // Update the DOM inputs
+                                if (expenseAccountInput) expenseAccountInput.value = expenseAccountData.value;
+                                if (expenseAccountDisplay) expenseAccountDisplay.value = expenseAccountData.text;
+                            }
                         }
                     });
                 }
