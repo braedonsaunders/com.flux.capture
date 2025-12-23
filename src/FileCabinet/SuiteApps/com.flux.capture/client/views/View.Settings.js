@@ -498,6 +498,8 @@
                 this.loadFormConfig(this.currentFormType);
             } else if (tabId === 'email' && !this.emailInboxConfig) {
                 this.loadEmailInboxStatus();
+            } else if (tabId === 'learning') {
+                this.initLearningTab();
             }
         },
 
@@ -3526,6 +3528,999 @@
                 });
         },
 
+        // ==========================================
+        // LEARNING MANAGEMENT
+        // ==========================================
+
+        learningData: null,
+        learningPage: 1,
+        learningLimit: 25,
+        learningFilters: {
+            type: '',
+            vendorId: '',
+            search: ''
+        },
+        learningInitialized: false,
+        editingLearning: null,
+
+        initLearningTab: function() {
+            var self = this;
+
+            // Only bind events once
+            if (!this.learningInitialized) {
+                this.bindLearningEvents();
+                this.learningInitialized = true;
+            }
+
+            // Always load fresh data when tab is shown
+            this.loadLearnings();
+            this.loadLearningStats();
+        },
+
+        bindLearningEvents: function() {
+            var self = this;
+
+            // Filter by type
+            var filterType = el('#learning-filter-type');
+            if (filterType) {
+                filterType.addEventListener('change', function() {
+                    self.learningFilters.type = this.value;
+                    self.learningPage = 1;
+                    self.loadLearnings();
+                });
+            }
+
+            // Search input with debounce
+            var searchInput = el('#learning-search');
+            if (searchInput) {
+                var searchDebounce = null;
+                searchInput.addEventListener('input', function() {
+                    var query = this.value;
+                    clearTimeout(searchDebounce);
+                    searchDebounce = setTimeout(function() {
+                        self.learningFilters.search = query;
+                        self.learningPage = 1;
+                        self.loadLearnings();
+                    }, 300);
+                });
+            }
+
+            // Vendor filter typeahead
+            this.initVendorFilterTypeahead();
+
+            // Refresh button
+            var refreshBtn = el('#btn-refresh-learnings');
+            if (refreshBtn) {
+                refreshBtn.addEventListener('click', function() {
+                    self.loadLearnings();
+                    self.loadLearningStats();
+                });
+            }
+
+            // Create new button
+            var createBtn = el('#btn-create-learning');
+            if (createBtn) {
+                createBtn.addEventListener('click', function() {
+                    self.openLearningModal(null);
+                });
+            }
+
+            // Pagination buttons
+            var prevBtn = el('#btn-prev-page');
+            var nextBtn = el('#btn-next-page');
+            if (prevBtn) {
+                prevBtn.addEventListener('click', function() {
+                    if (self.learningPage > 1) {
+                        self.learningPage--;
+                        self.loadLearnings();
+                    }
+                });
+            }
+            if (nextBtn) {
+                nextBtn.addEventListener('click', function() {
+                    self.learningPage++;
+                    self.loadLearnings();
+                });
+            }
+        },
+
+        initVendorFilterTypeahead: function() {
+            var self = this;
+            var wrapper = el('#learning-filter-vendor-wrapper');
+            if (!wrapper) return;
+
+            var input = wrapper.querySelector('.typeahead-input');
+            var hiddenInput = el('#learning-filter-vendor-id');
+            var dropdown = wrapper.querySelector('.typeahead-dropdown');
+
+            if (!input || !dropdown) return;
+
+            var debounceTimer = null;
+
+            input.addEventListener('input', function() {
+                var query = this.value.trim();
+
+                // Clear filter if input cleared
+                if (!query) {
+                    if (hiddenInput) hiddenInput.value = '';
+                    self.learningFilters.vendorId = '';
+                    dropdown.style.display = 'none';
+                    self.learningPage = 1;
+                    self.loadLearnings();
+                    return;
+                }
+
+                if (query.length < 2) {
+                    dropdown.style.display = 'none';
+                    return;
+                }
+
+                clearTimeout(debounceTimer);
+                debounceTimer = setTimeout(function() {
+                    self.fetchTypeaheadOptions('vendors', query, function(options) {
+                        if (options.length === 0) {
+                            dropdown.innerHTML = '<div class="typeahead-no-results">No vendors found</div>';
+                        } else {
+                            dropdown.innerHTML = options.map(function(opt) {
+                                return '<div class="typeahead-option" data-value="' + escapeHtml(opt.value) + '" data-text="' + escapeHtml(opt.text) + '">' +
+                                    escapeHtml(opt.text) + '</div>';
+                            }).join('');
+                        }
+                        dropdown.style.display = 'block';
+                    });
+                }, 300);
+            });
+
+            dropdown.addEventListener('click', function(e) {
+                var option = e.target.closest('.typeahead-option');
+                if (option) {
+                    var value = option.dataset.value;
+                    var text = option.dataset.text;
+                    input.value = text;
+                    if (hiddenInput) hiddenInput.value = value;
+                    self.learningFilters.vendorId = value;
+                    dropdown.style.display = 'none';
+                    self.learningPage = 1;
+                    self.loadLearnings();
+                }
+            });
+
+            // Hide dropdown on blur
+            input.addEventListener('blur', function() {
+                setTimeout(function() {
+                    dropdown.style.display = 'none';
+                }, 200);
+            });
+        },
+
+        loadLearningStats: function() {
+            API.get('learningStats')
+                .then(function(result) {
+                    var stats = result || {};
+                    var patterns = stats.learnedPatterns || {};
+
+                    var totalEl = el('#stat-total-learnings');
+                    var aliasEl = el('#stat-vendor-aliases');
+                    var accountEl = el('#stat-account-mappings');
+                    var segmentEl = el('#stat-segment-mappings');
+
+                    var total = (patterns.vendorAliases || 0) + (patterns.accountMappings || 0) +
+                                (patterns.dateFormats || 0) + (patterns.amountFormats || 0) +
+                                (patterns.fieldPatterns || 0);
+
+                    var segments = (stats.aliases && stats.aliases.totalRecords || 0);
+
+                    if (totalEl) totalEl.textContent = total;
+                    if (aliasEl) aliasEl.textContent = patterns.vendorAliases || 0;
+                    if (accountEl) accountEl.textContent = patterns.accountMappings || 0;
+                    if (segmentEl) segmentEl.textContent = segments;
+                })
+                .catch(function(err) {
+                    console.warn('Could not load learning stats:', err);
+                });
+        },
+
+        loadLearnings: function() {
+            var self = this;
+            var tbody = el('#learning-table-body');
+
+            if (tbody) {
+                tbody.innerHTML = '<tr class="loading-row"><td colspan="8"><div class="loading-indicator"><i class="fas fa-spinner fa-spin"></i> Loading learnings...</div></td></tr>';
+            }
+
+            var params = {
+                page: this.learningPage,
+                limit: this.learningLimit
+            };
+
+            if (this.learningFilters.type) {
+                params.type = this.learningFilters.type;
+            }
+            if (this.learningFilters.vendorId) {
+                params.vendorId = this.learningFilters.vendorId;
+            }
+            if (this.learningFilters.search) {
+                params.search = this.learningFilters.search;
+            }
+
+            API.get('learnings', params)
+                .then(function(result) {
+                    self.learningData = result;
+                    self.renderLearningsTable(result.learnings || []);
+                    self.updatePagination(result.pagination || {});
+                })
+                .catch(function(err) {
+                    if (tbody) {
+                        tbody.innerHTML = '<tr class="error-row"><td colspan="8"><div class="error-message"><i class="fas fa-exclamation-triangle"></i> Failed to load learnings: ' + escapeHtml(err.message || 'Unknown error') + '</div></td></tr>';
+                    }
+                });
+        },
+
+        renderLearningsTable: function(learnings) {
+            var self = this;
+            var tbody = el('#learning-table-body');
+            if (!tbody) return;
+
+            if (learnings.length === 0) {
+                tbody.innerHTML = '<tr class="empty-row"><td colspan="8"><div class="empty-message"><i class="fas fa-inbox"></i> No learnings found</div></td></tr>';
+                return;
+            }
+
+            var html = learnings.map(function(learning) {
+                var typeLabel = self.getLearningTypeLabel(learning.type);
+                var confidence = learning.confidence ? Math.round(learning.confidence * 100) + '%' : '-';
+                var modified = learning.modified ? self.formatDate(learning.modified) : '-';
+                var vendorName = learning.vendorName || (learning.vendorId ? 'ID: ' + learning.vendorId : '-');
+
+                return '<tr data-id="' + learning.id + '">' +
+                    '<td class="col-type"><span class="type-badge type-' + learning.type + '">' + escapeHtml(typeLabel) + '</span></td>' +
+                    '<td class="col-key" title="' + escapeHtml(learning.key || '') + '">' + escapeHtml(learning.displayKey || learning.key || '-') + '</td>' +
+                    '<td class="col-value" title="' + escapeHtml(learning.displayValue || '') + '">' + escapeHtml(learning.displayValue || '-') + '</td>' +
+                    '<td class="col-vendor">' + escapeHtml(vendorName) + '</td>' +
+                    '<td class="col-usage">' + (learning.usageCount || 0) + '</td>' +
+                    '<td class="col-confidence">' + confidence + '</td>' +
+                    '<td class="col-updated">' + escapeHtml(modified) + '</td>' +
+                    '<td class="col-actions">' +
+                        '<button class="btn btn-icon btn-ghost btn-edit-learning" title="Edit"><i class="fas fa-edit"></i></button>' +
+                        '<button class="btn btn-icon btn-ghost btn-delete-learning" title="Delete"><i class="fas fa-trash"></i></button>' +
+                    '</td>' +
+                '</tr>';
+            }).join('');
+
+            tbody.innerHTML = html;
+
+            // Bind action buttons
+            tbody.querySelectorAll('.btn-edit-learning').forEach(function(btn) {
+                btn.addEventListener('click', function(e) {
+                    e.stopPropagation();
+                    var row = this.closest('tr');
+                    var id = row.dataset.id;
+                    self.editLearning(id);
+                });
+            });
+
+            tbody.querySelectorAll('.btn-delete-learning').forEach(function(btn) {
+                btn.addEventListener('click', function(e) {
+                    e.stopPropagation();
+                    var row = this.closest('tr');
+                    var id = row.dataset.id;
+                    self.confirmDeleteLearning(id);
+                });
+            });
+        },
+
+        getLearningTypeLabel: function(type) {
+            var labels = {
+                'vendor_alias': 'Vendor Alias',
+                'account_mapping': 'Account',
+                'department_mapping': 'Department',
+                'class_mapping': 'Class',
+                'location_mapping': 'Location',
+                'vendor_defaults': 'Vendor Defaults',
+                'item_mapping': 'Item',
+                'date_format': 'Date Format',
+                'amount_format': 'Amount Format',
+                'custom_field_mapping': 'Custom Field',
+                'field_pattern': 'Field Pattern'
+            };
+            return labels[type] || type;
+        },
+
+        formatDate: function(dateStr) {
+            if (!dateStr) return '-';
+            try {
+                var d = new Date(dateStr);
+                return d.toLocaleDateString() + ' ' + d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+            } catch (e) {
+                return dateStr;
+            }
+        },
+
+        updatePagination: function(pagination) {
+            var infoEl = el('#pagination-info');
+            var pageEl = el('#page-indicator');
+            var prevBtn = el('#btn-prev-page');
+            var nextBtn = el('#btn-next-page');
+
+            var start = ((pagination.page - 1) * pagination.limit) + 1;
+            var end = Math.min(pagination.page * pagination.limit, pagination.total);
+
+            if (infoEl) {
+                infoEl.textContent = pagination.total > 0 ? 'Showing ' + start + '-' + end + ' of ' + pagination.total : 'No results';
+            }
+            if (pageEl) {
+                pageEl.textContent = 'Page ' + pagination.page + ' of ' + (pagination.totalPages || 1);
+            }
+            if (prevBtn) {
+                prevBtn.disabled = pagination.page <= 1;
+            }
+            if (nextBtn) {
+                nextBtn.disabled = pagination.page >= pagination.totalPages;
+            }
+        },
+
+        editLearning: function(learningId) {
+            var self = this;
+
+            API.get('learning', { id: learningId })
+                .then(function(result) {
+                    self.openLearningModal(result);
+                })
+                .catch(function(err) {
+                    UI.toast('Failed to load learning: ' + (err.message || 'Unknown error'), 'error');
+                });
+        },
+
+        confirmDeleteLearning: function(learningId) {
+            var self = this;
+
+            if (confirm('Are you sure you want to delete this learning? This cannot be undone.')) {
+                self.deleteLearning(learningId);
+            }
+        },
+
+        deleteLearning: function(learningId) {
+            var self = this;
+
+            API._delete('learning', { id: learningId })
+                .then(function() {
+                    UI.toast('Learning deleted successfully', 'success');
+                    self.loadLearnings();
+                    self.loadLearningStats();
+                })
+                .catch(function(err) {
+                    UI.toast('Failed to delete learning: ' + (err.message || 'Unknown error'), 'error');
+                });
+        },
+
+        openLearningModal: function(learning) {
+            var self = this;
+            this.editingLearning = learning;
+
+            // Remove existing modal if any
+            var existingModal = el('#learning-modal');
+            if (existingModal) {
+                existingModal.remove();
+            }
+
+            // Render the modal template
+            var container = document.createElement('div');
+            container.innerHTML = el('#tpl-learning-modal').innerHTML;
+            document.body.appendChild(container.firstElementChild);
+
+            var modal = el('#learning-modal');
+            var titleEl = el('#learning-modal-title');
+            var typeSelect = el('#learning-type');
+            var deleteBtn = el('#btn-delete-learning');
+            var formFields = el('#learning-form-fields');
+
+            if (learning) {
+                // Edit mode
+                if (titleEl) titleEl.textContent = 'Edit Learning';
+                if (typeSelect) {
+                    typeSelect.value = learning.type;
+                    typeSelect.disabled = true; // Can't change type when editing
+                }
+                if (deleteBtn) deleteBtn.style.display = 'inline-flex';
+                this.renderLearningFormFields(learning.type, learning.data);
+            } else {
+                // Create mode
+                if (titleEl) titleEl.textContent = 'Create Learning';
+                if (typeSelect) typeSelect.disabled = false;
+                if (deleteBtn) deleteBtn.style.display = 'none';
+            }
+
+            // Bind modal events
+            el('#btn-close-learning-modal').addEventListener('click', function() {
+                self.closeLearningModal();
+            });
+
+            el('#btn-cancel-learning').addEventListener('click', function() {
+                self.closeLearningModal();
+            });
+
+            el('#btn-save-learning').addEventListener('click', function() {
+                self.saveLearningFromModal();
+            });
+
+            if (deleteBtn) {
+                deleteBtn.addEventListener('click', function() {
+                    if (self.editingLearning) {
+                        self.confirmDeleteLearning(self.editingLearning.id);
+                        self.closeLearningModal();
+                    }
+                });
+            }
+
+            // Type change handler
+            if (typeSelect) {
+                typeSelect.addEventListener('change', function() {
+                    self.renderLearningFormFields(this.value, null);
+                });
+            }
+
+            // Close on overlay click
+            modal.addEventListener('click', function(e) {
+                if (e.target === modal) {
+                    self.closeLearningModal();
+                }
+            });
+
+            // Animate in
+            requestAnimationFrame(function() {
+                modal.classList.add('active');
+            });
+        },
+
+        closeLearningModal: function() {
+            var modal = el('#learning-modal');
+            if (modal) {
+                modal.classList.remove('active');
+                setTimeout(function() {
+                    modal.remove();
+                }, 300);
+            }
+            this.editingLearning = null;
+        },
+
+        renderLearningFormFields: function(type, data) {
+            var self = this;
+            var container = el('#learning-form-fields');
+            if (!container) return;
+
+            data = data || {};
+            var html = '';
+
+            switch (type) {
+                case 'vendor_alias':
+                    html = this.renderVendorAliasFields(data);
+                    break;
+                case 'account_mapping':
+                    html = this.renderAccountMappingFields(data);
+                    break;
+                case 'department_mapping':
+                case 'class_mapping':
+                case 'location_mapping':
+                    html = this.renderSegmentMappingFields(type, data);
+                    break;
+                case 'vendor_defaults':
+                    html = this.renderVendorDefaultsFields(data);
+                    break;
+                case 'item_mapping':
+                    html = this.renderItemMappingFields(data);
+                    break;
+                case 'date_format':
+                    html = this.renderDateFormatFields(data);
+                    break;
+                case 'amount_format':
+                    html = this.renderAmountFormatFields(data);
+                    break;
+                case 'custom_field_mapping':
+                    html = this.renderCustomFieldMappingFields(data);
+                    break;
+                default:
+                    html = '<div class="form-note">Select a learning type to configure.</div>';
+            }
+
+            container.innerHTML = html;
+
+            // Initialize typeaheads in the modal after rendering
+            this.initModalTypeaheads(type);
+        },
+
+        renderVendorAliasFields: function(data) {
+            var aliases = data.aliases || [];
+            return '<div class="form-group">' +
+                '<label>Alias Text(s) <span class="required">*</span></label>' +
+                '<input type="text" id="learning-aliases" value="' + escapeHtml(aliases.join(', ')) + '" placeholder="Enter alias texts, comma separated">' +
+                '<small>The OCR text variations that should map to this vendor</small>' +
+            '</div>' +
+            '<div class="form-group">' +
+                '<label>Vendor <span class="required">*</span></label>' +
+                '<div class="typeahead-select modal-typeahead" data-lookup="vendors">' +
+                    '<input type="hidden" id="learning-vendor-id" value="' + (data.vendorId || '') + '">' +
+                    '<input type="text" class="typeahead-input" id="learning-vendor-name" value="' + escapeHtml(data.vendorName || '') + '" placeholder="Search for vendor...">' +
+                    '<div class="typeahead-dropdown"></div>' +
+                '</div>' +
+            '</div>' +
+            '<div class="form-group">' +
+                '<label>Confidence</label>' +
+                '<input type="number" id="learning-confidence" min="0" max="1" step="0.01" value="' + (data.confidence || 0.85) + '">' +
+            '</div>';
+        },
+
+        renderAccountMappingFields: function(data) {
+            var keywords = data.keywords || [];
+            return '<div class="form-group">' +
+                '<label>Keywords <span class="required">*</span></label>' +
+                '<input type="text" id="learning-keywords" value="' + escapeHtml(keywords.join(', ')) + '" placeholder="Enter keywords, comma separated">' +
+                '<small>Description keywords that trigger this account mapping</small>' +
+            '</div>' +
+            '<div class="form-group">' +
+                '<label>Account <span class="required">*</span></label>' +
+                '<div class="typeahead-select modal-typeahead" data-lookup="accounts">' +
+                    '<input type="hidden" id="learning-account-id" value="' + (data.accountId || '') + '">' +
+                    '<input type="text" class="typeahead-input" id="learning-account-name" value="" placeholder="Search for account...">' +
+                    '<div class="typeahead-dropdown"></div>' +
+                '</div>' +
+            '</div>' +
+            '<div class="form-group">' +
+                '<label>Vendor (optional)</label>' +
+                '<div class="typeahead-select modal-typeahead" data-lookup="vendors">' +
+                    '<input type="hidden" id="learning-vendor-id" value="' + (data.vendorId || '') + '">' +
+                    '<input type="text" class="typeahead-input" id="learning-vendor-name" value="' + escapeHtml(data.vendorName || '') + '" placeholder="Leave blank for global mapping">' +
+                    '<div class="typeahead-dropdown"></div>' +
+                '</div>' +
+                '<small>If specified, this mapping only applies to this vendor</small>' +
+            '</div>';
+        },
+
+        renderSegmentMappingFields: function(type, data) {
+            var segmentName = type.replace('_mapping', '');
+            var segmentLabel = segmentName.charAt(0).toUpperCase() + segmentName.slice(1);
+            var lookupType = segmentName === 'class' ? 'classes' : segmentName + 's';
+
+            return '<div class="form-group">' +
+                '<label>Vendor <span class="required">*</span></label>' +
+                '<div class="typeahead-select modal-typeahead" data-lookup="vendors">' +
+                    '<input type="hidden" id="learning-vendor-id" value="' + (data.vendorId || '') + '">' +
+                    '<input type="text" class="typeahead-input" id="learning-vendor-name" value="' + escapeHtml(data.vendorName || '') + '" placeholder="Search for vendor...">' +
+                    '<div class="typeahead-dropdown"></div>' +
+                '</div>' +
+            '</div>' +
+            '<div class="form-group">' +
+                '<label>' + segmentLabel + ' <span class="required">*</span></label>' +
+                '<div class="typeahead-select modal-typeahead" data-lookup="' + lookupType + '">' +
+                    '<input type="hidden" id="learning-segment-id" value="' + (data.segmentId || '') + '">' +
+                    '<input type="text" class="typeahead-input" id="learning-segment-name" value="" placeholder="Search for ' + segmentName + '...">' +
+                    '<div class="typeahead-dropdown"></div>' +
+                '</div>' +
+            '</div>' +
+            '<div class="form-group">' +
+                '<label>Keywords (optional)</label>' +
+                '<input type="text" id="learning-keywords" value="' + escapeHtml((data.keywords || []).join(', ')) + '" placeholder="Enter keywords, comma separated">' +
+                '<small>Description patterns that trigger this mapping</small>' +
+            '</div>';
+        },
+
+        renderVendorDefaultsFields: function(data) {
+            var defaults = data.defaults || {};
+            return '<div class="form-group">' +
+                '<label>Vendor <span class="required">*</span></label>' +
+                '<div class="typeahead-select modal-typeahead" data-lookup="vendors">' +
+                    '<input type="hidden" id="learning-vendor-id" value="' + (data.vendorId || '') + '">' +
+                    '<input type="text" class="typeahead-input" id="learning-vendor-name" value="" placeholder="Search for vendor...">' +
+                    '<div class="typeahead-dropdown"></div>' +
+                '</div>' +
+            '</div>' +
+            '<div class="form-group">' +
+                '<label>Default Department</label>' +
+                '<div class="typeahead-select modal-typeahead" data-lookup="departments">' +
+                    '<input type="hidden" id="learning-default-department" value="' + (defaults.department ? defaults.department.value : '') + '">' +
+                    '<input type="text" class="typeahead-input" placeholder="Search for department...">' +
+                    '<div class="typeahead-dropdown"></div>' +
+                '</div>' +
+            '</div>' +
+            '<div class="form-group">' +
+                '<label>Default Class</label>' +
+                '<div class="typeahead-select modal-typeahead" data-lookup="classes">' +
+                    '<input type="hidden" id="learning-default-class" value="' + (defaults.class ? defaults.class.value : '') + '">' +
+                    '<input type="text" class="typeahead-input" placeholder="Search for class...">' +
+                    '<div class="typeahead-dropdown"></div>' +
+                '</div>' +
+            '</div>' +
+            '<div class="form-group">' +
+                '<label>Default Location</label>' +
+                '<div class="typeahead-select modal-typeahead" data-lookup="locations">' +
+                    '<input type="hidden" id="learning-default-location" value="' + (defaults.location ? defaults.location.value : '') + '">' +
+                    '<input type="text" class="typeahead-input" placeholder="Search for location...">' +
+                    '<div class="typeahead-dropdown"></div>' +
+                '</div>' +
+            '</div>';
+        },
+
+        renderItemMappingFields: function(data) {
+            var mappings = data.mappings || [];
+            var mappingsHtml = mappings.length > 0 ?
+                '<div class="mapping-list">' + mappings.slice(0, 10).map(function(m) {
+                    return '<div class="mapping-item">"' + escapeHtml(m.ocrText || '') + '" &rarr; Item ' + (m.itemId || 'N/A') + '</div>';
+                }).join('') + '</div>' +
+                (mappings.length > 10 ? '<small>...and ' + (mappings.length - 10) + ' more</small>' : '') :
+                '<em>No mappings yet</em>';
+
+            return '<div class="form-group">' +
+                '<label>Vendor (optional)</label>' +
+                '<div class="typeahead-select modal-typeahead" data-lookup="vendors">' +
+                    '<input type="hidden" id="learning-vendor-id" value="' + (data.vendorId || '') + '">' +
+                    '<input type="text" class="typeahead-input" id="learning-vendor-name" value="" placeholder="Leave blank for global mapping">' +
+                    '<div class="typeahead-dropdown"></div>' +
+                '</div>' +
+            '</div>' +
+            '<div class="form-group">' +
+                '<label>Add New Mapping</label>' +
+                '<input type="text" id="learning-item-ocr" placeholder="OCR text to match">' +
+            '</div>' +
+            '<div class="form-group">' +
+                '<label>Map to Item</label>' +
+                '<div class="typeahead-select modal-typeahead" data-lookup="items">' +
+                    '<input type="hidden" id="learning-item-id" value="">' +
+                    '<input type="text" class="typeahead-input" id="learning-item-name" placeholder="Search for item...">' +
+                    '<div class="typeahead-dropdown"></div>' +
+                '</div>' +
+            '</div>' +
+            '<div class="form-group">' +
+                '<label>Existing Mappings</label>' +
+                '<div id="learning-existing-mappings">' + mappingsHtml + '</div>' +
+            '</div>';
+        },
+
+        renderDateFormatFields: function(data) {
+            return '<div class="form-group">' +
+                '<label>Vendor (optional)</label>' +
+                '<div class="typeahead-select modal-typeahead" data-lookup="vendors">' +
+                    '<input type="hidden" id="learning-vendor-id" value="' + (data.vendorId || '') + '">' +
+                    '<input type="text" class="typeahead-input" id="learning-vendor-name" value="" placeholder="Leave blank for global format">' +
+                    '<div class="typeahead-dropdown"></div>' +
+                '</div>' +
+            '</div>' +
+            '<div class="form-group">' +
+                '<label>Date Format <span class="required">*</span></label>' +
+                '<select id="learning-date-format">' +
+                    '<option value="MDY"' + (data.format === 'MDY' ? ' selected' : '') + '>MM/DD/YYYY (US)</option>' +
+                    '<option value="DMY"' + (data.format === 'DMY' ? ' selected' : '') + '>DD/MM/YYYY (International)</option>' +
+                '</select>' +
+            '</div>' +
+            '<div class="form-group">' +
+                '<label>Confidence</label>' +
+                '<input type="number" id="learning-confidence" min="0" max="1" step="0.01" value="' + (data.confidence || 0.85) + '">' +
+            '</div>';
+        },
+
+        renderAmountFormatFields: function(data) {
+            return '<div class="form-group">' +
+                '<label>Vendor (optional)</label>' +
+                '<div class="typeahead-select modal-typeahead" data-lookup="vendors">' +
+                    '<input type="hidden" id="learning-vendor-id" value="' + (data.vendorId || '') + '">' +
+                    '<input type="text" class="typeahead-input" id="learning-vendor-name" value="" placeholder="Leave blank for global format">' +
+                    '<div class="typeahead-dropdown"></div>' +
+                '</div>' +
+            '</div>' +
+            '<div class="form-group">' +
+                '<label>Decimal Separator <span class="required">*</span></label>' +
+                '<select id="learning-amount-format">' +
+                    '<option value="PERIOD"' + (data.format === 'PERIOD' ? ' selected' : '') + '>Period (1,234.56)</option>' +
+                    '<option value="COMMA"' + (data.format === 'COMMA' ? ' selected' : '') + '>Comma (1.234,56)</option>' +
+                '</select>' +
+            '</div>' +
+            '<div class="form-group">' +
+                '<label>Confidence</label>' +
+                '<input type="number" id="learning-confidence" min="0" max="1" step="0.01" value="' + (data.confidence || 0.85) + '">' +
+            '</div>';
+        },
+
+        renderCustomFieldMappingFields: function(data) {
+            var mappings = data.mappings || [];
+            var mappingsHtml = mappings.length > 0 ?
+                '<div class="mapping-list">' + mappings.slice(0, 10).map(function(m) {
+                    return '<div class="mapping-item">"' + escapeHtml(m.sourceLabel || '') + '" &rarr; ' + (m.targetFieldId || 'N/A') + '</div>';
+                }).join('') + '</div>' +
+                (mappings.length > 10 ? '<small>...and ' + (mappings.length - 10) + ' more</small>' : '') :
+                '<em>No mappings yet</em>';
+
+            return '<div class="form-group">' +
+                '<label>Vendor (optional)</label>' +
+                '<div class="typeahead-select modal-typeahead" data-lookup="vendors">' +
+                    '<input type="hidden" id="learning-vendor-id" value="' + (data.vendorId || '') + '">' +
+                    '<input type="text" class="typeahead-input" id="learning-vendor-name" value="" placeholder="Leave blank for global mapping">' +
+                    '<div class="typeahead-dropdown"></div>' +
+                '</div>' +
+            '</div>' +
+            '<div class="form-group">' +
+                '<label>Add New Mapping - Source Label</label>' +
+                '<input type="text" id="learning-cf-source" placeholder="OCR label to match">' +
+            '</div>' +
+            '<div class="form-group">' +
+                '<label>Target Field ID</label>' +
+                '<input type="text" id="learning-cf-target" placeholder="e.g., custbody_po_ref">' +
+            '</div>' +
+            '<div class="form-group">' +
+                '<label>Existing Mappings</label>' +
+                '<div id="learning-existing-cf-mappings">' + mappingsHtml + '</div>' +
+            '</div>';
+        },
+
+        initModalTypeaheads: function(type) {
+            var self = this;
+            var container = el('#learning-form-fields');
+            if (!container) return;
+
+            container.querySelectorAll('.modal-typeahead').forEach(function(wrapper) {
+                var lookupType = wrapper.dataset.lookup;
+                var input = wrapper.querySelector('.typeahead-input');
+                var hiddenInput = wrapper.querySelector('input[type="hidden"]');
+                var dropdown = wrapper.querySelector('.typeahead-dropdown');
+
+                if (!input || !dropdown) return;
+
+                var debounceTimer = null;
+
+                input.addEventListener('input', function() {
+                    var query = this.value.trim();
+
+                    if (!query) {
+                        if (hiddenInput) hiddenInput.value = '';
+                        dropdown.style.display = 'none';
+                        return;
+                    }
+
+                    if (query.length < 2) {
+                        dropdown.style.display = 'none';
+                        return;
+                    }
+
+                    clearTimeout(debounceTimer);
+                    debounceTimer = setTimeout(function() {
+                        self.fetchTypeaheadOptions(lookupType, query, function(options) {
+                            if (options.length === 0) {
+                                dropdown.innerHTML = '<div class="typeahead-no-results">No results found</div>';
+                            } else {
+                                dropdown.innerHTML = options.map(function(opt) {
+                                    return '<div class="typeahead-option" data-value="' + escapeHtml(opt.value) + '" data-text="' + escapeHtml(opt.text) + '">' +
+                                        escapeHtml(opt.text) + '</div>';
+                                }).join('');
+                            }
+                            dropdown.style.display = 'block';
+                        });
+                    }, 300);
+                });
+
+                dropdown.addEventListener('click', function(e) {
+                    var option = e.target.closest('.typeahead-option');
+                    if (option) {
+                        input.value = option.dataset.text;
+                        if (hiddenInput) hiddenInput.value = option.dataset.value;
+                        dropdown.style.display = 'none';
+                    }
+                });
+
+                input.addEventListener('blur', function() {
+                    setTimeout(function() {
+                        dropdown.style.display = 'none';
+                    }, 200);
+                });
+            });
+        },
+
+        saveLearningFromModal: function() {
+            var self = this;
+            var typeSelect = el('#learning-type');
+            var type = typeSelect ? typeSelect.value : '';
+
+            if (!type) {
+                UI.toast('Please select a learning type', 'error');
+                return;
+            }
+
+            var data = this.collectLearningFormData(type);
+            if (!data) return; // Validation failed
+
+            var saveBtn = el('#btn-save-learning');
+            if (saveBtn) {
+                saveBtn.disabled = true;
+                saveBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Saving...';
+            }
+
+            var promise;
+            if (this.editingLearning) {
+                // Update existing
+                promise = API.put('saveLearning', {
+                    id: this.editingLearning.id,
+                    learningData: data
+                });
+            } else {
+                // Create new
+                promise = API.post('createLearning', {
+                    learningType: type,
+                    learningData: data
+                });
+            }
+
+            promise
+                .then(function() {
+                    UI.toast('Learning saved successfully', 'success');
+                    self.closeLearningModal();
+                    self.loadLearnings();
+                    self.loadLearningStats();
+                })
+                .catch(function(err) {
+                    if (saveBtn) {
+                        saveBtn.disabled = false;
+                        saveBtn.innerHTML = '<i class="fas fa-check"></i> Save';
+                    }
+                    UI.toast('Failed to save: ' + (err.message || 'Unknown error'), 'error');
+                });
+        },
+
+        collectLearningFormData: function(type) {
+            var data = {};
+
+            switch (type) {
+                case 'vendor_alias':
+                    var aliasInput = el('#learning-aliases');
+                    var vendorIdInput = el('#learning-vendor-id');
+
+                    if (!aliasInput || !aliasInput.value.trim()) {
+                        UI.toast('Alias text is required', 'error');
+                        return null;
+                    }
+                    if (!vendorIdInput || !vendorIdInput.value) {
+                        UI.toast('Vendor is required', 'error');
+                        return null;
+                    }
+
+                    data.aliases = aliasInput.value.split(',').map(function(a) { return a.trim(); }).filter(Boolean);
+                    data.vendorId = parseInt(vendorIdInput.value, 10);
+                    data.vendorName = el('#learning-vendor-name') ? el('#learning-vendor-name').value : '';
+                    data.confidence = parseFloat(el('#learning-confidence').value) || 0.85;
+                    data.usageCount = this.editingLearning ? (this.editingLearning.data.usageCount || 0) : 0;
+                    break;
+
+                case 'account_mapping':
+                    var keywordsInput = el('#learning-keywords');
+                    var accountIdInput = el('#learning-account-id');
+
+                    if (!keywordsInput || !keywordsInput.value.trim()) {
+                        UI.toast('Keywords are required', 'error');
+                        return null;
+                    }
+                    if (!accountIdInput || !accountIdInput.value) {
+                        UI.toast('Account is required', 'error');
+                        return null;
+                    }
+
+                    data.keywords = keywordsInput.value.split(',').map(function(k) { return k.trim().toLowerCase(); }).filter(Boolean);
+                    data.accountId = accountIdInput.value;
+                    data.vendorId = el('#learning-vendor-id') ? parseInt(el('#learning-vendor-id').value, 10) || null : null;
+                    data.patterns = this.editingLearning ? (this.editingLearning.data.patterns || []) : [];
+                    data.usageCount = this.editingLearning ? (this.editingLearning.data.usageCount || 0) : 0;
+                    break;
+
+                case 'department_mapping':
+                case 'class_mapping':
+                case 'location_mapping':
+                    var segmentIdInput = el('#learning-segment-id');
+                    var vendorIdInputSeg = el('#learning-vendor-id');
+
+                    if (!segmentIdInput || !segmentIdInput.value) {
+                        UI.toast('Segment value is required', 'error');
+                        return null;
+                    }
+
+                    data.segmentId = segmentIdInput.value;
+                    data.vendorId = vendorIdInputSeg ? parseInt(vendorIdInputSeg.value, 10) || null : null;
+                    data.keywords = el('#learning-keywords') ?
+                        el('#learning-keywords').value.split(',').map(function(k) { return k.trim().toLowerCase(); }).filter(Boolean) : [];
+                    data.patterns = this.editingLearning ? (this.editingLearning.data.patterns || []) : [];
+                    data.usageCount = this.editingLearning ? (this.editingLearning.data.usageCount || 0) : 0;
+                    break;
+
+                case 'vendor_defaults':
+                    var vendorIdInputDef = el('#learning-vendor-id');
+
+                    if (!vendorIdInputDef || !vendorIdInputDef.value) {
+                        UI.toast('Vendor is required', 'error');
+                        return null;
+                    }
+
+                    data.vendorId = parseInt(vendorIdInputDef.value, 10);
+                    data.defaults = {};
+
+                    var deptVal = el('#learning-default-department') ? el('#learning-default-department').value : '';
+                    var classVal = el('#learning-default-class') ? el('#learning-default-class').value : '';
+                    var locVal = el('#learning-default-location') ? el('#learning-default-location').value : '';
+
+                    if (deptVal) data.defaults.department = { value: deptVal, count: 1 };
+                    if (classVal) data.defaults.class = { value: classVal, count: 1 };
+                    if (locVal) data.defaults.location = { value: locVal, count: 1 };
+
+                    data.usageCount = this.editingLearning ? (this.editingLearning.data.usageCount || 0) : 0;
+                    break;
+
+                case 'date_format':
+                    var formatInput = el('#learning-date-format');
+
+                    if (!formatInput || !formatInput.value) {
+                        UI.toast('Date format is required', 'error');
+                        return null;
+                    }
+
+                    data.format = formatInput.value;
+                    data.vendorId = el('#learning-vendor-id') ? parseInt(el('#learning-vendor-id').value, 10) || null : null;
+                    data.confidence = parseFloat(el('#learning-confidence').value) || 0.85;
+                    data.sampleCount = this.editingLearning ? (this.editingLearning.data.sampleCount || 0) : 0;
+                    break;
+
+                case 'amount_format':
+                    var amtFormatInput = el('#learning-amount-format');
+
+                    if (!amtFormatInput || !amtFormatInput.value) {
+                        UI.toast('Amount format is required', 'error');
+                        return null;
+                    }
+
+                    data.format = amtFormatInput.value;
+                    data.vendorId = el('#learning-vendor-id') ? parseInt(el('#learning-vendor-id').value, 10) || null : null;
+                    data.confidence = parseFloat(el('#learning-confidence').value) || 0.85;
+                    data.sampleCount = this.editingLearning ? (this.editingLearning.data.sampleCount || 0) : 0;
+                    break;
+
+                case 'item_mapping':
+                    data.vendorId = el('#learning-vendor-id') ? parseInt(el('#learning-vendor-id').value, 10) || null : null;
+                    data.mappings = this.editingLearning ? (this.editingLearning.data.mappings || []) : [];
+
+                    // Add new mapping if provided
+                    var ocrText = el('#learning-item-ocr') ? el('#learning-item-ocr').value.trim() : '';
+                    var itemId = el('#learning-item-id') ? el('#learning-item-id').value : '';
+
+                    if (ocrText && itemId) {
+                        data.mappings.push({
+                            ocrText: ocrText,
+                            normalizedText: ocrText.toLowerCase().replace(/[^a-z0-9\s]/g, ' ').trim(),
+                            itemId: itemId,
+                            usageCount: 1,
+                            confidence: 0.8,
+                            createdAt: new Date().toISOString(),
+                            lastUsed: new Date().toISOString()
+                        });
+                    }
+                    break;
+
+                case 'custom_field_mapping':
+                    data.vendorId = el('#learning-vendor-id') ? parseInt(el('#learning-vendor-id').value, 10) || null : null;
+                    data.mappings = this.editingLearning ? (this.editingLearning.data.mappings || []) : [];
+
+                    // Add new mapping if provided
+                    var sourceLabel = el('#learning-cf-source') ? el('#learning-cf-source').value.trim() : '';
+                    var targetField = el('#learning-cf-target') ? el('#learning-cf-target').value.trim() : '';
+
+                    if (sourceLabel && targetField) {
+                        data.mappings.push({
+                            sourceLabel: sourceLabel,
+                            normalizedLabel: sourceLabel.toLowerCase().replace(/[^a-z0-9\s]/g, ' ').trim(),
+                            targetFieldId: targetField,
+                            usageCount: 1,
+                            confidence: 0.8,
+                            createdAt: new Date().toISOString(),
+                            lastUsed: new Date().toISOString()
+                        });
+                    }
+                    break;
+            }
+
+            data.lastUpdated = new Date().toISOString();
+            return data;
+        },
+
         cleanup: function() {
             this.formConfig = null;
             this.editedConfig = null;
@@ -3533,6 +4528,9 @@
             this.xmlSelections = {};
             this.emailInboxConfig = null;
             this.llmConfig = null;
+            this.learningData = null;
+            this.learningInitialized = false;
+            this.editingLearning = null;
         }
     };
 

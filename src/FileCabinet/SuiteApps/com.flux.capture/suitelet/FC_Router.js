@@ -206,6 +206,12 @@ define([
                 case 'learningStats':
                     result = getLearningStats();
                     break;
+                case 'learnings':
+                    result = getLearnings(context);
+                    break;
+                case 'learning':
+                    result = getLearning(context.id);
+                    break;
                 case 'suggestedAccount':
                     result = getSuggestedAccount(context.vendorId, context.description);
                     break;
@@ -260,6 +266,9 @@ define([
                     break;
                 case 'learn':
                     result = submitCorrection(context);
+                    break;
+                case 'createLearning':
+                    result = createLearning(context);
                     break;
                 case 'testprovider':
                     result = testProviderConnection(context.providerType, context.config);
@@ -324,6 +333,9 @@ define([
                 case 'dashboardPrefs':
                     result = saveDashboardPrefs(context);
                     break;
+                case 'saveLearning':
+                    result = saveLearning(context);
+                    break;
                 default:
                     result = Response.error('INVALID_ACTION', 'Unknown action: ' + action);
             }
@@ -371,6 +383,13 @@ define([
                     break;
                 case 'clear':
                     result = clearCompleted(params);
+                    break;
+                case 'learning':
+                    var learningId = params && (params.id || params.learningId);
+                    if (learningId && typeof learningId === 'string') {
+                        learningId = parseInt(learningId, 10);
+                    }
+                    result = deleteLearning(learningId);
                     break;
                 case 'clearcache':
                     // Clear form layout or datasource cache
@@ -3114,6 +3133,407 @@ define([
             });
         } catch (e) {
             return Response.error('STATS_FAILED', e.message);
+        }
+    }
+
+    /**
+     * Get all learning records with optional filtering
+     * @param {Object} context - Filter parameters
+     * @param {string} context.type - Filter by learning type
+     * @param {string} context.vendorId - Filter by vendor ID
+     * @param {string} context.search - Search in key/data
+     * @param {number} context.page - Page number (1-based)
+     * @param {number} context.limit - Records per page (default 50)
+     */
+    function getLearnings(context) {
+        try {
+            var filterType = context.type || '';
+            var filterVendorId = context.vendorId || '';
+            var searchQuery = context.search || '';
+            var page = parseInt(context.page, 10) || 1;
+            var limit = parseInt(context.limit, 10) || 50;
+            var offset = (page - 1) * limit;
+
+            // Build WHERE conditions
+            var conditions = ["custrecord_flux_cfg_active = 'T'"];
+            var params = [];
+
+            // Only include learning-related types (exclude settings, form_definition, etc.)
+            var learningTypes = [
+                'vendor_alias', 'date_format', 'amount_format', 'account_mapping',
+                'department_mapping', 'class_mapping', 'location_mapping',
+                'vendor_defaults', 'field_pattern', 'item_mapping', 'custom_field_mapping'
+            ];
+
+            if (filterType) {
+                conditions.push("custrecord_flux_cfg_type = ?");
+                params.push(filterType);
+            } else {
+                conditions.push("custrecord_flux_cfg_type IN ('" + learningTypes.join("','") + "')");
+            }
+
+            if (searchQuery) {
+                conditions.push("(LOWER(custrecord_flux_cfg_key) LIKE ? OR LOWER(custrecord_flux_cfg_data) LIKE ?)");
+                var searchPattern = '%' + searchQuery.toLowerCase() + '%';
+                params.push(searchPattern);
+                params.push(searchPattern);
+            }
+
+            // Count total records
+            var countSql = "SELECT COUNT(*) as total FROM customrecord_flux_config WHERE " + conditions.join(' AND ');
+            var countResult = query.runSuiteQL({ query: countSql, params: params });
+            var total = countResult.results && countResult.results.length > 0 ? countResult.results[0].values[0] : 0;
+
+            // Get paginated records
+            var dataSql = "SELECT id, custrecord_flux_cfg_type, custrecord_flux_cfg_key, " +
+                          "custrecord_flux_cfg_data, custrecord_flux_cfg_modified, custrecord_flux_cfg_source " +
+                          "FROM customrecord_flux_config " +
+                          "WHERE " + conditions.join(' AND ') + " " +
+                          "ORDER BY custrecord_flux_cfg_modified DESC NULLS LAST " +
+                          "OFFSET " + offset + " ROWS FETCH NEXT " + limit + " ROWS ONLY";
+
+            var results = query.runSuiteQL({ query: dataSql, params: params });
+            var learnings = [];
+
+            if (results.results) {
+                results.results.forEach(function(row) {
+                    var data = {};
+                    try {
+                        data = JSON.parse(row.values[3] || '{}');
+                    } catch (e) {
+                        data = { raw: row.values[3] };
+                    }
+
+                    // Extract display values based on type
+                    var type = row.values[1];
+                    var displayInfo = extractLearningDisplayInfo(type, row.values[2], data);
+
+                    learnings.push({
+                        id: row.values[0],
+                        type: type,
+                        key: row.values[2],
+                        data: data,
+                        modified: row.values[4],
+                        source: row.values[5],
+                        displayKey: displayInfo.key,
+                        displayValue: displayInfo.value,
+                        vendorId: data.vendorId || null,
+                        vendorName: data.vendorName || null,
+                        usageCount: data.usageCount || 0,
+                        confidence: data.confidence || null
+                    });
+                });
+            }
+
+            // Filter by vendorId if specified (post-filter since vendorId is in JSON)
+            if (filterVendorId) {
+                var vendorIdInt = parseInt(filterVendorId, 10);
+                learnings = learnings.filter(function(l) {
+                    return l.vendorId === vendorIdInt;
+                });
+                total = learnings.length;
+            }
+
+            return Response.success({
+                learnings: learnings,
+                pagination: {
+                    page: page,
+                    limit: limit,
+                    total: total,
+                    totalPages: Math.ceil(total / limit)
+                }
+            });
+        } catch (e) {
+            log.error('getLearnings', e.message);
+            return Response.error('GET_LEARNINGS_FAILED', e.message);
+        }
+    }
+
+    /**
+     * Extract display-friendly info from learning data
+     */
+    function extractLearningDisplayInfo(type, key, data) {
+        var displayKey = key;
+        var displayValue = '';
+
+        switch (type) {
+            case 'vendor_alias':
+                displayKey = data.aliases ? data.aliases.join(', ') : key;
+                displayValue = data.vendorName || ('Vendor ID: ' + data.vendorId);
+                break;
+            case 'account_mapping':
+                displayKey = data.keywords ? data.keywords.join(', ') : key;
+                displayValue = 'Account ID: ' + (data.accountId || 'N/A');
+                break;
+            case 'department_mapping':
+            case 'class_mapping':
+            case 'location_mapping':
+                displayKey = data.keywords ? data.keywords.join(', ') : key;
+                displayValue = 'Segment ID: ' + (data.segmentId || 'N/A');
+                break;
+            case 'vendor_defaults':
+                displayKey = 'Vendor: ' + (data.vendorId || 'N/A');
+                var defaults = [];
+                if (data.defaults) {
+                    Object.keys(data.defaults).forEach(function(k) {
+                        defaults.push(k + ': ' + data.defaults[k].value);
+                    });
+                }
+                displayValue = defaults.join(', ') || 'No defaults';
+                break;
+            case 'item_mapping':
+                var mappingCount = data.mappings ? data.mappings.length : 0;
+                displayKey = 'Vendor: ' + (data.vendorId || 'Global');
+                displayValue = mappingCount + ' item mapping(s)';
+                break;
+            case 'date_format':
+                displayKey = 'Vendor: ' + (data.vendorId || 'Global');
+                displayValue = 'Format: ' + (data.format || 'N/A');
+                break;
+            case 'amount_format':
+                displayKey = 'Vendor: ' + (data.vendorId || 'Global');
+                displayValue = 'Decimal: ' + (data.format === 'PERIOD' ? 'Period (1,234.56)' : 'Comma (1.234,56)');
+                break;
+            case 'custom_field_mapping':
+                var cfMappingCount = data.mappings ? data.mappings.length : 0;
+                displayKey = 'Vendor: ' + (data.vendorId || 'Global');
+                displayValue = cfMappingCount + ' field mapping(s)';
+                break;
+            default:
+                displayValue = JSON.stringify(data).substring(0, 100);
+        }
+
+        return { key: displayKey, value: displayValue };
+    }
+
+    /**
+     * Get a single learning record by ID
+     */
+    function getLearning(learningId) {
+        if (!learningId) {
+            return Response.error('MISSING_PARAM', 'Learning ID is required');
+        }
+
+        try {
+            var rec = record.load({
+                type: 'customrecord_flux_config',
+                id: learningId
+            });
+
+            var data = {};
+            try {
+                data = JSON.parse(rec.getValue('custrecord_flux_cfg_data') || '{}');
+            } catch (e) {
+                data = {};
+            }
+
+            return Response.success({
+                id: learningId,
+                type: rec.getValue('custrecord_flux_cfg_type'),
+                key: rec.getValue('custrecord_flux_cfg_key'),
+                data: data,
+                active: rec.getValue('custrecord_flux_cfg_active'),
+                source: rec.getValue('custrecord_flux_cfg_source'),
+                modified: rec.getValue('custrecord_flux_cfg_modified')
+            });
+        } catch (e) {
+            return Response.error('GET_LEARNING_FAILED', e.message);
+        }
+    }
+
+    /**
+     * Create a new learning record
+     */
+    function createLearning(context) {
+        var learningType = context.learningType;
+        var learningData = context.learningData;
+
+        if (!learningType) {
+            return Response.error('MISSING_PARAM', 'Learning type is required');
+        }
+
+        if (!learningData) {
+            return Response.error('MISSING_PARAM', 'Learning data is required');
+        }
+
+        try {
+            // Parse data if it's a string
+            var data = typeof learningData === 'string' ? JSON.parse(learningData) : learningData;
+
+            // Generate key based on type
+            var configKey = generateLearningKey(learningType, data);
+
+            // Check if record with same type+key already exists
+            var existingSearch = query.runSuiteQL({
+                query: "SELECT id FROM customrecord_flux_config WHERE custrecord_flux_cfg_type = ? AND custrecord_flux_cfg_key = ?",
+                params: [learningType, configKey]
+            });
+
+            if (existingSearch.results && existingSearch.results.length > 0) {
+                return Response.error('DUPLICATE_KEY', 'A learning with this type and key already exists. Use update instead.');
+            }
+
+            // Create new record
+            var rec = record.create({ type: 'customrecord_flux_config' });
+            rec.setValue('name', learningType + '_' + configKey.substring(0, 30));
+            rec.setValue('custrecord_flux_cfg_type', learningType);
+            rec.setValue('custrecord_flux_cfg_key', configKey);
+            rec.setValue('custrecord_flux_cfg_data', JSON.stringify(data));
+            rec.setValue('custrecord_flux_cfg_active', true);
+            rec.setValue('custrecord_flux_cfg_modified', new Date());
+            rec.setValue('custrecord_flux_cfg_modified_by', runtime.getCurrentUser().id);
+            rec.setValue('custrecord_flux_cfg_source', 'manual');
+
+            var savedId = rec.save();
+
+            log.audit('createLearning', {
+                id: savedId,
+                type: learningType,
+                key: configKey
+            });
+
+            return Response.success({
+                id: savedId,
+                type: learningType,
+                key: configKey,
+                message: 'Learning created successfully'
+            });
+        } catch (e) {
+            log.error('createLearning', e.message);
+            return Response.error('CREATE_LEARNING_FAILED', e.message);
+        }
+    }
+
+    /**
+     * Generate a key for a learning record based on its type and data
+     */
+    function generateLearningKey(type, data) {
+        switch (type) {
+            case 'vendor_alias':
+                var aliasText = (data.aliases && data.aliases[0]) || data.aliasText || '';
+                return 'alias_' + hashString(aliasText.toLowerCase());
+            case 'account_mapping':
+                var keyword = (data.keywords && data.keywords[0]) || 'unknown';
+                return data.vendorId ? 'vendor_' + data.vendorId + '_' + keyword : 'global_' + keyword;
+            case 'department_mapping':
+            case 'class_mapping':
+            case 'location_mapping':
+                return data.vendorId ? 'vendor_' + data.vendorId : 'global_default';
+            case 'vendor_defaults':
+                return 'vendor_' + (data.vendorId || 'unknown');
+            case 'item_mapping':
+            case 'custom_field_mapping':
+                return data.vendorId ? 'vendor_' + data.vendorId : 'global';
+            case 'date_format':
+            case 'amount_format':
+                return data.vendorId ? 'vendor_' + data.vendorId : 'global_' + type;
+            default:
+                return 'manual_' + Date.now();
+        }
+    }
+
+    /**
+     * Simple string hash for generating keys
+     */
+    function hashString(str) {
+        var hash = 0;
+        for (var i = 0; i < str.length; i++) {
+            var char = str.charCodeAt(i);
+            hash = ((hash << 5) - hash) + char;
+            hash = hash & hash;
+        }
+        return Math.abs(hash).toString(36);
+    }
+
+    /**
+     * Update an existing learning record
+     */
+    function saveLearning(context) {
+        var learningId = context.id || context.learningId;
+        var learningData = context.learningData;
+
+        if (!learningId) {
+            return Response.error('MISSING_PARAM', 'Learning ID is required');
+        }
+
+        if (!learningData) {
+            return Response.error('MISSING_PARAM', 'Learning data is required');
+        }
+
+        try {
+            var data = typeof learningData === 'string' ? JSON.parse(learningData) : learningData;
+
+            var rec = record.load({
+                type: 'customrecord_flux_config',
+                id: learningId
+            });
+
+            // Optionally update the key if type-specific data changed
+            var currentType = rec.getValue('custrecord_flux_cfg_type');
+            var newKey = context.newKey || generateLearningKey(currentType, data);
+
+            rec.setValue('custrecord_flux_cfg_key', newKey);
+            rec.setValue('custrecord_flux_cfg_data', JSON.stringify(data));
+            rec.setValue('custrecord_flux_cfg_modified', new Date());
+            rec.setValue('custrecord_flux_cfg_modified_by', runtime.getCurrentUser().id);
+
+            rec.save();
+
+            log.audit('saveLearning', {
+                id: learningId,
+                type: currentType,
+                key: newKey
+            });
+
+            return Response.success({
+                id: learningId,
+                type: currentType,
+                key: newKey,
+                message: 'Learning updated successfully'
+            });
+        } catch (e) {
+            log.error('saveLearning', e.message);
+            return Response.error('SAVE_LEARNING_FAILED', e.message);
+        }
+    }
+
+    /**
+     * Delete a learning record
+     */
+    function deleteLearning(learningId) {
+        if (!learningId) {
+            return Response.error('MISSING_PARAM', 'Learning ID is required');
+        }
+
+        try {
+            // Load first to log what we're deleting
+            var rec = record.load({
+                type: 'customrecord_flux_config',
+                id: learningId
+            });
+
+            var type = rec.getValue('custrecord_flux_cfg_type');
+            var key = rec.getValue('custrecord_flux_cfg_key');
+
+            // Delete the record
+            record.delete({
+                type: 'customrecord_flux_config',
+                id: learningId
+            });
+
+            log.audit('deleteLearning', {
+                id: learningId,
+                type: type,
+                key: key
+            });
+
+            return Response.success({
+                id: learningId,
+                message: 'Learning deleted successfully'
+            });
+        } catch (e) {
+            log.error('deleteLearning', e.message);
+            return Response.error('DELETE_LEARNING_FAILED', e.message);
         }
     }
 
