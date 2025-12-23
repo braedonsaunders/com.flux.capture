@@ -539,11 +539,15 @@ ${this._buildLineItemEnhancementSection(lineItemOptions, vendorHistory)}
 
         /**
          * Prepare extraction summary for the prompt
+         * v4.2: Include _originalIndex for each line item so AI can reference them correctly
+         * v4.2: Increased limit from 20 to 50 items, and track if truncated
          * @private
          */
         _prepareExtractionSummary(result) {
             const extraction = result.extraction || result;
             const fields = extraction.fields || {};
+            const allLineItems = extraction.lineItems || [];
+            const MAX_LINE_ITEMS = 50; // v4.2: Increased from 20
 
             return {
                 vendorName: fields.vendorName || null,
@@ -556,12 +560,17 @@ ${this._buildLineItemEnhancementSection(lineItemOptions, vendorHistory)}
                 taxAmount: fields.taxAmount || null,
                 totalAmount: fields.totalAmount || null,
                 currency: fields.currency || 'USD',
-                lineItems: (extraction.lineItems || []).slice(0, 20).map(item => ({
+                // v4.2: Include _originalIndex so AI knows which item to reference
+                lineItems: allLineItems.slice(0, MAX_LINE_ITEMS).map((item, index) => ({
+                    _originalIndex: index, // v4.2: Critical for proper item tracking
                     description: item.description || item.memo,
                     quantity: item.quantity,
                     unitPrice: item.unitPrice || item.rate,
                     amount: item.amount
                 })),
+                // v4.2: Track total count so AI knows if there are more items
+                lineItemsTotal: allLineItems.length,
+                lineItemsTruncated: allLineItems.length > MAX_LINE_ITEMS,
                 confidence: extraction.confidence?.overall || null
             };
         }
@@ -591,13 +600,20 @@ CAPABILITIES:
 - DELETE line items that don't exist in the PDF (OCR hallucinations)
 - KEEP line items that are correct
 
-CRITICAL REQUIREMENTS:
-1. Extract ALL line items visible in the PDF - be thorough
-2. Include description/memo, quantity, unit price, and amount for each line
-3. Ensure line item amounts match what's in the document
-4. Mark each line item with _action: "keep", "add", "modify", or "delete"
-5. For modified items, include _originalIndex to indicate which extracted item was changed
-6. For deleted items, include _originalIndex and set other fields to null
+CRITICAL REQUIREMENTS - READ CAREFULLY:
+1. Each extracted line item has an "_originalIndex" field - this is its position in our system
+2. When you return line items, you MUST include "_originalIndex" to reference existing items
+3. For KEEP actions: copy the "_originalIndex" from the extracted data exactly
+4. For MODIFY actions: copy the "_originalIndex" from the item you are modifying
+5. For DELETE actions: copy the "_originalIndex" from the item you are deleting
+6. For ADD actions: do NOT include "_originalIndex" (these are new items)
+7. Mark each line item with _action: "keep", "add", "modify", or "delete"
+8. Extract ALL line items visible in the PDF - be thorough
+9. Include description/memo, quantity, unit price, and amount for each line
+10. If the extracted data shows "lineItemsTruncated: true", there are more items not shown
+
+IMPORTANT: Every existing line item you want to KEEP or MODIFY must have the correct _originalIndex.
+If you omit an item from your response, it may be lost. Return ALL items with appropriate actions.
 
 `;
 
@@ -761,7 +777,8 @@ Do not include account, department, class, or location fields in line items.
                 added: [],
                 modified: [],
                 deleted: [],
-                kept: []
+                kept: [],
+                preserved: [] // v4.2: Track items preserved from original (not mentioned by AI)
             };
             const aiLineItems = verificationResult.lineItems || verificationResult.rawResponse?.lineItems || null;
 
@@ -769,113 +786,202 @@ Do not include account, department, class, or location fields in line items.
                 const originalLineItems = extraction.lineItems || [];
                 const enhancedLineItems = [];
 
-                for (const aiItem of aiLineItems) {
-                    const action = aiItem._action || 'keep';
-                    const confidence = aiItem.confidence || 0;
+                // v4.2 FIX: Track which original items have been processed by AI
+                // This prevents losing items that AI didn't mention
+                const processedOriginalIndices = new Set();
+                const deletedOriginalIndices = new Set();
 
-                    if (action === 'delete') {
-                        // Track deletion (don't add to enhanced list)
-                        if (aiItem._originalIndex !== null && aiItem._originalIndex !== undefined) {
-                            const deletedItem = originalLineItems[aiItem._originalIndex];
-                            if (deletedItem) {
-                                lineItemChanges.deleted.push({
-                                    originalIndex: aiItem._originalIndex,
-                                    description: deletedItem.description || deletedItem.memo,
-                                    amount: deletedItem.amount,
-                                    reason: aiItem._reason || 'AI detected this line item does not exist in document'
-                                });
-                            }
-                        }
-                        log.audit('GeminiVerifier', `Deleted line item at index ${aiItem._originalIndex}: ${aiItem._reason || 'not in document'}`);
+                // v4.2 FIX: Log counts for debugging
+                log.audit('GeminiVerifier', `Line item enhancement starting: ${originalLineItems.length} original items, ${aiLineItems.length} AI items`);
 
-                    } else if (action === 'add' && confidence >= this.autoApplyThreshold) {
-                        // Add new line item
-                        const newItem = this._buildLineItem(aiItem);
-                        newItem._source = 'ai_enhanced';
-                        newItem._aiAdded = true;
-                        enhancedLineItems.push(newItem);
-                        lineItemChanges.added.push({
-                            description: newItem.description || newItem.memo,
-                            amount: newItem.amount,
-                            confidence: confidence,
-                            reason: aiItem._reason || 'AI detected missing line item'
-                        });
-                        log.audit('GeminiVerifier', `Added line item: ${newItem.description || newItem.memo} = $${newItem.amount}`);
+                // v4.2 FIX: Validate AI returned proper data structure
+                const validAiItems = aiLineItems.filter(item =>
+                    item && typeof item === 'object' &&
+                    (item._action || item.description || item.amount !== undefined)
+                );
 
-                    } else if (action === 'modify' && confidence >= this.autoApplyThreshold) {
-                        // Modify existing line item
-                        const originalIndex = aiItem._originalIndex;
-                        const originalItem = originalIndex !== null && originalIndex !== undefined
-                            ? originalLineItems[originalIndex] : null;
-                        const modifiedItem = this._buildLineItem(aiItem, originalItem);
-                        modifiedItem._source = 'ai_enhanced';
-                        modifiedItem._aiModified = true;
-                        modifiedItem._originalIndex = originalIndex;
-                        enhancedLineItems.push(modifiedItem);
-                        lineItemChanges.modified.push({
-                            originalIndex: originalIndex,
-                            original: originalItem ? {
-                                description: originalItem.description || originalItem.memo,
-                                amount: originalItem.amount
-                            } : null,
-                            modified: {
-                                description: modifiedItem.description || modifiedItem.memo,
-                                amount: modifiedItem.amount
-                            },
-                            confidence: confidence,
-                            reason: aiItem._reason || 'AI corrected line item values'
-                        });
-                        log.audit('GeminiVerifier', `Modified line item at index ${originalIndex}`);
-
-                    } else if (action === 'keep') {
-                        // Keep original line item (possibly with field suggestions)
-                        const originalIndex = aiItem._originalIndex;
-                        const originalItem = originalIndex !== null && originalIndex !== undefined
-                            ? originalLineItems[originalIndex] : null;
-
-                        if (originalItem) {
-                            const keptItem = { ...originalItem };
-                            // Apply field suggestions (account, department, etc.) if guessing is enabled
-                            if (this.guessAccounts && aiItem.account && confidence >= 0.7) {
-                                keptItem.account = aiItem.account;
-                                keptItem._accountSuggested = true;
-                            }
-                            if (this.guessDepartments && aiItem.department && confidence >= 0.7) {
-                                keptItem.department = aiItem.department;
-                                keptItem._departmentSuggested = true;
-                            }
-                            if (this.guessClasses && aiItem.class && confidence >= 0.7) {
-                                keptItem.class = aiItem.class;
-                                keptItem._classSuggested = true;
-                            }
-                            if (this.guessLocations && aiItem.location && confidence >= 0.7) {
-                                keptItem.location = aiItem.location;
-                                keptItem._locationSuggested = true;
-                            }
-                            enhancedLineItems.push(keptItem);
-                            lineItemChanges.kept.push({
-                                originalIndex: originalIndex,
-                                description: keptItem.description || keptItem.memo,
-                                suggestedFields: {
-                                    account: keptItem._accountSuggested ? keptItem.account : null,
-                                    department: keptItem._departmentSuggested ? keptItem.department : null,
-                                    class: keptItem._classSuggested ? keptItem.class : null,
-                                    location: keptItem._locationSuggested ? keptItem.location : null
-                                }
-                            });
-                        }
-                    } else {
-                        // Low confidence add/modify - keep original if exists, otherwise skip
-                        const originalIndex = aiItem._originalIndex;
-                        if (originalIndex !== null && originalIndex !== undefined && originalLineItems[originalIndex]) {
-                            enhancedLineItems.push({ ...originalLineItems[originalIndex] });
-                        }
-                    }
+                if (validAiItems.length !== aiLineItems.length) {
+                    log.audit('GeminiVerifier', `Filtered ${aiLineItems.length - validAiItems.length} malformed AI line items`);
                 }
 
-                // Replace line items with enhanced version
-                extraction.lineItems = enhancedLineItems;
-                log.audit('GeminiVerifier', `Line items enhanced: ${lineItemChanges.added.length} added, ${lineItemChanges.modified.length} modified, ${lineItemChanges.deleted.length} deleted`);
+                // v4.2 FIX: Safety check - if AI returns empty/invalid array, preserve original items
+                if (validAiItems.length === 0 && originalLineItems.length > 0) {
+                    log.audit('GeminiVerifier', `AI returned no valid line items - preserving ${originalLineItems.length} original items`);
+                    // Don't process - keep original line items as-is
+                } else {
+                    // Use validAiItems instead of aiLineItems for processing
+                    for (const aiItem of validAiItems) {
+                        const action = aiItem._action || 'keep';
+                        const confidence = aiItem.confidence || 0;
+
+                        if (action === 'delete') {
+                            // Track deletion (don't add to enhanced list)
+                            if (aiItem._originalIndex !== null && aiItem._originalIndex !== undefined) {
+                                const deletedItem = originalLineItems[aiItem._originalIndex];
+                                if (deletedItem) {
+                                    // v4.2: Only delete if confidence is high enough
+                                    if (confidence >= this.autoApplyThreshold) {
+                                        deletedOriginalIndices.add(aiItem._originalIndex);
+                                        processedOriginalIndices.add(aiItem._originalIndex);
+                                        lineItemChanges.deleted.push({
+                                            originalIndex: aiItem._originalIndex,
+                                            description: deletedItem.description || deletedItem.memo,
+                                            amount: deletedItem.amount,
+                                            reason: aiItem._reason || 'AI detected this line item does not exist in document'
+                                        });
+                                        log.audit('GeminiVerifier', `Deleted line item at index ${aiItem._originalIndex}: ${aiItem._reason || 'not in document'}`);
+                                    } else {
+                                        // Low confidence delete - keep the original item
+                                        enhancedLineItems.push({ ...deletedItem });
+                                        processedOriginalIndices.add(aiItem._originalIndex);
+                                        log.audit('GeminiVerifier', `Kept line item at index ${aiItem._originalIndex} (delete confidence ${confidence} below threshold)`);
+                                    }
+                                }
+                            }
+
+                        } else if (action === 'add' && confidence >= this.autoApplyThreshold) {
+                            // Add new line item
+                            const newItem = this._buildLineItem(aiItem);
+                            newItem._source = 'ai_enhanced';
+                            newItem._aiAdded = true;
+                            enhancedLineItems.push(newItem);
+                            lineItemChanges.added.push({
+                                description: newItem.description || newItem.memo,
+                                amount: newItem.amount,
+                                confidence: confidence,
+                                reason: aiItem._reason || 'AI detected missing line item'
+                            });
+                            log.audit('GeminiVerifier', `Added line item: ${newItem.description || newItem.memo} = $${newItem.amount}`);
+
+                        } else if (action === 'modify' && confidence >= this.autoApplyThreshold) {
+                            // Modify existing line item
+                            const originalIndex = aiItem._originalIndex;
+                            const originalItem = originalIndex !== null && originalIndex !== undefined
+                                ? originalLineItems[originalIndex] : null;
+                            const modifiedItem = this._buildLineItem(aiItem, originalItem);
+                            modifiedItem._source = 'ai_enhanced';
+                            modifiedItem._aiModified = true;
+                            modifiedItem._originalIndex = originalIndex;
+                            enhancedLineItems.push(modifiedItem);
+                            if (originalIndex !== null && originalIndex !== undefined) {
+                                processedOriginalIndices.add(originalIndex);
+                            }
+                            lineItemChanges.modified.push({
+                                originalIndex: originalIndex,
+                                original: originalItem ? {
+                                    description: originalItem.description || originalItem.memo,
+                                    amount: originalItem.amount
+                                } : null,
+                                modified: {
+                                    description: modifiedItem.description || modifiedItem.memo,
+                                    amount: modifiedItem.amount
+                                },
+                                confidence: confidence,
+                                reason: aiItem._reason || 'AI corrected line item values'
+                            });
+                            log.audit('GeminiVerifier', `Modified line item at index ${originalIndex}`);
+
+                        } else if (action === 'keep') {
+                            // Keep original line item (possibly with field suggestions)
+                            const originalIndex = aiItem._originalIndex;
+                            const originalItem = originalIndex !== null && originalIndex !== undefined
+                                ? originalLineItems[originalIndex] : null;
+
+                            if (originalItem) {
+                                const keptItem = { ...originalItem };
+                                // Apply field suggestions (account, department, etc.) if guessing is enabled
+                                if (this.guessAccounts && aiItem.account && confidence >= 0.7) {
+                                    keptItem.account = aiItem.account;
+                                    keptItem._accountSuggested = true;
+                                }
+                                if (this.guessDepartments && aiItem.department && confidence >= 0.7) {
+                                    keptItem.department = aiItem.department;
+                                    keptItem._departmentSuggested = true;
+                                }
+                                if (this.guessClasses && aiItem.class && confidence >= 0.7) {
+                                    keptItem.class = aiItem.class;
+                                    keptItem._classSuggested = true;
+                                }
+                                if (this.guessLocations && aiItem.location && confidence >= 0.7) {
+                                    keptItem.location = aiItem.location;
+                                    keptItem._locationSuggested = true;
+                                }
+                                enhancedLineItems.push(keptItem);
+                                processedOriginalIndices.add(originalIndex);
+                                lineItemChanges.kept.push({
+                                    originalIndex: originalIndex,
+                                    description: keptItem.description || keptItem.memo,
+                                    suggestedFields: {
+                                        account: keptItem._accountSuggested ? keptItem.account : null,
+                                        department: keptItem._departmentSuggested ? keptItem.department : null,
+                                        class: keptItem._classSuggested ? keptItem.class : null,
+                                        location: keptItem._locationSuggested ? keptItem.location : null
+                                    }
+                                });
+                            } else {
+                                // v4.2 FIX: AI said "keep" but didn't provide valid _originalIndex
+                                // This likely means AI is describing an item it found - treat as potential add
+                                if (aiItem.description || aiItem.amount !== null) {
+                                    const newItem = this._buildLineItem(aiItem);
+                                    newItem._source = 'ai_keep_no_index';
+                                    // Only add if it has meaningful content
+                                    if ((newItem.description && newItem.description.length > 0) || newItem.amount > 0) {
+                                        enhancedLineItems.push(newItem);
+                                        log.audit('GeminiVerifier', `Added item from "keep" action without index: ${newItem.description || newItem.memo}`);
+                                    }
+                                }
+                            }
+                        } else {
+                            // Low confidence add/modify - keep original if exists, otherwise try to use AI data
+                            const originalIndex = aiItem._originalIndex;
+                            if (originalIndex !== null && originalIndex !== undefined && originalLineItems[originalIndex]) {
+                                enhancedLineItems.push({ ...originalLineItems[originalIndex] });
+                                processedOriginalIndices.add(originalIndex);
+                            } else if (action === 'add' && aiItem.description) {
+                                // v4.2 FIX: Low confidence add - still include but mark for review
+                                const newItem = this._buildLineItem(aiItem);
+                                newItem._source = 'ai_low_confidence';
+                                newItem._needsReview = true;
+                                enhancedLineItems.push(newItem);
+                                log.audit('GeminiVerifier', `Added low-confidence item for review: ${newItem.description || newItem.memo}`);
+                            }
+                        }
+                    }
+
+                    // v4.2 FIX: CRITICAL - Preserve any original items that AI didn't mention
+                    // This prevents losing line items when AI returns incomplete data
+                    for (let i = 0; i < originalLineItems.length; i++) {
+                        if (!processedOriginalIndices.has(i) && !deletedOriginalIndices.has(i)) {
+                            const preservedItem = { ...originalLineItems[i] };
+                            preservedItem._preserved = true; // Mark as preserved from original
+                            enhancedLineItems.push(preservedItem);
+                            lineItemChanges.preserved.push({
+                                originalIndex: i,
+                                description: preservedItem.description || preservedItem.memo,
+                                amount: preservedItem.amount,
+                                reason: 'AI did not mention this item - preserved from original extraction'
+                            });
+                            log.audit('GeminiVerifier', `Preserved unmentioned item at index ${i}: ${preservedItem.description || preservedItem.memo}`);
+                        }
+                    }
+
+                    // v4.2 FIX: Final safety check - only replace if we have at least as many items
+                    // or if deletions explain the difference
+                    const expectedMinItems = originalLineItems.length - deletedOriginalIndices.size;
+                    if (enhancedLineItems.length >= expectedMinItems || enhancedLineItems.length >= originalLineItems.length) {
+                        extraction.lineItems = enhancedLineItems;
+                        log.audit('GeminiVerifier', `Line items enhanced: ${lineItemChanges.added.length} added, ${lineItemChanges.modified.length} modified, ${lineItemChanges.deleted.length} deleted, ${lineItemChanges.preserved.length} preserved`);
+                    } else {
+                        // Something went wrong - AI lost items. Keep original to be safe.
+                        log.audit('GeminiVerifier', `Safety check failed: enhanced has ${enhancedLineItems.length} items, expected at least ${expectedMinItems}. Keeping original ${originalLineItems.length} items.`);
+                        lineItemChanges.added = [];
+                        lineItemChanges.modified = [];
+                        lineItemChanges.deleted = [];
+                        lineItemChanges.kept = [];
+                        lineItemChanges.preserved = [];
+                        // Don't modify extraction.lineItems - keep original
+                    }
+                }
             }
 
             // Get unified alerts from AI (consolidates system alerts + AI findings)
