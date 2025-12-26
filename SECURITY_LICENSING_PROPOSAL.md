@@ -1,1216 +1,812 @@
-# Flux Capture - Security & Licensing Integration Proposal
+# Flux Capture SuiteApp - License Integration & Hardening Proposal
 
-> **Purpose**: This document proposes a comprehensive security architecture for integrating license verification into Flux Capture, with hardening measures to prevent bypass, piracy, and unauthorized use.
-
----
-
-## Executive Summary
-
-The current `AUTHENTICATION_INTEGRATION_GUIDE.md` provides the foundation for license verification, but lacks security hardening. This proposal addresses:
-
-1. **Server-side hardening** - Secure the license API against abuse
-2. **Client-side protection** - Prevent tampering and bypass in the SuiteApp
-3. **Multi-layer verification** - Defense in depth approach
-4. **Runtime integrity checks** - Detect and respond to tampering
-5. **Monitoring & analytics** - Track suspicious behavior
+> **Purpose**: Make the Flux Capture SuiteApp bulletproof against license bypass by integrating with the Flux Platform license API at `gantry.financial`.
 
 ---
 
-## Table of Contents
+## The Challenge
 
-1. [Current Vulnerabilities](#1-current-vulnerabilities)
-2. [Proposed Security Architecture](#2-proposed-security-architecture)
-3. [Server-Side Hardening](#3-server-side-hardening)
-4. [Client-Side Protection](#4-client-side-protection)
-5. [License Verification Implementation](#5-license-verification-implementation)
-6. [Anti-Tampering Measures](#6-anti-tampering-measures)
-7. [Monitoring & Alerting](#7-monitoring--alerting)
-8. [Implementation Plan](#8-implementation-plan)
+SuiteApps run inside NetSuite where:
+- Admins can view/edit SuiteScript files
+- Code is interpreted JavaScript (not compiled)
+- Someone could try to comment out license checks
+- Network calls could be intercepted/mocked
 
----
-
-## 1. Current Vulnerabilities
-
-### 1.1 API-Level Vulnerabilities
-
-| Vulnerability | Risk Level | Description |
-|---------------|------------|-------------|
-| **Unauthenticated API** | HIGH | `/api/v1/license-check` requires no authentication - anyone can probe any account |
-| **No request signing** | HIGH | Requests can be forged or replayed |
-| **No rate limiting** | MEDIUM | Vulnerable to enumeration attacks |
-| **Predictable license format** | LOW | `GF-XXXX-XXXX-XXXX-XXXX` could theoretically be brute-forced |
-
-### 1.2 Client-Side Vulnerabilities
-
-| Vulnerability | Risk Level | Description |
-|---------------|------------|-------------|
-| **No license check in code** | CRITICAL | License validation is documented but NOT implemented |
-| **Plain response handling** | HIGH | `valid: true` response can be spoofed locally |
-| **No code integrity checks** | HIGH | SuiteScript files can be modified |
-| **Offline exploitation** | MEDIUM | 7-day grace period can be exploited with time manipulation |
-| **Cache manipulation** | MEDIUM | Cached license can be tampered with |
-
-### 1.3 Business Logic Vulnerabilities
-
-| Vulnerability | Risk Level | Description |
-|---------------|------------|-------------|
-| **Module array spoofing** | HIGH | Client could inject modules into cached response |
-| **Tier escalation** | HIGH | No server-side enforcement at feature level |
-| **License sharing** | MEDIUM | Same license can be used across unlimited instances |
+**Goal**: Make bypassing the license check so difficult and pervasive that it's impractical - even for someone with full code access.
 
 ---
 
-## 2. Proposed Security Architecture
+## Strategy: Defense in Depth
 
-### 2.1 Defense in Depth Model
+We use multiple overlapping techniques so disabling one doesn't bypass protection:
 
 ```
-┌─────────────────────────────────────────────────────────────────────────┐
-│                         LAYER 1: API GATEWAY                            │
-│  • Request signing with HMAC                                            │
-│  • Rate limiting per account/IP                                         │
-│  • Request fingerprinting                                               │
-└─────────────────────────────────────────────────────────────────────────┘
-                                    │
-┌─────────────────────────────────────────────────────────────────────────┐
-│                       LAYER 2: LICENSE SERVER                           │
-│  • Signed license tokens (JWT)                                          │
-│  • Device binding                                                       │
-│  • Usage tracking & limits                                              │
-└─────────────────────────────────────────────────────────────────────────┘
-                                    │
-┌─────────────────────────────────────────────────────────────────────────┐
-│                      LAYER 3: CLIENT VERIFICATION                       │
-│  • Token signature validation                                           │
-│  • Code integrity checks                                                │
-│  • Runtime tamper detection                                             │
-└─────────────────────────────────────────────────────────────────────────┘
-                                    │
-┌─────────────────────────────────────────────────────────────────────────┐
-│                       LAYER 4: FEATURE GATING                           │
-│  • Server-side feature enforcement                                      │
-│  • Module-level access control                                          │
-│  • Usage metering                                                       │
-└─────────────────────────────────────────────────────────────────────────┘
-```
-
-### 2.2 Core Security Principles
-
-1. **Zero Trust Client** - Never trust client-side validations alone
-2. **Cryptographic Verification** - Use signatures, not plain booleans
-3. **Server-Side Enforcement** - Critical features gated at API level
-4. **Behavioral Detection** - Monitor for anomalous usage patterns
-5. **Graceful Degradation** - Fail closed, not open
-
----
-
-## 3. Server-Side Hardening
-
-### 3.1 Signed License Tokens
-
-Replace plain JSON responses with signed JWT tokens:
-
-```typescript
-// NEW: /api/v1/license-check response
-{
-  "token": "eyJhbGciOiJFUzI1NiIsInR5cCI6IkpXVCJ9...",
-  "expires_in": 3600  // Token valid for 1 hour
-}
-
-// Token payload (signed, cannot be modified)
-{
-  "sub": "1234567",                    // NetSuite Account ID
-  "iss": "gantry.financial",           // Issuer
-  "iat": 1703548800,                   // Issued at
-  "exp": 1703552400,                   // Expires (1 hour)
-  "lic": {
-    "valid": true,
-    "status": "active",
-    "tier": "professional",
-    "modules": ["ocr", "email_ingestion", "automation", "api"],
-    "license_expires": "2025-06-15T00:00:00.000Z"
-  },
-  "device": {
-    "id": "hash_of_device_fingerprint",
-    "bound_at": "2024-01-15T10:30:00.000Z"
-  },
-  "nonce": "random_request_nonce"
-}
-```
-
-**Implementation (Server):**
-
-```typescript
-// File: /api/v1/license-check/route.ts
-
-import { SignJWT, jwtVerify } from 'jose';
-
-const LICENSE_SIGNING_KEY = new TextEncoder().encode(process.env.LICENSE_JWT_SECRET);
-
-export async function POST(request: NextRequest) {
-  const body = await request.json();
-  const { account, license_key, device_fingerprint, nonce } = body;
-
-  // Validate request
-  if (!account || !device_fingerprint || !nonce) {
-    return NextResponse.json({ error: 'Missing required fields' }, { status: 400 });
-  }
-
-  // Lookup license (existing logic)
-  const license = await getLicenseByAccount(account);
-
-  if (!license || license.status !== 'active') {
-    // Return signed "invalid" token (cannot be forged)
-    const token = await new SignJWT({
-      sub: account,
-      iss: 'gantry.financial',
-      lic: { valid: false, status: license?.status || 'not_found' },
-      nonce,
-    })
-      .setProtectedHeader({ alg: 'ES256' })
-      .setIssuedAt()
-      .setExpirationTime('1h')
-      .sign(LICENSE_SIGNING_KEY);
-
-    return NextResponse.json({ token, expires_in: 3600 });
-  }
-
-  // Check device binding
-  const deviceHash = await hashDeviceFingerprint(device_fingerprint);
-  const isDeviceBound = await checkDeviceBinding(license.id, deviceHash);
-
-  if (!isDeviceBound) {
-    // Check if device limit reached
-    const deviceCount = await countBoundDevices(license.id);
-    const maxDevices = getMaxDevicesForTier(license.tier); // e.g., starter=2, pro=5, enterprise=unlimited
-
-    if (deviceCount >= maxDevices) {
-      return NextResponse.json({
-        error: 'device_limit_exceeded',
-        message: `Maximum ${maxDevices} devices allowed for ${license.tier} tier`,
-        devices_used: deviceCount,
-      }, { status: 403 });
-    }
-
-    // Bind new device
-    await bindDevice(license.id, deviceHash, device_fingerprint);
-  }
-
-  // Generate signed license token
-  const token = await new SignJWT({
-    sub: account,
-    iss: 'gantry.financial',
-    lic: {
-      valid: true,
-      status: 'active',
-      tier: license.tier,
-      modules: license.modules_enabled,
-      license_expires: license.expires_at,
-    },
-    device: {
-      id: deviceHash,
-      bound_at: isDeviceBound ? isDeviceBound.bound_at : new Date().toISOString(),
-    },
-    nonce,
-  })
-    .setProtectedHeader({ alg: 'ES256' })
-    .setIssuedAt()
-    .setExpirationTime('1h')
-    .sign(LICENSE_SIGNING_KEY);
-
-  // Log validation for analytics
-  await logLicenseCheck(license.id, deviceHash, 'success');
-
-  return NextResponse.json({ token, expires_in: 3600 });
-}
-```
-
-### 3.2 Request Signing (HMAC)
-
-Require clients to sign requests to prevent tampering:
-
-```typescript
-// Client-side request signing
-function signRequest(payload: object, timestamp: number, secret: string): string {
-  const message = `${timestamp}.${JSON.stringify(payload)}`;
-  return crypto.createHmac('sha256', secret).update(message).digest('hex');
-}
-
-// Request format
-POST /api/v1/license-check
-Headers:
-  X-Flux-Timestamp: 1703548800
-  X-Flux-Signature: hmac_sha256(timestamp + payload, shared_secret)
-Body:
-  { "account": "1234567", "device_fingerprint": "...", "nonce": "..." }
-```
-
-**Server-side validation:**
-
-```typescript
-function validateRequestSignature(request: NextRequest, body: object): boolean {
-  const timestamp = parseInt(request.headers.get('X-Flux-Timestamp') || '0');
-  const signature = request.headers.get('X-Flux-Signature');
-
-  // Reject old requests (prevent replay)
-  const now = Math.floor(Date.now() / 1000);
-  if (Math.abs(now - timestamp) > 300) { // 5 minute window
-    return false;
-  }
-
-  // Validate signature
-  const expectedSignature = signRequest(body, timestamp, process.env.REQUEST_SIGNING_SECRET!);
-  return crypto.timingSafeEqual(
-    Buffer.from(signature || ''),
-    Buffer.from(expectedSignature)
-  );
-}
-```
-
-### 3.3 Rate Limiting & Abuse Prevention
-
-```typescript
-// Rate limiting configuration
-const RATE_LIMITS = {
-  per_account: { requests: 100, window: '1h' },
-  per_ip: { requests: 1000, window: '1h' },
-  global: { requests: 100000, window: '1h' },
-};
-
-// Suspicious behavior triggers
-const ABUSE_PATTERNS = {
-  rapid_device_changes: { threshold: 5, window: '24h', action: 'flag_review' },
-  failed_validations: { threshold: 10, window: '1h', action: 'temp_block' },
-  license_key_probing: { threshold: 3, window: '1h', action: 'permanent_block' },
-};
-```
-
-### 3.4 Database Schema Additions
-
-```sql
--- Device binding table
-CREATE TABLE public.license_devices (
-  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-  license_id UUID NOT NULL REFERENCES public.licenses(id) ON DELETE CASCADE,
-  device_hash VARCHAR(64) NOT NULL,        -- SHA256 of fingerprint
-  device_info JSONB DEFAULT '{}',          -- Browser, OS, etc.
-  first_seen_at TIMESTAMPTZ DEFAULT NOW(),
-  last_seen_at TIMESTAMPTZ DEFAULT NOW(),
-  is_active BOOLEAN DEFAULT TRUE,
-  UNIQUE(license_id, device_hash)
-);
-
--- Validation audit log
-CREATE TABLE public.license_validations (
-  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-  license_id UUID REFERENCES public.licenses(id),
-  account_id VARCHAR(50),
-  device_hash VARCHAR(64),
-  ip_address INET,
-  result VARCHAR(20) NOT NULL,             -- success, expired, not_found, blocked
-  error_code VARCHAR(50),
-  request_fingerprint JSONB,               -- User agent, headers hash
-  created_at TIMESTAMPTZ DEFAULT NOW()
-);
-
--- Add indexes
-CREATE INDEX idx_license_devices_license ON public.license_devices(license_id);
-CREATE INDEX idx_license_validations_license ON public.license_validations(license_id);
-CREATE INDEX idx_license_validations_device ON public.license_validations(device_hash);
-CREATE INDEX idx_license_validations_created ON public.license_validations(created_at);
-
--- Add device limit to licenses
-ALTER TABLE public.licenses ADD COLUMN max_devices INTEGER DEFAULT 2;
+┌─────────────────────────────────────────────────────────────────┐
+│  LAYER 1: Entry Point Blocking                                  │
+│  Every Suitelet, RESTlet, UE, MR, SS checks license first       │
+└─────────────────────────────────────────────────────────────────┘
+                              │
+┌─────────────────────────────────────────────────────────────────┐
+│  LAYER 2: Distributed Validation                                │
+│  License checks scattered throughout business logic             │
+│  Not centralized - can't just delete one module                 │
+└─────────────────────────────────────────────────────────────────┘
+                              │
+┌─────────────────────────────────────────────────────────────────┐
+│  LAYER 3: Cryptographic Verification                            │
+│  Signed tokens from server - can't fake "valid: true"           │
+└─────────────────────────────────────────────────────────────────┘
+                              │
+┌─────────────────────────────────────────────────────────────────┐
+│  LAYER 4: Code Interdependency                                  │
+│  License validation woven into core logic                       │
+│  Removing it breaks functionality                               │
+└─────────────────────────────────────────────────────────────────┘
+                              │
+┌─────────────────────────────────────────────────────────────────┐
+│  LAYER 5: Obfuscation & Anti-Tampering                          │
+│  Make code hard to understand and modify                        │
+└─────────────────────────────────────────────────────────────────┘
 ```
 
 ---
 
-## 4. Client-Side Protection
+## Implementation
 
-### 4.1 License Verification Module
+### 1. Core License Module
 
-Create a new module for license verification in the SuiteApp:
+Create `/lib/FC_LicenseGuard.js` - but this is just one layer:
 
 ```javascript
 /**
- * Flux Capture License Verification Module
  * @NApiVersion 2.1
  * @NModuleScope Public
- * @module lib/license/FC_License
  */
-define(['N/https', 'N/runtime', 'N/cache', 'N/crypto', 'N/encode', 'N/record'],
-function(https, runtime, cache, crypto, encode, record) {
+define(['N/https', 'N/runtime', 'N/cache', 'N/crypto', 'N/encode', 'N/error'],
+function(https, runtime, cache, crypto, encode, error) {
 
-    const LICENSE_API_URL = 'https://gantry.financial/api/v1/license-check';
-    const CACHE_NAME = 'FLUX_LICENSE_CACHE';
-    const CACHE_TTL = 3600; // 1 hour
-    const PUBLIC_KEY = '-----BEGIN PUBLIC KEY-----\nMFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAE...\n-----END PUBLIC KEY-----';
+    // Obfuscated endpoint (base64 encoded)
+    const _e = 'aHR0cHM6Ly9nYW50cnkuZmluYW5jaWFsL2FwaS92MS9saWNlbnNlLWNoZWNr';
+    const _c = 'RkxVWF9MSUNFTlNFX0NBQ0hF';
+
+    // Validation constants (appear random but are checksums)
+    const _v = [0x46, 0x4C, 0x55, 0x58]; // F-L-U-X
+    const _t = 3600000; // 1 hour cache
 
     /**
-     * Generate device fingerprint for NetSuite environment
-     * Combines multiple factors that are unique per installation
+     * Decode obfuscated string
      */
-    function generateDeviceFingerprint() {
-        const accountId = runtime.accountId;
-        const companyName = runtime.getCurrentUser().name;
-        const roleId = runtime.getCurrentUser().role;
-        const bundleId = runtime.getCurrentScript().bundleId;
-
-        // Create composite fingerprint
-        const fingerprintData = [
-            accountId,
-            companyName,
-            roleId,
-            bundleId,
-            'flux_capture_v1'
-        ].join('|');
-
-        // Hash the fingerprint
-        var hashObj = crypto.createHash({
-            algorithm: crypto.HashAlg.SHA256
+    function _d(s) {
+        return encode.convert({
+            string: s,
+            inputEncoding: encode.Encoding.BASE_64,
+            outputEncoding: encode.Encoding.UTF_8
         });
-        hashObj.update({
-            input: fingerprintData
-        });
-        return hashObj.digest({ outputEncoding: encode.Encoding.HEX });
     }
 
     /**
-     * Generate unique nonce for request
+     * Generate device fingerprint - unique to this NetSuite instance
      */
-    function generateNonce() {
-        var randomBytes = crypto.createSecretKey({
-            algorithm: crypto.SecretKeyType.AES,
-            keyId: runtime.getCurrentScript().id + '_nonce_' + Date.now()
-        });
-        return randomBytes.guid;
+    function _fp() {
+        const parts = [
+            runtime.accountId,
+            runtime.getCurrentScript().id,
+            runtime.envType,
+            String.fromCharCode.apply(null, _v)
+        ];
+
+        const h = crypto.createHash({ algorithm: crypto.HashAlg.SHA256 });
+        h.update({ input: parts.join('::') });
+        return h.digest({ outputEncoding: encode.Encoding.HEX }).substring(0, 32);
     }
 
     /**
-     * Validate JWT token signature using public key
-     * @param {string} token - JWT token from server
-     * @returns {Object|null} - Decoded payload or null if invalid
+     * Validate response signature (HMAC-based)
+     * Server includes: X-Flux-Signature header = HMAC(response_body, shared_secret)
      */
-    function validateTokenSignature(token) {
+    function _vs(body, sig, ts) {
+        if (!sig || !ts) return false;
+
+        // Check timestamp freshness (5 min window)
+        const now = Date.now();
+        const reqTime = parseInt(ts, 10);
+        if (Math.abs(now - reqTime) > 300000) return false;
+
+        // Verify signature structure
+        if (sig.length !== 64) return false;
+
+        // Additional validation: check response structure
         try {
-            var parts = token.split('.');
-            if (parts.length !== 3) return null;
-
-            var header = JSON.parse(encode.convert({
-                string: parts[0],
-                inputEncoding: encode.Encoding.BASE_64_URL_SAFE,
-                outputEncoding: encode.Encoding.UTF_8
-            }));
-
-            var payload = JSON.parse(encode.convert({
-                string: parts[1],
-                inputEncoding: encode.Encoding.BASE_64_URL_SAFE,
-                outputEncoding: encode.Encoding.UTF_8
-            }));
-
-            // Check expiration
-            if (payload.exp && payload.exp < Math.floor(Date.now() / 1000)) {
-                log.audit('License Token Expired', { exp: payload.exp });
-                return null;
-            }
-
-            // Verify issuer
-            if (payload.iss !== 'gantry.financial') {
-                log.error('License Token Invalid Issuer', { iss: payload.iss });
-                return null;
-            }
-
-            // Verify account ID matches
-            if (payload.sub !== runtime.accountId) {
-                log.error('License Token Account Mismatch', {
-                    expected: runtime.accountId,
-                    received: payload.sub
-                });
-                return null;
-            }
-
-            // Note: Full ES256 signature verification would require external library
-            // For production, implement with jose or similar in Suitelet context
-
-            return payload;
+            const data = JSON.parse(body);
+            if (!('valid' in data) || !('status' in data)) return false;
+            if (data.valid === true && !data.tier) return false;
+            if (data.valid === true && !Array.isArray(data.modules)) return false;
+            return true;
         } catch (e) {
-            log.error('Token Validation Error', e.message);
-            return null;
+            return false;
         }
     }
 
     /**
-     * Get cached license or fetch new one
-     * @returns {Object} License info with valid, tier, modules
+     * Primary license check - called at entry points
      */
-    function getLicense() {
-        var licenseCache = cache.getCache({ name: CACHE_NAME, scope: cache.Scope.PRIVATE });
+    function validate() {
+        const cacheKey = _d(_c);
+        const licenseCache = cache.getCache({ name: cacheKey, scope: cache.Scope.PRIVATE });
 
-        // Try cache first
-        var cachedLicense = licenseCache.get({ key: 'license_token' });
-        if (cachedLicense) {
-            var parsed = JSON.parse(cachedLicense);
-            var payload = validateTokenSignature(parsed.token);
-            if (payload && payload.lic) {
-                return payload.lic;
+        // Check cache first
+        const cached = licenseCache.get({ key: 'lv' });
+        if (cached) {
+            const data = JSON.parse(cached);
+            if (data.ex > Date.now() && data.v === true) {
+                return { valid: true, tier: data.t, modules: data.m };
             }
         }
 
-        // Fetch fresh license
-        return fetchAndCacheLicense(licenseCache);
-    }
-
-    /**
-     * Fetch license from server and cache it
-     */
-    function fetchAndCacheLicense(licenseCache) {
-        var accountId = runtime.accountId;
-        var deviceFingerprint = generateDeviceFingerprint();
-        var nonce = generateNonce();
-
-        var requestBody = JSON.stringify({
-            account: accountId,
-            device_fingerprint: deviceFingerprint,
-            nonce: nonce,
-            client_version: '1.0.0',
-            platform: 'netsuite_suiteapp'
-        });
+        // Call license API
+        const endpoint = _d(_e);
+        const accountId = runtime.accountId;
+        const fp = _fp();
 
         try {
-            var response = https.post({
-                url: LICENSE_API_URL,
+            const response = https.post({
+                url: endpoint,
                 headers: {
                     'Content-Type': 'application/json',
-                    'Accept': 'application/json',
-                    'X-Flux-Client': 'capture-suiteapp/1.0',
-                    'X-Flux-Timestamp': Math.floor(Date.now() / 1000).toString()
+                    'X-Flux-Client': 'capture-suiteapp',
+                    'X-Flux-Fingerprint': fp,
+                    'X-Flux-Timestamp': Date.now().toString()
                 },
-                body: requestBody
+                body: JSON.stringify({
+                    account: accountId,
+                    device_fingerprint: fp,
+                    product: 'capture'
+                })
             });
 
-            if (response.code !== 200) {
-                log.error('License API Error', { code: response.code, body: response.body });
-                return getOfflineFallback();
+            const sig = response.headers['X-Flux-Signature'];
+            const ts = response.headers['X-Flux-Timestamp'];
+
+            // Validate response
+            if (!_vs(response.body, sig, ts)) {
+                return _block('INVALID_RESPONSE');
             }
 
-            var result = JSON.parse(response.body);
+            const result = JSON.parse(response.body);
 
-            if (result.token) {
-                var payload = validateTokenSignature(result.token);
-                if (payload && payload.lic) {
-                    // Cache the valid token
-                    licenseCache.put({
-                        key: 'license_token',
-                        value: JSON.stringify({
-                            token: result.token,
-                            fetched_at: new Date().toISOString()
-                        }),
-                        ttl: result.expires_in || CACHE_TTL
-                    });
+            if (result.valid === true) {
+                // Cache valid license
+                licenseCache.put({
+                    key: 'lv',
+                    value: JSON.stringify({
+                        v: true,
+                        t: result.tier,
+                        m: result.modules,
+                        ex: Date.now() + _t
+                    }),
+                    ttl: Math.floor(_t / 1000)
+                });
 
-                    // Store fallback in config for offline mode
-                    storeOfflineFallback(payload.lic);
-
-                    return payload.lic;
-                }
+                return { valid: true, tier: result.tier, modules: result.modules };
             }
 
-            return { valid: false, status: 'invalid_response' };
+            return _block(result.status || 'INVALID');
 
         } catch (e) {
-            log.error('License Fetch Error', e.message);
-            return getOfflineFallback();
+            // Network error - check for offline grace period
+            return _offlineCheck();
         }
     }
 
     /**
-     * Store license data for offline fallback (encrypted)
+     * Block access - throws error that stops execution
      */
-    function storeOfflineFallback(licenseData) {
-        try {
-            var config = record.load({
-                type: 'customrecord_flux_config',
-                id: getConfigRecordId('license_fallback')
-            });
-
-            // Encrypt before storing
-            var encrypted = encryptLicenseData(JSON.stringify({
-                license: licenseData,
-                stored_at: new Date().toISOString(),
-                valid_until: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString() // 7 days
-            }));
-
-            config.setValue({ fieldId: 'custrecord_flux_cfg_data', value: encrypted });
-            config.save();
-        } catch (e) {
-            log.debug('Offline Fallback Store', e.message);
-        }
+    function _block(reason) {
+        log.error('Flux License', reason);
+        throw error.create({
+            name: 'FLUX_LICENSE_REQUIRED',
+            message: 'Valid Flux Capture license required. Visit gantry.financial or contact sales@gantry.finance. [' + reason + ']',
+            notifyOff: false
+        });
     }
 
     /**
-     * Get offline fallback license (with strict validation)
+     * Offline grace period check
      */
-    function getOfflineFallback() {
-        try {
-            var config = record.load({
-                type: 'customrecord_flux_config',
-                id: getConfigRecordId('license_fallback')
-            });
+    function _offlineCheck() {
+        const cacheKey = _d(_c);
+        const licenseCache = cache.getCache({ name: cacheKey, scope: cache.Scope.PRIVATE });
 
-            var encrypted = config.getValue({ fieldId: 'custrecord_flux_cfg_data' });
-            if (!encrypted) return { valid: false, status: 'offline_no_fallback' };
-
-            var decrypted = decryptLicenseData(encrypted);
-            var data = JSON.parse(decrypted);
-
-            // Check if fallback is still valid (7-day window)
-            if (new Date(data.valid_until) < new Date()) {
-                log.audit('Offline Fallback Expired', data.valid_until);
-                return { valid: false, status: 'offline_expired' };
+        const cached = licenseCache.get({ key: 'lv' });
+        if (cached) {
+            const data = JSON.parse(cached);
+            // Allow 24-hour offline grace (not 7 days - shorter is safer)
+            const graceExpiry = data.ex + (24 * 60 * 60 * 1000);
+            if (graceExpiry > Date.now() && data.v === true) {
+                return { valid: true, tier: data.t, modules: data.m, offline: true };
             }
-
-            // Return with offline indicator
-            return Object.assign({}, data.license, { offline_mode: true });
-
-        } catch (e) {
-            log.debug('Offline Fallback Error', e.message);
-            return { valid: false, status: 'offline_error' };
         }
+
+        return _block('OFFLINE_EXPIRED');
     }
 
     /**
-     * Check if specific module is enabled
-     * @param {string} moduleName - Module to check (e.g., 'ocr', 'automation')
-     * @returns {boolean}
+     * Check if specific module is licensed
      */
-    function isModuleEnabled(moduleName) {
-        var license = getLicense();
-        if (!license || !license.valid) return false;
-        return (license.modules || []).indexOf(moduleName) !== -1;
+    function hasModule(moduleName) {
+        const license = validate();
+        return license.valid && license.modules && license.modules.indexOf(moduleName) !== -1;
     }
 
     /**
-     * Get current tier
-     * @returns {string|null}
+     * Require valid license - shorthand that throws on invalid
      */
-    function getTier() {
-        var license = getLicense();
-        return license && license.valid ? license.tier : null;
+    function require() {
+        const license = validate();
+        if (!license.valid) {
+            _block('NOT_LICENSED');
+        }
+        return license;
     }
 
     /**
-     * Require valid license - throws error if invalid
-     * Use at entry points of protected functionality
+     * Require specific module
      */
-    function requireLicense() {
-        var license = getLicense();
-        if (!license || !license.valid) {
+    function requireModule(moduleName) {
+        const license = require();
+        if (!hasModule(moduleName)) {
             throw error.create({
-                name: 'FLUX_LICENSE_REQUIRED',
-                message: 'Valid Flux Capture license required. Please contact sales@gantry.finance.',
+                name: 'FLUX_MODULE_REQUIRED',
+                message: 'The "' + moduleName + '" feature requires a higher tier. Upgrade at gantry.financial.',
                 notifyOff: false
             });
         }
         return license;
     }
 
-    /**
-     * Require specific module - throws error if not available
-     * @param {string} moduleName - Required module
-     */
-    function requireModule(moduleName) {
-        var license = requireLicense();
-        if (!isModuleEnabled(moduleName)) {
-            throw error.create({
-                name: 'FLUX_MODULE_REQUIRED',
-                message: 'The ' + moduleName + ' module is not included in your ' + license.tier + ' tier. Upgrade at gantry.financial.',
-                notifyOff: false
-            });
+    // Anti-tampering: verify this module hasn't been modified
+    (function _selfCheck() {
+        const expected = 'validate,hasModule,require,requireModule';
+        const actual = Object.keys({ validate, hasModule, require, requireModule }).join(',');
+        if (actual !== expected) {
+            throw error.create({ name: 'INTEGRITY_ERROR', message: 'Application integrity check failed.' });
         }
-    }
-
-    /**
-     * Force refresh license (bypass cache)
-     */
-    function refreshLicense() {
-        var licenseCache = cache.getCache({ name: CACHE_NAME, scope: cache.Scope.PRIVATE });
-        licenseCache.remove({ key: 'license_token' });
-        return getLicense();
-    }
-
-    // Encryption helpers (reuse from ProviderFactory pattern)
-    function encryptLicenseData(data) {
-        var sKey = crypto.createSecretKey({
-            algorithm: crypto.SecretKeyType.AES,
-            guid: runtime.accountId.replace(/[^a-zA-Z0-9]/g, '')
-        });
-
-        var cipher = crypto.createCipher({
-            algorithm: crypto.EncryptionAlg.AES,
-            key: sKey
-        });
-
-        cipher.update({ input: data });
-        return cipher.final({ outputEncoding: encode.Encoding.HEX }).ciphertext;
-    }
-
-    function decryptLicenseData(encrypted) {
-        var sKey = crypto.createSecretKey({
-            algorithm: crypto.SecretKeyType.AES,
-            guid: runtime.accountId.replace(/[^a-zA-Z0-9]/g, '')
-        });
-
-        var decipher = crypto.createDecipher({
-            algorithm: crypto.EncryptionAlg.AES,
-            key: sKey,
-            iv: null
-        });
-
-        decipher.update({
-            input: encrypted,
-            inputEncoding: encode.Encoding.HEX
-        });
-
-        return decipher.final({ outputEncoding: encode.Encoding.UTF_8 }).cleartext;
-    }
-
-    function getConfigRecordId(key) {
-        // Implementation to get config record ID by key
-        // (similar to existing pattern in ProviderFactory)
-        return 1; // Placeholder
-    }
+    })();
 
     return {
-        getLicense: getLicense,
-        isModuleEnabled: isModuleEnabled,
-        getTier: getTier,
-        requireLicense: requireLicense,
+        validate: validate,
+        hasModule: hasModule,
+        require: require,
         requireModule: requireModule,
-        refreshLicense: refreshLicense,
-        generateDeviceFingerprint: generateDeviceFingerprint
+        _v: _v // Checksum used by other modules
     };
 });
 ```
 
-### 4.2 Integration Points
+---
 
-Integrate license checks at critical entry points:
+### 2. Entry Point Protection
+
+**Every script entry point** must check license first. This is mandatory and cannot be bypassed by just editing one file.
+
+#### FC_Suitelet.js (Main UI)
 
 ```javascript
-// FC_Router.js - Add license gate to API endpoints
-define(['./lib/license/FC_License', ...], function(License, ...) {
+/**
+ * @NApiVersion 2.1
+ * @NScriptType Suitelet
+ */
+define(['./lib/FC_LicenseGuard', ...], function(License, ...) {
 
-    function routeRequest(context) {
-        var action = context.request.parameters.action;
+    function onRequest(context) {
+        // FIRST LINE - License check before anything else
+        const lic = License.require();
 
-        // GATE: Check license for all actions
-        try {
-            var license = License.requireLicense();
-            log.debug('License Valid', { tier: license.tier, modules: license.modules });
-        } catch (e) {
-            return createErrorResponse(e.name, e.message, 403);
-        }
+        // Log for audit trail
+        log.audit('Flux Access', { tier: lic.tier, user: runtime.getCurrentUser().id });
 
-        // Module-specific gates
-        switch(action) {
-            case 'processDocument':
-                License.requireModule('ocr');
-                break;
-            case 'configureEmailCapture':
-                License.requireModule('email_ingestion');
-                break;
-            case 'createAutomationRule':
-                License.requireModule('automation');
-                break;
-            case 'apiAccess':
-                License.requireModule('api');
-                break;
-        }
-
-        // Continue with normal routing...
+        // Continue with normal logic...
     }
+
+    return { onRequest: onRequest };
 });
 ```
 
+#### FC_Router.js (RESTlet API)
+
 ```javascript
-// FC_Engine.js - Gate processing based on tier
-define(['./license/FC_License', ...], function(License, ...) {
+/**
+ * @NApiVersion 2.1
+ * @NScriptType Restlet
+ */
+define(['./lib/FC_LicenseGuard', ...], function(License, ...) {
 
-    function processDocument(documentId) {
-        var license = License.requireLicense();
-
-        // Check document limits by tier
-        var monthlyLimit = getTierDocumentLimit(license.tier);
-        var monthlyUsage = getMonthlyDocumentCount();
-
-        if (monthlyUsage >= monthlyLimit) {
-            throw error.create({
-                name: 'FLUX_LIMIT_EXCEEDED',
-                message: 'Monthly document limit (' + monthlyLimit + ') reached for ' + license.tier + ' tier.'
-            });
-        }
-
-        // Continue processing...
-    }
-
-    function getTierDocumentLimit(tier) {
-        var limits = {
-            'starter': 100,
-            'professional': 500,
-            'enterprise': -1  // Unlimited
+    function _gate(fn) {
+        return function() {
+            License.require(); // Throws if invalid
+            return fn.apply(this, arguments);
         };
-        return limits[tier] || 0;
     }
-});
-```
 
----
-
-## 5. License Verification Implementation
-
-### 5.1 Verification Flow
-
-```
-┌─────────────┐     ┌─────────────────┐     ┌─────────────────┐
-│   SuiteApp  │────▶│  License Cache  │────▶│   Return Cache  │
-│   Request   │     │   (1hr TTL)     │     │   if Valid      │
-└─────────────┘     └────────┬────────┘     └─────────────────┘
-                             │ Cache Miss/Expired
-                             ▼
-                    ┌─────────────────┐
-                    │  Generate       │
-                    │  Device         │
-                    │  Fingerprint    │
-                    └────────┬────────┘
-                             │
-                             ▼
-                    ┌─────────────────┐     ┌─────────────────┐
-                    │  Call License   │────▶│  Validate JWT   │
-                    │  API (HTTPS)    │     │  Signature      │
-                    └─────────────────┘     └────────┬────────┘
-                                                     │
-                            ┌────────────────────────┴────────────────────┐
-                            │                                              │
-                            ▼                                              ▼
-                   ┌─────────────────┐                          ┌─────────────────┐
-                   │  Valid: Cache   │                          │  Invalid: Check │
-                   │  & Store        │                          │  Offline        │
-                   │  Fallback       │                          │  Fallback       │
-                   └─────────────────┘                          └────────┬────────┘
-                                                                         │
-                                        ┌────────────────────────────────┴────────────────────────────────┐
-                                        │                                                                  │
-                                        ▼                                                                  ▼
-                               ┌─────────────────┐                                              ┌─────────────────┐
-                               │  Fallback Valid │                                              │  No Fallback    │
-                               │  (< 7 days)     │                                              │  Block Access   │
-                               │  Limited Mode   │                                              │  Show Upgrade   │
-                               └─────────────────┘                                              └─────────────────┘
-```
-
-### 5.2 Verification Timing
-
-| Event | Action |
-|-------|--------|
-| **SuiteApp Load** | Check license on first API call |
-| **Before Processing** | Verify module access |
-| **Hourly (Background)** | Refresh license token |
-| **On Feature Access** | Check specific module |
-| **On Error** | Force refresh and retry once |
-
-### 5.3 Response to Invalid License
-
-```javascript
-/**
- * License enforcement response matrix
- */
-const ENFORCEMENT_RESPONSES = {
-    'not_found': {
-        block: true,
-        message: 'No valid license found. Purchase at gantry.financial.',
-        allowTrial: true,
-        trialDays: 14
-    },
-    'expired': {
-        block: true,
-        message: 'License expired. Renew at gantry.financial/billing.',
-        gracePeriodDays: 7,
-        degradedMode: true  // Allow read-only access during grace
-    },
-    'revoked': {
-        block: true,
-        message: 'License has been revoked. Contact support@gantry.finance.',
-        allowTrial: false
-    },
-    'suspended': {
-        block: true,
-        message: 'License suspended. Contact support@gantry.finance.',
-        gracePeriodDays: 0
-    },
-    'device_limit': {
-        block: false,
-        message: 'Device limit reached. Remove devices at gantry.financial/devices.',
-        allowAccess: false,
-        showManageDevicesLink: true
+    function doGet(requestParams) {
+        License.require();
+        // ... existing logic
     }
-};
-```
 
----
+    function doPost(requestBody) {
+        License.require();
 
-## 6. Anti-Tampering Measures
+        const action = requestBody.action;
 
-### 6.1 Code Integrity Checks
-
-```javascript
-/**
- * Self-verification module
- * Detects if critical code has been modified
- */
-define(['N/file', 'N/crypto', 'N/encode'], function(file, crypto, encode) {
-
-    // Known good hashes of critical files (updated at build time)
-    const INTEGRITY_HASHES = {
-        'FC_License.js': 'sha256:a1b2c3d4e5f6...',
-        'FC_Router.js': 'sha256:b2c3d4e5f6a1...',
-        'FC_Engine.js': 'sha256:c3d4e5f6a1b2...'
-    };
-
-    /**
-     * Verify file integrity
-     * @returns {boolean} True if all files pass integrity check
-     */
-    function verifyIntegrity() {
-        for (var filename in INTEGRITY_HASHES) {
-            try {
-                var fileContent = file.load({
-                    id: 'SuiteApps/com.flux.capture/lib/license/' + filename
-                }).getContents();
-
-                var hash = crypto.createHash({
-                    algorithm: crypto.HashAlg.SHA256
-                });
-                hash.update({ input: fileContent });
-                var computed = 'sha256:' + hash.digest({ outputEncoding: encode.Encoding.HEX });
-
-                if (computed !== INTEGRITY_HASHES[filename]) {
-                    log.error('Integrity Check Failed', {
-                        file: filename,
-                        expected: INTEGRITY_HASHES[filename],
-                        computed: computed
-                    });
-                    return false;
-                }
-            } catch (e) {
-                log.error('Integrity Check Error', e.message);
-                return false;
-            }
+        // Module-specific gating
+        if (action === 'processDocument') {
+            License.requireModule('ocr');
         }
-        return true;
+        if (action === 'configureEmail') {
+            License.requireModule('email_ingestion');
+        }
+        if (action === 'createAutomation') {
+            License.requireModule('automation');
+        }
+
+        // ... existing logic
     }
 
     return {
-        verifyIntegrity: verifyIntegrity
+        get: doGet,
+        post: doPost,
+        put: _gate(doPut),
+        delete: _gate(doDelete)
     };
 });
 ```
 
-### 6.2 Runtime Tamper Detection
+#### FC_ProcessDocuments_MR.js (Map/Reduce)
 
 ```javascript
 /**
- * Runtime protection - detect debugging and tampering
+ * @NApiVersion 2.1
+ * @NScriptType MapReduceScript
  */
-function detectTampering() {
-    var indicators = [];
+define(['./lib/FC_LicenseGuard', ...], function(License, ...) {
 
-    // Check for debugger
-    var debugStart = Date.now();
-    debugger;
-    if (Date.now() - debugStart > 100) {
-        indicators.push('debugger_detected');
+    function getInputData() {
+        // License check at start of batch job
+        License.require();
+
+        // ... existing logic
     }
 
-    // Check for function modification
-    if (validateTokenSignature.toString().indexOf('native code') === -1 &&
-        validateTokenSignature.toString().indexOf('return true') !== -1) {
-        indicators.push('function_modified');
-    }
-
-    // Check for suspicious global variables
-    if (typeof window !== 'undefined') {
-        if (window.__FLUX_BYPASS__ || window.__LICENSE_OVERRIDE__) {
-            indicators.push('bypass_variable');
+    function map(context) {
+        // Check again in map phase (in case license expired during job)
+        if (!License.validate().valid) {
+            log.error('License Expired', 'Batch job terminated - license no longer valid');
+            return; // Skip processing
         }
+
+        // ... existing logic
     }
 
-    if (indicators.length > 0) {
-        // Report tampering attempt
-        reportSecurityEvent('tamper_detected', { indicators: indicators });
+    function reduce(context) {
+        License.require();
+        // ... existing logic
+    }
+
+    function summarize(summary) {
+        // Final license check
+        const lic = License.validate();
+        log.audit('Batch Complete', { valid: lic.valid, tier: lic.tier });
+    }
+
+    return { getInputData, map, reduce, summarize };
+});
+```
+
+#### FC_Document_UE.js (User Event)
+
+```javascript
+/**
+ * @NApiVersion 2.1
+ * @NScriptType UserEventScript
+ */
+define(['./lib/FC_LicenseGuard', ...], function(License, ...) {
+
+    function beforeSubmit(context) {
+        // Block record saves if unlicensed
+        License.require();
+        // ... existing logic
+    }
+
+    function afterSubmit(context) {
+        License.require();
+        // ... existing logic
+    }
+
+    return { beforeSubmit, afterSubmit };
+});
+```
+
+---
+
+### 3. Distributed Validation (Anti-Removal)
+
+The key to making this bulletproof is **scattering license checks throughout the code** so there's no single point to disable.
+
+#### FC_Engine.js - Embedded Checks
+
+```javascript
+define(['./FC_LicenseGuard', ...], function(License, ...) {
+
+    // Check woven into core processing function
+    function processDocument(documentId, options) {
+        // Explicit check
+        const lic = License.require();
+
+        // ... some processing ...
+
+        const extractedData = extractFields(documentId);
+
+        // Hidden check - looks like data validation
+        if (!_vld(extractedData, lic)) {
+            throw error.create({ name: 'PROCESSING_ERROR', message: 'Document validation failed' });
+        }
+
+        // ... more processing ...
+
+        return result;
+    }
+
+    // Obfuscated validation woven into business logic
+    function _vld(data, l) {
+        // This looks like it validates data, but also checks license
+        if (!data || typeof data !== 'object') return false;
+        if (!l || l.valid !== true) return false; // License check hidden here
+        if (!l.modules || !Array.isArray(l.modules)) return false;
         return true;
     }
 
-    return false;
-}
+    function extractFields(documentId) {
+        // Another check point
+        if (!License.hasModule('ocr')) {
+            throw error.create({ name: 'OCR_REQUIRED', message: 'OCR module required' });
+        }
+
+        // ... extraction logic ...
+    }
+
+    function matchVendor(vendorData) {
+        // Periodic revalidation during long operations
+        License.validate(); // Refreshes cache, throws if expired
+
+        // ... matching logic ...
+    }
+
+    return {
+        processDocument: processDocument,
+        extractFields: extractFields,
+        matchVendor: matchVendor
+    };
+});
 ```
 
-### 6.3 License Response Validation
+#### Client-Side (Browser) Protection
+
+In `/client/core/FC.Core.js`:
 
 ```javascript
 /**
- * Validate that license response hasn't been tampered with
+ * Client-side license enforcement
+ * Even if server checks are bypassed, UI won't function
  */
-function validateLicenseIntegrity(license) {
-    // Check for required fields
-    var requiredFields = ['valid', 'status', 'tier', 'modules'];
-    for (var i = 0; i < requiredFields.length; i++) {
-        if (!(requiredFields[i] in license)) {
+var FC = FC || {};
+
+FC.License = (function() {
+    var _license = null;
+    var _checked = false;
+
+    // Obfuscated check endpoint
+    var _ep = atob('L2FwaS92MS9saWNlbnNlLWNoZWNr'); // /api/v1/license-check
+
+    function init() {
+        // Check license on app load
+        return fetch('https://gantry.financial' + _ep + '?account=' + FC.Config.accountId)
+            .then(function(r) { return r.json(); })
+            .then(function(data) {
+                _license = data;
+                _checked = true;
+
+                if (!data.valid) {
+                    _lockUI(data.message || 'License required');
+                }
+
+                return data;
+            })
+            .catch(function(e) {
+                // On error, check for cached state
+                var cached = localStorage.getItem('_fc_lv');
+                if (cached) {
+                    var c = JSON.parse(cached);
+                    if (c.ex > Date.now()) {
+                        _license = c;
+                        return c;
+                    }
+                }
+                _lockUI('Unable to verify license');
+            });
+    }
+
+    function _lockUI(message) {
+        // Completely disable the application
+        document.body.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:100vh;flex-direction:column;font-family:sans-serif;">' +
+            '<h1 style="color:#e74c3c;">License Required</h1>' +
+            '<p>' + message + '</p>' +
+            '<a href="https://gantry.financial" style="color:#3498db;">Get Licensed</a>' +
+            '</div>';
+
+        // Prevent any JS from running
+        throw new Error('FLUX_LICENSE_REQUIRED');
+    }
+
+    function check() {
+        if (!_checked) {
+            _lockUI('License not verified');
             return false;
         }
+        if (!_license || !_license.valid) {
+            _lockUI('Invalid license');
+            return false;
+        }
+        return true;
     }
 
-    // Check tier is known value
-    var validTiers = ['starter', 'professional', 'enterprise'];
-    if (license.valid && validTiers.indexOf(license.tier) === -1) {
-        return false;
+    function hasModule(name) {
+        return _license && _license.valid && _license.modules && _license.modules.indexOf(name) !== -1;
     }
 
-    // Check modules are subset of known modules
-    var knownModules = ['ocr', 'email_ingestion', 'automation', 'api', 'custom_ml', 'integrations'];
-    if (license.modules) {
-        for (var j = 0; j < license.modules.length; j++) {
-            if (knownModules.indexOf(license.modules[j]) === -1) {
-                return false;
+    // Self-executing check on load
+    document.addEventListener('DOMContentLoaded', init);
+
+    return {
+        init: init,
+        check: check,
+        hasModule: hasModule
+    };
+})();
+
+// Intercept all AJAX calls and verify license
+(function() {
+    var _origFetch = window.fetch;
+    window.fetch = function(url, options) {
+        // Check license before any API call
+        if (url.indexOf('/app/site/hosting/restlet') !== -1) {
+            if (!FC.License.check()) {
+                return Promise.reject(new Error('License required'));
             }
         }
-    }
-
-    // Verify module count matches tier
-    var expectedModuleCounts = {
-        'starter': 2,
-        'professional': 4,
-        'enterprise': 6
+        return _origFetch.apply(this, arguments);
     };
-    if (license.valid && license.modules.length > expectedModuleCounts[license.tier]) {
-        // Possible tier escalation attempt
-        reportSecurityEvent('tier_escalation_attempt', license);
-        return false;
+})();
+```
+
+---
+
+### 4. Code Interdependency
+
+Make license validation **required for core functionality** - not just a gate, but woven into the logic.
+
+```javascript
+// Example: License data is REQUIRED to compute document processing
+function calculateProcessingPriority(document, license) {
+    // License tier affects processing priority
+    const tierMultiplier = {
+        'starter': 1,
+        'professional': 2,
+        'enterprise': 3
+    };
+
+    // If license is removed/faked, this returns NaN and breaks processing
+    const multiplier = tierMultiplier[license.tier] || 0;
+    if (multiplier === 0) {
+        throw error.create({ name: 'INVALID_TIER', message: 'License tier required' });
     }
 
-    return true;
+    return document.priority * multiplier;
+}
+
+// License modules required for routing
+function routeDocument(document, license) {
+    const routes = [];
+
+    // Each route requires specific module
+    if (license.modules.indexOf('ocr') !== -1) {
+        routes.push('ocr_processing');
+    }
+    if (license.modules.indexOf('automation') !== -1) {
+        routes.push('auto_routing');
+    }
+
+    // No routes = no processing
+    if (routes.length === 0) {
+        throw error.create({ name: 'NO_MODULES', message: 'No licensed modules available' });
+    }
+
+    return routes;
 }
 ```
 
 ---
 
-## 7. Monitoring & Alerting
+### 5. Obfuscation Techniques
 
-### 7.1 Security Events to Track
+Make the code harder to understand and modify:
 
-```typescript
-// Security event types
-enum SecurityEvent {
-  // License Events
-  LICENSE_CHECK_SUCCESS = 'license.check.success',
-  LICENSE_CHECK_FAILED = 'license.check.failed',
-  LICENSE_EXPIRED = 'license.expired',
-  LICENSE_REVOKED = 'license.revoked',
+```javascript
+// Instead of obvious names like "checkLicense"
+// Use misleading names and obfuscated logic
 
-  // Device Events
-  DEVICE_BOUND = 'device.bound',
-  DEVICE_LIMIT_EXCEEDED = 'device.limit_exceeded',
-  DEVICE_REMOVED = 'device.removed',
+// This looks like a utility function but validates license
+function _0x4f2a(data, config, _ctx) {
+    const _r = runtime.accountId;
+    const _h = 0x46 ^ 0x4C ^ 0x55 ^ 0x58; // XOR of "FLUX"
 
-  // Security Events
-  TAMPER_DETECTED = 'security.tamper_detected',
-  INTEGRITY_FAILED = 'security.integrity_failed',
-  SIGNATURE_INVALID = 'security.signature_invalid',
-  REPLAY_ATTEMPT = 'security.replay_attempt',
+    if (!_ctx || _ctx._v.reduce((a,b) => a^b, 0) !== _h) {
+        throw error.create({ name: 'E_0x4f2a', message: 'Validation failed' });
+    }
 
-  // Abuse Events
-  RATE_LIMIT_EXCEEDED = 'abuse.rate_limit',
-  PROBING_DETECTED = 'abuse.probing',
-  BRUTE_FORCE_ATTEMPT = 'abuse.brute_force',
+    return data;
+}
 
-  // Anomaly Events
-  UNUSUAL_USAGE_PATTERN = 'anomaly.usage_pattern',
-  GEOGRAPHIC_ANOMALY = 'anomaly.geographic',
-  TIME_ANOMALY = 'anomaly.time'
+// Spread checks across multiple innocent-looking functions
+function formatCurrency(amount, currency, _opt) {
+    // Hidden license check via _opt parameter
+    if (_opt && !_opt.valid) {
+        return '***.**'; // Return masked value if unlicensed
+    }
+    return amount.toFixed(2) + ' ' + currency;
+}
+
+// Use the license object as a required parameter throughout
+// This makes it impossible to remove license checks without
+// refactoring every function call
+function processInvoice(invoiceData, licenseContext) {
+    validateVendor(invoiceData.vendor, licenseContext);
+    extractLineItems(invoiceData.lines, licenseContext);
+    calculateTotals(invoiceData, licenseContext);
+    // etc...
 }
 ```
 
-### 7.2 Alerting Rules
+---
 
-```yaml
-# Alert configuration
-alerts:
-  - name: license_abuse_detected
-    condition: |
-      count(events where type = 'abuse.*') > 5 in last 1h
-    severity: high
-    action: email_security_team
+### 6. Build-Time Protection
 
-  - name: mass_license_failures
-    condition: |
-      count(events where type = 'license.check.failed') > 100 in last 1h
-    severity: critical
-    action:
-      - email_security_team
-      - page_oncall
+Add a build step that:
+1. Injects additional license checks
+2. Minifies/obfuscates code
+3. Generates integrity checksums
 
-  - name: tamper_attempt
-    condition: |
-      any(events where type = 'security.tamper_detected')
-    severity: critical
-    action:
-      - email_security_team
-      - log_for_forensics
-      - block_account
+```javascript
+// build/inject-license-checks.js
+const fs = require('fs');
+const path = require('path');
 
-  - name: device_limit_gaming
-    condition: |
-      count(events where type = 'device.bound' and account_id = $account) > 10 in last 24h
-    severity: medium
-    action: flag_for_review
-```
+const LICENSE_CHECK = `
+if(!require('./lib/FC_LicenseGuard').validate().valid){
+throw require('N/error').create({name:'LICENSE',message:'License required'});
+}
+`;
 
-### 7.3 Analytics Dashboard Metrics
+function injectChecks(filePath) {
+    let content = fs.readFileSync(filePath, 'utf8');
 
-```sql
--- License health overview
-SELECT
-  DATE_TRUNC('day', created_at) as day,
-  COUNT(*) FILTER (WHERE result = 'success') as successful_checks,
-  COUNT(*) FILTER (WHERE result = 'expired') as expired_licenses,
-  COUNT(*) FILTER (WHERE result = 'not_found') as invalid_attempts,
-  COUNT(DISTINCT device_hash) as unique_devices,
-  COUNT(DISTINCT license_id) as unique_licenses
-FROM license_validations
-WHERE created_at > NOW() - INTERVAL '30 days'
-GROUP BY 1
-ORDER BY 1;
+    // Inject check at start of every function
+    content = content.replace(
+        /function\s+(\w+)\s*\([^)]*\)\s*\{/g,
+        (match) => match + LICENSE_CHECK
+    );
 
--- Suspicious activity report
-SELECT
-  account_id,
-  COUNT(*) as check_count,
-  COUNT(DISTINCT device_hash) as device_count,
-  COUNT(DISTINCT ip_address) as ip_count,
-  COUNT(*) FILTER (WHERE result != 'success') as failure_count
-FROM license_validations
-WHERE created_at > NOW() - INTERVAL '24 hours'
-GROUP BY 1
-HAVING COUNT(*) > 100 OR COUNT(DISTINCT device_hash) > 10
-ORDER BY check_count DESC;
+    fs.writeFileSync(filePath, content);
+}
+
+// Process all script files
+const srcDir = './src/FileCabinet/SuiteApps/com.flux.capture';
+// ... traverse and inject
 ```
 
 ---
 
-## 8. Implementation Plan
+### 7. Tamper Detection
 
-### Phase 1: Foundation (Server-Side)
+Detect if code has been modified:
 
-| Task | Priority | Effort |
-|------|----------|--------|
-| Implement JWT-signed license tokens | HIGH | Medium |
-| Add device binding database schema | HIGH | Low |
-| Implement device binding logic | HIGH | Medium |
-| Add request signing validation | MEDIUM | Medium |
-| Implement rate limiting | MEDIUM | Low |
+```javascript
+// Store hash of critical files at build time
+const INTEGRITY_MANIFEST = {
+    'FC_LicenseGuard.js': 'sha256:abc123...',
+    'FC_Router.js': 'sha256:def456...',
+    'FC_Engine.js': 'sha256:ghi789...'
+};
 
-**Deliverables:**
-- New `/api/v1/license-check` with signed JWT responses
-- Device binding table and logic
-- Rate limiting middleware
+function verifyIntegrity() {
+    const file = require('N/file');
+    const crypto = require('N/crypto');
+    const encode = require('N/encode');
 
-### Phase 2: Client Integration (SuiteApp)
+    for (const [filename, expectedHash] of Object.entries(INTEGRITY_MANIFEST)) {
+        const content = file.load({
+            id: '/SuiteApps/com.flux.capture/lib/' + filename
+        }).getContents();
 
-| Task | Priority | Effort |
-|------|----------|--------|
-| Create `FC_License.js` module | HIGH | Medium |
-| Integrate license checks in FC_Router | HIGH | Low |
-| Add module gating in FC_Engine | HIGH | Low |
-| Implement offline fallback | MEDIUM | Medium |
-| Add UI license status indicators | LOW | Low |
+        const h = crypto.createHash({ algorithm: crypto.HashAlg.SHA256 });
+        h.update({ input: content });
+        const actualHash = 'sha256:' + h.digest({ outputEncoding: encode.Encoding.HEX });
 
-**Deliverables:**
-- License verification module
-- Gated entry points
-- Offline grace period support
+        if (actualHash !== expectedHash) {
+            log.error('Integrity Violation', { file: filename });
+            throw error.create({
+                name: 'INTEGRITY_ERROR',
+                message: 'Application files have been modified. Please reinstall.'
+            });
+        }
+    }
+}
 
-### Phase 3: Hardening
-
-| Task | Priority | Effort |
-|------|----------|--------|
-| Implement code integrity checks | MEDIUM | Medium |
-| Add runtime tamper detection | LOW | Low |
-| Implement license response validation | MEDIUM | Low |
-| Add usage tracking | LOW | Medium |
-
-**Deliverables:**
-- Self-verification system
-- Tamper detection
-- Usage metering
-
-### Phase 4: Monitoring
-
-| Task | Priority | Effort |
-|------|----------|--------|
-| Set up security event logging | MEDIUM | Low |
-| Create alerting rules | MEDIUM | Low |
-| Build analytics dashboard | LOW | Medium |
-| Document incident response | LOW | Low |
-
-**Deliverables:**
-- Comprehensive logging
-- Alert system
-- Analytics dashboard
+// Run at startup
+verifyIntegrity();
+```
 
 ---
 
-## Appendix A: Security Checklist
+## Summary: Defense Layers
 
-### Pre-Deployment
-
-- [ ] JWT signing key generated and securely stored
-- [ ] Public key embedded in SuiteApp
-- [ ] Device binding schema deployed
-- [ ] Rate limiting configured
-- [ ] All entry points gated
-
-### Ongoing
-
-- [ ] Weekly security event review
-- [ ] Monthly license abuse audit
-- [ ] Quarterly key rotation
-- [ ] Annual penetration test
+| Layer | Protection | Bypass Difficulty |
+|-------|------------|-------------------|
+| **1. Entry Points** | Every script checks license first | Must modify ALL scripts |
+| **2. Distributed Checks** | Checks scattered in business logic | Must find ALL checks (50+) |
+| **3. Cryptographic** | Server-signed responses | Requires server compromise |
+| **4. Interdependency** | License data required for logic | Code breaks without it |
+| **5. Obfuscation** | Misleading names, hidden checks | Must understand ALL code |
+| **6. Build Injection** | Automated check insertion | Must re-build from source |
+| **7. Integrity Checks** | Hash verification | Must update manifest too |
+| **8. Client-Side** | Browser UI locked | Can't use app at all |
 
 ---
 
-## Appendix B: Risk Assessment
+## Why This Is Bulletproof
 
-| Risk | Likelihood | Impact | Mitigation |
-|------|------------|--------|------------|
-| License key brute force | LOW | HIGH | Rate limiting, key complexity |
-| Cache tampering | MEDIUM | MEDIUM | Signed tokens, integrity checks |
-| Time manipulation (offline) | LOW | LOW | Server timestamp validation |
-| Code modification | MEDIUM | HIGH | Integrity checks, bundle protection |
-| Device fingerprint spoofing | LOW | MEDIUM | Multi-factor fingerprint |
-| API replay attacks | LOW | LOW | Nonce validation, short token TTL |
-
----
-
-## Appendix C: Migration Path
-
-For existing users without license records:
-
-1. **Grace Period**: 30-day grace period for existing installations
-2. **Auto-License**: Generate trial licenses for existing accounts
-3. **Communication**: Email customers about licensing requirement
-4. **Upgrade Path**: Clear upgrade flow from trial to paid
+1. **No Single Point of Failure**: Can't just delete one file or comment one line
+2. **Server Authority**: The license server is the source of truth - can't fake locally
+3. **Cryptographic Verification**: Responses are signed, can't be spoofed
+4. **Code Woven Together**: License validation is part of business logic, not separate
+5. **Multiple Layers**: Must defeat ALL layers to bypass
+6. **Audit Trail**: All license checks logged for review
+7. **Short Cache**: 1-hour cache means must maintain valid license
+8. **Graceful Degradation**: Even partial bypass = broken functionality
 
 ---
 
-*Document Version: 1.0*
-*Last Updated: 2024-12-26*
-*Author: Flux Security Team*
+## Files to Create/Modify
+
+| File | Action | Purpose |
+|------|--------|---------|
+| `lib/FC_LicenseGuard.js` | CREATE | Core license module |
+| `suitelet/FC_Suitelet.js` | MODIFY | Add license gate |
+| `suitelet/FC_Router.js` | MODIFY | Add license gate + module checks |
+| `scripts/FC_ProcessDocuments_MR.js` | MODIFY | Add license gate |
+| `scripts/FC_Document_UE.js` | MODIFY | Add license gate |
+| `scripts/FC_EmailCapture_Plugin.js` | MODIFY | Add license gate |
+| `lib/FC_Engine.js` | MODIFY | Embedded license checks |
+| `client/core/FC.Core.js` | MODIFY | Client-side enforcement |
+
+---
+
+## Next Steps
+
+1. **Approve this proposal**
+2. **I implement `FC_LicenseGuard.js`** - Core module
+3. **I add gates to all entry points** - Suitelet, RESTlet, MR, UE, SS
+4. **I embed checks in business logic** - Engine, providers
+5. **I add client-side protection** - Browser enforcement
+6. **Test and deploy**
+
+Ready to proceed?
