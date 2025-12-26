@@ -1,12 +1,22 @@
 openapi: 3.0.3
 info:
-  title: Flux Capture Installation Portal API
+  title: Flux Capture License API
   description: |
-    API endpoints for the Flux Capture self-service installation portal.
-    These endpoints power the customer-facing installation wizard at fluxfornetsuite.com.
+    API for the Flux Capture license management system.
+
+    This API serves two purposes:
+    1. **License validation** - Called by the NetSuite SuiteApp to check license validity
+    2. **Portal operations** - Trial signup, purchase, account management
+
+    ## Authentication
+
+    - License check endpoints: No auth required (rate limited by IP)
+    - Portal endpoints: Bearer token from session
+    - Webhooks: Signature verification (Stripe)
+
   version: 1.0.0
   contact:
-    name: Flux for NetSuite Support
+    name: Flux for NetSuite
     email: support@fluxfornetsuite.com
     url: https://fluxfornetsuite.com
 
@@ -15,10 +25,95 @@ servers:
     description: Production
 
 paths:
+  #
+  # LICENSE VALIDATION (Called by SuiteApp)
+  #
+  /license-check:
+    post:
+      summary: Validate a license
+      description: |
+        Called by FC_LicenseGuard.js in the NetSuite SuiteApp.
+        This is the most critical endpoint - must be fast and reliable.
+
+        The SuiteApp caches results for 1 hour, so expect ~1 call/hour per active user.
+      operationId: checkLicense
+      tags:
+        - License Validation
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - account
+                - product
+              properties:
+                account:
+                  type: string
+                  description: NetSuite account ID
+                  example: "123456"
+                license_key:
+                  type: string
+                  description: License key (optional if account is already bound)
+                  example: "LIC-A1B2-C3D4-E5F6"
+                device_fingerprint:
+                  type: string
+                  description: Unique identifier for the installation
+                product:
+                  type: string
+                  enum: [capture]
+                  description: Product identifier
+                client_version:
+                  type: string
+                  description: SuiteApp version
+                  example: "1.0.0"
+      responses:
+        '200':
+          description: License is valid
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  valid:
+                    type: boolean
+                    example: true
+                  status:
+                    type: string
+                    enum: [active, trial]
+                    example: "active"
+                  expires_at:
+                    type: string
+                    format: date-time
+                    example: "2025-12-31T23:59:59Z"
+        '404':
+          description: License not found or invalid
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  valid:
+                    type: boolean
+                    example: false
+                  status:
+                    type: string
+                    enum: [not_found, expired, suspended, cancelled]
+                    example: "not_found"
+                  message:
+                    type: string
+                    example: "No license found for this account"
+
+  #
+  # TRIAL MANAGEMENT
+  #
   /trial-request:
     post:
       summary: Request a trial license
-      description: Creates a trial license and returns installation instructions
+      description: |
+        Creates a new trial license and customer record.
+        Sends welcome email with license key and installation instructions.
       operationId: requestTrial
       tags:
         - Trial
@@ -27,87 +122,82 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/TrialRequest'
+              type: object
+              required:
+                - email
+                - company
+              properties:
+                email:
+                  type: string
+                  format: email
+                  example: "user@company.com"
+                company:
+                  type: string
+                  example: "Acme Corp"
+                phone:
+                  type: string
+                  example: "+1-555-123-4567"
+                account_id:
+                  type: string
+                  description: NetSuite account ID to pre-bind
+                  example: "123456"
+                source:
+                  type: string
+                  description: Attribution source
+                  example: "google"
       responses:
         '200':
           description: Trial created successfully
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/TrialResponse'
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  trial_key:
+                    type: string
+                    example: "TRL-A1B2-C3D4-E5F6"
+                  expires_at:
+                    type: string
+                    format: date-time
+                    example: "2025-01-09T23:59:59Z"
+                  bundle_id:
+                    type: string
+                    example: "123456"
+                  installation_url:
+                    type: string
+                    format: uri
+                    example: "https://fluxfornetsuite.com/install"
         '400':
           description: Invalid request
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
+        '409':
+          description: Email already has an active license
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
         '429':
-          description: Too many requests
+          description: Rate limit exceeded
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
 
-  /purchase:
-    post:
-      summary: Process license purchase
-      description: Create a paid license after successful payment
-      operationId: purchaseLicense
-      tags:
-        - Purchase
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/PurchaseRequest'
-      responses:
-        '200':
-          description: Purchase successful
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/PurchaseResponse'
-        '400':
-          description: Invalid request or payment failed
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-
-  /license-check:
-    post:
-      summary: Validate a license
-      description: |
-        Called by Flux Capture SuiteApp to validate license.
-        This is the existing endpoint used by FC_LicenseGuard.js.
-      operationId: checkLicense
-      tags:
-        - License
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/LicenseCheckRequest'
-      responses:
-        '200':
-          description: License validation result
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/LicenseCheckResponse'
-        '404':
-          description: License not found
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/LicenseCheckResponse'
-
+  #
+  # INSTALLATION VERIFICATION
+  #
   /verify-installation:
     post:
       summary: Verify Flux Capture installation
-      description: Check if Flux Capture is properly installed in a NetSuite account
+      description: |
+        Check if Flux Capture is installed and active in a NetSuite account.
+        Used by the installation wizard to confirm successful setup.
       operationId: verifyInstallation
       tags:
         - Installation
@@ -116,46 +206,53 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/VerifyRequest'
-      responses:
-        '200':
-          description: Verification result
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/VerifyResponse'
-
-  /installation-status/{account_id}:
-    get:
-      summary: Get installation status
-      description: Get the current installation and license status for an account
-      operationId: getInstallationStatus
-      tags:
-        - Installation
-      parameters:
-        - name: account_id
-          in: path
-          required: true
-          schema:
-            type: string
-          description: NetSuite account ID
+              type: object
+              required:
+                - account
+              properties:
+                account:
+                  type: string
+                  description: NetSuite account ID
+                  example: "123456"
+                license_key:
+                  type: string
+                  description: License key for additional validation
       responses:
         '200':
           description: Installation status
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/InstallationStatus'
-        '404':
-          description: Account not found
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
+                type: object
+                properties:
+                  installed:
+                    type: boolean
+                    description: Whether we've seen activity from this account
+                  first_seen:
+                    type: string
+                    format: date-time
+                    description: When first license check was received
+                  last_activity:
+                    type: string
+                    format: date-time
+                    description: Most recent license check
+                  license:
+                    type: object
+                    properties:
+                      valid:
+                        type: boolean
+                      status:
+                        type: string
+                      expires_at:
+                        type: string
+                        format: date-time
 
+  #
+  # BUNDLE INFORMATION
+  #
   /bundle-info:
     get:
-      summary: Get bundle information
+      summary: Get bundle installation info
       description: Returns current bundle ID and installation instructions
       operationId: getBundleInfo
       tags:
@@ -166,15 +263,77 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/BundleInfo'
+                type: object
+                properties:
+                  bundle_id:
+                    type: string
+                    example: "123456"
+                  bundle_name:
+                    type: string
+                    example: "Flux Capture"
+                  version:
+                    type: string
+                    example: "1.0.0"
+                  source_account_id:
+                    type: string
+                    description: Account ID to search for bundle
+                    example: "987654"
 
-  /webhook/installation-complete:
+  #
+  # STRIPE CHECKOUT
+  #
+  /create-checkout:
     post:
-      summary: Installation complete webhook
+      summary: Create Stripe checkout session
+      description: Creates a checkout session for purchasing a subscription
+      operationId: createCheckout
+      tags:
+        - Billing
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - plan
+              properties:
+                plan:
+                  type: string
+                  enum: [monthly, annual]
+                license_key:
+                  type: string
+                  description: Existing trial to convert
+                account_id:
+                  type: string
+                  description: NetSuite account to license
+      responses:
+        '200':
+          description: Checkout session created
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  checkout_url:
+                    type: string
+                    format: uri
+
+  #
+  # STRIPE WEBHOOKS
+  #
+  /webhook/stripe:
+    post:
+      summary: Stripe webhook handler
       description: |
-        Called by Flux Capture after successful first activation.
-        Used to track installations and send welcome emails.
-      operationId: installationComplete
+        Handles Stripe webhook events:
+        - checkout.session.completed
+        - invoice.paid
+        - invoice.payment_failed
+        - customer.subscription.deleted
+      operationId: stripeWebhook
       tags:
         - Webhooks
       requestBody:
@@ -182,10 +341,10 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/InstallationCompleteRequest'
+              type: object
       responses:
         '200':
-          description: Webhook received
+          description: Webhook processed
           content:
             application/json:
               schema:
@@ -194,264 +353,155 @@ paths:
                   received:
                     type: boolean
 
+  #
+  # CUSTOMER PORTAL (Authenticated)
+  #
+  /me:
+    get:
+      summary: Get current user
+      description: Returns the authenticated user's profile and licenses
+      operationId: getCurrentUser
+      tags:
+        - Portal
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: User profile
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  id:
+                    type: string
+                    format: uuid
+                  email:
+                    type: string
+                    format: email
+                  company:
+                    type: string
+                  licenses:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/License'
+
+  /me/licenses:
+    get:
+      summary: Get user's licenses
+      description: Returns all licenses for the authenticated user
+      operationId: getUserLicenses
+      tags:
+        - Portal
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: License list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/License'
+
+  /me/usage:
+    get:
+      summary: Get usage statistics
+      description: Returns usage stats for the user's licenses
+      operationId: getUserUsage
+      tags:
+        - Portal
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: days
+          in: query
+          schema:
+            type: integer
+            default: 30
+          description: Number of days to include
+      responses:
+        '200':
+          description: Usage statistics
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  period_start:
+                    type: string
+                    format: date
+                  period_end:
+                    type: string
+                    format: date
+                  total_documents:
+                    type: integer
+                  total_api_calls:
+                    type: integer
+                  daily:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        date:
+                          type: string
+                          format: date
+                        documents:
+                          type: integer
+                        api_calls:
+                          type: integer
+
+  /me/billing-portal:
+    post:
+      summary: Create Stripe billing portal session
+      description: Creates a session for the Stripe customer portal
+      operationId: createBillingPortal
+      tags:
+        - Billing
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: Portal URL
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  url:
+                    type: string
+                    format: uri
+
 components:
   schemas:
-    TrialRequest:
-      type: object
-      required:
-        - email
-        - company
-      properties:
-        email:
-          type: string
-          format: email
-          description: Contact email address
-        company:
-          type: string
-          description: Company name
-        account_id:
-          type: string
-          description: NetSuite account ID (optional, for pre-validation)
-        phone:
-          type: string
-          description: Contact phone number
-        estimated_documents:
-          type: integer
-          description: Estimated monthly document volume
-        source:
-          type: string
-          description: How they found us (referral, search, etc.)
-
-    TrialResponse:
+    License:
       type: object
       properties:
-        success:
-          type: boolean
-        trial_key:
+        id:
           type: string
-          description: Trial license key (format TRL-XXXX-XXXX-XXXX)
-        expires_at:
-          type: string
-          format: date-time
-          description: Trial expiration date (14 days from now)
-        bundle_id:
-          type: string
-          description: NetSuite bundle ID for installation
-        installation_url:
-          type: string
-          format: uri
-          description: Direct link to installation wizard
-        quick_start_url:
-          type: string
-          format: uri
-          description: Link to quick start guide
-
-    PurchaseRequest:
-      type: object
-      required:
-        - email
-        - payment_token
-        - plan
-      properties:
-        email:
-          type: string
-          format: email
-        payment_token:
-          type: string
-          description: Payment processor token (Stripe, etc.)
-        plan:
-          type: string
-          enum: [monthly, annual]
-        account_id:
-          type: string
-          description: NetSuite account ID to license
-        coupon_code:
-          type: string
-          description: Discount coupon code
-
-    PurchaseResponse:
-      type: object
-      properties:
-        success:
-          type: boolean
+          format: uuid
         license_key:
           type: string
-          description: Production license key (format LIC-XXXX-XXXX-XXXX)
-        expires_at:
+          example: "LIC-A1B2-C3D4-E5F6"
+        netsuite_account_id:
           type: string
-          format: date-time
-        receipt_url:
-          type: string
-          format: uri
-        bundle_id:
-          type: string
-
-    LicenseCheckRequest:
-      type: object
-      required:
-        - account
-        - product
-      properties:
-        account:
-          type: string
-          description: NetSuite account ID
-        license_key:
-          type: string
-          description: License key (optional, uses account binding if not provided)
-        device_fingerprint:
-          type: string
-          description: Unique identifier for the installation
-        product:
-          type: string
-          enum: [capture]
-        client_version:
-          type: string
-          description: SuiteApp version
-
-    LicenseCheckResponse:
-      type: object
-      properties:
-        valid:
-          type: boolean
-          description: Whether the license is valid
+          example: "123456"
         status:
           type: string
-          enum: [active, trial, expired, not_found, suspended]
-        tier:
+          enum: [active, trial, expired, suspended, cancelled]
+        type:
           type: string
-          description: License tier (if applicable)
-        modules:
-          type: array
-          items:
-            type: string
-          description: Enabled modules
+          enum: [trial, monthly, annual]
+        created_at:
+          type: string
+          format: date-time
+        activated_at:
+          type: string
+          format: date-time
         expires_at:
           type: string
           format: date-time
-        message:
-          type: string
-          description: Human-readable status message
-
-    VerifyRequest:
-      type: object
-      required:
-        - account
-      properties:
-        account:
-          type: string
-          description: NetSuite account ID
-        license_key:
-          type: string
-          description: License key for additional validation
-        action:
-          type: string
-          enum: [verify_installation, full_health_check]
-
-    VerifyResponse:
-      type: object
-      properties:
-        installed:
-          type: boolean
-        version:
-          type: string
-        installation_date:
-          type: string
-          format: date-time
-        last_activity:
-          type: string
-          format: date-time
-        health:
-          type: object
-          properties:
-            scripts_deployed:
-              type: boolean
-            records_created:
-              type: boolean
-            license_valid:
-              type: boolean
-            api_accessible:
-              type: boolean
-        license:
-          $ref: '#/components/schemas/LicenseCheckResponse'
-
-    InstallationStatus:
-      type: object
-      properties:
-        account_id:
-          type: string
-        installed:
-          type: boolean
-        install_date:
-          type: string
-          format: date-time
-        version:
-          type: string
-        license:
-          type: object
-          properties:
-            status:
-              type: string
-            expires_at:
-              type: string
-              format: date-time
-        usage:
-          type: object
-          properties:
-            documents_processed:
-              type: integer
-            last_document:
-              type: string
-              format: date-time
-
-    BundleInfo:
-      type: object
-      properties:
-        bundle_id:
-          type: string
-          description: Current bundle ID for installation
-        version:
-          type: string
-          description: Current bundle version
-        release_date:
-          type: string
-          format: date-time
-        installation_steps:
-          type: array
-          items:
-            type: object
-            properties:
-              step:
-                type: integer
-              title:
-                type: string
-              description:
-                type: string
-              screenshot_url:
-                type: string
-                format: uri
-        requirements:
-          type: array
-          items:
-            type: string
-          description: NetSuite features required
-
-    InstallationCompleteRequest:
-      type: object
-      required:
-        - account
-        - version
-      properties:
-        account:
-          type: string
-          description: NetSuite account ID
-        version:
-          type: string
-          description: Installed version
-        environment:
-          type: string
-          enum: [production, sandbox]
-        license_key:
-          type: string
 
     Error:
       type: object
@@ -461,26 +511,28 @@ components:
           default: true
         code:
           type: string
+          example: "INVALID_REQUEST"
         message:
           type: string
-        details:
-          type: object
+          example: "Email is required"
 
   securitySchemes:
-    ApiKey:
-      type: apiKey
-      in: header
-      name: X-API-Key
-      description: API key for portal access (admin functions)
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: JWT token from authentication
 
 tags:
+  - name: License Validation
+    description: Endpoints called by the NetSuite SuiteApp
   - name: Trial
     description: Trial license management
-  - name: Purchase
-    description: License purchase and billing
-  - name: License
-    description: License validation (used by SuiteApp)
   - name: Installation
-    description: Installation verification and status
+    description: Installation verification
+  - name: Billing
+    description: Stripe integration for payments
+  - name: Portal
+    description: Customer portal endpoints
   - name: Webhooks
-    description: Callback endpoints from SuiteApp
+    description: External webhook handlers

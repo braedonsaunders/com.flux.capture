@@ -1,389 +1,314 @@
 # Flux Capture - Distribution System Guide
 
-> **Purpose**: Distribute Flux Capture SuiteApp from your website with source code protection
+> **Purpose**: Distribute Flux Capture SuiteApp from your website without SDN membership
 > **Last Updated**: 2024-12-26
 
 ---
 
 ## Overview
 
-Since SuiteApp Marketplace access may not be available, this guide outlines a creative distribution strategy using:
+This guide outlines how to distribute Flux Capture using:
 
-1. **SuiteBundler** - NetSuite's native bundle distribution system
+1. **SuiteBundler** - NetSuite's native bundle system (no SDN required)
 2. **Hide Script** - Source code protection for server-side scripts
-3. **Code Obfuscation** - Protection for client-side scripts (can't be hidden)
-4. **Self-Service Portal** - Website-based installation and licensing
+3. **Code Obfuscation** - Protection for client-side scripts
+4. **License API** - Your existing fluxfornetsuite.com license system
+
+**No SDN (SuiteCloud Developer Network) membership required.**
 
 ---
 
-## Architecture
+## Distribution Architecture
 
 ```
-┌─────────────────────────────────────────────────────────────────┐
-│                    DISTRIBUTION FLOW                             │
-├─────────────────────────────────────────────────────────────────┤
-│                                                                  │
-│   ┌──────────────┐     ┌──────────────┐     ┌──────────────┐   │
-│   │   Website    │     │   NetSuite   │     │   Customer   │   │
-│   │   Portal     │────>│   Bundle     │────>│   Account    │   │
-│   │              │     │   (Hidden)   │     │              │   │
-│   └──────────────┘     └──────────────┘     └──────────────┘   │
-│          │                                          │           │
-│          │         License Validation               │           │
-│          └──────────────────────────────────────────┘           │
-│                                                                  │
-└─────────────────────────────────────────────────────────────────┘
+┌─────────────────────────────────────────────────────────────────────┐
+│                         DISTRIBUTION FLOW                            │
+├─────────────────────────────────────────────────────────────────────┤
+│                                                                      │
+│   ┌──────────────────┐                                              │
+│   │  fluxfornetsuite │  1. Customer requests trial                  │
+│   │     .com         │  2. Gets license key + Bundle ID             │
+│   └────────┬─────────┘                                              │
+│            │                                                         │
+│            ▼                                                         │
+│   ┌──────────────────┐                                              │
+│   │  Your NetSuite   │  Bundle stored here with                     │
+│   │  Dev Account     │  "Hide in SuiteBundle" enabled               │
+│   │  (Bundle Source) │  Sharing: Public or Shared                   │
+│   └────────┬─────────┘                                              │
+│            │                                                         │
+│            ▼                                                         │
+│   ┌──────────────────┐                                              │
+│   │  Customer's      │  3. Customer installs bundle                 │
+│   │  NetSuite        │  4. Enters license key in Settings           │
+│   │  Account         │  5. License API validates                    │
+│   └────────┬─────────┘                                              │
+│            │                                                         │
+│            ▼                                                         │
+│   ┌──────────────────┐                                              │
+│   │  fluxfornetsuite │  License check on every use                  │
+│   │  /api/v1/        │  Tracks usage, validates access              │
+│   │  license-check   │                                              │
+│   └──────────────────┘                                              │
+│                                                                      │
+└─────────────────────────────────────────────────────────────────────┘
 ```
 
 ---
 
-## Distribution Methods
+## Bundle Distribution Options
 
-### Method 1: Managed Bundle (Recommended)
+### Option A: Public Bundle (Recommended)
 
-This is the most integrated approach, using NetSuite's SuiteBundler.
+Anyone can search and install. Your license system controls access.
 
-#### Step 1: Create Bundle in Development Account
+**Pros:**
+- No manual work per customer
+- Customers can install immediately
+- Self-service friendly
 
-1. Log into your NetSuite development/sandbox account
-2. Navigate to: **Customization > SuiteBundler > Create Bundle**
-3. Configure bundle:
-   - **Name**: Flux Capture
-   - **Version**: 1.0.0
-   - **Is Managed**: Yes (tracks installations)
-   - **Is Locked**: Yes (prevents editing)
+**Cons:**
+- Anyone can download (but can't use without license)
+- Competitors could examine obfuscated client code
 
-#### Step 2: Enable Hide Script on Server-Side Files
+**Setup:**
+1. Create bundle in your NetSuite account
+2. Set availability to "Public"
+3. Customers search by bundle name or your account ID
 
-Before adding files to the bundle, enable "Hide in SuiteBundle" on each server-side script:
+### Option B: Shared Bundle
 
-1. Navigate to: **Documents > Files > File Cabinet**
-2. Go to: **SuiteApps/com.flux.capture/**
-3. For each server-side file, click to edit and check **"Hide in SuiteBundle"**
+Only specific account IDs can install.
 
-**Files to Hide (Server-Side):**
+**Pros:**
+- Full control over who can download
+- Extra layer of protection
+
+**Cons:**
+- Must collect Account ID before they can install
+- Manual process to add each customer
+
+**Setup:**
+1. Create bundle in your NetSuite account
+2. Set availability to "Shared"
+3. Add customer Account IDs to sharing list as they sign up
+
+### Recommendation
+
+**Use Public Bundle** - Your license system already prevents unauthorized use. The convenience of self-service outweighs the minimal risk of someone downloading without a license.
+
+---
+
+## Source Code Protection
+
+### What Gets Hidden vs Obfuscated
+
+| File Type | Protection | Method |
+|-----------|------------|--------|
+| Server-side SuiteScript | **Hidden** | "Hide in SuiteBundle" checkbox |
+| Client-side JavaScript | Obfuscated | Build script transformation |
+| HTML/CSS | None needed | Minimal IP value |
+
+### Server-Side Files (HIDDEN - completely invisible)
+
 ```
-suitelet/FC_Suitelet.js          ✓ Hide
-suitelet/FC_Router.js            ✓ Hide
-lib/FC_Engine.js                 ✓ Hide
-lib/FC_LicenseGuard.js           ✓ Hide
-lib/FC_Debug.js                  ✓ Hide
-lib/providers/*.js               ✓ Hide (all provider files)
-lib/extraction/*.js              ✓ Hide
-lib/resolution/*.js              ✓ Hide
-lib/matching/*.js                ✓ Hide
-lib/learning/*.js                ✓ Hide
-lib/validation/*.js              ✓ Hide
-lib/vendors/*.js                 ✓ Hide
-lib/llm/*.js                     ✓ Hide
-lib/utils/*.js                   ✓ Hide
-scripts/FC_ProcessDocuments_MR.js ✓ Hide
-scripts/FC_Document_UE.js        ✓ Hide
-scripts/FC_EmailCapture_Plugin.js ✓ Hide
-scripts/FC_ContinuePolling_SS.js ✓ Hide
+suitelet/FC_Suitelet.js           ✓ HIDDEN
+suitelet/FC_Router.js             ✓ HIDDEN
+lib/FC_Engine.js                  ✓ HIDDEN
+lib/FC_LicenseGuard.js            ✓ HIDDEN
+lib/FC_Debug.js                   ✓ HIDDEN
+lib/providers/*.js                ✓ HIDDEN
+lib/extraction/*.js               ✓ HIDDEN
+lib/resolution/*.js               ✓ HIDDEN
+lib/matching/*.js                 ✓ HIDDEN
+lib/learning/*.js                 ✓ HIDDEN
+lib/validation/*.js               ✓ HIDDEN
+lib/vendors/*.js                  ✓ HIDDEN
+lib/llm/*.js                      ✓ HIDDEN
+lib/utils/*.js                    ✓ HIDDEN
+scripts/FC_ProcessDocuments_MR.js ✓ HIDDEN
+scripts/FC_Document_UE.js         ✓ HIDDEN
+scripts/FC_EmailCapture_Plugin.js ✓ HIDDEN
+scripts/FC_ContinuePolling_SS.js  ✓ HIDDEN
 ```
 
-**Files that CANNOT be Hidden (Client-Side):**
+### Client-Side Files (OBFUSCATED - hard to read)
+
 ```
-client/core/FC.Core.js           ✗ Obfuscate instead
-client/FC.Main.js                ✗ Obfuscate instead
-client/views/*.js                ✗ Obfuscate instead
-App/app_index.html               ✗ Standard
-App/css/*.css                    ✗ Standard
+client/core/FC.Core.js            → Obfuscated
+client/FC.Main.js                 → Obfuscated
+client/views/View.Dashboard.js    → Obfuscated
+client/views/View.Queue.js        → Obfuscated
+client/views/View.Review.js       → Obfuscated
+client/views/View.Settings.js     → Obfuscated
+client/views/View.Rail.js         → Obfuscated
+client/views/View.Documents.js    → Obfuscated
 ```
 
-> **Important**: As of May 2024, NetSuite validates that client-side scripts cannot have "Hide in SuiteBundle" enabled. They must be served to the browser.
+---
 
-#### Step 3: Build Obfuscated Distribution
+## Step-by-Step Setup
 
-Run the build script to obfuscate client-side code:
+### Step 1: Build Distribution Package
 
 ```bash
-# Install dependencies
+# Install build dependencies
 npm install
 
-# Build distribution package
+# Build with obfuscation
 npm run build
 ```
 
 This creates:
-- `dist/bundle/` - SDF project with obfuscated client code
-- `dist/bundle-manifest.json` - Bundle configuration
-- `dist/INSTALL.txt` - Installation instructions
-- `dist/FC_BundleHelper.js` - Helper script to configure Hide settings
+- `dist/bundle/` - Files ready for upload
+- `dist/bundle-manifest.json` - Configuration reference
+- `dist/INSTALL.txt` - Customer instructions
 
-#### Step 4: Upload Obfuscated Files
+### Step 2: Upload to Your NetSuite Account
 
-Replace client-side files in File Cabinet with obfuscated versions from `dist/bundle/`.
+1. Log into your NetSuite dev/sandbox account
+2. Go to **Documents > Files > File Cabinet**
+3. Navigate to or create: `SuiteApps/com.flux.capture/`
+4. Upload all files from `dist/bundle/FileCabinet/SuiteApps/com.flux.capture/`
 
-#### Step 5: Add Objects to Bundle
+### Step 3: Enable Hide in SuiteBundle
 
-In Bundle Builder, add:
-- All script records (with deployments)
-- Custom record types
-- All File Cabinet files
+For each server-side `.js` file:
 
-#### Step 6: Configure Bundle Sharing
+1. Click on the file in File Cabinet
+2. Click **Edit**
+3. Check **"Hide in SuiteBundle"**
+4. Save
 
-**Option A: Shared Bundle (Private)**
-- Add specific account IDs to "Shared Account IDs"
-- Customers search by your account ID + bundle name
+**Tip:** Use the helper script to automate this:
+1. Upload `dist/FC_BundleHelper.js` as a Suitelet
+2. Deploy and run with `?action=configure`
 
-**Option B: Public Bundle**
-- Make bundle public (visible to all NetSuite accounts)
-- Customers search by bundle name
+### Step 4: Create the Bundle
 
-#### Step 7: Generate Bundle ID
+1. Go to **Customization > SuiteBundler > Create Bundle**
+2. Fill in details:
+   - **Name:** Flux Capture
+   - **Version:** 1.0.0
+   - **Description:** AI-powered document capture for NetSuite
+   - **Availability:** Public (or Shared if you prefer)
+3. Add components:
+   - All script records (with deployments)
+   - Both custom record types
+   - All File Cabinet files under `SuiteApps/com.flux.capture/`
+4. Save and note the **Bundle ID**
 
-Save the bundle and note the **Bundle ID** - this is what customers use to install.
+### Step 5: Configure Your Website
 
----
+Update fluxfornetsuite.com with:
+- The Bundle ID for installation instructions
+- Your NetSuite Account ID (for bundle search)
 
-### Method 2: Self-Service Web Portal
-
-Create a web portal on fluxfornetsuite.com for guided installation.
-
-#### Portal Features
-
-1. **Trial Request Flow**
-   - Customer enters email and company info
-   - System generates trial license
-   - Customer receives installation instructions
-
-2. **Installation Wizard**
-   - Step-by-step guide with screenshots
-   - Bundle ID lookup
-   - Verification check
-
-3. **License Activation**
-   - Customer enters license key in app settings
-   - Real-time validation via API
-
-#### Portal API Endpoints
-
-Add these endpoints to your fluxfornetsuite.com backend:
-
-```javascript
-// POST /api/v1/trial-request
-// Request trial installation
-{
-  "email": "user@company.com",
-  "company": "Acme Corp",
-  "account_id": "123456",  // Optional - for verification
-  "estimated_documents": 500
-}
-
-// Response
-{
-  "success": true,
-  "trial_key": "TRL-XXXX-XXXX-XXXX",
-  "expires_at": "2025-01-26T00:00:00Z",
-  "bundle_id": "123456",
-  "installation_url": "https://fluxfornetsuite.com/install/TRL-XXXX",
-  "instructions": "..."
-}
-
-// POST /api/v1/verify-installation
-// Verify Flux Capture is installed in an account
-{
-  "account": "TSTDRV123456",
-  "license_key": "LIC-XXXX-XXXX"
-}
-
-// Response
-{
-  "installed": true,
-  "version": "1.0.0",
-  "license": {
-    "valid": true,
-    "status": "active",
-    "expires_at": "2025-12-31"
-  },
-  "health": {
-    "scripts_deployed": true,
-    "records_created": true,
-    "last_activity": "2024-12-26T10:30:00Z"
-  }
-}
-
-// POST /api/v1/license-check
-// Existing endpoint - validates license
-{
-  "account": "TSTDRV123456",
-  "license_key": "LIC-XXXX-XXXX",
-  "product": "capture",
-  "client_version": "1.0.0"
-}
-
-// Response
-{
-  "valid": true,
-  "status": "active",
-  "expires_at": "2025-12-31T00:00:00Z"
-}
-```
+See `WEBSITE_PORTAL_SPEC.md` for full website implementation details.
 
 ---
 
-## Source Code Protection Strategy
+## Customer Installation Flow
 
-### Layer 1: Hide in SuiteBundle (Server-Side)
-
-Server-side scripts are completely hidden from view when using a managed bundle.
-
-**What "Hidden" Means:**
-- Source code is not visible in File Cabinet
-- Script record shows file but content is encrypted/hidden
-- Customers cannot copy, modify, or view the code
-- Only works for server-side SuiteScript
-
-### Layer 2: Obfuscation (Client-Side)
-
-Client-side JavaScript must be served to browsers, so it can't be truly hidden. We use obfuscation instead:
-
-**Obfuscation Features:**
-- Control flow flattening
-- Dead code injection
-- String encryption (base64)
-- Identifier mangling (hexadecimal names)
-- String array with rotation/shuffle
-- Object key transformation
-
-**Result:**
-- Code is functional but extremely difficult to read
-- Reverse engineering is time-consuming and error-prone
-- Combined with license validation = strong protection
-
-### Layer 3: License Validation
-
-Even if someone deobfuscates the code, they must modify 9+ files to bypass licensing:
-
-- FC_LicenseGuard.js (central validation)
-- FC_Suitelet.js (entry point)
-- FC_Router.js (API entry point)
-- FC_ProcessDocuments_MR.js (background processing)
-- FC_Document_UE.js (record triggers)
-- FC_EmailCapture_Plugin.js (email import)
-- FC_Engine.js (core processing)
-- FC.Core.js (client-side)
-- Multiple embedded checks throughout
-
----
-
-## Installation Flow for Customers
-
-### For Customers - What They See
+### What Customers Do
 
 1. **Visit fluxfornetsuite.com**
    - Click "Start Free Trial" or "Buy Now"
 
-2. **Complete Registration**
-   - Enter email, company, NetSuite account ID
-   - Receive trial/license key via email
+2. **Complete signup**
+   - Enter email, company name
+   - Receive license key via email
 
-3. **Install Bundle in NetSuite**
+3. **Install in NetSuite**
    ```
-   1. Log into NetSuite as Administrator
-   2. Go to: Customization > SuiteBundler > Search & Install Bundles
-   3. Search for "Flux Capture" or enter Bundle ID: [XXXXX]
-   4. Click Install
-   5. Wait 2-5 minutes for installation
+   Customization > SuiteBundler > Search & Install Bundles
+
+   Search for: "Flux Capture"
+   (or enter your Account ID in the search)
+
+   Click Install > Confirm > Wait 2-5 minutes
    ```
 
-4. **Configure License**
-   - Navigate to Flux Capture Suitelet
+4. **Activate license**
+   - Open Flux Capture (appears in menu after install)
    - Go to Settings
    - Enter license key
    - Click Validate
 
-5. **Start Using**
+5. **Start using**
    - Upload first document
-   - Configure extraction settings
-   - Set up email capture (optional)
+   - Configure extraction provider
 
 ---
 
-## Bundle Update Distribution
+## License System Integration
+
+Your existing license system handles:
+
+| Feature | How It Works |
+|---------|--------------|
+| **Access Control** | FC_LicenseGuard.js checks license on every request |
+| **Installation Tracking** | License API logs account IDs that validate |
+| **Trial Management** | 14-day trials with automatic expiration |
+| **Usage Monitoring** | Health check endpoint reports activity |
+
+### License Check Flow
+
+```
+Customer uses Flux Capture
+        │
+        ▼
+FC_LicenseGuard.js checks cache
+        │
+        ├─── Cache valid? → Allow access
+        │
+        └─── Cache expired?
+                │
+                ▼
+        POST fluxfornetsuite.com/api/v1/license-check
+                │
+                ├─── Valid → Cache result, allow access
+                │
+                └─── Invalid → Block with license required message
+```
+
+---
+
+## Updating the Bundle
 
 When you release updates:
 
-1. Update bundle version in your development account
-2. Run obfuscation build for new client code
-3. Upload new files
-4. Save bundle (creates new version)
+1. Build new distribution package
+2. Upload updated files to File Cabinet
+3. Re-enable "Hide in SuiteBundle" on any new server-side files
+4. Edit the bundle and increment version
+5. Save bundle
 
-**For Customers:**
-- They see update notification in SuiteBundler
-- One-click update applies changes
-- Their data is preserved
-
----
-
-## Security Considerations
-
-### What's Protected
-
-| Component | Protection | Effectiveness |
-|-----------|------------|---------------|
-| Server-side scripts | Hide in SuiteBundle | **Strong** - Completely hidden |
-| Client-side scripts | Obfuscation | **Moderate** - Difficult to read |
-| License logic | Multi-layer checks | **Strong** - 9 files to modify |
-| API keys/secrets | Environment config | **Strong** - Not in source |
-
-### What's Not Protected
-
-| Component | Risk | Mitigation |
-|-----------|------|------------|
-| HTML templates | Visible in browser | Minimal IP value |
-| CSS styles | Visible in browser | Minimal IP value |
-| API structure | Visible via network | License required for access |
-
-### Recommendations
-
-1. **Keep core algorithms server-side** - FC_Engine.js handles all AI extraction
-2. **Validate everything server-side** - Don't trust client-side validation
-3. **Use short cache TTL** - License checks every hour
-4. **Monitor for abuse** - Track unusual API patterns
-5. **Rotate obfuscation** - Re-obfuscate with each release
+**For customers:**
+- They'll see update notification in SuiteBundler
+- One-click update process
+- Their data and settings are preserved
 
 ---
 
 ## Troubleshooting
 
-### Bundle Won't Install
+### "Bundle not found" when searching
 
-**Symptoms:** Installation fails or times out
+- Ensure bundle is saved and availability is "Public"
+- Try searching by your Account ID instead of bundle name
+- Bundle may take a few minutes to appear in search
 
-**Solutions:**
-1. Check required features are enabled
-2. Verify no conflicting script IDs
-3. Check for existing custom records with same IDs
-4. Review installation log in SuiteBundler
+### Scripts visible after installation
 
-### Scripts Not Hidden
+- "Hide in SuiteBundle" must be enabled BEFORE adding file to bundle
+- Remove file from bundle, enable hide, re-add file
 
-**Symptoms:** Source code visible after bundle install
+### License validation fails after install
 
-**Causes:**
-1. "Hide in SuiteBundle" not enabled on source file
-2. File added to bundle after preference was set
-3. Bundle is not "Managed"
-
-**Solution:**
-1. Enable "Hide in SuiteBundle" on each file
-2. Remove file from bundle
-3. Re-add file to bundle
-4. Re-save bundle
-
-### License Validation Fails
-
-**Symptoms:** "License Required" error after installation
-
-**Solutions:**
-1. Verify license key is correct
-2. Check network connectivity to fluxfornetsuite.com
-3. Verify account ID matches license
-4. Contact support@fluxfornetsuite.com
+- Check network connectivity to fluxfornetsuite.com
+- Verify license key is entered correctly
+- Check if trial has expired
 
 ---
 
@@ -392,39 +317,43 @@ When you release updates:
 ### Build Commands
 
 ```bash
-# Install dependencies
-npm install
-
-# Full build (obfuscate + package)
-npm run build
-
-# Package only (no obfuscation)
-npm run build:bundle
-
-# Obfuscate only
-npm run build:obfuscate
-
-# Verify installation
-npm run verify-installation -- --account TSTDRV123456
+npm install                    # Install dependencies
+npm run build                  # Full build with obfuscation
+npm run build:bundle           # Package only (skip obfuscation)
 ```
 
-### Key Files
+### Key Information to Configure
+
+| Setting | Value |
+|---------|-------|
+| Bundle ID | [Your bundle ID after creation] |
+| Source Account ID | [Your NetSuite account ID] |
+| License API | https://fluxfornetsuite.com/api/v1/license-check |
+| Support Email | support@fluxfornetsuite.com |
+
+### Files Reference
 
 | File | Purpose |
 |------|---------|
-| `scripts/build-distribution.js` | Build and obfuscation pipeline |
-| `scripts/verify-installation.js` | Installation verification |
-| `dist/bundle/` | Distribution-ready SDF project |
-| `dist/bundle-manifest.json` | Bundle configuration |
-| `dist/INSTALL.txt` | Customer installation guide |
-| `dist/FC_BundleHelper.js` | Helper for Hide settings |
-
-### Support
-
-- Website: https://fluxfornetsuite.com
-- Email: support@fluxfornetsuite.com
-- Documentation: https://fluxfornetsuite.com/docs
+| `scripts/build-distribution.js` | Build and obfuscation |
+| `scripts/verify-installation.js` | Installation verification CLI |
+| `dist/bundle/` | Distribution-ready files |
+| `portal/` | Website portal templates |
+| `WEBSITE_PORTAL_SPEC.md` | Full website specification |
 
 ---
 
-*This document is confidential and intended for internal use.*
+## Security Summary
+
+| Layer | Protection | Bypass Difficulty |
+|-------|------------|-------------------|
+| Hide in SuiteBundle | Server code invisible | Impossible |
+| Obfuscation | Client code unreadable | Very Hard |
+| License Checks | 9+ files to modify | Hard |
+| API Validation | Server-side enforcement | Impossible without server access |
+
+**Combined protection makes unauthorized use impractical.**
+
+---
+
+*For website implementation details, see WEBSITE_PORTAL_SPEC.md*
