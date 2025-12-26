@@ -2637,6 +2637,17 @@ define([
             }
 
             log.audit('saveSettings', 'Settings saved: ' + JSON.stringify(settingsData));
+
+            // If license key was updated, clear the license cache so next check gets fresh data
+            if (context.licenseKey !== undefined) {
+                try {
+                    License.refresh();
+                    log.audit('saveSettings', 'License cache cleared after key update');
+                } catch (e) {
+                    log.debug('saveSettings', 'Could not refresh license cache: ' + e.message);
+                }
+            }
+
             return Response.success({ saved: true, configId: configId });
         } catch (e) {
             log.error('saveSettings', e);
