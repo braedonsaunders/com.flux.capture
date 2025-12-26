@@ -159,13 +159,117 @@ define([
         return lic;
     }
 
+    /**
+     * Get detailed health and installation status
+     * Used for installation verification from website portal
+     * @param {boolean} detailed - Include detailed component checks
+     * @returns {Object} Health status response
+     */
+    function getHealthStatus(detailed) {
+        var health = {
+            status: 'healthy',
+            version: API_VERSION,
+            account: runtime.accountId,
+            environment: runtime.envType,
+            timestamp: new Date().toISOString()
+        };
+
+        // Basic license check (non-blocking)
+        try {
+            var licenseResult = License.validate();
+            health.license = {
+                valid: licenseResult && licenseResult.valid === true,
+                status: licenseResult ? licenseResult.status : 'unknown',
+                expires_at: licenseResult ? licenseResult.expires_at : null
+            };
+        } catch (e) {
+            health.license = { valid: false, status: 'error', message: e.message };
+        }
+
+        if (detailed) {
+            // Check custom records exist
+            health.components = {
+                records: {},
+                scripts: {},
+                files: {}
+            };
+
+            // Check Flux Document record
+            try {
+                var docSearch = search.create({
+                    type: 'customrecord_flux_document',
+                    columns: ['internalid'],
+                    filters: []
+                });
+                docSearch.run().getRange({ start: 0, end: 1 });
+                health.components.records.flux_document = { exists: true };
+            } catch (e) {
+                health.components.records.flux_document = { exists: false, error: e.message };
+            }
+
+            // Check Flux Config record
+            try {
+                var configSearch = search.create({
+                    type: 'customrecord_flux_config',
+                    columns: ['internalid'],
+                    filters: []
+                });
+                configSearch.run().getRange({ start: 0, end: 1 });
+                health.components.records.flux_config = { exists: true };
+            } catch (e) {
+                health.components.records.flux_config = { exists: false, error: e.message };
+            }
+
+            // Check key files exist
+            var filesToCheck = [
+                '/SuiteApps/com.flux.capture/lib/FC_Engine.js',
+                '/SuiteApps/com.flux.capture/App/app_index.html'
+            ];
+
+            for (var i = 0; i < filesToCheck.length; i++) {
+                var filePath = filesToCheck[i];
+                try {
+                    var f = file.load({ id: filePath });
+                    health.components.files[filePath] = { exists: true, size: f.size };
+                } catch (e) {
+                    health.components.files[filePath] = { exists: false };
+                }
+            }
+
+            // Get usage stats
+            try {
+                var statsSearch = search.create({
+                    type: 'customrecord_flux_document',
+                    columns: [
+                        search.createColumn({ name: 'internalid', summary: search.Summary.COUNT })
+                    ],
+                    filters: []
+                });
+                var statsResult = statsSearch.run().getRange({ start: 0, end: 1 });
+                health.usage = {
+                    total_documents: statsResult.length > 0 ? parseInt(statsResult[0].getValue({ name: 'internalid', summary: search.Summary.COUNT })) || 0 : 0
+                };
+            } catch (e) {
+                health.usage = { total_documents: 0 };
+            }
+
+            // All components OK?
+            health.installed = health.components.records.flux_document &&
+                              health.components.records.flux_document.exists &&
+                              health.components.records.flux_config &&
+                              health.components.records.flux_config.exists;
+        }
+
+        return Response.success(health);
+    }
+
     function get(context) {
         var result;
         try {
             var action = context.action || 'list';
 
-            // Allow settings and licenseStatus actions without license
-            if (action !== 'settings' && action !== 'licenseStatus') {
+            // Allow settings, licenseStatus, health, and installationVerify actions without license
+            if (action !== 'settings' && action !== 'licenseStatus' && action !== 'health' && action !== 'installationVerify') {
                 // LICENSE CHECK - Block unauthorized access for all other actions
                 _requireLicense();
             }
@@ -223,7 +327,10 @@ define([
                     result = getExpenseCategory(context.id);
                     break;
                 case 'health':
-                    result = Response.success({ status: 'healthy', version: API_VERSION });
+                    result = getHealthStatus(false);
+                    break;
+                case 'installationVerify':
+                    result = getHealthStatus(true);
                     break;
                 case 'vendorSuggestions':
                     result = getVendorSuggestions(context.vendorName);
