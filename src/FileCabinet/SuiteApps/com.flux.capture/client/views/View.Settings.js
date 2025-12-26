@@ -509,6 +509,27 @@
 
             // Load LLM config on init
             this.loadLLMConfig();
+
+            // License activation button
+            var activateLicenseBtn = el('#btn-activate-license');
+            if (activateLicenseBtn) {
+                activateLicenseBtn.addEventListener('click', function() {
+                    self.activateLicense();
+                });
+            }
+
+            // License validate button
+            var validateLicenseBtn = el('#btn-validate-license');
+            if (validateLicenseBtn) {
+                validateLicenseBtn.addEventListener('click', function() {
+                    self.validateLicense();
+                });
+            }
+
+            // If unlicensed, auto-switch to license tab
+            if (License.isUnlicensedMode()) {
+                this.switchSettingsTab('license');
+            }
         },
 
         // ==========================================
@@ -534,7 +555,9 @@
             });
 
             // Load data for specific tabs on first activation
-            if (tabId === 'extraction' && !this.providerConfig) {
+            if (tabId === 'license') {
+                this.initLicensePanel();
+            } else if (tabId === 'extraction' && !this.providerConfig) {
                 this.loadProviderConfig();
             } else if (tabId === 'forms' && !this.formConfig) {
                 this.loadFormConfig(this.currentFormType);
@@ -587,6 +610,106 @@
                     }
                 }
             });
+        },
+
+        // ==========================================
+        // LICENSE MANAGEMENT
+        // ==========================================
+
+        initLicensePanel: function() {
+            var self = this;
+
+            // Set account ID
+            var accountIdEl = el('#license-account-id');
+            if (accountIdEl && window.FC_CONFIG) {
+                accountIdEl.value = window.FC_CONFIG.accountId || '';
+            }
+
+            // Load saved license key if any
+            API.get('settings').then(function(result) {
+                var settings = result.data || result;
+                if (settings.licenseKey) {
+                    var keyInput = el('#license-key-input');
+                    if (keyInput) {
+                        keyInput.value = settings.licenseKey;
+                    }
+                }
+            }).catch(function() {
+                // Ignore - settings may not exist yet
+            });
+
+            // Update status based on current license state
+            this.updateLicenseStatus();
+        },
+
+        updateLicenseStatus: function() {
+            var badge = el('#license-status-badge');
+            var details = el('#license-details');
+
+            if (License.isValid()) {
+                if (badge) {
+                    badge.textContent = 'Active';
+                    badge.className = 'status-badge status-completed';
+                }
+                if (details) {
+                    details.style.display = 'block';
+                }
+            } else {
+                if (badge) {
+                    badge.textContent = 'Not Licensed';
+                    badge.className = 'status-badge status-error';
+                }
+                if (details) {
+                    details.style.display = 'none';
+                }
+            }
+        },
+
+        activateLicense: function() {
+            var self = this;
+            var keyInput = el('#license-key-input');
+            var licenseKey = keyInput ? keyInput.value.trim() : '';
+
+            if (!licenseKey) {
+                UI.toast('Please enter a license key', 'warning');
+                return;
+            }
+
+            var activateBtn = el('#btn-activate-license');
+            if (activateBtn) {
+                activateBtn.disabled = true;
+                activateBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Activating...';
+            }
+
+            // Save license key to settings and trigger validation
+            API.post('settings', {
+                licenseKey: licenseKey
+            }).then(function() {
+                UI.toast('License key saved. Validating...', 'info');
+                // Reload page to trigger fresh license check from server
+                setTimeout(function() {
+                    License.refresh();
+                }, 500);
+            }).catch(function(err) {
+                UI.toast('Failed to save license key: ' + err.message, 'error');
+                if (activateBtn) {
+                    activateBtn.disabled = false;
+                    activateBtn.innerHTML = '<i class="fas fa-check"></i> Activate License';
+                }
+            });
+        },
+
+        validateLicense: function() {
+            var validateBtn = el('#btn-validate-license');
+            if (validateBtn) {
+                validateBtn.disabled = true;
+                validateBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Validating...';
+            }
+
+            // Trigger full refresh to revalidate with server
+            setTimeout(function() {
+                License.refresh();
+            }, 300);
         },
 
         // ==========================================

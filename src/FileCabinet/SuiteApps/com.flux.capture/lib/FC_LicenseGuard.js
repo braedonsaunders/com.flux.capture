@@ -5,8 +5,8 @@
  * Flux Capture - License Validation Guard
  * Validates license with Flux Platform API and enforces access control
  */
-define(['N/https', 'N/runtime', 'N/cache', 'N/error', 'N/encode'],
-function(https, runtime, cache, error, encode) {
+define(['N/https', 'N/runtime', 'N/cache', 'N/error', 'N/encode', 'N/search'],
+function(https, runtime, cache, error, encode, search) {
 
     'use strict';
 
@@ -73,6 +73,37 @@ function(https, runtime, cache, error, encode) {
     }
 
     /**
+     * Load license key from saved settings
+     * @private
+     */
+    function _getLicenseKey() {
+        try {
+            const configSearch = search.create({
+                type: 'customrecord_flux_config',
+                filters: [
+                    ['custrecord_flux_cfg_type', 'is', 'settings'],
+                    'AND',
+                    ['custrecord_flux_cfg_key', 'is', 'general'],
+                    'AND',
+                    ['custrecord_flux_cfg_active', 'is', 'T']
+                ],
+                columns: ['custrecord_flux_cfg_data']
+            });
+            const results = configSearch.run().getRange({ start: 0, end: 1 });
+            if (results.length > 0) {
+                const dataStr = results[0].getValue('custrecord_flux_cfg_data');
+                if (dataStr) {
+                    const settings = JSON.parse(dataStr);
+                    return settings.licenseKey || '';
+                }
+            }
+        } catch (e) {
+            log.debug('FC_LicenseGuard', 'Could not load license key: ' + e.message);
+        }
+        return '';
+    }
+
+    /**
      * Fetch license from server
      * @private
      */
@@ -80,6 +111,7 @@ function(https, runtime, cache, error, encode) {
         const endpoint = _d(_b);
         const accountId = runtime.accountId;
         const fingerprint = _generateFingerprint();
+        const licenseKey = _getLicenseKey();
 
         try {
             const response = https.post({
@@ -92,6 +124,7 @@ function(https, runtime, cache, error, encode) {
                 },
                 body: JSON.stringify({
                     account: accountId,
+                    license_key: licenseKey,
                     device_fingerprint: fingerprint,
                     product: 'capture',
                     client_version: '1.0.0'
