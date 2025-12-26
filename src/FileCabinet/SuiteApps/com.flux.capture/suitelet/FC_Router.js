@@ -27,8 +27,9 @@ define([
     '/SuiteApps/com.flux.capture/lib/FC_Debug',
     '/SuiteApps/com.flux.capture/suitelet/FC_FormSchemaExtractor',
     '/SuiteApps/com.flux.capture/lib/llm/GeminiVerifier',
-    '/SuiteApps/com.flux.capture/lib/matching/POMatchingEngine'
-], function(file, record, search, query, runtime, errorModule, log, encode, email, format, task, workflow, FC_Engine, fcDebug, FormSchemaExtractor, GeminiVerifierModule, POMatchingEngine) {
+    '/SuiteApps/com.flux.capture/lib/matching/POMatchingEngine',
+    '/SuiteApps/com.flux.capture/lib/FC_LicenseGuard'
+], function(file, record, search, query, runtime, errorModule, log, encode, email, format, task, workflow, FC_Engine, fcDebug, FormSchemaExtractor, GeminiVerifierModule, POMatchingEngine, License) {
 
     const API_VERSION = '2.0.0';
 
@@ -148,9 +149,22 @@ define([
     // ==================== Main Handlers ====================
     // CRITICAL: Return JSON.stringify() to avoid NetSuite serialization bug
 
+    /**
+     * License gate wrapper - validates license before processing
+     * @private
+     */
+    function _requireLicense() {
+        var lic = License.require();
+        log.debug('FC_Router.License', 'Validated: ' + lic.tier);
+        return lic;
+    }
+
     function get(context) {
         var result;
         try {
+            // LICENSE CHECK - Block unauthorized access
+            _requireLicense();
+
             var action = context.action || 'list';
 
             switch (action) {
@@ -263,6 +277,9 @@ define([
     function post(context) {
         var result;
         try {
+            // LICENSE CHECK - Block unauthorized access
+            _requireLicense();
+
             var action = context.action || 'upload';
 
             switch (action) {
@@ -307,6 +324,9 @@ define([
     function put(context) {
         var result;
         try {
+            // LICENSE CHECK - Block unauthorized access
+            _requireLicense();
+
             var action = context.action || 'update';
 
             switch (action) {
@@ -372,6 +392,9 @@ define([
     function _delete(context) {
         var result;
         try {
+            // LICENSE CHECK - Block unauthorized access
+            _requireLicense();
+
             // For DELETE requests, params come as URL query string object (not body)
             // NetSuite RESTlets pass query params directly to the handler
             var params = context || {};

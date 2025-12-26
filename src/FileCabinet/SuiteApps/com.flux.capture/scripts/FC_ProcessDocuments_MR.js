@@ -26,9 +26,11 @@ define([
     'N/search',
     'N/runtime',
     'N/task',
+    'N/log',
     '/SuiteApps/com.flux.capture/lib/FC_Engine',
-    '/SuiteApps/com.flux.capture/lib/utils/PDFUtils'
-], function(record, file, search, runtime, task, FC_Engine, PDFUtils) {
+    '/SuiteApps/com.flux.capture/lib/utils/PDFUtils',
+    '/SuiteApps/com.flux.capture/lib/FC_LicenseGuard'
+], function(record, file, search, runtime, task, log, FC_Engine, PDFUtils, License) {
 
     'use strict';
 
@@ -82,6 +84,15 @@ define([
      * Includes both new PENDING docs and PROCESSING docs that need continued polling.
      */
     function getInputData() {
+        // LICENSE CHECK - Block processing if unlicensed
+        try {
+            var lic = License.require();
+            log.audit('FC_ProcessDocuments_MR.License', 'Validated: ' + lic.tier);
+        } catch (licError) {
+            log.error('FC_ProcessDocuments_MR', 'License validation failed - aborting job');
+            return []; // Return empty to abort job gracefully
+        }
+
         // Search for:
         // 1. PENDING documents (new, need Azure submission)
         // 2. PROCESSING documents with operation URL (need continued polling)

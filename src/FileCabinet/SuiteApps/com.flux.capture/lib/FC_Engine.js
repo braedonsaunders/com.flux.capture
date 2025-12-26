@@ -23,6 +23,8 @@ define([
     'N/encode',
     // Debug utility
     './FC_Debug',
+    // License validation
+    './FC_LicenseGuard',
     // Provider factory
     './providers/ProviderFactory',
     // Extraction modules
@@ -47,6 +49,7 @@ define([
 ], function(
     file, record, search, query, runtime, log, format, encode,
     fcDebug,
+    License,
     ProviderFactoryModule,
     FieldMatcherModule, DateParserModule, AmountParserModule, LayoutAnalyzerModule, TableAnalyzerModule,
     DynamicFieldMatcherModule,
@@ -104,6 +107,12 @@ define([
 
     class FluxCaptureEngine {
         constructor(options = {}) {
+            // LICENSE CHECK - Validate before initialization
+            this._licenseContext = License.validate();
+            if (!this._licenseContext || !this._licenseContext.valid) {
+                throw new Error('FLUX_LICENSE_REQUIRED: Valid Flux Capture license required');
+            }
+
             this.enableLearning = options.enableLearning !== false;
 
             // Anomaly detection settings (all default to true except detectRoundAmounts)
@@ -232,6 +241,11 @@ define([
          */
         processDocument(fileId, options = {}) {
             const startTime = Date.now();
+
+            // Embedded license revalidation
+            if (!License._vld({ id: fileId }, this._licenseContext)) {
+                throw new Error('FLUX_LICENSE_REQUIRED: Processing requires valid license');
+            }
 
             try {
                 const fileObj = file.load({ id: fileId });
@@ -383,6 +397,11 @@ define([
          */
         processWithRawResult(rawResult, options = {}) {
             const startTime = Date.now();
+
+            // Embedded license revalidation
+            if (!License._vld(rawResult, this._licenseContext)) {
+                throw new Error('FLUX_LICENSE_REQUIRED: Processing requires valid license');
+            }
 
             try {
                 log.audit('FluxCapture.processWithRawResult', 'Processing with pre-extracted result');
