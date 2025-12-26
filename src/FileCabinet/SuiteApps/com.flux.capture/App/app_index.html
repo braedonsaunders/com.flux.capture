@@ -1620,7 +1620,7 @@
                                     </div>
                                     <div class="provider-info">
                                         <div class="provider-header">
-                                            <span class="provider-name">Azure Form Recognizer</span>
+                                            <span class="provider-name">Azure Document Intelligence</span>
                                             <span class="provider-badge badge-pro">Premium</span>
                                         </div>
                                         <p class="provider-desc">Microsoft Azure Document Intelligence. Higher accuracy for complex documents.</p>
@@ -1652,11 +1652,14 @@
 
                             <!-- Azure Configuration Panel -->
                             <div class="provider-config-panel" id="azure-config-panel" style="display:none;">
-                                <h4><i class="fas fa-cog"></i> Azure Form Recognizer Configuration</h4>
+                                <h4><i class="fas fa-cog"></i> Azure Document Intelligence Configuration</h4>
                                 <div class="provider-config-form">
                                     <div class="form-field">
                                         <label for="azure-endpoint">
                                             Azure Endpoint <span class="required">*</span>
+                                            <button type="button" class="btn-help-icon" id="btn-help-azure" title="How to get Azure credentials">
+                                                <i class="fas fa-question-circle"></i>
+                                            </button>
                                         </label>
                                         <input type="url" id="azure-endpoint" placeholder="https://your-resource.cognitiveservices.azure.com" autocomplete="off">
                                         <small>Your Azure Cognitive Services endpoint URL</small>
@@ -1672,6 +1675,31 @@
                                             </button>
                                         </div>
                                         <small>Your API key will be encrypted before storage</small>
+                                    </div>
+
+                                    <!-- Azure Help Popup -->
+                                    <div class="help-popup" id="azure-help-popup" style="display:none;">
+                                        <div class="help-popup-content">
+                                            <div class="help-popup-header">
+                                                <h5><i class="fas fa-info-circle"></i> Getting Azure Document Intelligence Credentials</h5>
+                                                <button type="button" class="btn-close-popup" id="btn-close-azure-help">
+                                                    <i class="fas fa-times"></i>
+                                                </button>
+                                            </div>
+                                            <div class="help-popup-body">
+                                                <ol>
+                                                    <li><strong>Sign in</strong> to the <a href="https://portal.azure.com" target="_blank">Azure Portal</a></li>
+                                                    <li><strong>Create a resource:</strong> Search for "Document Intelligence" and click Create</li>
+                                                    <li><strong>Configure:</strong> Select your subscription, resource group, region, and pricing tier</li>
+                                                    <li><strong>Get credentials:</strong> Once created, go to "Keys and Endpoint" in your resource</li>
+                                                    <li><strong>Copy:</strong> Use KEY 1 or KEY 2 as your API Key, and copy the Endpoint URL</li>
+                                                </ol>
+                                                <div class="help-popup-note">
+                                                    <i class="fas fa-lightbulb"></i>
+                                                    <span>The F0 (Free) tier includes 500 pages/month. For production, consider the S0 tier.</span>
+                                                </div>
+                                            </div>
+                                        </div>
                                     </div>
                                     <div class="form-field">
                                         <label for="azure-model">Default Model</label>
@@ -1698,6 +1726,9 @@
                                     <div class="form-field">
                                         <label for="mindee-api-key">
                                             API Key <span class="required">*</span>
+                                            <button type="button" class="btn-help-icon" id="btn-help-mindee" title="How to get Mindee API key">
+                                                <i class="fas fa-question-circle"></i>
+                                            </button>
                                         </label>
                                         <div class="input-with-icon">
                                             <input type="password" id="mindee-api-key" placeholder="Enter your Mindee API key" autocomplete="new-password">
@@ -1705,8 +1736,33 @@
                                                 <i class="fas fa-eye"></i>
                                             </button>
                                         </div>
-                                        <small>Your API key will be encrypted before storage. Get your key at <a href="https://platform.mindee.com" target="_blank">platform.mindee.com</a></small>
+                                        <small>Your API key will be encrypted before storage</small>
                                     </div>
+
+                                    <!-- Mindee Help Popup -->
+                                    <div class="help-popup" id="mindee-help-popup" style="display:none;">
+                                        <div class="help-popup-content">
+                                            <div class="help-popup-header">
+                                                <h5><i class="fas fa-info-circle"></i> Getting Your Mindee API Key</h5>
+                                                <button type="button" class="btn-close-popup" id="btn-close-mindee-help">
+                                                    <i class="fas fa-times"></i>
+                                                </button>
+                                            </div>
+                                            <div class="help-popup-body">
+                                                <ol>
+                                                    <li><strong>Sign up</strong> at <a href="https://platform.mindee.com" target="_blank">platform.mindee.com</a></li>
+                                                    <li><strong>Create an API:</strong> Go to APIs &gt; Add New API, or use a pre-built API like Invoice or Receipt</li>
+                                                    <li><strong>Get your key:</strong> Navigate to your API's dashboard and find the API Key section</li>
+                                                    <li><strong>Copy:</strong> Click the copy button next to your API key</li>
+                                                </ol>
+                                                <div class="help-popup-note">
+                                                    <i class="fas fa-lightbulb"></i>
+                                                    <span>Mindee offers a free tier with 250 pages/month. The Invoice API provides excellent accuracy for business documents.</span>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+
                                     <div class="form-field">
                                         <label for="mindee-doc-type">Default Document Type</label>
                                         <select id="mindee-doc-type">

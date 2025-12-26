@@ -412,6 +412,9 @@
                 });
             }
 
+            // Help popup handlers
+            self.initHelpPopups();
+
             // Save provider settings
             var saveProviderBtn = el('#btn-save-provider');
             if (saveProviderBtn) {
@@ -3154,6 +3157,75 @@
                 if (ociRadio) ociRadio.checked = true;
                 if (ociOption) ociOption.classList.add('selected');
             }
+        },
+
+        /**
+         * Initialize help popup event handlers
+         */
+        initHelpPopups: function() {
+            var self = this;
+
+            // Azure help popup
+            var azureHelpBtn = el('#btn-help-azure');
+            var azureHelpPopup = el('#azure-help-popup');
+            var azureHelpClose = el('#btn-close-azure-help');
+
+            if (azureHelpBtn && azureHelpPopup) {
+                azureHelpBtn.addEventListener('click', function(e) {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    azureHelpPopup.style.display = 'flex';
+                });
+            }
+
+            if (azureHelpClose && azureHelpPopup) {
+                azureHelpClose.addEventListener('click', function() {
+                    azureHelpPopup.style.display = 'none';
+                });
+            }
+
+            if (azureHelpPopup) {
+                azureHelpPopup.addEventListener('click', function(e) {
+                    if (e.target === azureHelpPopup) {
+                        azureHelpPopup.style.display = 'none';
+                    }
+                });
+            }
+
+            // Mindee help popup
+            var mindeeHelpBtn = el('#btn-help-mindee');
+            var mindeeHelpPopup = el('#mindee-help-popup');
+            var mindeeHelpClose = el('#btn-close-mindee-help');
+
+            if (mindeeHelpBtn && mindeeHelpPopup) {
+                mindeeHelpBtn.addEventListener('click', function(e) {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    mindeeHelpPopup.style.display = 'flex';
+                });
+            }
+
+            if (mindeeHelpClose && mindeeHelpPopup) {
+                mindeeHelpClose.addEventListener('click', function() {
+                    mindeeHelpPopup.style.display = 'none';
+                });
+            }
+
+            if (mindeeHelpPopup) {
+                mindeeHelpPopup.addEventListener('click', function(e) {
+                    if (e.target === mindeeHelpPopup) {
+                        mindeeHelpPopup.style.display = 'none';
+                    }
+                });
+            }
+
+            // Close popups with Escape key
+            document.addEventListener('keydown', function(e) {
+                if (e.key === 'Escape') {
+                    if (azureHelpPopup) azureHelpPopup.style.display = 'none';
+                    if (mindeeHelpPopup) mindeeHelpPopup.style.display = 'none';
+                }
+            });
         },
 
         testAzureConnection: function() {

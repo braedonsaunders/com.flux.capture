@@ -10535,6 +10535,167 @@ tr.doc-row.deleting::after {
     border-top: 1px solid var(--border-color);
 }
 
+/* Help Icon Button */
+.btn-help-icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 18px;
+    height: 18px;
+    padding: 0;
+    margin-left: var(--space-xs);
+    border: none;
+    background: transparent;
+    color: var(--color-primary);
+    cursor: pointer;
+    border-radius: var(--radius-full);
+    transition: all var(--transition);
+    vertical-align: middle;
+}
+
+.btn-help-icon:hover {
+    color: var(--color-primary-dark);
+    background: var(--color-primary-bg);
+}
+
+.btn-help-icon i {
+    font-size: 14px;
+}
+
+/* Help Popup Overlay */
+.help-popup {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.5);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 10000;
+    animation: fadeIn 0.2s ease;
+}
+
+@keyframes fadeIn {
+    from { opacity: 0; }
+    to { opacity: 1; }
+}
+
+.help-popup-content {
+    background: var(--surface-card);
+    border-radius: var(--radius-lg);
+    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+    max-width: 500px;
+    width: 90%;
+    max-height: 80vh;
+    overflow: hidden;
+    animation: slideUp 0.3s ease;
+}
+
+@keyframes slideUp {
+    from {
+        opacity: 0;
+        transform: translateY(20px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.help-popup-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: var(--space-md) var(--space-lg);
+    border-bottom: 1px solid var(--border-color);
+    background: var(--gray-50);
+}
+
+.help-popup-header h5 {
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
+    margin: 0;
+    font-size: var(--font-size-base);
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+.help-popup-header h5 i {
+    color: var(--color-primary);
+}
+
+.btn-close-popup {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 32px;
+    height: 32px;
+    border: none;
+    background: transparent;
+    color: var(--text-tertiary);
+    cursor: pointer;
+    border-radius: var(--radius-md);
+    transition: all var(--transition);
+}
+
+.btn-close-popup:hover {
+    background: var(--gray-100);
+    color: var(--text-primary);
+}
+
+.help-popup-body {
+    padding: var(--space-lg);
+}
+
+.help-popup-body ol {
+    margin: 0;
+    padding-left: var(--space-lg);
+}
+
+.help-popup-body ol li {
+    margin-bottom: var(--space-sm);
+    line-height: 1.6;
+    color: var(--text-secondary);
+}
+
+.help-popup-body ol li strong {
+    color: var(--text-primary);
+}
+
+.help-popup-body a {
+    color: var(--color-primary);
+    text-decoration: none;
+}
+
+.help-popup-body a:hover {
+    text-decoration: underline;
+}
+
+.help-popup-note {
+    display: flex;
+    align-items: flex-start;
+    gap: var(--space-sm);
+    margin-top: var(--space-lg);
+    padding: var(--space-md);
+    background: var(--color-info-bg);
+    border-radius: var(--radius-md);
+    border-left: 3px solid var(--color-info);
+}
+
+.help-popup-note i {
+    color: var(--color-info);
+    margin-top: 2px;
+}
+
+.help-popup-note span {
+    font-size: var(--font-size-sm);
+    color: var(--text-secondary);
+    line-height: 1.5;
+}
+
 /* ==========================================
    EXTRACTION POOL SYSTEM
    PDF.js, Annotations, Pool, Quick Assign

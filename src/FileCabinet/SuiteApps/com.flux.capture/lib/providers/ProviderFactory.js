@@ -112,8 +112,8 @@ define([
                 },
                 {
                     type: ProviderType.AZURE,
-                    name: 'Azure Form Recognizer',
-                    description: 'Microsoft Azure Document Intelligence (Form Recognizer)',
+                    name: 'Azure Document Intelligence',
+                    description: 'Microsoft Azure AI Document Intelligence for high-accuracy document extraction',
                     requiresConfig: true,
                     configFields: [
                         {
@@ -130,7 +130,7 @@ define([
                             type: 'password',
                             required: true,
                             placeholder: 'Enter your Azure API key',
-                            helpText: 'Your Azure Form Recognizer API key (will be encrypted)',
+                            helpText: 'Your Azure Document Intelligence API key (will be encrypted)',
                             encrypted: true
                         },
                         {
