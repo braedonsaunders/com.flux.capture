@@ -924,6 +924,10 @@
 
             <!-- Settings Tabs Navigation -->
             <div class="settings-tabs-nav">
+                <button class="settings-nav-tab" data-settings-tab="license">
+                    <i class="fas fa-key"></i>
+                    <span>License</span>
+                </button>
                 <button class="settings-nav-tab active" data-settings-tab="general">
                     <i class="fas fa-sliders"></i>
                     <span>General</span>
@@ -948,6 +952,109 @@
                     <i class="fas fa-cog"></i>
                     <span>System</span>
                 </button>
+            </div>
+
+            <!-- TAB: License -->
+            <div class="settings-tab-panel" id="settings-panel-license" style="display:none;">
+                <div class="settings-layout">
+                    <div class="settings-card settings-card-large">
+                        <div class="settings-card-header">
+                            <i class="fas fa-key"></i>
+                            <div>
+                                <h3>License Configuration</h3>
+                                <p>Enter your Flux Capture license key to activate the application</p>
+                            </div>
+                        </div>
+                        <div class="settings-card-body">
+                            <!-- License Status -->
+                            <div class="setting-row" id="license-status-row">
+                                <div class="setting-label">
+                                    <span>License Status</span>
+                                    <small>Current license validation state</small>
+                                </div>
+                                <div class="setting-control">
+                                    <span id="license-status-badge" class="status-badge status-pending">Checking...</span>
+                                </div>
+                            </div>
+
+                            <!-- Account ID (read-only) -->
+                            <div class="setting-row">
+                                <div class="setting-label">
+                                    <span>NetSuite Account ID</span>
+                                    <small>Your account identifier (used for license validation)</small>
+                                </div>
+                                <div class="setting-control">
+                                    <input type="text" id="license-account-id" readonly style="background: var(--bg-secondary); cursor: not-allowed;">
+                                </div>
+                            </div>
+
+                            <!-- License Key Input -->
+                            <div class="setting-row">
+                                <div class="setting-label">
+                                    <span>License Key</span>
+                                    <small>Enter the license key provided by Flux</small>
+                                </div>
+                                <div class="setting-control" style="flex-direction: column; align-items: flex-start; gap: 8px;">
+                                    <input type="text" id="license-key-input" placeholder="XXXX-XXXX-XXXX-XXXX" style="width: 100%; max-width: 350px; font-family: monospace; letter-spacing: 1px;">
+                                    <div style="display: flex; gap: 8px;">
+                                        <button class="btn btn-primary" id="btn-activate-license">
+                                            <i class="fas fa-check"></i> Activate License
+                                        </button>
+                                        <button class="btn btn-secondary" id="btn-validate-license">
+                                            <i class="fas fa-sync"></i> Validate
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- License Details (shown when valid) -->
+                            <div id="license-details" style="display: none;">
+                                <div class="setting-row">
+                                    <div class="setting-label">
+                                        <span>Licensed To</span>
+                                        <small>Organization name on record</small>
+                                    </div>
+                                    <div class="setting-control">
+                                        <span id="license-org-name">-</span>
+                                    </div>
+                                </div>
+                                <div class="setting-row">
+                                    <div class="setting-label">
+                                        <span>Expiration Date</span>
+                                        <small>License validity period</small>
+                                    </div>
+                                    <div class="setting-control">
+                                        <span id="license-expires-at">-</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Help Card -->
+                    <div class="settings-card">
+                        <div class="settings-card-header">
+                            <i class="fas fa-circle-question"></i>
+                            <div>
+                                <h3>Need a License?</h3>
+                                <p>Get started with Flux Capture</p>
+                            </div>
+                        </div>
+                        <div class="settings-card-body">
+                            <p style="color: var(--text-secondary); margin-bottom: 16px;">
+                                Contact our sales team to get a license key for your organization.
+                            </p>
+                            <div style="display: flex; gap: 12px; flex-wrap: wrap;">
+                                <a href="https://flux-com.vercel.app" target="_blank" class="btn btn-primary">
+                                    <i class="fas fa-external-link-alt"></i> Visit Website
+                                </a>
+                                <a href="mailto:sales@gantry.finance" class="btn btn-secondary">
+                                    <i class="fas fa-envelope"></i> Contact Sales
+                                </a>
+                            </div>
+                        </div>
+                    </div>
+                </div>
             </div>
 
             <!-- TAB: General -->

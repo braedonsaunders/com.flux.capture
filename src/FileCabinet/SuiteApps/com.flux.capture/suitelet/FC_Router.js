@@ -2476,6 +2476,8 @@ define([
         };
 
         var settings = {
+            // License key (if saved)
+            licenseKey: savedSettings.licenseKey || '',
             defaultDocumentType: savedSettings.defaultDocumentType || 'auto',
             emailImportEnabled: true,
             emailAddress: 'flux-' + runtime.accountId + '@netsuite.com',
@@ -2501,12 +2503,37 @@ define([
 
     function saveSettings(context) {
         try {
-            var anomaly = context.anomalyDetection || {};
-            var submitModes = context.submitButtonMode || {};
-            var workflowSettings = context.workflowSettings || {};
+            // Get existing settings first to preserve fields not being updated
+            var existingSettings = {};
+            try {
+                var existingSearch = search.create({
+                    type: 'customrecord_flux_config',
+                    filters: [
+                        ['custrecord_flux_cfg_type', 'is', 'settings'],
+                        'AND',
+                        ['custrecord_flux_cfg_key', 'is', 'general']
+                    ],
+                    columns: ['custrecord_flux_cfg_data']
+                });
+                var existingResults = existingSearch.run().getRange({ start: 0, end: 1 });
+                if (existingResults.length > 0) {
+                    var existingValue = existingResults[0].getValue('custrecord_flux_cfg_data');
+                    if (existingValue) {
+                        existingSettings = JSON.parse(existingValue);
+                    }
+                }
+            } catch (e) {
+                // Ignore - use empty settings
+            }
+
+            var anomaly = context.anomalyDetection || existingSettings.anomalyDetection || {};
+            var submitModes = context.submitButtonMode || existingSettings.submitButtonMode || {};
+            var workflowSettings = context.workflowSettings || existingSettings.workflowSettings || {};
             var settingsData = {
-                defaultDocumentType: context.defaultDocumentType || 'auto',
-                defaultLineSublist: context.defaultLineSublist || 'auto',
+                // License key for activation
+                licenseKey: context.licenseKey !== undefined ? context.licenseKey : (existingSettings.licenseKey || ''),
+                defaultDocumentType: context.defaultDocumentType || existingSettings.defaultDocumentType || 'auto',
+                defaultLineSublist: context.defaultLineSublist || existingSettings.defaultLineSublist || 'auto',
                 maxExtractionPages: parseInt(context.maxExtractionPages, 10) || 0,
                 // Company locale settings
                 companyCountry: context.companyCountry || 'CA',
