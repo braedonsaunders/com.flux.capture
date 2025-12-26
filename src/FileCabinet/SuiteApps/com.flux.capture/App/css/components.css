@@ -5705,18 +5705,18 @@ body.sidebar-collapsed .sidebar-expand-btn {
    DARK MODE
    ========================================== */
 body.dark-mode {
-    --surface-bg: #1a1a2e;
-    --surface-card: #16213e;
-    --surface-elevated: #1a1a2e;
+    --surface-bg: #18181b;
+    --surface-card: #1f1f23;
+    --surface-elevated: #18181b;
     --text-primary: #e4e4e7;
     --text-secondary: #a1a1aa;
     --text-muted: #71717a;
-    --border-color: #27273a;
-    --gray-50: #1a1a2e;
-    --gray-100: #16213e;
-    --gray-200: #27273a;
-    --gray-800: #0f0f1a;
-    --gray-900: #0a0a12;
+    --border-color: #27272a;
+    --gray-50: #18181b;
+    --gray-100: #1f1f23;
+    --gray-200: #27272a;
+    --gray-800: #0f0f10;
+    --gray-900: #09090b;
 }
 
 body.dark-mode .app-main {
@@ -5724,7 +5724,7 @@ body.dark-mode .app-main {
 }
 
 body.dark-mode .app-topbar {
-    background: linear-gradient(90deg, #0a0a12 0%, #111827 100%);
+    background: linear-gradient(90deg, #09090b 0%, #18181b 100%);
 }
 
 body.dark-mode .surface-card,
@@ -5777,6 +5777,62 @@ body.dark-mode .rail-zones {
 /* Dark mode icon swap */
 body.dark-mode #btn-dark-mode i::before {
     content: "\f185"; /* sun icon */
+}
+
+/* Dark mode ingest/flow page overrides */
+body.dark-mode .flow-dropzone {
+    background: var(--surface-card);
+    box-shadow:
+        0 4px 24px rgba(0, 0, 0, 0.3),
+        inset 0 0 0 1px rgba(255, 255, 255, 0.06);
+}
+
+body.dark-mode .flow-dropzone::before {
+    background: linear-gradient(135deg, rgba(255, 255, 255, 0.1), rgba(255, 255, 255, 0.03), rgba(255, 255, 255, 0.1));
+}
+
+body.dark-mode .flow-dropzone:hover {
+    box-shadow:
+        0 12px 40px rgba(0, 0, 0, 0.4),
+        0 4px 12px rgba(0, 0, 0, 0.2),
+        inset 0 0 0 1px rgba(255, 255, 255, 0.1);
+}
+
+body.dark-mode .flow-dropzone.dragover {
+    box-shadow:
+        0 20px 60px rgba(0, 0, 0, 0.5),
+        0 8px 24px rgba(0, 0, 0, 0.3),
+        inset 0 0 0 2px rgba(255, 255, 255, 0.15);
+}
+
+body.dark-mode.view-flow.fullpage-mode .flow-dropzone,
+body.dark-mode .view-flow.fullpage-mode .flow-dropzone {
+    background: var(--surface-bg);
+}
+
+body.dark-mode.view-flow.fullpage-mode .flow-dropzone.dragover,
+body.dark-mode .view-flow.fullpage-mode .flow-dropzone.dragover {
+    background: linear-gradient(135deg, rgba(255, 255, 255, 0.02) 0%, rgba(255, 255, 255, 0.04) 50%, rgba(255, 255, 255, 0.02) 100%);
+}
+
+body.dark-mode .dropzone-glow {
+    background: radial-gradient(circle, rgba(255, 255, 255, 0.04) 0%, transparent 70%);
+}
+
+body.dark-mode .ring {
+    border-color: rgba(255, 255, 255, 0.04);
+}
+
+body.dark-mode .dropzone-icon-bg {
+    background: linear-gradient(135deg, rgba(255, 255, 255, 0.08), rgba(255, 255, 255, 0.02));
+}
+
+body.dark-mode .dropzone-icon {
+    filter: drop-shadow(0 4px 12px rgba(0, 0, 0, 0.5));
+}
+
+body.dark-mode .dropzone-particles .particle {
+    background: rgba(255, 255, 255, 0.4);
 }
 
 /* ==========================================
