@@ -639,13 +639,24 @@
             });
 
             // Update status based on current license state (from server)
-            this.updateLicenseStatus();
+            // If license is valid, fetch full details from API
+            if (window.FC_CONFIG && window.FC_CONFIG.licenseValid === true) {
+                API.get('licenseStatus').then(function(result) {
+                    self.updateLicenseStatus(result);
+                }).catch(function() {
+                    self.updateLicenseStatus();
+                });
+            } else {
+                this.updateLicenseStatus();
+            }
         },
 
         updateLicenseStatus: function(validationResult) {
             var badge = el('#license-status-badge');
             var details = el('#license-details');
             var orgName = el('#license-org-name');
+            var tierEl = el('#license-tier');
+            var activatedAt = el('#license-activated-at');
             var expiresAt = el('#license-expires-at');
 
             // Use validation result if provided, otherwise check FC_CONFIG
@@ -663,10 +674,17 @@
                 }
                 // Update details if we have validation result
                 if (validationResult) {
-                    if (orgName) orgName.textContent = validationResult.tier || 'Standard';
+                    if (orgName) orgName.textContent = validationResult.licensed_to || '-';
+                    if (tierEl) tierEl.textContent = validationResult.tier || 'Standard';
+                    if (activatedAt && validationResult.activated_at) {
+                        var actDate = new Date(validationResult.activated_at);
+                        activatedAt.textContent = actDate.toLocaleDateString();
+                    }
                     if (expiresAt && validationResult.expires_at) {
                         var expDate = new Date(validationResult.expires_at);
                         expiresAt.textContent = expDate.toLocaleDateString();
+                    } else if (expiresAt) {
+                        expiresAt.textContent = 'Never';
                     }
                 }
             } else {

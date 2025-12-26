@@ -2527,6 +2527,8 @@ define([
                     status: licenseData.status || 'active',
                     tier: licenseData.tier,
                     modules: licenseData.modules,
+                    licensed_to: licenseData.licensed_to,
+                    activated_at: licenseData.activated_at,
                     expires_at: licenseData.expires_at
                 });
             } else {
@@ -2686,6 +2688,8 @@ define([
                             status: licenseData.status || (licenseData.valid ? 'active' : 'not_found'),
                             tier: licenseData.tier,
                             modules: licenseData.modules,
+                            licensed_to: licenseData.licensed_to,
+                            activated_at: licenseData.activated_at,
                             expires_at: licenseData.expires_at
                         };
                     }
