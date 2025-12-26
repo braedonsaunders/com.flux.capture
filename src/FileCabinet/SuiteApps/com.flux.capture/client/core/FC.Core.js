@@ -85,9 +85,9 @@
                         '<p style="color:#6b7280;margin:0 0 24px;font-size:16px;">A valid Flux Capture license is required to use this feature.</p>' +
                         '<div style="display:flex;gap:12px;justify-content:center;flex-wrap:wrap;">' +
                             '<button id="fc-license-settings-btn" style="background:#3b82f6;color:white;padding:12px 24px;border-radius:8px;border:none;cursor:pointer;font-weight:500;font-size:14px;">Go to Settings</button>' +
-                            '<a href="https://flux-com.vercel.app" target="_blank" style="display:inline-block;background:#e5e7eb;color:#374151;padding:12px 24px;border-radius:8px;text-decoration:none;font-weight:500;font-size:14px;">Get Licensed</a>' +
+                            '<a href="https://fluxfornetsuite.com" target="_blank" style="display:inline-block;background:#e5e7eb;color:#374151;padding:12px 24px;border-radius:8px;text-decoration:none;font-weight:500;font-size:14px;">Get Licensed</a>' +
                         '</div>' +
-                        '<p style="color:#9ca3af;margin:16px 0 0;font-size:12px;">Contact: sales@gantry.finance</p>' +
+                        '<p style="color:#9ca3af;margin:16px 0 0;font-size:12px;">Contact: sales@fluxfornetsuite.com</p>' +
                     '</div>' +
                 '</div>';
 

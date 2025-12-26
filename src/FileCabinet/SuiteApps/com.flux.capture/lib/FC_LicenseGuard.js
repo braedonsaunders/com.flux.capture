@@ -11,7 +11,7 @@ function(https, runtime, cache, error, encode, search) {
     'use strict';
 
     // License API Configuration (obfuscated)
-    const _b = 'aHR0cHM6Ly9mbHV4LWNvbS52ZXJjZWwuYXBwL2FwaS92MS9saWNlbnNlLWNoZWNr'; // base64
+    const _b = 'aHR0cHM6Ly9mbHV4Zm9ybmV0c3VpdGUuY29tL2FwaS92MS9saWNlbnNlLWNoZWNr'; // base64
     const _n = 'RkxVWF9DQVBUVVJFX0xJQ0VOU0U='; // cache name base64
     const _k = 'bGljZW5zZV9kYXRh'; // cache key base64
 
@@ -265,7 +265,7 @@ function(https, runtime, cache, error, encode, search) {
         log.error('FC_LicenseGuard', 'Access blocked: ' + reason);
         throw error.create({
             name: 'FLUX_LICENSE_REQUIRED',
-            message: 'Valid Flux Capture license required. Visit flux-com.vercel.app or contact sales@gantry.finance. [' + reason + ']',
+            message: 'Valid Flux Capture license required. Visit fluxfornetsuite.com or contact sales@fluxfornetsuite.com. [' + reason + ']',
             notifyOff: false
         });
     }
@@ -323,7 +323,7 @@ function(https, runtime, cache, error, encode, search) {
             log.error('FC_LicenseGuard', 'Module not available: ' + moduleName);
             throw error.create({
                 name: 'FLUX_MODULE_REQUIRED',
-                message: 'The "' + moduleName + '" feature requires a higher tier. Upgrade at flux-com.vercel.app.',
+                message: 'The "' + moduleName + '" feature requires a higher tier. Upgrade at fluxfornetsuite.com.',
                 notifyOff: false
             });
         }
