@@ -9,126 +9,107 @@
     // LICENSE ENFORCEMENT
     // ==========================================
 
-    var LICENSE_API_URL = 'https://flux-com.vercel.app/api/v1/license-check';
     var LICENSE_CACHE_KEY = '_fc_lic';
     var LICENSE_CACHE_TTL = 3600000; // 1 hour in ms
 
     var License = {
         _data: null,
         _checked: false,
-        _blocked: false,
+        _unlicensedMode: false,
 
         /**
          * Initialize license check on app load
+         * Uses server-side license status from FC_CONFIG
          */
         init: function() {
             var self = this;
 
-            // Check cache first
-            try {
-                var cached = localStorage.getItem(LICENSE_CACHE_KEY);
-                if (cached) {
-                    var data = JSON.parse(cached);
-                    if (data._expires && data._expires > Date.now() && data.valid) {
-                        self._data = data;
-                        self._checked = true;
-                        return Promise.resolve(data);
-                    }
+            // Server already checked license - use that status
+            var serverLicenseValid = window.FC_CONFIG && window.FC_CONFIG.licenseValid === true;
+
+            if (serverLicenseValid) {
+                // License is valid - cache and proceed normally
+                self._data = { valid: true };
+                self._checked = true;
+                try {
+                    localStorage.setItem(LICENSE_CACHE_KEY, JSON.stringify({
+                        valid: true,
+                        _expires: Date.now() + LICENSE_CACHE_TTL
+                    }));
+                } catch (e) {
+                    // Cache write failed
                 }
-            } catch (e) {
-                // Cache read failed
+                return Promise.resolve(self._data);
             }
 
-            // Fetch from API
-            var accountId = window.FC_CONFIG ? window.FC_CONFIG.accountId : '';
+            // License invalid - enter unlicensed mode (allows Settings only)
+            self._data = { valid: false };
+            self._checked = true;
+            self._unlicensedMode = true;
 
-            return fetch(LICENSE_API_URL, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'Accept': 'application/json'
-                },
-                body: JSON.stringify({
-                    account: accountId,
-                    product: 'capture',
-                    client_version: '1.0.0'
-                })
-            })
-            .then(function(response) {
-                return response.json();
-            })
-            .then(function(data) {
-                self._data = data;
-                self._checked = true;
-
-                if (data && data.valid) {
-                    // Cache valid license
-                    try {
-                        localStorage.setItem(LICENSE_CACHE_KEY, JSON.stringify({
-                            valid: data.valid,
-                            tier: data.tier,
-                            modules: data.modules,
-                            _expires: Date.now() + LICENSE_CACHE_TTL
-                        }));
-                    } catch (e) {
-                        // Cache write failed
-                    }
-                } else {
-                    self._lockUI('License not found or expired');
-                }
-
-                return data;
-            })
-            .catch(function(error) {
-                console.error('[License] Check failed:', error);
-                // On network error, use cached if available
-                try {
-                    var cached = localStorage.getItem(LICENSE_CACHE_KEY);
-                    if (cached) {
-                        var data = JSON.parse(cached);
-                        // Allow extended grace period on network failure
-                        var graceExpiry = (data._expires || 0) + (24 * 60 * 60 * 1000);
-                        if (graceExpiry > Date.now() && data.valid) {
-                            self._data = data;
-                            self._data._offline = true;
-                            self._checked = true;
-                            return data;
-                        }
-                    }
-                } catch (e) {
-                    // No valid cache
-                }
-
-                self._lockUI('Unable to verify license');
-                return { valid: false, error: 'network_error' };
-            });
+            console.warn('[License] No valid license - Settings access only');
+            return Promise.resolve(self._data);
         },
 
         /**
-         * Lock the UI when license is invalid
+         * Check if current route is allowed without license
+         * @param {string} route - Route name
+         * @returns {boolean}
          */
-        _lockUI: function(message) {
-            if (this._blocked) return;
-            this._blocked = true;
+        isRouteAllowed: function(route) {
+            // Settings is always allowed for license configuration
+            if (route === 'settings') return true;
+            // All other routes require license
+            return this.isValid();
+        },
 
-            // Replace entire document with license required message
-            document.body.innerHTML =
-                '<div style="display:flex;align-items:center;justify-content:center;min-height:100vh;background:#f5f5f5;font-family:-apple-system,BlinkMacSystemFont,sans-serif;">' +
-                    '<div style="text-align:center;padding:40px;background:white;border-radius:12px;box-shadow:0 4px 20px rgba(0,0,0,0.1);max-width:500px;">' +
+        /**
+         * Show license required overlay (doesn't block Settings)
+         * Called when trying to access protected routes
+         */
+        showLicenseOverlay: function() {
+            // Don't add multiple overlays
+            if (document.getElementById('fc-license-overlay')) return;
+
+            var overlay = document.createElement('div');
+            overlay.id = 'fc-license-overlay';
+            overlay.innerHTML =
+                '<div style="position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.5);z-index:9999;display:flex;align-items:center;justify-content:center;">' +
+                    '<div style="text-align:center;padding:40px;background:white;border-radius:12px;box-shadow:0 4px 20px rgba(0,0,0,0.2);max-width:500px;margin:20px;">' +
                         '<div style="width:64px;height:64px;background:#fee2e2;border-radius:50%;display:flex;align-items:center;justify-content:center;margin:0 auto 20px;">' +
                             '<svg style="width:32px;height:32px;color:#ef4444;" fill="none" stroke="currentColor" viewBox="0 0 24 24">' +
                                 '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/>' +
                             '</svg>' +
                         '</div>' +
                         '<h1 style="color:#1f2937;margin:0 0 12px;font-size:24px;font-weight:600;">License Required</h1>' +
-                        '<p style="color:#6b7280;margin:0 0 24px;font-size:16px;">' + (message || 'A valid Flux Capture license is required to use this application.') + '</p>' +
-                        '<a href="https://flux-com.vercel.app" style="display:inline-block;background:#3b82f6;color:white;padding:12px 24px;border-radius:8px;text-decoration:none;font-weight:500;font-size:14px;">Get Licensed</a>' +
+                        '<p style="color:#6b7280;margin:0 0 24px;font-size:16px;">A valid Flux Capture license is required to use this feature.</p>' +
+                        '<div style="display:flex;gap:12px;justify-content:center;flex-wrap:wrap;">' +
+                            '<button id="fc-license-settings-btn" style="background:#3b82f6;color:white;padding:12px 24px;border-radius:8px;border:none;cursor:pointer;font-weight:500;font-size:14px;">Go to Settings</button>' +
+                            '<a href="https://flux-com.vercel.app" target="_blank" style="display:inline-block;background:#e5e7eb;color:#374151;padding:12px 24px;border-radius:8px;text-decoration:none;font-weight:500;font-size:14px;">Get Licensed</a>' +
+                        '</div>' +
                         '<p style="color:#9ca3af;margin:16px 0 0;font-size:12px;">Contact: sales@gantry.finance</p>' +
                     '</div>' +
                 '</div>';
 
-            // Prevent any further JS execution for this app
-            throw new Error('FLUX_LICENSE_REQUIRED');
+            document.body.appendChild(overlay);
+
+            // Handle Settings button click
+            document.getElementById('fc-license-settings-btn').addEventListener('click', function() {
+                License.hideLicenseOverlay();
+                if (window.Router) {
+                    Router.navigate('settings');
+                }
+            });
+        },
+
+        /**
+         * Hide license overlay
+         */
+        hideLicenseOverlay: function() {
+            var overlay = document.getElementById('fc-license-overlay');
+            if (overlay) {
+                overlay.remove();
+            }
         },
 
         /**
@@ -139,7 +120,14 @@
         },
 
         /**
-         * Check if specific module is enabled
+         * Check if in unlicensed mode (Settings only)
+         */
+        isUnlicensedMode: function() {
+            return this._unlicensedMode === true;
+        },
+
+        /**
+         * Check if specific module is enabled (not used for flat pricing)
          */
         hasModule: function(moduleName) {
             if (!this.isValid()) return false;
@@ -147,10 +135,21 @@
         },
 
         /**
-         * Get current tier
+         * Get current tier (not used for flat pricing)
          */
         getTier: function() {
             return this._data && this._data.valid ? this._data.tier : null;
+        },
+
+        /**
+         * Refresh license status (reloads page to get fresh server check)
+         */
+        refresh: function() {
+            // Clear cache and reload to get fresh server-side check
+            try {
+                localStorage.removeItem(LICENSE_CACHE_KEY);
+            } catch (e) {}
+            window.location.reload();
         }
     };
 
@@ -515,6 +514,16 @@
             var self = this;
             FCDebug.log('[Router] navigate called:', route, params);
             params = params || {};
+
+            // License check - block non-settings routes if unlicensed
+            if (!License.isRouteAllowed(route)) {
+                FCDebug.log('[Router] Route blocked - license required:', route);
+                License.showLicenseOverlay();
+                return;
+            }
+
+            // Hide license overlay if navigating to allowed route
+            License.hideLicenseOverlay();
 
             // Prevent navigation during transition
             if (this.isTransitioning) {
