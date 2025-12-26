@@ -162,10 +162,13 @@ define([
     function get(context) {
         var result;
         try {
-            // LICENSE CHECK - Block unauthorized access
-            _requireLicense();
-
             var action = context.action || 'list';
+
+            // Allow settings action without license (needed to read license key)
+            if (action !== 'settings') {
+                // LICENSE CHECK - Block unauthorized access for all other actions
+                _requireLicense();
+            }
 
             switch (action) {
                 case 'document':
@@ -277,10 +280,13 @@ define([
     function post(context) {
         var result;
         try {
-            // LICENSE CHECK - Block unauthorized access
-            _requireLicense();
-
             var action = context.action || 'upload';
+
+            // Allow settings action without license (needed to save license key)
+            if (action !== 'settings') {
+                // LICENSE CHECK - Block unauthorized access for all other actions
+                _requireLicense();
+            }
 
             switch (action) {
                 case 'upload':
