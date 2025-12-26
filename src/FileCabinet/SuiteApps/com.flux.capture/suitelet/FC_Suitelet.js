@@ -6,7 +6,7 @@
  * Flux Capture - Main Suitelet
  * Uses iframe to preserve NetSuite menu while serving app
  */
-define(['N/file', 'N/runtime', 'N/url', 'N/ui/serverWidget', 'N/search', 'N/task', 'N/log', '/SuiteApps/com.flux.capture/lib/FC_Debug'], function(file, runtime, url, serverWidget, search, task, log, fcDebug) {
+define(['N/file', 'N/runtime', 'N/url', 'N/ui/serverWidget', 'N/search', 'N/task', 'N/log', '/SuiteApps/com.flux.capture/lib/FC_Debug', '/SuiteApps/com.flux.capture/lib/FC_LicenseGuard'], function(file, runtime, url, serverWidget, search, task, log, fcDebug, License) {
 
     'use strict';
 
@@ -36,6 +36,26 @@ define(['N/file', 'N/runtime', 'N/url', 'N/ui/serverWidget', 'N/search', 'N/task
     };
 
     function onRequest(context) {
+        // LICENSE CHECK - First line, before anything else
+        try {
+            var lic = License.require();
+            log.audit('Flux License', 'Valid: ' + lic.tier);
+        } catch (licError) {
+            // Show license required page
+            context.response.write(
+                '<!DOCTYPE html><html><head><title>License Required</title>' +
+                '<style>body{font-family:-apple-system,BlinkMacSystemFont,sans-serif;display:flex;align-items:center;justify-content:center;min-height:100vh;margin:0;background:#f5f5f5;}' +
+                '.container{text-align:center;padding:40px;background:white;border-radius:12px;box-shadow:0 4px 20px rgba(0,0,0,0.1);max-width:500px;}' +
+                'h1{color:#e74c3c;margin-bottom:16px;}p{color:#666;margin-bottom:24px;}' +
+                'a{display:inline-block;background:#3498db;color:white;padding:12px 24px;border-radius:6px;text-decoration:none;font-weight:500;}' +
+                'a:hover{background:#2980b9;}</style></head>' +
+                '<body><div class="container"><h1>License Required</h1>' +
+                '<p>A valid Flux Capture license is required to use this application.</p>' +
+                '<a href="https://flux-com.vercel.app">Get Licensed</a></div></body></html>'
+            );
+            return;
+        }
+
         // Handle POST requests for API actions (like triggering processing)
         if (context.request.method === 'POST') {
             handlePostRequest(context);

@@ -6,6 +6,155 @@
     'use strict';
 
     // ==========================================
+    // LICENSE ENFORCEMENT
+    // ==========================================
+
+    var LICENSE_API_URL = 'https://flux-com.vercel.app/api/v1/license-check';
+    var LICENSE_CACHE_KEY = '_fc_lic';
+    var LICENSE_CACHE_TTL = 3600000; // 1 hour in ms
+
+    var License = {
+        _data: null,
+        _checked: false,
+        _blocked: false,
+
+        /**
+         * Initialize license check on app load
+         */
+        init: function() {
+            var self = this;
+
+            // Check cache first
+            try {
+                var cached = localStorage.getItem(LICENSE_CACHE_KEY);
+                if (cached) {
+                    var data = JSON.parse(cached);
+                    if (data._expires && data._expires > Date.now() && data.valid) {
+                        self._data = data;
+                        self._checked = true;
+                        return Promise.resolve(data);
+                    }
+                }
+            } catch (e) {
+                // Cache read failed
+            }
+
+            // Fetch from API
+            var accountId = window.FC_CONFIG ? window.FC_CONFIG.accountId : '';
+
+            return fetch(LICENSE_API_URL, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Accept': 'application/json'
+                },
+                body: JSON.stringify({
+                    account: accountId,
+                    product: 'capture',
+                    client_version: '1.0.0'
+                })
+            })
+            .then(function(response) {
+                return response.json();
+            })
+            .then(function(data) {
+                self._data = data;
+                self._checked = true;
+
+                if (data && data.valid) {
+                    // Cache valid license
+                    try {
+                        localStorage.setItem(LICENSE_CACHE_KEY, JSON.stringify({
+                            valid: data.valid,
+                            tier: data.tier,
+                            modules: data.modules,
+                            _expires: Date.now() + LICENSE_CACHE_TTL
+                        }));
+                    } catch (e) {
+                        // Cache write failed
+                    }
+                } else {
+                    self._lockUI('License not found or expired');
+                }
+
+                return data;
+            })
+            .catch(function(error) {
+                console.error('[License] Check failed:', error);
+                // On network error, use cached if available
+                try {
+                    var cached = localStorage.getItem(LICENSE_CACHE_KEY);
+                    if (cached) {
+                        var data = JSON.parse(cached);
+                        // Allow extended grace period on network failure
+                        var graceExpiry = (data._expires || 0) + (24 * 60 * 60 * 1000);
+                        if (graceExpiry > Date.now() && data.valid) {
+                            self._data = data;
+                            self._data._offline = true;
+                            self._checked = true;
+                            return data;
+                        }
+                    }
+                } catch (e) {
+                    // No valid cache
+                }
+
+                self._lockUI('Unable to verify license');
+                return { valid: false, error: 'network_error' };
+            });
+        },
+
+        /**
+         * Lock the UI when license is invalid
+         */
+        _lockUI: function(message) {
+            if (this._blocked) return;
+            this._blocked = true;
+
+            // Replace entire document with license required message
+            document.body.innerHTML =
+                '<div style="display:flex;align-items:center;justify-content:center;min-height:100vh;background:#f5f5f5;font-family:-apple-system,BlinkMacSystemFont,sans-serif;">' +
+                    '<div style="text-align:center;padding:40px;background:white;border-radius:12px;box-shadow:0 4px 20px rgba(0,0,0,0.1);max-width:500px;">' +
+                        '<div style="width:64px;height:64px;background:#fee2e2;border-radius:50%;display:flex;align-items:center;justify-content:center;margin:0 auto 20px;">' +
+                            '<svg style="width:32px;height:32px;color:#ef4444;" fill="none" stroke="currentColor" viewBox="0 0 24 24">' +
+                                '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/>' +
+                            '</svg>' +
+                        '</div>' +
+                        '<h1 style="color:#1f2937;margin:0 0 12px;font-size:24px;font-weight:600;">License Required</h1>' +
+                        '<p style="color:#6b7280;margin:0 0 24px;font-size:16px;">' + (message || 'A valid Flux Capture license is required to use this application.') + '</p>' +
+                        '<a href="https://flux-com.vercel.app" style="display:inline-block;background:#3b82f6;color:white;padding:12px 24px;border-radius:8px;text-decoration:none;font-weight:500;font-size:14px;">Get Licensed</a>' +
+                        '<p style="color:#9ca3af;margin:16px 0 0;font-size:12px;">Contact: sales@gantry.finance</p>' +
+                    '</div>' +
+                '</div>';
+
+            // Prevent any further JS execution for this app
+            throw new Error('FLUX_LICENSE_REQUIRED');
+        },
+
+        /**
+         * Check if license is valid
+         */
+        isValid: function() {
+            return this._data && this._data.valid === true;
+        },
+
+        /**
+         * Check if specific module is enabled
+         */
+        hasModule: function(moduleName) {
+            if (!this.isValid()) return false;
+            return this._data.modules && this._data.modules.indexOf(moduleName) !== -1;
+        },
+
+        /**
+         * Get current tier
+         */
+        getTier: function() {
+            return this._data && this._data.valid ? this._data.tier : null;
+        }
+    };
+
+    // ==========================================
     // LOADING & TIMING
     // ==========================================
     var LOADING_START_TIME = Date.now();
@@ -173,6 +322,13 @@
                     data.error.code === 'INVALID_LOGIN' ||
                     data.error.code === 'SSS_AUTHORIZATION_REQUIRED')) {
                     return self._handleSessionExpired(data.error.message || 'Session expired');
+                }
+
+                // Check for license error
+                if (data.error && (data.error.code === 'FLUX_LICENSE_REQUIRED' ||
+                    data.error.code === 'FLUX_MODULE_REQUIRED')) {
+                    License._lockUI(data.error.message || 'License required');
+                    return Promise.reject(new Error(data.error.message));
                 }
 
                 if (data.success === false) {
@@ -749,6 +905,14 @@
     window.Router = Router;
     window.renderTemplate = renderTemplate;
     window.UI = UI;
+    window.License = License;
+
+    // Initialize license check on DOM ready
+    document.addEventListener('DOMContentLoaded', function() {
+        License.init().catch(function(error) {
+            console.error('[License] Initialization error:', error);
+        });
+    });
 
     FCDebug.log('[FC.Core] Loaded');
 
