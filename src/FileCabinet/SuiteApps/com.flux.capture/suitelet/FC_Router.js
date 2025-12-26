@@ -164,8 +164,8 @@ define([
         try {
             var action = context.action || 'list';
 
-            // Allow settings action without license (needed to read license key)
-            if (action !== 'settings') {
+            // Allow settings and licenseStatus actions without license
+            if (action !== 'settings' && action !== 'licenseStatus') {
                 // LICENSE CHECK - Block unauthorized access for all other actions
                 _requireLicense();
             }
@@ -197,6 +197,9 @@ define([
                     break;
                 case 'settings':
                     result = getSettings();
+                    break;
+                case 'licenseStatus':
+                    result = getLicenseStatus();
                     break;
                 case 'analytics':
                     result = getAnalytics(context);
@@ -2510,6 +2513,39 @@ define([
         return Response.success(settings);
     }
 
+    /**
+     * Get current license status (forces fresh check from API)
+     */
+    function getLicenseStatus() {
+        try {
+            // Force refresh to get fresh status from API
+            var licenseData = License.refresh();
+
+            if (licenseData && licenseData.valid) {
+                return Response.success({
+                    valid: true,
+                    status: licenseData.status || 'active',
+                    tier: licenseData.tier,
+                    modules: licenseData.modules,
+                    expires_at: licenseData.expires_at
+                });
+            } else {
+                return Response.success({
+                    valid: false,
+                    status: licenseData ? licenseData.status : 'not_found',
+                    message: licenseData ? licenseData.message : 'License not found'
+                });
+            }
+        } catch (e) {
+            log.error('getLicenseStatus', e);
+            return Response.success({
+                valid: false,
+                status: 'error',
+                message: e.message
+            });
+        }
+    }
+
     function saveSettings(context) {
         try {
             // Get existing settings first to preserve fields not being updated
@@ -2638,17 +2674,27 @@ define([
 
             log.audit('saveSettings', 'Settings saved: ' + JSON.stringify(settingsData));
 
-            // If license key was updated, clear the license cache so next check gets fresh data
+            // If license key was updated, refresh license and return status
+            var licenseStatus = null;
             if (context.licenseKey !== undefined) {
                 try {
-                    License.refresh();
+                    var licenseData = License.refresh();
                     log.audit('saveSettings', 'License cache cleared after key update');
+                    if (licenseData) {
+                        licenseStatus = {
+                            valid: licenseData.valid,
+                            status: licenseData.status || (licenseData.valid ? 'active' : 'not_found'),
+                            tier: licenseData.tier,
+                            modules: licenseData.modules,
+                            expires_at: licenseData.expires_at
+                        };
+                    }
                 } catch (e) {
                     log.debug('saveSettings', 'Could not refresh license cache: ' + e.message);
                 }
             }
 
-            return Response.success({ saved: true, configId: configId });
+            return Response.success({ saved: true, configId: configId, licenseStatus: licenseStatus });
         } catch (e) {
             log.error('saveSettings', e);
             return Response.error('SAVE_SETTINGS_ERROR', e.message);
