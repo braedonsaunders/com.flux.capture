@@ -317,6 +317,9 @@ define([
                     // Deprecated - User Event script now triggers processing automatically
                     result = Response.success({ message: 'Processing is now triggered automatically via User Event' });
                     break;
+                case 'settings':
+                    result = saveSettings(context);
+                    break;
                 default:
                     result = Response.error('INVALID_ACTION', 'Unknown action: ' + action);
             }
