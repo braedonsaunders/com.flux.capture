@@ -1,0 +1,538 @@
+openapi: 3.0.3
+info:
+  title: Flux Capture License API
+  description: |
+    API for the Flux Capture license management system.
+
+    This API serves two purposes:
+    1. **License validation** - Called by the NetSuite SuiteApp to check license validity
+    2. **Portal operations** - Trial signup, purchase, account management
+
+    ## Authentication
+
+    - License check endpoints: No auth required (rate limited by IP)
+    - Portal endpoints: Bearer token from session
+    - Webhooks: Signature verification (Stripe)
+
+  version: 1.0.0
+  contact:
+    name: Flux for NetSuite
+    email: support@fluxfornetsuite.com
+    url: https://fluxfornetsuite.com
+
+servers:
+  - url: https://fluxfornetsuite.com/api/v1
+    description: Production
+
+paths:
+  #
+  # LICENSE VALIDATION (Called by SuiteApp)
+  #
+  /license-check:
+    post:
+      summary: Validate a license
+      description: |
+        Called by FC_LicenseGuard.js in the NetSuite SuiteApp.
+        This is the most critical endpoint - must be fast and reliable.
+
+        The SuiteApp caches results for 1 hour, so expect ~1 call/hour per active user.
+      operationId: checkLicense
+      tags:
+        - License Validation
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - account
+                - product
+              properties:
+                account:
+                  type: string
+                  description: NetSuite account ID
+                  example: "123456"
+                license_key:
+                  type: string
+                  description: License key (optional if account is already bound)
+                  example: "LIC-A1B2-C3D4-E5F6"
+                device_fingerprint:
+                  type: string
+                  description: Unique identifier for the installation
+                product:
+                  type: string
+                  enum: [capture]
+                  description: Product identifier
+                client_version:
+                  type: string
+                  description: SuiteApp version
+                  example: "1.0.0"
+      responses:
+        '200':
+          description: License is valid
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  valid:
+                    type: boolean
+                    example: true
+                  status:
+                    type: string
+                    enum: [active, trial]
+                    example: "active"
+                  expires_at:
+                    type: string
+                    format: date-time
+                    example: "2025-12-31T23:59:59Z"
+        '404':
+          description: License not found or invalid
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  valid:
+                    type: boolean
+                    example: false
+                  status:
+                    type: string
+                    enum: [not_found, expired, suspended, cancelled]
+                    example: "not_found"
+                  message:
+                    type: string
+                    example: "No license found for this account"
+
+  #
+  # TRIAL MANAGEMENT
+  #
+  /trial-request:
+    post:
+      summary: Request a trial license
+      description: |
+        Creates a new trial license and customer record.
+        Sends welcome email with license key and installation instructions.
+      operationId: requestTrial
+      tags:
+        - Trial
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - email
+                - company
+              properties:
+                email:
+                  type: string
+                  format: email
+                  example: "user@company.com"
+                company:
+                  type: string
+                  example: "Acme Corp"
+                phone:
+                  type: string
+                  example: "+1-555-123-4567"
+                account_id:
+                  type: string
+                  description: NetSuite account ID to pre-bind
+                  example: "123456"
+                source:
+                  type: string
+                  description: Attribution source
+                  example: "google"
+      responses:
+        '200':
+          description: Trial created successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  trial_key:
+                    type: string
+                    example: "TRL-A1B2-C3D4-E5F6"
+                  expires_at:
+                    type: string
+                    format: date-time
+                    example: "2025-01-09T23:59:59Z"
+                  bundle_id:
+                    type: string
+                    example: "123456"
+                  installation_url:
+                    type: string
+                    format: uri
+                    example: "https://fluxfornetsuite.com/install"
+        '400':
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '409':
+          description: Email already has an active license
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '429':
+          description: Rate limit exceeded
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  #
+  # INSTALLATION VERIFICATION
+  #
+  /verify-installation:
+    post:
+      summary: Verify Flux Capture installation
+      description: |
+        Check if Flux Capture is installed and active in a NetSuite account.
+        Used by the installation wizard to confirm successful setup.
+      operationId: verifyInstallation
+      tags:
+        - Installation
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - account
+              properties:
+                account:
+                  type: string
+                  description: NetSuite account ID
+                  example: "123456"
+                license_key:
+                  type: string
+                  description: License key for additional validation
+      responses:
+        '200':
+          description: Installation status
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  installed:
+                    type: boolean
+                    description: Whether we've seen activity from this account
+                  first_seen:
+                    type: string
+                    format: date-time
+                    description: When first license check was received
+                  last_activity:
+                    type: string
+                    format: date-time
+                    description: Most recent license check
+                  license:
+                    type: object
+                    properties:
+                      valid:
+                        type: boolean
+                      status:
+                        type: string
+                      expires_at:
+                        type: string
+                        format: date-time
+
+  #
+  # BUNDLE INFORMATION
+  #
+  /bundle-info:
+    get:
+      summary: Get bundle installation info
+      description: Returns current bundle ID and installation instructions
+      operationId: getBundleInfo
+      tags:
+        - Installation
+      responses:
+        '200':
+          description: Bundle information
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  bundle_id:
+                    type: string
+                    example: "123456"
+                  bundle_name:
+                    type: string
+                    example: "Flux Capture"
+                  version:
+                    type: string
+                    example: "1.0.0"
+                  source_account_id:
+                    type: string
+                    description: Account ID to search for bundle
+                    example: "987654"
+
+  #
+  # STRIPE CHECKOUT
+  #
+  /create-checkout:
+    post:
+      summary: Create Stripe checkout session
+      description: Creates a checkout session for purchasing a subscription
+      operationId: createCheckout
+      tags:
+        - Billing
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - plan
+              properties:
+                plan:
+                  type: string
+                  enum: [monthly, annual]
+                license_key:
+                  type: string
+                  description: Existing trial to convert
+                account_id:
+                  type: string
+                  description: NetSuite account to license
+      responses:
+        '200':
+          description: Checkout session created
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  checkout_url:
+                    type: string
+                    format: uri
+
+  #
+  # STRIPE WEBHOOKS
+  #
+  /webhook/stripe:
+    post:
+      summary: Stripe webhook handler
+      description: |
+        Handles Stripe webhook events:
+        - checkout.session.completed
+        - invoice.paid
+        - invoice.payment_failed
+        - customer.subscription.deleted
+      operationId: stripeWebhook
+      tags:
+        - Webhooks
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        '200':
+          description: Webhook processed
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  received:
+                    type: boolean
+
+  #
+  # CUSTOMER PORTAL (Authenticated)
+  #
+  /me:
+    get:
+      summary: Get current user
+      description: Returns the authenticated user's profile and licenses
+      operationId: getCurrentUser
+      tags:
+        - Portal
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: User profile
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  id:
+                    type: string
+                    format: uuid
+                  email:
+                    type: string
+                    format: email
+                  company:
+                    type: string
+                  licenses:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/License'
+
+  /me/licenses:
+    get:
+      summary: Get user's licenses
+      description: Returns all licenses for the authenticated user
+      operationId: getUserLicenses
+      tags:
+        - Portal
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: License list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/License'
+
+  /me/usage:
+    get:
+      summary: Get usage statistics
+      description: Returns usage stats for the user's licenses
+      operationId: getUserUsage
+      tags:
+        - Portal
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: days
+          in: query
+          schema:
+            type: integer
+            default: 30
+          description: Number of days to include
+      responses:
+        '200':
+          description: Usage statistics
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  period_start:
+                    type: string
+                    format: date
+                  period_end:
+                    type: string
+                    format: date
+                  total_documents:
+                    type: integer
+                  total_api_calls:
+                    type: integer
+                  daily:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        date:
+                          type: string
+                          format: date
+                        documents:
+                          type: integer
+                        api_calls:
+                          type: integer
+
+  /me/billing-portal:
+    post:
+      summary: Create Stripe billing portal session
+      description: Creates a session for the Stripe customer portal
+      operationId: createBillingPortal
+      tags:
+        - Billing
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: Portal URL
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  url:
+                    type: string
+                    format: uri
+
+components:
+  schemas:
+    License:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        license_key:
+          type: string
+          example: "LIC-A1B2-C3D4-E5F6"
+        netsuite_account_id:
+          type: string
+          example: "123456"
+        status:
+          type: string
+          enum: [active, trial, expired, suspended, cancelled]
+        type:
+          type: string
+          enum: [trial, monthly, annual]
+        created_at:
+          type: string
+          format: date-time
+        activated_at:
+          type: string
+          format: date-time
+        expires_at:
+          type: string
+          format: date-time
+
+    Error:
+      type: object
+      properties:
+        error:
+          type: boolean
+          default: true
+        code:
+          type: string
+          example: "INVALID_REQUEST"
+        message:
+          type: string
+          example: "Email is required"
+
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: JWT token from authentication
+
+tags:
+  - name: License Validation
+    description: Endpoints called by the NetSuite SuiteApp
+  - name: Trial
+    description: Trial license management
+  - name: Installation
+    description: Installation verification
+  - name: Billing
+    description: Stripe integration for payments
+  - name: Portal
+    description: Customer portal endpoints
+  - name: Webhooks
+    description: External webhook handlers
