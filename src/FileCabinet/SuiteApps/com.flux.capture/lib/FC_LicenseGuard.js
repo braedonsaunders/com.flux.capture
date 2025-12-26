@@ -61,17 +61,14 @@ function(https, runtime, cache, error, encode) {
 
     /**
      * Validate license response structure
+     * Capture is flat-priced - only requires valid: true/false
+     * API may return tier/modules for other products, but not enforced here
      * @private
      */
     function _validateResponse(data) {
         if (!data || typeof data !== 'object') return false;
         if (!('valid' in data)) return false;
-        if (data.valid === true) {
-            if (!data.tier || !Array.isArray(data.modules)) return false;
-            // Validate tier is known
-            const validTiers = ['starter', 'professional', 'enterprise', 'trial'];
-            if (validTiers.indexOf(data.tier) === -1) return false;
-        }
+        // Flat pricing - just need valid field, tier/modules are optional
         return true;
     }
 
@@ -335,8 +332,8 @@ function(https, runtime, cache, error, encode) {
      */
     function _vld(data, ctx) {
         if (!data || typeof data !== 'object') return false;
+        // Capture is flat-priced - just check valid flag
         if (!ctx || ctx.valid !== true) return false;
-        if (!ctx.modules || !Array.isArray(ctx.modules)) return false;
         return true;
     }
 
