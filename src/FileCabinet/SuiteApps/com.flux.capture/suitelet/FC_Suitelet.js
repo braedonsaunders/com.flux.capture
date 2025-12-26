@@ -36,28 +36,19 @@ define(['N/file', 'N/runtime', 'N/url', 'N/ui/serverWidget', 'N/search', 'N/task
     };
 
     function onRequest(context) {
-        // LICENSE CHECK - First line, before anything else
-        try {
-            var lic = License.require();
-            log.audit('Flux License', 'Valid: ' + lic.tier);
-        } catch (licError) {
-            // Show license required page
-            context.response.write(
-                '<!DOCTYPE html><html><head><title>License Required</title>' +
-                '<style>body{font-family:-apple-system,BlinkMacSystemFont,sans-serif;display:flex;align-items:center;justify-content:center;min-height:100vh;margin:0;background:#f5f5f5;}' +
-                '.container{text-align:center;padding:40px;background:white;border-radius:12px;box-shadow:0 4px 20px rgba(0,0,0,0.1);max-width:500px;}' +
-                'h1{color:#e74c3c;margin-bottom:16px;}p{color:#666;margin-bottom:24px;}' +
-                'a{display:inline-block;background:#3498db;color:white;padding:12px 24px;border-radius:6px;text-decoration:none;font-weight:500;}' +
-                'a:hover{background:#2980b9;}</style></head>' +
-                '<body><div class="container"><h1>License Required</h1>' +
-                '<p>A valid Flux Capture license is required to use this application.</p>' +
-                '<a href="https://flux-com.vercel.app">Get Licensed</a></div></body></html>'
-            );
-            return;
-        }
-
         // Handle POST requests for API actions (like triggering processing)
         if (context.request.method === 'POST') {
+            // License check for POST actions
+            try {
+                License.require();
+            } catch (licError) {
+                context.response.setHeader({ name: 'Content-Type', value: 'application/json' });
+                context.response.write(JSON.stringify({
+                    success: false,
+                    error: { code: 'FLUX_LICENSE_REQUIRED', message: 'Valid license required' }
+                }));
+                return;
+            }
             handlePostRequest(context);
             return;
         }
@@ -71,8 +62,18 @@ define(['N/file', 'N/runtime', 'N/url', 'N/ui/serverWidget', 'N/search', 'N/task
             var isInnerFrame = context.request.parameters.fc_mode === 'content';
 
             if (isInnerFrame) {
-                serveAppContent(context);
+                // Check license for iframe content - pass status to client
+                var licenseValid = false;
+                try {
+                    var lic = License.validate();
+                    licenseValid = lic && lic.valid === true;
+                } catch (e) {
+                    licenseValid = false;
+                }
+                serveAppContent(context, licenseValid);
             } else {
+                // ALWAYS serve wrapper - preserves NetSuite navbar
+                // License state is handled by the iframe content
                 serveWrapper(context);
             }
         } catch (error) {
@@ -332,8 +333,10 @@ define(['N/file', 'N/runtime', 'N/url', 'N/ui/serverWidget', 'N/search', 'N/task
 
     /**
      * MODE 2: APP CONTENT (Raw HTML inside iframe)
+     * @param {Object} context - Request context
+     * @param {boolean} licenseValid - Whether license is valid (from server check)
      */
-    function serveAppContent(context) {
+    function serveAppContent(context, licenseValid) {
         // 1. Resolve all file URLs
         var fileUrls = resolveFileUrls();
 
@@ -361,7 +364,7 @@ define(['N/file', 'N/runtime', 'N/url', 'N/ui/serverWidget', 'N/search', 'N/task
         htmlContent = htmlContent.replace(/\{\{JS_VIEW_SETTINGS_URL\}\}/g, fileUrls['js_view_settings'] || '');
         htmlContent = htmlContent.replace(/\{\{JS_VIEW_DOCUMENTS_URL\}\}/g, fileUrls['js_view_documents'] || '');
 
-        // 5. Inject runtime configuration
+        // 5. Inject runtime configuration (including license status from server)
         var currentUser = runtime.getCurrentUser();
         var isDebugMode = fcDebug.isDebugMode();
         var configScript = '<script>\n' +
@@ -369,6 +372,7 @@ define(['N/file', 'N/runtime', 'N/url', 'N/ui/serverWidget', 'N/search', 'N/task
             '    apiUrl: "' + routerUrl + '",\n' +
             '    accountId: "' + runtime.accountId + '",\n' +
             '    isDebugMode: ' + isDebugMode + ',\n' +
+            '    licenseValid: ' + (licenseValid === true) + ',\n' +
             '    user: {\n' +
             '        id: ' + currentUser.id + ',\n' +
             '        name: "' + escapeJs(currentUser.name) + '",\n' +

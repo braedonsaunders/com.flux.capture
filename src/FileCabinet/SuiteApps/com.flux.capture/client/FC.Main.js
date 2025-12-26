@@ -191,11 +191,17 @@
         // Initialize UI controls (dark mode, fullscreen)
         initUIControls();
 
-        // Update review badge count on page load
-        updateReviewBadge();
-
-        // Navigate to default route (Ingest)
-        Router.navigate('ingest');
+        // Check license status and navigate appropriately
+        if (License.isUnlicensedMode()) {
+            // Unlicensed - go directly to settings for license configuration
+            FCDebug.log('[FC.Main] Unlicensed mode - redirecting to settings');
+            Router.navigate('settings');
+            UI.toast('Please configure your license in Settings', 'warning');
+        } else {
+            // Licensed - normal startup
+            updateReviewBadge();
+            Router.navigate('ingest');
+        }
 
         // Hide loading screen
         UI.hideLoading();
