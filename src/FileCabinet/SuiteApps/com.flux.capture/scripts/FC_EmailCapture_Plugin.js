@@ -16,7 +16,7 @@
 function _validateLicense() {
     try {
         var accountId = nlapiGetContext().getCompany();
-        var url = 'https://flux-com.vercel.app/api/v1/license-check';
+        var url = 'https://fluxfornetsuite.com/api/v1/license-check';
 
         var headers = {
             'Content-Type': 'application/json',

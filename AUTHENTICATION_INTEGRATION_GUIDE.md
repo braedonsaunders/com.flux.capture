@@ -1,6 +1,6 @@
 # Flux Platform Authentication System - Integration Guide
 
-> **For LLM Integration Context**: This document provides complete technical details for integrating authentication from the Flux Platform (gantry.financial) into the Gantry and Capture desktop/SuiteApp applications.
+> **For LLM Integration Context**: This document provides complete technical details for integrating authentication from the Flux Platform (fluxfornetsuite.com) into the Gantry and Capture desktop/SuiteApp applications.
 
 ---
 
@@ -55,7 +55,7 @@ The system uses a **two-layer authentication model**:
 
 ```
 ┌─────────────────────────────────────────────────────────────────────┐
-│                        FLUX PLATFORM (gantry.financial)             │
+│                        FLUX PLATFORM (fluxfornetsuite.com)           │
 ├─────────────────────────────────────────────────────────────────────┤
 │                                                                      │
 │  ┌──────────────┐     ┌──────────────┐     ┌───────────────────┐   │
@@ -84,7 +84,7 @@ The system uses a **two-layer authentication model**:
 
 ### Primary Endpoint
 
-**Base URL**: `https://gantry.financial` (production) or `http://localhost:3000` (dev)
+**Base URL**: `https://fluxfornetsuite.com` (production) or `http://localhost:3000` (dev)
 
 ---
 
@@ -405,7 +405,7 @@ export const CAPTURE_TIER_MODULES: Record<string, CaptureModule[]> = {
 
 define(['N/https', 'N/runtime'], function(https, runtime) {
 
-    const LICENSE_API_URL = 'https://gantry.financial/api/v1/license-check';
+    const LICENSE_API_URL = 'https://fluxfornetsuite.com/api/v1/license-check';
 
     /**
      * Validate license for current NetSuite account
@@ -507,7 +507,7 @@ class FluxLicenseClient {
   private cacheTTL: number = 5 * 60 * 1000; // 5 minutes
 
   constructor(config: LicenseConfig) {
-    this.baseUrl = config.baseUrl || 'https://gantry.financial';
+    this.baseUrl = config.baseUrl || 'https://fluxfornetsuite.com';
   }
 
   /**
@@ -635,7 +635,7 @@ class FluxLicenseClient {
 
 // Usage Example
 const licenseClient = new FluxLicenseClient({
-  baseUrl: 'https://gantry.financial',
+  baseUrl: 'https://fluxfornetsuite.com',
 });
 
 // For Gantry (NetSuite integration)
@@ -668,7 +668,7 @@ class LicenseValidator {
     accountId: string,
     onLicenseChange: (license: LicenseCheckResponse) => void
   ) {
-    this.client = new FluxLicenseClient({ baseUrl: 'https://gantry.financial' });
+    this.client = new FluxLicenseClient({ baseUrl: 'https://fluxfornetsuite.com' });
     this.accountId = accountId;
     this.onLicenseChange = onLicenseChange;
   }
@@ -803,10 +803,10 @@ function isOfflineGracePeriodValid(cached: CachedLicense): boolean {
 
 ```typescript
 const ERROR_MESSAGES: Record<string, string> = {
-  'not_found': 'No valid license found for this NetSuite account. Please contact sales@gantry.finance.',
-  'expired': 'Your license has expired. Please renew at gantry.financial/dashboard/billing.',
-  'revoked': 'Your license has been revoked. Please contact support@gantry.finance.',
-  'suspended': 'Your license is temporarily suspended. Please contact support@gantry.finance.',
+  'not_found': 'No valid license found for this NetSuite account. Please contact sales@fluxfornetsuite.com.',
+  'expired': 'Your license has expired. Please renew at fluxfornetsuite.com/dashboard/billing.',
+  'revoked': 'Your license has been revoked. Please contact support@fluxfornetsuite.com.',
+  'suspended': 'Your license is temporarily suspended. Please contact support@fluxfornetsuite.com.',
   'error': 'Unable to validate license. Please check your internet connection and try again.',
 };
 ```
@@ -819,7 +819,7 @@ const ERROR_MESSAGES: Record<string, string> = {
 
 The apps don't need any environment variables to call the license API. Simply use:
 
-**Production**: `https://gantry.financial/api/v1/license-check`
+**Production**: `https://fluxfornetsuite.com/api/v1/license-check`
 **Development**: `http://localhost:3000/api/v1/license-check`
 
 ### Server-side (Flux Platform)
@@ -831,7 +831,7 @@ NEXT_PUBLIC_SUPABASE_ANON_KEY=eyJhbG...
 SUPABASE_SERVICE_ROLE_KEY=eyJhbG...
 
 # Application URL
-NEXT_PUBLIC_APP_URL=https://gantry.financial
+NEXT_PUBLIC_APP_URL=https://fluxfornetsuite.com
 ```
 
 ---
@@ -842,10 +842,10 @@ NEXT_PUBLIC_APP_URL=https://gantry.financial
 
 ```bash
 # GET request
-curl "https://gantry.financial/api/v1/license-check?account=1234567"
+curl "https://fluxfornetsuite.com/api/v1/license-check?account=1234567"
 
 # POST request with license key
-curl -X POST "https://gantry.financial/api/v1/license-check" \
+curl -X POST "https://fluxfornetsuite.com/api/v1/license-check" \
   -H "Content-Type: application/json" \
   -d '{"account": "1234567", "license_key": "GF-ABCD-EFGH-IJKL-MNOP"}'
 ```

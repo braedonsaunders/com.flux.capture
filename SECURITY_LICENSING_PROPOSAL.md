@@ -1,7 +1,7 @@
 # Flux Capture SuiteApp - License Integration & Hardening
 
 > **Status**: IMPLEMENTED
-> **License API URL**: https://flux-com.vercel.app/api/v1/license-check
+> **License API URL**: https://fluxfornetsuite.com/api/v1/license-check
 
 ---
 
@@ -70,7 +70,7 @@ Every script entry point validates license before processing:
 ### Request Format
 
 ```javascript
-POST https://flux-com.vercel.app/api/v1/license-check
+POST https://fluxfornetsuite.com/api/v1/license-check
 Content-Type: application/json
 
 {
