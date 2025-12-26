@@ -113,7 +113,17 @@ function(https, runtime, cache, error, encode, search) {
         const fingerprint = _generateFingerprint();
         const licenseKey = _getLicenseKey();
 
+        log.audit('FC_LicenseGuard', 'License check - Account: ' + accountId + ', Key: ' + (licenseKey ? licenseKey.substring(0, 4) + '...' : 'NONE'));
+
         try {
+            const requestBody = {
+                account: accountId,
+                license_key: licenseKey,
+                device_fingerprint: fingerprint,
+                product: 'capture',
+                client_version: '1.0.0'
+            };
+
             const response = https.post({
                 url: endpoint,
                 headers: {
@@ -122,14 +132,10 @@ function(https, runtime, cache, error, encode, search) {
                     'X-Flux-Client': 'capture-suiteapp',
                     'X-Flux-Account': accountId
                 },
-                body: JSON.stringify({
-                    account: accountId,
-                    license_key: licenseKey,
-                    device_fingerprint: fingerprint,
-                    product: 'capture',
-                    client_version: '1.0.0'
-                })
+                body: JSON.stringify(requestBody)
             });
+
+            log.audit('FC_LicenseGuard', 'API Response - Code: ' + response.code + ', Body: ' + response.body);
 
             if (response.code !== 200 && response.code !== 404) {
                 log.error('FC_LicenseGuard', 'License API returned: ' + response.code);
@@ -143,6 +149,7 @@ function(https, runtime, cache, error, encode, search) {
                 return null;
             }
 
+            log.audit('FC_LicenseGuard', 'License result - Valid: ' + result.valid);
             return result;
 
         } catch (e) {
