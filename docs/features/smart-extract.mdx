@@ -1,0 +1,270 @@
+---
+title: "Smart Extract"
+description: "AI-powered document data extraction"
+order: 1
+icon: "scan"
+---
+
+Smart Extract is Flux Capture's core AI engine that automatically reads and extracts data from your invoices and financial documents. This guide explains how it works and how to get the best results.
+
+## How Smart Extract Works
+
+When you upload a document, Smart Extract performs several sophisticated analysis steps:
+
+### 1. Document Recognition
+
+The AI first identifies what type of document you've uploaded:
+- Invoice
+- Receipt
+- Credit Memo
+- Expense Report
+- Purchase Order
+
+### 2. Layout Analysis
+
+Smart Extract analyzes the document structure to identify:
+- Header zone (vendor info, invoice details)
+- Line items table
+- Totals section
+- Footer information
+
+### 3. Field Extraction
+
+Using advanced OCR and natural language processing, the system extracts:
+
+| Field | Description |
+|-------|-------------|
+| Vendor Name | Company or individual billing you |
+| Vendor Address | Vendor's mailing address |
+| Invoice Number | Unique invoice identifier |
+| Invoice Date | Date the invoice was issued |
+| Due Date | Payment due date |
+| PO Number | Purchase order reference |
+| Payment Terms | Net 30, Net 60, etc. |
+| Subtotal | Pre-tax amount |
+| Tax Amount | Taxes charged |
+| Total Amount | Final amount due |
+| Currency | USD, CAD, EUR, etc. |
+
+### 4. Line Item Extraction
+
+For each line item, Smart Extract captures:
+- Item code or SKU
+- Description
+- Quantity
+- Unit of measure
+- Unit price
+- Line amount
+- Tax (if itemized)
+
+### 5. Vendor Matching
+
+After extraction, the system matches the vendor name to your NetSuite vendor list using:
+- Fuzzy string matching
+- Tax ID correlation
+- Email domain matching
+- Historical alias matching
+
+## Extraction Providers
+
+Smart Extract supports multiple AI providers, each with different strengths:
+
+### OCI Document Understanding
+
+Oracle's built-in document AI:
+- Native integration with NetSuite
+- No additional API keys required
+- Good general-purpose extraction
+
+### Azure Form Recognizer
+
+Microsoft's document AI service:
+- Excellent line item extraction
+- High accuracy on complex layouts
+- Strong multi-page support
+
+### Mindee
+
+Specialized invoice processing:
+- Purpose-built for invoices
+- Fast processing times
+- Great for standard invoice formats
+
+> ✅ **Tip**: If you're unsure which provider to use, start with OCI. If you need better line item accuracy, try Azure.
+
+## Understanding Extraction Results
+
+### Field Confidence
+
+Each extracted field has a confidence score:
+
+| Score | Meaning |
+|-------|---------|
+| 90%+ | Very confident, likely correct |
+| 70-89% | Reasonably confident |
+| 50-69% | Uncertain, verify carefully |
+| Below 50% | Low confidence, may need manual entry |
+
+### Extraction Warnings
+
+Smart Extract may flag issues during extraction:
+
+| Warning | Meaning |
+|---------|---------|
+| Low confidence field | One or more fields uncertain |
+| Missing required field | Invoice number or amount not found |
+| Date interpretation | Ambiguous date format detected |
+| Amount mismatch | Line items don't sum to total |
+| Multi-page limited | Only first N pages processed |
+
+## Getting Better Extraction Results
+
+### Document Quality
+
+The quality of your source documents significantly affects extraction:
+
+**Good documents:**
+- Digital PDFs (not scanned images)
+- High-resolution scans (300 DPI+)
+- Straight, uncropped pages
+- Clear, readable text
+
+**Problematic documents:**
+- Low-resolution photos
+- Skewed or rotated pages
+- Handwritten invoices
+- Heavily stylized fonts
+
+### Tips for Best Results
+
+1. **Use native PDFs** - Digital PDFs extract better than scanned images
+2. **Scan at 300 DPI** - Higher resolution improves OCR accuracy
+3. **Keep pages straight** - Skewed documents reduce accuracy
+4. **Include full pages** - Don't crop out headers or footers
+5. **Avoid photos** - Take screenshots or scan instead
+
+## Multi-Page Documents
+
+Smart Extract handles multi-page invoices:
+
+### Automatic Page Merging
+
+Tables that span multiple pages are automatically combined into a single list of line items.
+
+### Page Limits
+
+By default, all pages are processed. You can limit this in Settings to speed up processing for very long documents.
+
+> ⚠️ **Warning**: Limiting pages may cause missed line items on later pages.
+
+## Currency Detection
+
+Smart Extract identifies currency from multiple signals:
+
+1. **Currency symbols** - $, €, £, etc.
+2. **Currency codes** - USD, CAD, EUR
+3. **Vendor location** - Based on address
+4. **Account settings** - Your default currency
+
+When currency is ambiguous (e.g., $ could be USD or CAD), the system uses:
+1. Vendor's default currency (if known)
+2. Your account's default currency
+3. The most likely currency based on context
+
+## Date Parsing
+
+Dates are parsed intelligently based on context:
+
+### Format Detection
+
+The system handles various formats:
+- MM/DD/YYYY (US standard)
+- DD/MM/YYYY (European/International)
+- YYYY-MM-DD (ISO format)
+- Written dates (January 15, 2024)
+
+### Ambiguous Dates
+
+For ambiguous dates like "03/04/2024":
+- Vendor history is checked for patterns
+- Regional conventions are considered
+- You can correct during review to train the system
+
+## Amount Parsing
+
+Financial amounts are parsed considering:
+
+### Number Formats
+
+- US/UK: 1,234.56 (comma thousands, period decimal)
+- European: 1.234,56 (period thousands, comma decimal)
+
+### Negative Amounts
+
+The system recognizes:
+- Parentheses: (100.00)
+- Minus sign: -100.00
+- CR suffix: 100.00 CR
+
+## Custom Field Extraction
+
+For fields specific to your business, Smart Extract can:
+
+### Auto-Match Custom Fields
+
+When you have custom fields on your vendor bill form, the system attempts to match extracted data to those fields based on:
+- Field labels
+- Similar terminology
+- Position on document
+
+### Manual Mapping
+
+In the review interface, you can manually map extracted values to any field on your form.
+
+## Extraction Limits
+
+### File Size
+
+Maximum file size: **20 MB**
+
+### Processing Time
+
+Typical processing times:
+| Document Type | Time |
+|---------------|------|
+| 1-page invoice | 2-5 seconds |
+| 5-page invoice | 5-10 seconds |
+| 10+ page invoice | 10-30 seconds |
+
+### Concurrent Processing
+
+Multiple documents can be processed simultaneously. Large batches are queued automatically.
+
+## Troubleshooting Extraction
+
+### No Data Extracted
+
+1. Verify the file isn't corrupted
+2. Check if the document is readable by humans
+3. Try a different file format (PDF instead of image)
+4. Ensure the document isn't password-protected
+
+### Wrong Field Values
+
+1. Check document quality
+2. Review the original document
+3. Correct the value (this trains the system)
+4. Consider switching extraction providers
+
+### Missing Line Items
+
+1. Verify all pages were processed
+2. Check page limit settings
+3. Ensure table isn't split across pages
+4. Try increasing max extraction pages
+
+## Next Steps
+
+- [Learn about the Learning Engine](/docs/capture/features/learning-engine) to improve accuracy over time
+- [Set up Fraud Shield](/docs/capture/features/fraud-shield) to catch extraction issues
+- [Configure extraction providers](/docs/capture/configuration) for your needs

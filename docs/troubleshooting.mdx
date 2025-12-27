@@ -1,0 +1,463 @@
+---
+title: "Troubleshooting"
+description: "Solutions to common issues with Flux Capture"
+order: 10
+icon: "life-buoy"
+---
+
+This guide helps you resolve common issues with Flux Capture. If you don't find your answer here, contact support@fluxfornetsuite.com.
+
+## Document Upload Issues
+
+### File Won't Upload
+
+**Symptoms:**
+- Error message when uploading
+- Upload appears stuck
+- File rejected
+
+**Solutions:**
+
+1. **Check file size** - Maximum is 20 MB
+2. **Verify file format** - Supported: PDF, PNG, JPG, JPEG, TIFF
+3. **Try a different browser** - Clear cache or use incognito mode
+4. **Check file isn't corrupted** - Open file locally to verify
+
+### Upload Stuck at Processing
+
+**Symptoms:**
+- Upload completed but processing never finishes
+- Spinning indicator for extended time
+
+**Solutions:**
+
+1. **Wait 2-3 minutes** - Large files take longer
+2. **Refresh the page** - Check if document is already in queue
+3. **Check queue for errors** - Document may have failed
+4. **Re-upload** - If stuck more than 5 minutes
+
+## Extraction Issues
+
+### No Data Extracted
+
+**Symptoms:**
+- Document processed but all fields empty
+- "No data found" message
+
+**Solutions:**
+
+1. **Check document quality**
+   - Is the scan clear and readable?
+   - Is text (not just images)?
+   - Are pages straight (not skewed)?
+
+2. **Try different format**
+   - Convert image to PDF
+   - Increase scan resolution to 300 DPI
+
+3. **Check extraction provider**
+   - Verify provider is configured in Settings
+   - Test connection to provider
+
+### Wrong Data Extracted
+
+**Symptoms:**
+- Field values don't match document
+- Data in wrong fields
+- Garbled text
+
+**Solutions:**
+
+1. **For OCR errors**
+   - Source document may be poor quality
+   - Correct the value (helps learning)
+
+2. **For field mapping errors**
+   - Data extracted from wrong area
+   - Correct to train the system
+
+3. **For persistent issues**
+   - Try different extraction provider
+   - Contact support with example document
+
+### Line Items Missing
+
+**Symptoms:**
+- Some or all line items not extracted
+- Only header data present
+
+**Solutions:**
+
+1. **Check page limit settings**
+   - Line items may be on later pages
+   - Increase max extraction pages in Settings
+
+2. **Verify table format**
+   - Very unusual table layouts may not parse
+   - Contact support for complex formats
+
+3. **Multi-page tables**
+   - Tables spanning pages should merge automatically
+   - If not, report to support
+
+## Vendor Matching Issues
+
+### Vendor Not Found
+
+**Symptoms:**
+- "Vendor not found" anomaly
+- No vendor suggestions
+
+**Solutions:**
+
+1. **Check vendor exists in NetSuite**
+   - Search for vendor in NetSuite
+   - Add vendor if new
+
+2. **Check vendor name spelling**
+   - Invoice may use different name than NetSuite
+   - Select correct vendor to create alias
+
+3. **Review vendor settings**
+   - Vendor may be inactive in NetSuite
+   - Activate or use different vendor
+
+### Wrong Vendor Matched
+
+**Symptoms:**
+- Different vendor selected
+- Similar names confused
+
+**Solutions:**
+
+1. **Select correct vendor**
+   - Click vendor field and search
+   - Correct selection creates learning
+
+2. **Check for duplicate vendors**
+   - Merge duplicates in NetSuite
+   - Clear learned aliases if needed
+
+## Fraud Shield Issues
+
+### Too Many False Positives
+
+**Symptoms:**
+- Legitimate invoices constantly flagged
+- Same warning on most documents
+
+**Solutions:**
+
+1. **Adjust sensitivity**
+   - Go to Settings > Anomaly Detection
+   - Disable checks causing false positives
+   - Adjust thresholds where available
+
+2. **For specific checks:**
+
+   | Check | If Too Sensitive |
+   |-------|------------------|
+   | Round amounts | Disable (off by default) |
+   | Amount outlier | May need more history |
+   | Stale date | Adjust if vendors submit late |
+   | Invoice format | Disable if vendors change systems |
+
+### Duplicate Not Caught
+
+**Symptoms:**
+- Same invoice processed twice
+- Duplicate exists in NetSuite
+
+**Solutions:**
+
+1. **Verify checks enabled**
+   - Go to Settings > Anomaly Detection
+   - Ensure duplicate detection is on
+
+2. **Check invoice numbers**
+   - Slightly different numbers won't match
+   - e.g., "INV-001" vs "INV001"
+
+3. **Different vendors**
+   - Duplicates only check same vendor
+   - Two vendors with same invoice number won't flag
+
+## Review Interface Issues
+
+### Document Not Displaying
+
+**Symptoms:**
+- Left panel blank
+- "Unable to load document" message
+
+**Solutions:**
+
+1. **Refresh the page**
+2. **Clear browser cache**
+3. **Check popup blockers** - Document viewer may be blocked
+4. **Try different browser**
+5. **Re-upload document** if file is corrupted
+
+### Cannot Save Changes
+
+**Symptoms:**
+- Save button doesn't work
+- Error on save attempt
+- Changes lost
+
+**Solutions:**
+
+1. **Check required fields**
+   - All required fields must be filled
+   - Look for red field borders
+
+2. **Check session timeout**
+   - NetSuite may have timed out
+   - Refresh and log in again
+
+3. **Check permissions**
+   - You need edit rights to save
+   - Contact administrator
+
+### Cannot Approve
+
+**Symptoms:**
+- Approve button disabled
+- Error when approving
+
+**Solutions:**
+
+1. **Check for blocking anomalies**
+   - High-severity issues must be resolved
+   - Dismiss or fix flagged items
+
+2. **Verify required fields**
+   - Vendor must be selected
+   - Required amounts must be present
+
+3. **Check permissions**
+   - You need create vendor bill permission
+   - Contact administrator
+
+## Transaction Creation Issues
+
+### Vendor Bill Not Created
+
+**Symptoms:**
+- Approval succeeded but no transaction
+- Error after approval
+
+**Solutions:**
+
+1. **Check NetSuite directly**
+   - Search for vendor bill
+   - May have created despite error message
+
+2. **Review error message**
+   - Specific field validation failed
+   - Address the noted issue
+
+3. **Check vendor status**
+   - Vendor may be inactive
+   - Vendor may have holds
+
+### Wrong Data on Transaction
+
+**Symptoms:**
+- Vendor bill has different data than review
+- Fields missing or changed
+
+**Solutions:**
+
+1. **Check form configuration**
+   - Form in Settings may not match NetSuite form
+   - Update form configuration
+
+2. **Check field mappings**
+   - Extracted fields may map to wrong transaction fields
+   - Review form configuration
+
+## Email Capture Issues
+
+### Emails Not Processing
+
+**Symptoms:**
+- Forwarded emails not appearing
+- No documents in queue from email
+
+**Solutions:**
+
+1. **Verify email address**
+   - Double-check Capture email address
+   - Copy fresh from Settings
+
+2. **Check for bounce messages**
+   - Email may have been rejected
+   - Look in sender's inbox
+
+3. **View activity log**
+   - Settings > Email > View Activity
+   - Check for errors
+
+4. **Verify attachments**
+   - Emails without attachments are ignored
+   - Attachments must be PDF or images
+
+### Attachments Not Extracting
+
+**Symptoms:**
+- Email received but no documents
+- Only some attachments processed
+
+**Solutions:**
+
+1. **Check attachment format**
+   - Supported: PDF, PNG, JPG, TIFF
+   - Unsupported formats are skipped
+
+2. **Check attachment size**
+   - Max 20 MB per attachment
+   - Large files may fail silently
+
+3. **Embedded vs attached**
+   - Embedded images may not process
+   - Attachments work better
+
+## License Issues
+
+### "License Required" Error
+
+**Symptoms:**
+- Cannot access Flux Capture
+- License error message
+
+**Solutions:**
+
+1. **Check license key**
+   - Go to Settings > License
+   - Verify key is entered correctly
+
+2. **Refresh license**
+   - Click Refresh button
+   - Wait for re-validation
+
+3. **Check expiration**
+   - License may have expired
+   - Contact sales to renew
+
+4. **Contact support**
+   - Provide NetSuite account ID
+   - We can verify license status
+
+### License Won't Validate
+
+**Symptoms:**
+- "Validation failed" message
+- Cannot save license key
+
+**Solutions:**
+
+1. **Check for network issues**
+   - License server may be temporarily unreachable
+   - Wait and try again
+
+2. **Verify license key format**
+   - Copy fresh from email
+   - Ensure no extra spaces
+
+3. **Check account match**
+   - License is account-specific
+   - Verify correct NetSuite account
+
+## Performance Issues
+
+### Slow Loading
+
+**Symptoms:**
+- Application takes long to load
+- Queue takes long to populate
+
+**Solutions:**
+
+1. **Check queue size**
+   - Very large queues take longer
+   - Archive old documents
+
+2. **Browser issues**
+   - Clear cache
+   - Disable extensions
+   - Try different browser
+
+3. **Network issues**
+   - Check internet connection
+   - Try from different network
+
+### Processing Delays
+
+**Symptoms:**
+- Documents stuck in "Processing"
+- Extraction takes very long
+
+**Solutions:**
+
+1. **Check queue volume**
+   - High volume slows processing
+   - Wait for queue to clear
+
+2. **Check document complexity**
+   - Large documents take longer
+   - Multi-page invoices need more time
+
+3. **Check provider status**
+   - Extraction provider may have issues
+   - Try different provider if available
+
+## Getting Help
+
+### Before Contacting Support
+
+Gather this information:
+1. NetSuite account ID
+2. User email/role
+3. Steps to reproduce the issue
+4. Any error messages (screenshot if possible)
+5. Document ID or filename (if applicable)
+
+### Contact Options
+
+- **Email**: support@fluxfornetsuite.com
+- **Response time**: Within 24 hours (business days)
+
+### What Support Can Do
+
+- Diagnose account-specific issues
+- Reset learned data if needed
+- Adjust configurations
+- Escalate product bugs
+- Provide workarounds
+
+## FAQ
+
+### Can I undo an approval?
+
+No, once approved, the vendor bill exists in NetSuite. Edit or void the transaction in NetSuite directly.
+
+### How do I delete old documents?
+
+In the queue, select documents and click Delete. Or enable "Delete on success" in Settings to auto-clean.
+
+### Can multiple users work simultaneously?
+
+Yes, Flux Capture supports concurrent users. Documents can be claimed to prevent conflicts.
+
+### Is there an API?
+
+Yes, Flux Capture has a RESTlet API. Contact support for API documentation.
+
+### How long is data retained?
+
+Document records remain until deleted. Completed documents can be automatically cleaned based on settings.
+
+### Can I export data?
+
+Use NetSuite's saved searches on Flux Capture records, or contact support for export options.

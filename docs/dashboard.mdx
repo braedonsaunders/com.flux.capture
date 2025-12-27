@@ -1,0 +1,266 @@
+---
+title: "Dashboard"
+description: "Understanding the Flux Capture dashboard and processing documents"
+order: 4
+icon: "layout-dashboard"
+---
+
+The Flux Capture dashboard is your central hub for uploading, reviewing, and approving documents. This guide explains each section and how to use it effectively.
+
+## Dashboard Overview
+
+When you open Flux Capture, you'll see the main dashboard with these key areas:
+
+- **Upload Area** - Drag and drop documents for processing
+- **Processing Queue** - Documents waiting for review
+- **Quick Stats** - Overview of processing activity
+- **Recent Activity** - Latest processed documents
+
+## Uploading Documents
+
+### Drag and Drop
+
+The fastest way to upload:
+
+1. Locate your invoice file(s) on your computer
+2. Drag them onto the upload area
+3. Drop to start processing
+
+### Click to Browse
+
+Alternatively:
+
+1. Click the upload area
+2. Select files from your computer
+3. Click Open to upload
+
+### Supported File Types
+
+Flux Capture accepts:
+
+| Format | Extension | Notes |
+|--------|-----------|-------|
+| PDF | .pdf | Preferred format |
+| PNG | .png | Good for screenshots |
+| JPEG | .jpg, .jpeg | Scanned documents |
+| TIFF | .tif, .tiff | Multi-page supported |
+
+### File Size Limits
+
+- Maximum file size: **20 MB** per document
+- Multiple files can be uploaded at once
+- Batch uploads are processed in sequence
+
+## Processing Queue
+
+The queue shows all documents waiting for review.
+
+### Queue Columns
+
+| Column | Description |
+|--------|-------------|
+| Document | Filename and thumbnail |
+| Vendor | Detected or matched vendor |
+| Amount | Extracted total amount |
+| Date | Invoice date |
+| Status | Processing status |
+| Confidence | Extraction confidence score |
+
+### Status Indicators
+
+| Status | Meaning | Action Required |
+|--------|---------|-----------------|
+| Pending | Waiting to be processed | Wait for processing |
+| Processing | AI is extracting data | Wait for completion |
+| Extracted | Ready for review | Review and approve |
+| Needs Review | Flagged for attention | Review issues |
+| Completed | Approved and created | None |
+| Error | Processing failed | Check and retry |
+
+### Filtering the Queue
+
+Filter documents by:
+
+- **Status** - Show only specific statuses
+- **Date Range** - Documents from a time period
+- **Vendor** - Specific vendor's invoices
+
+### Sorting
+
+Click column headers to sort by:
+
+- Document name
+- Amount (high to low, low to high)
+- Date (newest first, oldest first)
+- Confidence score
+
+## Understanding Confidence Scores
+
+The confidence score indicates how certain the AI is about its extractions.
+
+### Confidence Levels
+
+| Level | Score | Meaning |
+|-------|-------|---------|
+| High | 85%+ | Very confident, likely accurate |
+| Medium | 60-84% | Reasonably confident, verify key fields |
+| Low | Below 60% | Uncertain, requires careful review |
+
+### What Affects Confidence
+
+**Higher confidence:**
+- Clear, high-quality scans
+- Standard invoice formats
+- Known vendors with history
+
+**Lower confidence:**
+- Blurry or skewed documents
+- Handwritten content
+- Non-standard layouts
+- New vendors
+
+> ✅ **Tip**: Documents with High confidence can often be approved quickly. Focus detailed review on Medium and Low confidence items.
+
+## Quick Stats
+
+The stats section shows:
+
+### Today's Activity
+- Documents uploaded today
+- Documents processed
+- Documents pending review
+- Documents approved
+
+### Processing Trends
+- Visual chart of recent activity
+- Comparison to previous periods
+
+### Common Issues
+- Top flagged anomalies
+- Documents needing attention
+
+## Document Types
+
+Flux Capture categorizes documents automatically:
+
+| Type | Icon | Description |
+|------|------|-------------|
+| Invoice | 📄 | Standard vendor invoices |
+| Receipt | 🧾 | Itemized receipts |
+| Credit Memo | 💳 | Vendor credits |
+| Expense Report | 📋 | Employee expenses |
+| Purchase Order | 📦 | PO documents |
+
+The AI detects document type based on content, but you can change it during review.
+
+## Batch Operations
+
+For efficiency, you can work with multiple documents at once.
+
+### Selecting Multiple Documents
+
+- **Click** individual checkboxes
+- **Shift+Click** to select a range
+- **Select All** to choose all visible documents
+
+### Bulk Actions
+
+| Action | Effect |
+|--------|--------|
+| Approve All | Approve all selected high-confidence documents |
+| Reject All | Reject all selected documents |
+| Reprocess | Run extraction again on selected documents |
+| Delete | Remove selected documents |
+
+> ⚠️ **Warning**: Bulk approve only works on documents with High confidence and no critical anomalies.
+
+## Recent Activity
+
+The activity feed shows:
+
+- Recently processed documents
+- Documents you've approved
+- Documents with new issues
+- System notifications
+
+Click any item to open it for review.
+
+## Keyboard Shortcuts
+
+Speed up your workflow with keyboard shortcuts:
+
+| Key | Action |
+|-----|--------|
+| `↑` / `↓` | Navigate queue |
+| `Enter` | Open selected document |
+| `A` | Approve current document |
+| `R` | Reject current document |
+| `N` | Next document |
+| `P` | Previous document |
+| `?` | Show all shortcuts |
+
+## Notifications
+
+Flux Capture notifies you of important events:
+
+### In-App Notifications
+- Processing complete
+- Anomalies detected
+- Errors encountered
+
+### Email Notifications (if configured)
+- Daily summary of pending items
+- Critical issues requiring attention
+
+## Customizing the Dashboard
+
+### View Options
+
+Toggle display of:
+- Queue columns
+- Stats panels
+- Activity feed
+
+### Default Filters
+
+Set your preferred default view:
+
+1. Apply your desired filters
+2. Click **Save as Default**
+3. Dashboard will remember your preferences
+
+## Mobile Access
+
+The Flux Capture dashboard is responsive and works on tablets:
+
+- Upload photos of receipts directly
+- Review documents on the go
+- Approve urgent invoices quickly
+
+> ℹ️ **Info**: For best experience on mobile, use landscape orientation when reviewing documents.
+
+## Troubleshooting Dashboard Issues
+
+### Queue Not Loading
+
+1. Refresh the page
+2. Clear browser cache
+3. Check your NetSuite session
+
+### Upload Failed
+
+1. Verify file size (max 20 MB)
+2. Check file format is supported
+3. Ensure you have file cabinet permissions
+
+### Stats Not Updating
+
+Stats refresh every few minutes. Click refresh icon for immediate update.
+
+## Next Steps
+
+Now that you understand the dashboard:
+
+1. [Learn about the review interface](/docs/capture/features/side-by-side-review)
+2. [Understand extraction features](/docs/capture/features/smart-extract)
+3. [Configure anomaly detection](/docs/capture/configuration)

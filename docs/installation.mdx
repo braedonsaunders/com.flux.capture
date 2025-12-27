@@ -1,0 +1,150 @@
+---
+title: "Installation"
+description: "How to install Flux Capture in your NetSuite account"
+order: 1
+icon: "download"
+---
+
+This guide walks you through installing Flux Capture in your NetSuite environment. The installation process is straightforward and typically takes just a few minutes.
+
+## Before You Begin
+
+Ensure you have:
+
+- Administrator access to your NetSuite account
+- Permission to install SuiteApps (bundles)
+- Your Flux Capture license key (provided by your Flux sales representative)
+
+## Installation Steps
+
+### Step 1: Access the SuiteApp Marketplace
+
+1. Log into NetSuite as an Administrator
+2. Navigate to **Customization > SuiteBundler > Search & Install Bundles**
+3. In the Keywords field, search for "Flux Capture"
+
+### Step 2: Review and Install
+
+1. Click on **Flux Capture** in the search results
+2. Review the bundle details and permissions
+3. Click **Install**
+4. Accept the terms and conditions
+5. Click **Install Bundle**
+
+### Step 3: Wait for Installation
+
+The installation process may take a few minutes. NetSuite will display a progress indicator. Do not navigate away from the page until installation completes.
+
+### Step 4: Verify Installation
+
+Once complete, verify the installation:
+
+1. Navigate to **Customization > SuiteBundler > Installed Bundles**
+2. Confirm "Flux Capture" appears in the list with status "Installed"
+3. Navigate to **Flux Capture** in your center menu to access the application
+
+## Accessing Flux Capture
+
+After installation, Flux Capture is accessible in several ways:
+
+### From the Menu
+Look for "Flux Capture" in your NetSuite center navigation. Click to open the main application.
+
+### From a Shortcut
+Your administrator can add Flux Capture to your shortcuts for quick access.
+
+### Direct URL
+Access Flux Capture directly using the Suitelet URL provided after installation.
+
+## Post-Installation Setup
+
+After installing, complete these essential setup steps:
+
+### 1. Enter Your License Key
+
+1. Open Flux Capture
+2. Go to **Settings**
+3. Enter your license key in the License section
+4. Click **Save**
+
+See [Licensing](/docs/capture/licensing) for detailed license activation instructions.
+
+### 2. Configure Extraction Settings
+
+Choose your preferred document extraction provider:
+- **OCI Document Understanding** - Native NetSuite integration
+- **Azure Form Recognizer** - Microsoft's advanced AI
+- **Mindee** - Specialized invoice extraction
+
+See [Configuration](/docs/capture/configuration) for detailed setup instructions.
+
+### 3. Test with a Sample Document
+
+1. Upload a sample invoice to verify extraction is working
+2. Review the extracted data
+3. Make any needed configuration adjustments
+
+## User Roles and Permissions
+
+Flux Capture respects NetSuite's role-based access control. Ensure users have appropriate permissions:
+
+| Permission | Required For |
+|------------|--------------|
+| View File Cabinet | Uploading and viewing documents |
+| Create Vendor Bills | Approving documents as vendor bills |
+| Create Expense Reports | Processing expense documents |
+| Custom Records | Accessing Flux Capture records |
+
+> ⚠️ **Warning**: Users without appropriate permissions may see errors when trying to access certain features.
+
+## Updating Flux Capture
+
+When updates are available:
+
+1. Navigate to **Customization > SuiteBundler > Installed Bundles**
+2. Find "Flux Capture" in the list
+3. If an update is available, click **Update**
+4. Follow the prompts to complete the update
+
+> ℹ️ **Info**: Updates typically take 2-5 minutes. Plan updates during low-usage periods.
+
+## Uninstalling
+
+If you need to remove Flux Capture:
+
+1. Navigate to **Customization > SuiteBundler > Installed Bundles**
+2. Find "Flux Capture" in the list
+3. Click **Uninstall**
+4. Confirm the uninstallation
+
+> 🚨 **Danger**: Uninstalling removes all Flux Capture data including document records, settings, and learned preferences. This cannot be undone.
+
+## Troubleshooting Installation Issues
+
+### Bundle Not Found
+
+If you cannot find Flux Capture in the marketplace:
+- Verify you're searching in **Search & Install Bundles**
+- Contact your Flux representative for the direct bundle ID
+
+### Installation Failed
+
+If installation fails:
+- Check for pending bundle operations
+- Ensure you have administrator permissions
+- Contact support@fluxfornetsuite.com with the error message
+
+### Missing Menu Items
+
+If Flux Capture doesn't appear in your menu after installation:
+- Clear your browser cache
+- Log out and back into NetSuite
+- Verify your role has access to the Flux Capture SuiteApp
+
+## Next Steps
+
+Once installation is complete:
+
+1. [Activate your license](/docs/capture/licensing)
+2. [Configure your settings](/docs/capture/configuration)
+3. [Explore the features](/docs/capture/features)
