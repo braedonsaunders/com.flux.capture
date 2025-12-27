@@ -1,0 +1,340 @@
+---
+title: "Side-by-Side Review"
+description: "Efficiently review and approve documents with the split-screen interface"
+order: 4
+icon: "columns"
+---
+
+The Side-by-Side Review interface lets you verify extracted data while viewing the original document. This split-screen approach makes document review fast and accurate.
+
+## Overview
+
+When you open a document for review, you'll see:
+- **Left panel**: Original document (PDF/image viewer)
+- **Right panel**: Extracted data form
+
+This layout lets you verify each field against the source without switching between screens.
+
+## Opening a Document for Review
+
+### From the Queue
+
+1. Find the document in the processing queue
+2. Click on the document row
+3. Or click the **Review** button
+
+### Direct Link
+
+Documents can also be opened via direct URL, useful for:
+- Email notifications
+- Workflow links
+- Bookmarks
+
+## Document Viewer (Left Panel)
+
+### Viewing Controls
+
+| Control | Function |
+|---------|----------|
+| Zoom In/Out | Adjust document size |
+| Fit Width | Fit document to panel width |
+| Fit Page | Show entire page |
+| Rotate | Rotate document 90° |
+
+### Multi-Page Navigation
+
+For multi-page documents:
+- Use page arrows to navigate
+- Enter page number directly
+- Thumbnail sidebar for quick jumping
+
+### Zoom and Pan
+
+- **Scroll** to zoom in/out
+- **Click and drag** to pan
+- **Double-click** to reset view
+
+## Extraction Form (Right Panel)
+
+### Header Fields
+
+The top section shows key invoice details:
+- Vendor (with match confidence)
+- Invoice Number
+- Invoice Date
+- Due Date
+- PO Number
+- Memo
+
+### Amount Summary
+
+Quick view of financial totals:
+- Subtotal
+- Tax Amount
+- Total Amount
+- Currency
+
+### Line Items
+
+Expandable table showing each line item:
+- Description
+- Quantity
+- Unit Price
+- Amount
+- Account (for coding)
+
+## Reviewing Extracted Data
+
+### Verifying Fields
+
+For each field:
+
+1. **Look at the extraction** - See what the AI found
+2. **Check the document** - Verify against original
+3. **Correct if needed** - Click to edit
+4. **Move on** - Tab to next field
+
+### Confidence Indicators
+
+Fields show confidence levels:
+
+| Indicator | Meaning |
+|-----------|---------|
+| Green checkmark | High confidence (85%+) |
+| Yellow dot | Medium confidence (60-84%) |
+| Red warning | Low confidence (<60%) |
+| Orange flag | Anomaly detected |
+
+### Quick Navigation
+
+Click on a field label to:
+- Highlight that area on the document
+- Zoom to the relevant section
+- See extraction context
+
+## Editing Fields
+
+### Inline Editing
+
+Click any field to edit:
+1. Click the field value
+2. Type your correction
+3. Press Tab or Enter to save
+
+### Vendor Selection
+
+To change the vendor:
+1. Click the vendor field
+2. Start typing to search
+3. Select from dropdown
+4. Or click "Add New Vendor"
+
+### Date Fields
+
+Date fields offer:
+- Calendar picker
+- Manual entry
+- Clear option
+
+### Amount Fields
+
+Amount fields:
+- Accept numbers only
+- Auto-format with commas
+- Validate against totals
+
+## Working with Line Items
+
+### Viewing Line Items
+
+Click "Line Items" to expand the table:
+- All extracted items listed
+- Scroll for long lists
+- Sort by clicking headers
+
+### Editing Line Items
+
+For each line item:
+1. Click any cell to edit
+2. Tab between columns
+3. Changes save automatically
+
+### Adding Line Items
+
+To add a missing line item:
+1. Click "Add Line"
+2. Enter item details
+3. System recalculates totals
+
+### Removing Line Items
+
+To remove an incorrect line item:
+1. Click the delete icon on the row
+2. Confirm removal
+3. Totals update automatically
+
+### Assigning Accounts
+
+For each line item:
+1. Click the Account column
+2. Search or browse accounts
+3. Select appropriate GL account
+
+> ✅ **Tip**: The Learning Engine remembers your account choices and suggests them for similar items in the future.
+
+## Handling Anomalies
+
+### Viewing Anomalies
+
+Detected issues appear in:
+- Top alert bar
+- Field-level warnings
+- Summary panel
+
+### Resolving Anomalies
+
+For each anomaly:
+
+1. **Review** - Understand the issue
+2. **Verify** - Check the document
+3. **Resolve** - Correct or dismiss
+
+### Dismissing Anomalies
+
+To acknowledge and proceed:
+1. Click "Dismiss" on the anomaly
+2. Optionally add a note
+3. Continue with review
+
+## Approval Workflow
+
+### Ready for Approval
+
+A document is ready when:
+- All required fields populated
+- No high-severity anomalies
+- Vendor is selected
+
+### Approval Actions
+
+| Button | Action |
+|--------|--------|
+| Approve | Create transaction and close |
+| Save Draft | Save changes without creating |
+| Reject | Decline the document |
+| Skip | Move to next document |
+
+### Creating the Transaction
+
+When you approve:
+1. Vendor bill (or other transaction) created in NetSuite
+2. Document marked as completed
+3. Original file optionally attached
+4. You're navigated to next document
+
+## Keyboard Shortcuts
+
+Speed up your workflow:
+
+| Key | Action |
+|-----|--------|
+| `Tab` | Next field |
+| `Shift+Tab` | Previous field |
+| `Enter` | Save field |
+| `Escape` | Cancel edit |
+| `Ctrl+S` | Save draft |
+| `Ctrl+Enter` | Approve |
+| `N` | Next document |
+| `P` | Previous document |
+| `?` | Show shortcuts |
+
+## Batch Review
+
+### Processing Multiple Documents
+
+For efficiency when reviewing many documents:
+
+1. Open first document
+2. Review and approve
+3. Automatically opens next
+4. Continue until done
+
+### Queue Position
+
+Bottom bar shows:
+- Current position (e.g., "5 of 23")
+- Progress through queue
+- Navigation to specific documents
+
+## Mobile Review
+
+The review interface works on tablets:
+
+### Touch Controls
+- Pinch to zoom
+- Swipe to navigate pages
+- Tap to edit fields
+
+### Responsive Layout
+- Panels stack on narrow screens
+- Toggle between document and form
+- Full functionality maintained
+
+## Tips for Efficient Review
+
+### High-Confidence First
+
+Start with high-confidence documents:
+- Faster to review
+- Often need no changes
+- Build momentum
+
+### Batch by Vendor
+
+Process same-vendor invoices together:
+- Familiarize with format
+- Faster pattern recognition
+- Consistent coding
+
+### Use Keyboard Navigation
+
+Minimize mouse usage:
+- Tab between fields
+- Enter to confirm
+- Shortcuts for actions
+
+### Trust But Verify
+
+For high-confidence extractions:
+- Quick visual scan
+- Check totals
+- Approve quickly
+
+## Troubleshooting
+
+### Document Not Loading
+
+If the document viewer is blank:
+1. Refresh the page
+2. Check your browser allows popups
+3. Verify file isn't corrupted
+
+### Cannot Edit Field
+
+If a field won't accept input:
+1. Check you have edit permissions
+2. Verify document status allows editing
+3. Some fields may be locked after partial save
+
+### Form Not Saving
+
+If changes aren't saving:
+1. Check for validation errors
+2. Ensure required fields are filled
+3. Look for error messages
+
+## Next Steps
+
+- [Set up email ingestion](/docs/capture/features/email-to-invoice) for automatic document capture
+- [Configure settings](/docs/capture/configuration) to customize the review experience
+- [Review troubleshooting tips](/docs/capture/troubleshooting) for common issues

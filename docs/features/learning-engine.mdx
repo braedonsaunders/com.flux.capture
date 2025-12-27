@@ -1,0 +1,275 @@
+---
+title: "Learning Engine"
+description: "How Flux Capture learns from your corrections to improve accuracy"
+order: 2
+icon: "graduation-cap"
+---
+
+The Learning Engine is Flux Capture's adaptive intelligence system. Every correction you make helps the system get smarter, leading to increasingly accurate extractions over time.
+
+## How Learning Works
+
+When you correct extracted data during review, Flux Capture remembers those corrections and applies them to future documents.
+
+### The Learning Loop
+
+1. **Extract** - AI extracts data from a document
+2. **Review** - You verify and correct any errors
+3. **Learn** - System stores your corrections
+4. **Improve** - Future extractions use learned patterns
+5. **Repeat** - Each correction improves accuracy
+
+## What the System Learns
+
+### Vendor Name Aliases
+
+When the same vendor appears with different names on invoices:
+
+**Example:**
+- Invoice says: "ACME Corporation Inc."
+- You select vendor: "ACME Corp"
+- System learns: "ACME Corporation Inc." → "ACME Corp"
+
+Next time an invoice from "ACME Corporation Inc." arrives, the system automatically matches to "ACME Corp".
+
+### Date Format Patterns
+
+Different vendors use different date formats:
+
+**Example:**
+- Vendor A uses: MM/DD/YYYY (03/15/2024)
+- Vendor B uses: DD/MM/YYYY (15/03/2024)
+
+When you correct a date interpretation, the system remembers that vendor's preferred format.
+
+### Account Coding Patterns
+
+The system learns your GL account preferences:
+
+**Example:**
+- Office supplies from Staples → Account 6200 (Office Supplies)
+- Shipping from UPS → Account 6100 (Shipping)
+
+After a few corrections, the system suggests the right account automatically.
+
+### Amount Format Preferences
+
+For vendors using different number formats:
+
+**Example:**
+- European vendor uses: 1.234,56 (comma decimal)
+- US vendor uses: 1,234.56 (period decimal)
+
+## Building Vendor Intelligence
+
+Over time, Flux Capture builds a profile for each vendor:
+
+### Vendor Defaults
+
+Learned defaults include:
+- Payment terms
+- Default expense account
+- Typical invoice amounts
+- Expected date ranges
+- Currency preference
+
+### Invoice Patterns
+
+The system tracks:
+- Invoice number formats
+- Typical line item descriptions
+- Average invoice amounts
+- Normal payment terms
+
+> ✅ **Tip**: Process invoices from the same vendor consistently to build stronger vendor profiles.
+
+## Training the System
+
+### Making Effective Corrections
+
+For best learning results:
+
+1. **Always correct errors** - Don't skip mistakes
+2. **Be consistent** - Use the same vendor names
+3. **Complete the review** - Don't abandon partial corrections
+4. **Approve when ready** - Approvals confirm learning
+
+### What Corrections Teach
+
+| Correction Type | What System Learns |
+|-----------------|-------------------|
+| Vendor selection | Name aliases, matching patterns |
+| Date correction | Date format preferences |
+| Amount correction | Number format patterns |
+| Account selection | Coding patterns by description |
+| Currency change | Currency preferences |
+
+### Learning from Approvals
+
+When you approve a document without changes, the system learns:
+- Extracted values were correct
+- Current patterns are working
+- Vendor matching was accurate
+
+## Learning Timeline
+
+How quickly does accuracy improve?
+
+### Immediate Learning
+
+Some patterns apply immediately:
+- Vendor name aliases
+- Explicit corrections
+
+### Pattern Recognition
+
+Other patterns need multiple examples:
+- 3-5 corrections for date format recognition
+- 5-10 corrections for account coding patterns
+- 10+ documents for statistical patterns
+
+### Continuous Improvement
+
+Over months of use:
+- Accuracy typically improves 10-20%
+- High-volume vendors improve fastest
+- New vendors start from baseline
+
+## Viewing Learned Data
+
+### Vendor Alias List
+
+To see what the system has learned about vendor names:
+
+1. Go to **Settings**
+2. View the **Learning** section
+3. Browse vendor aliases
+
+### Account Suggestions
+
+When reviewing a document:
+- Look for suggested accounts on line items
+- Suggestions appear based on learned patterns
+
+## Managing Learned Data
+
+### Reviewing Aliases
+
+Periodically review learned aliases to ensure accuracy:
+
+1. Check that mappings are correct
+2. Remove any incorrect aliases
+3. Merge duplicate vendors
+
+### Resetting Learning
+
+If learning has gone wrong for a vendor:
+
+1. Contact support to reset specific vendor learning
+2. Or clear all learning for a fresh start
+
+> ⚠️ **Warning**: Resetting learning removes valuable accumulated intelligence. Only reset when necessary.
+
+## Best Practices
+
+### Consistent Vendor Names
+
+Use a single canonical name for each vendor in NetSuite:
+- Good: "Office Depot" (always)
+- Bad: "Office Depot", "OfficeDepot", "Office Depot Inc."
+
+### Process Similar Invoices
+
+Group invoices from the same vendor:
+- Helps build patterns faster
+- Reduces context switching
+
+### Correct Rather Than Skip
+
+When extraction is wrong:
+- Correct the value (teaches the system)
+- Don't delete and re-upload (loses learning opportunity)
+
+### Complete Reviews
+
+Finish what you start:
+- Partial reviews may save incomplete patterns
+- Complete reviews ensure accurate learning
+
+## How Learning Improves Accuracy
+
+### Before Learning
+
+New installation, no learned data:
+- Vendor matching: ~70% accuracy
+- Account coding: Manual selection
+- Date parsing: Based on format detection
+
+### After 1 Month
+
+With regular use:
+- Vendor matching: ~85% accuracy
+- Account coding: Suggestions for common vendors
+- Date parsing: Vendor-specific format awareness
+
+### After 6 Months
+
+Mature installation:
+- Vendor matching: ~95% accuracy
+- Account coding: Auto-populated for most vendors
+- Date parsing: Rarely needs correction
+
+## Privacy and Data
+
+### What's Stored
+
+The Learning Engine stores:
+- Vendor name mappings
+- Format preferences per vendor
+- Account coding patterns
+- Statistical patterns (no raw content)
+
+### What's Not Stored
+
+- Document content is not retained
+- Line item text is not stored long-term
+- Personal information is not tracked
+
+### Data Security
+
+All learned data:
+- Stored in your NetSuite account
+- Not shared with other customers
+- Protected by NetSuite security
+
+## Troubleshooting Learning Issues
+
+### Not Learning Correctly
+
+If the system isn't learning as expected:
+
+1. Verify you're completing reviews (not abandoning)
+2. Check that corrections are being saved
+3. Ensure vendors are being properly selected
+
+### Wrong Suggestions
+
+If suggestions are consistently wrong:
+
+1. Make explicit corrections
+2. The new pattern will override old learning
+3. Contact support if issues persist
+
+### Slow Improvement
+
+If accuracy isn't improving:
+
+1. Ensure consistent vendor usage
+2. Process more documents from problem vendors
+3. Review and correct all errors
+
+## Next Steps
+
+- [Configure Fraud Shield](/docs/capture/features/fraud-shield) to catch issues learning might miss
+- [Use Side-by-Side Review](/docs/capture/features/side-by-side-review) for efficient corrections
+- [Set up Email-to-Invoice](/docs/capture/features/email-to-invoice) for higher volume processing

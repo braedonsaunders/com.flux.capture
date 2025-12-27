@@ -1,0 +1,279 @@
+---
+title: "Configuration"
+description: "How to configure Flux Capture settings for your organization"
+order: 3
+icon: "settings"
+---
+
+This guide covers all configuration options in Flux Capture, helping you customize the application to match your business processes.
+
+## Accessing Settings
+
+1. Open Flux Capture in NetSuite
+2. Click the **Settings** icon in the left navigation
+3. Use the tabs to navigate between setting categories
+
+## General Settings
+
+### Default Document Type
+
+Set the default document type for new uploads:
+
+| Option | Use For |
+|--------|---------|
+| Invoice | Standard vendor invoices and bills |
+| Receipt | Itemized receipts |
+| Credit Memo | Vendor credits and refunds |
+| Expense Report | Employee expense documentation |
+| Purchase Order | PO documents |
+
+> ✅ **Tip**: Set this to "Invoice" if most of your documents are vendor bills.
+
+### Default Line Sublist
+
+Choose where line items are entered on vendor bills:
+
+- **Expenses** - Service-based items, simple purchases
+- **Items** - Inventory items, items with stock tracking
+
+### Maximum Extraction Pages
+
+Control how many pages are processed for multi-page documents:
+
+- **0** - Process all pages (default)
+- **1-10** - Limit to specified number of pages
+
+> ℹ️ **Info**: Limiting pages can speed up processing but may miss line items on later pages.
+
+## Extraction Provider Settings
+
+Flux Capture supports multiple AI providers for document extraction. Choose the one that best fits your needs.
+
+### OCI Document Understanding
+
+Oracle Cloud Infrastructure's built-in document AI:
+
+- **Pros**: Native NetSuite integration, no additional setup
+- **Cons**: May have usage limits based on your NetSuite edition
+- **Best for**: Organizations already using Oracle Cloud services
+
+To enable:
+1. Select **OCI** as your provider
+2. No additional configuration required
+
+### Azure Form Recognizer
+
+Microsoft's advanced document AI service:
+
+- **Pros**: High accuracy, excellent line item extraction
+- **Cons**: Requires Azure subscription and API key
+- **Best for**: Organizations needing maximum accuracy
+
+To configure:
+1. Select **Azure** as your provider
+2. Enter your Azure endpoint URL
+3. Enter your Azure API key
+4. Click **Test Connection** to verify
+5. Save settings
+
+### Mindee
+
+Specialized invoice processing API:
+
+- **Pros**: Purpose-built for invoices, fast processing
+- **Cons**: Requires Mindee account and API key
+- **Best for**: High-volume invoice processing
+
+To configure:
+1. Select **Mindee** as your provider
+2. Enter your Mindee API key
+3. Click **Test Connection** to verify
+4. Save settings
+
+## Anomaly Detection Settings
+
+Configure which validation checks Flux Capture performs. These help catch errors and potential fraud.
+
+### Duplicate Detection
+
+| Setting | Description |
+|---------|-------------|
+| Detect Duplicate Invoice | Flag invoices with the same number from the same vendor |
+| Detect Duplicate Payment | Flag invoices matching vendor + amount + date |
+
+> ⚠️ **Warning**: Keep both enabled to prevent duplicate payments.
+
+### Amount Validation
+
+| Setting | Description | Default |
+|---------|-------------|---------|
+| Validate Line Items Total | Check that line items sum to subtotal | On |
+| Validate Subtotal + Tax | Verify subtotal plus tax equals total | On |
+| Validate Positive Amounts | Flag negative amounts | On |
+| Detect Round Amounts | Flag suspiciously round numbers | Off |
+| Detect Amount Outlier | Flag amounts much higher than vendor average | On |
+
+### Date Validation
+
+| Setting | Description | Default |
+|---------|-------------|---------|
+| Validate Future Date | Flag invoice dates in the future | On |
+| Validate Due Date Sequence | Ensure due date is after invoice date | On |
+| Validate Stale Date | Flag invoices more than 90 days old | On |
+| Detect Unusual Terms | Flag payment terms that differ from vendor norm | On |
+
+### Vendor Validation
+
+| Setting | Description | Default |
+|---------|-------------|---------|
+| Detect Vendor Not Found | Flag when no vendor match is found | On |
+| Detect Low Vendor Confidence | Flag when vendor match is uncertain | On |
+| Detect Invoice Format Change | Flag unusual invoice number patterns | On |
+
+### Required Fields
+
+| Setting | Description | Default |
+|---------|-------------|---------|
+| Require Invoice Number | Flag documents without invoice numbers | On |
+| Require Total Amount | Flag documents without a total amount | On |
+
+## Transaction Creation Settings
+
+Control what happens when you approve a document.
+
+### Attach File to Transaction
+
+When enabled, the original document PDF is attached to the created vendor bill.
+
+- **On**: Document attached to transaction record
+- **Off**: No attachment (saves storage)
+
+### Delete Document on Success
+
+When enabled, the Flux Capture document record is deleted after successful transaction creation.
+
+- **On**: Clean up records after processing
+- **Off**: Keep records for audit trail
+
+> ✅ **Tip**: Keep this off initially while learning the system, then enable to reduce clutter.
+
+### Submit Button Behavior
+
+Configure what happens when you click the submit button for each transaction type:
+
+| Option | Behavior |
+|--------|----------|
+| Save | Creates transaction in saved (editable) state |
+| Submit | Creates and submits for approval |
+| Create Only | Creates without opening |
+
+You can set different behaviors for:
+- Vendor Bills
+- Expense Reports
+- Vendor Credits
+- Purchase Orders
+
+## Workflow Integration
+
+Connect Flux Capture to your NetSuite workflows for automated routing.
+
+### Setting Up Workflow Integration
+
+For each transaction type:
+
+1. Enter the **Workflow ID** of your approval workflow
+2. Enter the **Action ID** for the workflow action to trigger
+3. Save settings
+
+When configured, approved documents will automatically enter your workflow.
+
+> ℹ️ **Info**: Ask your NetSuite administrator for the correct workflow and action IDs.
+
+## Form Configuration
+
+Customize which fields are extracted and how they map to your NetSuite forms.
+
+### Accessing Form Configuration
+
+1. Go to **Settings > Forms**
+2. Select the transaction type (Vendor Bill, Expense Report, etc.)
+3. Use the editor to configure field mappings
+
+### Adding Fields
+
+To extract data into a custom field:
+
+1. Click **Add Field**
+2. Select the NetSuite field
+3. Configure the extraction label (what the AI looks for)
+4. Set default values if needed
+
+### Removing Fields
+
+To stop extracting a field:
+
+1. Find the field in the editor
+2. Click the delete icon
+3. Save configuration
+
+## AI Verification (Gemini)
+
+Optional AI-powered verification provides an additional accuracy check.
+
+### Enabling AI Verification
+
+1. Toggle **Enable AI Verification** on
+2. Enter your Gemini API key
+3. Configure trigger mode:
+   - **Always** - Verify every document
+   - **Smart** - Only verify when confidence is below threshold
+   - **Never** - Disabled
+4. Set confidence threshold if using Smart mode
+5. Test connection and save
+
+## Email Inbox Settings
+
+Configure email-to-invoice functionality.
+
+### Your Capture Email Address
+
+Each Flux Capture installation has a unique email address for receiving invoices. Find it in:
+
+1. **Settings > Email**
+2. Copy your dedicated inbox address
+3. Share with vendors or set up email forwarding
+
+### Configuring Forwarding
+
+To automatically capture invoices from your existing email:
+
+1. Set up a forwarding rule in your email system
+2. Forward matching emails to your Capture address
+3. Documents will appear in your processing queue
+
+See [Email-to-Invoice](/docs/capture/features/email-to-invoice) for detailed setup instructions.
+
+## Saving Settings
+
+After making changes:
+
+1. Click **Save Settings** at the bottom of the page
+2. Wait for confirmation
+3. Changes take effect immediately
+
+> ⚠️ **Warning**: Some settings changes may affect documents currently in the queue. Review pending documents after making significant changes.
+
+## Resetting to Defaults
+
+To reset all settings to defaults:
+
+1. Contact support@fluxfornetsuite.com
+2. Or reinstall the application (this will also clear learned data)
+
+## Next Steps
+
+With configuration complete:
+
+1. [Learn about the dashboard](/docs/capture/dashboard)
+2. [Explore all features](/docs/capture/features)
+3. [Review troubleshooting tips](/docs/capture/troubleshooting)

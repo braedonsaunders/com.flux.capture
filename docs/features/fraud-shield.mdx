@@ -1,0 +1,397 @@
+---
+title: "Fraud Shield"
+description: "Automatic fraud and error detection for your invoices"
+order: 3
+icon: "shield-alert"
+---
+
+Fraud Shield is Flux Capture's built-in protection system that automatically detects potential fraud, duplicate payments, and data errors before they become costly mistakes.
+
+## Overview
+
+Every document processed by Flux Capture runs through multiple validation checks. When issues are detected, they're flagged for your review before approval.
+
+## Detection Categories
+
+### Duplicate Detection
+
+Catch the same invoice being submitted multiple times.
+
+#### Duplicate Invoice Number
+
+Flags when an invoice number has already been processed for the same vendor.
+
+**What it catches:**
+- Same invoice submitted twice
+- Invoice resubmissions after rejection
+- Vendor billing errors
+
+**Example alert:**
+> Invoice #INV-2024-001 from ACME Corp already exists in the system.
+
+#### Duplicate Payment
+
+Detects when the same vendor, amount, and date combination exists.
+
+**What it catches:**
+- Different invoice numbers for same transaction
+- Split invoice fraud
+- Vendor duplicate billing
+
+**Example alert:**
+> Another invoice from ACME Corp for $5,000.00 dated Jan 15, 2024 already exists.
+
+### Amount Validation
+
+Verify invoice amounts are mathematically correct and reasonable.
+
+#### Line Items Total
+
+Checks that individual line items sum to the subtotal.
+
+**What it catches:**
+- Extraction errors
+- Missing line items
+- Addition errors on invoice
+
+**Example alert:**
+> Line items total $4,800.00 but subtotal shows $5,000.00 (difference: $200.00)
+
+#### Subtotal + Tax Validation
+
+Ensures subtotal plus tax equals the total amount.
+
+**What it catches:**
+- Tax calculation errors
+- Transposed numbers
+- Hidden charges
+
+**Example alert:**
+> Subtotal $4,000 + Tax $500 = $4,500, but total shows $5,000
+
+#### Positive Amounts
+
+Flags unexpected negative amounts.
+
+**What it catches:**
+- Credits submitted as invoices
+- Sign errors
+- Data entry mistakes
+
+**Example alert:**
+> Total amount is negative (-$500.00). This may be a credit memo.
+
+#### Round Amount Detection
+
+Optionally flags suspiciously round numbers.
+
+**What it catches:**
+- Estimated rather than actual amounts
+- Potential fabricated invoices
+- Unusual pricing patterns
+
+**Example alert:**
+> Total amount $10,000.00 is an unusually round number.
+
+> ℹ️ **Info**: This check is off by default as many legitimate invoices have round amounts.
+
+#### Amount Outlier
+
+Flags amounts significantly higher than vendor historical average.
+
+**What it catches:**
+- Abnormally large invoices
+- Decimal point errors ($5000 vs $50.00)
+- Potential fraud
+
+**Example alert:**
+> Amount $50,000.00 is 5x higher than ACME Corp's average invoice ($10,000.00)
+
+### Date Validation
+
+Ensure invoice dates make sense.
+
+#### Future Date Detection
+
+Flags invoices dated in the future.
+
+**What it catches:**
+- Premature invoicing
+- Data entry errors
+- Time zone issues
+
+**Example alert:**
+> Invoice date March 15, 2025 is in the future.
+
+#### Due Date Sequence
+
+Ensures due date comes after invoice date.
+
+**What it catches:**
+- Reversed dates
+- Data entry errors
+- Extraction mistakes
+
+**Example alert:**
+> Due date Jan 1, 2024 is before invoice date Jan 15, 2024.
+
+#### Stale Date Detection
+
+Flags invoices more than 90 days old.
+
+**What it catches:**
+- Forgotten invoices
+- Late submissions
+- Potential duplicate risk
+
+**Example alert:**
+> Invoice date October 1, 2023 is more than 90 days old.
+
+#### Unusual Payment Terms
+
+Detects terms that differ from vendor's typical pattern.
+
+**What it catches:**
+- Changed terms without notice
+- Potential manipulation
+- Data entry errors
+
+**Example alert:**
+> Payment terms (Net 10) differ significantly from ACME Corp's typical terms (Net 30).
+
+### Vendor Validation
+
+Verify vendor information is correct and consistent.
+
+#### Vendor Not Found
+
+Flags when no matching vendor exists in NetSuite.
+
+**What it catches:**
+- New vendors
+- Misspelled vendor names
+- Potential fraudulent vendors
+
+**Example alert:**
+> Vendor "ACME Corporation Ltd." not found in system. Did you mean "ACME Corp"?
+
+#### Low Vendor Confidence
+
+Flags uncertain vendor matches.
+
+**What it catches:**
+- Similar vendor names
+- Ambiguous matches
+- Need for verification
+
+**Example alert:**
+> Vendor match confidence is 65%. Please verify correct vendor selected.
+
+#### Invoice Format Change
+
+Detects when invoice number format differs from historical pattern.
+
+**What it catches:**
+- Changed invoice systems
+- Potential forged invoices
+- Vendor acquisitions
+
+**Example alert:**
+> Invoice number format "FC-2024-001" differs from ACME Corp's typical pattern "INV-NNNN".
+
+### Required Field Validation
+
+Ensure critical information is present.
+
+#### Invoice Number Required
+
+Flags documents without an invoice number.
+
+**What it catches:**
+- Incomplete invoices
+- Extraction failures
+- Informal billing
+
+**Example alert:**
+> No invoice number found. This field is required.
+
+#### Total Amount Required
+
+Flags documents without a total amount.
+
+**What it catches:**
+- Incomplete invoices
+- Extraction failures
+- Quote documents
+
+**Example alert:**
+> No total amount found. This field is required.
+
+## Understanding Anomaly Severity
+
+Anomalies are classified by severity:
+
+| Severity | Color | Meaning | Action |
+|----------|-------|---------|--------|
+| High | Red | Critical issue | Must review before approval |
+| Medium | Orange | Important warning | Should verify |
+| Low | Yellow | Minor concern | Review if time permits |
+
+### High Severity Examples
+- Duplicate invoice detected
+- Amount is negative
+- Required field missing
+
+### Medium Severity Examples
+- Amount outlier detected
+- Vendor not found
+- Due date before invoice date
+
+### Low Severity Examples
+- Low vendor confidence
+- Invoice format changed
+- Round amount warning
+
+## Reviewing Flagged Documents
+
+When Fraud Shield flags a document:
+
+### In the Queue
+
+Documents with issues show:
+- Warning icon next to status
+- Anomaly count indicator
+- "Needs Review" status
+
+### In Review
+
+The review interface displays:
+- List of all detected anomalies
+- Severity for each issue
+- Suggested actions
+- One-click dismiss options
+
+### Taking Action
+
+For each anomaly, you can:
+
+1. **Investigate** - Check the original document
+2. **Correct** - Fix the underlying issue
+3. **Dismiss** - Acknowledge and proceed
+4. **Reject** - Decline the document
+
+## Configuring Fraud Shield
+
+Customize which checks run in Settings:
+
+### Enable/Disable Checks
+
+Toggle each validation on or off based on your needs.
+
+### Adjust Thresholds
+
+Some checks have adjustable thresholds:
+- Amount outlier multiplier (default: 3x)
+- Stale date days (default: 90)
+
+### Per-Vendor Overrides
+
+For vendors with known exceptions:
+- Contact support for custom configuration
+- Or dismiss recurring false positives
+
+## Best Practices
+
+### Start Conservative
+
+Enable all checks initially, then adjust based on false positive rate.
+
+### Review High Severity Always
+
+Never skip high severity anomalies—they catch the most costly errors.
+
+### Investigate Patterns
+
+If the same anomaly appears repeatedly:
+- There may be a legitimate pattern
+- Or a systematic issue to address
+
+### Document Exceptions
+
+When dismissing anomalies:
+- Add notes explaining why
+- Creates audit trail for later
+
+## How Calculations Work
+
+### Amount Outlier Detection
+
+The system calculates:
+1. Historical average for vendor (last 50 invoices)
+2. Standard deviation of amounts
+3. Flags if: amount > average × 3 OR amount > average + 2σ
+
+### Benford's Law Analysis
+
+For advanced fraud detection:
+- Analyzes first digit distribution
+- Compares to expected mathematical distribution
+- Flags significant deviations
+
+> ℹ️ **Info**: Benford's Law is a mathematical principle about digit frequency. Fabricated numbers often violate this pattern.
+
+## Audit Trail
+
+Fraud Shield maintains a complete audit trail:
+
+### What's Logged
+- Every anomaly detected
+- User actions (investigate, dismiss, correct)
+- Timestamps and user IDs
+
+### Accessing Audit Data
+- Available in document detail view
+- Exportable for compliance reporting
+- Retained per your data retention policy
+
+## False Positives
+
+Sometimes legitimate invoices trigger alerts:
+
+### Common False Positives
+
+| Alert | Legitimate Cause |
+|-------|------------------|
+| Round amount | Subscription or retainer fees |
+| Amount outlier | Annual payment or large order |
+| Format change | Vendor updated their system |
+| Stale date | Delayed vendor submission |
+
+### Handling False Positives
+
+1. Review the underlying document
+2. Verify it's legitimate
+3. Dismiss with appropriate note
+4. Consider adjusting settings if recurring
+
+## Reporting
+
+### Anomaly Dashboard
+
+View aggregate fraud detection stats:
+- Most common anomaly types
+- Trends over time
+- High-risk vendors
+
+### Export Reports
+
+Export anomaly data for:
+- Compliance reporting
+- Audit documentation
+- Trend analysis
+
+## Next Steps
+
+- [Review documents efficiently](/docs/capture/features/side-by-side-review) using the split-screen interface
+- [Configure detection settings](/docs/capture/configuration) to match your needs
+- [Set up email capture](/docs/capture/features/email-to-invoice) for automatic ingestion

@@ -1,0 +1,342 @@
+---
+title: "Email-to-Invoice"
+description: "Forward invoices to a dedicated email address for automatic processing"
+order: 5
+icon: "mail"
+---
+
+Email-to-Invoice lets you capture invoices simply by forwarding them to a dedicated email address. Attachments are automatically extracted and queued for processing.
+
+## How It Works
+
+1. **Receive** - Invoice arrives in your regular email
+2. **Forward** - Send to your Capture email address
+3. **Process** - Flux Capture extracts the attachment
+4. **Review** - Document appears in your queue
+5. **Approve** - Create the transaction in NetSuite
+
+## Your Capture Email Address
+
+Each Flux Capture installation has a unique email address for receiving documents.
+
+### Finding Your Address
+
+1. Open Flux Capture
+2. Go to **Settings**
+3. Navigate to the **Email** section
+4. Your dedicated address is displayed
+
+### Address Format
+
+Your address follows this pattern:
+```
+capture-[unique-id]@ingest.fluxfornetsuite.com
+```
+
+> ⚠️ **Warning**: Keep your Capture email address private. Anyone with the address can submit documents to your queue.
+
+### Copying the Address
+
+Click the **Copy** button to copy your address to clipboard, then:
+- Add to contacts
+- Share with team members
+- Configure in forwarding rules
+
+## Forwarding Invoices
+
+### Manual Forwarding
+
+When you receive an invoice:
+1. Open the email
+2. Click Forward
+3. Send to your Capture address
+4. Document queues within seconds
+
+### Automatic Forwarding
+
+Set up email rules to auto-forward:
+
+#### Gmail
+
+1. Go to Settings > Filters
+2. Create new filter
+3. Set criteria (e.g., from vendor domain)
+4. Action: Forward to your Capture address
+
+#### Outlook
+
+1. Go to Rules
+2. Create new rule
+3. Condition: From specific sender or subject contains "invoice"
+4. Action: Forward to your Capture address
+
+#### Microsoft 365 Admin
+
+For organization-wide rules:
+1. Exchange Admin Center
+2. Mail flow > Rules
+3. Create rule with forwarding action
+
+> ✅ **Tip**: Start with manual forwarding to test, then set up automation once you're comfortable.
+
+## What Gets Processed
+
+### Supported Attachments
+
+Email-to-Invoice processes:
+- PDF attachments
+- Image attachments (PNG, JPG, TIFF)
+- Multiple attachments per email
+
+### Attachment Handling
+
+| Scenario | Result |
+|----------|--------|
+| Single PDF attachment | One document created |
+| Multiple attachments | Separate document for each |
+| No attachments | Email ignored |
+| Embedded images | Usually ignored |
+| Unsupported file types | Skipped with notification |
+
+### Email Body
+
+The email body text is:
+- Stored as reference
+- Not processed as a document
+- Available in document notes
+
+## Processing Queue
+
+### Document Appearance
+
+Forwarded documents appear with:
+- Source: "Email Import"
+- Sender email address noted
+- Original filename preserved
+- Timestamp of receipt
+
+### Processing Time
+
+Typical processing timeline:
+- Email received: Immediate
+- Document queued: 1-2 minutes
+- Extraction complete: 2-5 minutes
+
+### Checking Status
+
+In the queue, email-imported documents show:
+- Email icon indicator
+- Sender information
+- Arrival time
+
+## Trusted Senders
+
+For security, you can configure trusted sender lists.
+
+### Why Use Trusted Senders
+
+Benefits:
+- Prevent spam documents
+- Auto-approve known vendors
+- Reduce fraudulent submissions
+
+### Configuring Trusted Senders
+
+1. Go to **Settings > Email**
+2. Add trusted email addresses
+3. Or add entire domains (e.g., @acmecorp.com)
+
+### Untrusted Sender Handling
+
+For emails from untrusted senders:
+- Documents still process
+- Flagged for extra review
+- Warning displayed in queue
+
+## Best Practices
+
+### Create a Dedicated AP Email
+
+Set up a central email for invoices:
+1. Create ap-invoices@yourcompany.com
+2. Share with vendors
+3. Forward to Capture address
+
+Benefits:
+- Single point of collection
+- Easy to manage rules
+- Clear audit trail
+
+### Vendor Communication
+
+Inform vendors they can email invoices directly:
+- Faster than mail
+- Automatic processing
+- Confirmation of receipt
+
+### File Naming
+
+Encourage vendors to use descriptive filenames:
+- Good: "Invoice-INV2024-001-ACMECorp.pdf"
+- Bad: "document.pdf"
+
+(Though Smart Extract will read the content regardless)
+
+### One Invoice Per Email
+
+For best results:
+- One invoice per email
+- Or clearly separate attachments
+- Avoid combined PDF documents
+
+## Common Workflows
+
+### Centralized AP Inbox
+
+```
+Vendor → AP Email → Forward Rule → Capture → Review → NetSuite
+```
+
+### Direct Vendor Submission
+
+```
+Vendor → Capture Email → Queue → Review → NetSuite
+```
+
+### Personal Inbox Forwarding
+
+```
+Vendor → Your Email → Manual Forward → Capture → Review → NetSuite
+```
+
+## Error Handling
+
+### Failed Processing
+
+If a document fails to process:
+- Check attachment format
+- Verify file isn't corrupted
+- Try uploading manually
+
+### Missing Attachments
+
+If the email had no processable attachments:
+- The email is logged but no document created
+- Check for embedded images vs attachments
+- Verify attachment format is supported
+
+### Duplicate Detection
+
+If the same invoice is forwarded twice:
+- Fraud Shield catches duplicates
+- Second copy flagged for review
+- Choose which to keep
+
+## Monitoring Email Capture
+
+### Activity Log
+
+View email capture activity:
+1. Go to **Settings > Email**
+2. Click **View Activity**
+3. See recent emails and processing status
+
+### Statistics
+
+Email capture stats show:
+- Documents received this period
+- Processing success rate
+- Common senders
+
+### Troubleshooting Queue
+
+If documents aren't appearing:
+1. Verify you sent to correct address
+2. Check spam/junk folders didn't intercept
+3. View activity log for errors
+4. Contact support if issues persist
+
+## Security Considerations
+
+### Protecting Your Address
+
+Your Capture email address should be:
+- Shared only with trusted parties
+- Not published publicly
+- Changed if compromised (contact support)
+
+### Email Authentication
+
+Flux Capture validates:
+- Email authenticity (SPF/DKIM when available)
+- Attachment safety
+- Source reputation
+
+### Access Logging
+
+All email submissions are logged:
+- Sender address
+- Timestamp
+- IP information
+- Processing result
+
+## Limits and Quotas
+
+### Attachment Size
+
+Maximum per attachment: **20 MB**
+
+### Emails Per Day
+
+Standard limits:
+- No hard limit on emails
+- Large volumes may queue
+- Contact support for high-volume needs
+
+### Rate Limiting
+
+To prevent abuse:
+- Rapid submissions may be throttled
+- Normal usage is unaffected
+
+## Integration Options
+
+### With Expense Systems
+
+Forward expense receipts for employee reimbursement processing.
+
+### With Vendor Portals
+
+Configure vendor portal to email invoices directly to Capture.
+
+### With Scanning Services
+
+Point your document scanning workflow to email scanned invoices.
+
+## Troubleshooting
+
+### Emails Not Arriving
+
+1. Verify email address is correct
+2. Check sender's outbox/sent items
+3. Look for bounce-back messages
+4. View activity log in Settings
+
+### Attachments Not Processing
+
+1. Confirm attachment format (PDF, PNG, JPG, TIFF)
+2. Check file size (max 20 MB)
+3. Verify attachment isn't corrupted
+4. Try forwarding again
+
+### Wrong Documents Appearing
+
+1. Review your forwarding rules
+2. Check if address was shared too broadly
+3. Enable trusted sender restrictions
+
+## Next Steps
+
+- [Configure your email settings](/docs/capture/configuration)
+- [Review the processing queue](/docs/capture/dashboard)
+- [Learn about Smart Extract](/docs/capture/features/smart-extract)
