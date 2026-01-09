@@ -1,6 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <customrecordtype scriptid="customrecord_flux_config">
     <recordname>Flux Configuration</recordname>
+    <accesstype>NONENEEDED</accesstype>
     <includename>T</includename>
     <showid>T</showid>
     <shownotes>F</shownotes>
