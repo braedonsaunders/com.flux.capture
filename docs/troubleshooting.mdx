@@ -36,6 +36,32 @@ This guide helps you resolve common issues with Flux Capture. If you don't find 
 3. **Check queue for errors** - Document may have failed
 4. **Re-upload** - If stuck more than 5 minutes
 
+### Permission Error on Upload
+
+**Symptoms:**
+- "Permission Violation: You need a higher permission for custom record type Flux Document"
+- Error when trying to upload documents
+- User has permissions set but still gets error
+
+**Solutions:**
+
+1. **Update the bundle**
+   - This issue is fixed in the latest version
+   - Navigate to **Customization > SuiteBundler > Installed Bundles**
+   - Find "Flux Capture" and click **Update** if available
+
+2. **For administrators (manual fix)**
+   - If you cannot update immediately, set the custom record access type:
+   - Go to **Customization > Lists, Records & Fields > Record Types**
+   - Find "Flux Document" and click Edit
+   - Under "Access Type", select "No Permission Required"
+   - Save the record
+   - Repeat for "Flux Configuration" record type
+
+3. **Verify File Cabinet permissions**
+   - Users also need File Cabinet access to upload documents
+   - Ensure role has "Documents and Files" permission (View level minimum)
+
 ## Extraction Issues
 
 ### No Data Extracted
