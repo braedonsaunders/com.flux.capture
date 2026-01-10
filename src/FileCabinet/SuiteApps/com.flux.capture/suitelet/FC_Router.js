@@ -755,7 +755,7 @@ define([
         var sortColumns = {
             'created': 'COALESCE(custrecord_flux_created_date, custrecord_flux_email_received, created)',
             'confidence': 'custrecord_flux_confidence_score',
-            'vendor': 'custrecord_flux_vendor',
+            'vendor': 'BUILTIN.DF(custrecord_flux_vendor)',  // Sort by vendor NAME (A-Z) not ID
             'status': 'custrecord_flux_status',
             'amount': 'custrecord_flux_total_amount'
         };
@@ -805,20 +805,21 @@ define([
     function getProcessingQueue(context) {
         var page = parseInt(context.page) || 1;
         var pageSize = Math.min(parseInt(context.pageSize) || 50, 100);
-        var sortBy = context.sortBy || 'created';
-        var sortDir = (context.sortDir || 'desc').toUpperCase() === 'ASC' ? 'ASC' : 'DESC';
+        // Default to vendor (A-Z) sorting for queue/review
+        var sortBy = context.sortBy || 'vendor';
+        var sortDir = (context.sortDir || 'asc').toUpperCase() === 'DESC' ? 'DESC' : 'ASC';
 
         // Map sort columns to database fields
         var sortColumns = {
             'created': 'custrecord_flux_created_date',
             'date': 'custrecord_flux_created_date',
             'confidence': 'custrecord_flux_confidence_score',
-            'vendor': 'vendorName',
+            'vendor': 'BUILTIN.DF(custrecord_flux_vendor)',  // Sort by vendor NAME (A-Z) not ID
             'status': 'custrecord_flux_status',
             'amount': 'custrecord_flux_total_amount',
             'invoice': 'custrecord_flux_invoice_number'
         };
-        var sortColumn = sortColumns[sortBy] || 'custrecord_flux_created_date';
+        var sortColumn = sortColumns[sortBy] || 'BUILTIN.DF(custrecord_flux_vendor)';
 
         try {
             // Use COALESCE to handle cases where custrecord_flux_original_filename might not exist
@@ -1086,15 +1087,19 @@ define([
                     };
                 }
 
-                periods.push({
-                    value: periodId,
-                    text: periodName,
-                    startDate: startDate,
-                    endDate: endDate,
-                    isClosed: isClosed,
-                    isApLocked: isApLocked,
-                    isCurrent: isCurrent
-                });
+                // Only include periods that are open for AP posting
+                // (not closed and not AP-locked)
+                if (!isClosed && !isApLocked) {
+                    periods.push({
+                        value: periodId,
+                        text: periodName,
+                        startDate: startDate,
+                        endDate: endDate,
+                        isClosed: isClosed,
+                        isApLocked: isApLocked,
+                        isCurrent: isCurrent
+                    });
+                }
             });
 
             // Return options with currentPeriod for smart defaults
@@ -2609,7 +2614,7 @@ define([
             companyCurrency: savedSettings.companyCurrency || 'CAD', // Default to CAD
             anomalyDetection: anomalyDefaults,
             // Transaction creation settings
-            attachFileToTransaction: savedSettings.attachFileToTransaction === true, // Default OFF
+            attachFileToTransaction: savedSettings.attachFileToTransaction !== false, // Default ON
             deleteDocumentOnSuccess: savedSettings.deleteDocumentOnSuccess !== false, // Default ON
             // Submit button mode per transaction type: 'create', 'submit_for_approval', or 'both'
             submitButtonMode: submitButtonModeDefaults,
@@ -3211,7 +3216,8 @@ define([
 
             var result = engine.processDocument(fileId, {
                 documentType: documentType,
-                enableLearning: true
+                enableLearning: true,
+                documentId: documentId  // Pass document ID for duplicate detection exclusion
             });
 
             var processingTime = Date.now() - startTime;
@@ -5408,10 +5414,22 @@ define([
         }
 
         // Known date fields that need conversion (NOT postingperiod - that's a select field)
-        var dateFields = ['trandate', 'duedate', 'startdate', 'enddate', 'expensedate', 'expectedreceiptdate'];
+        var dateFields = ['trandate', 'duedate', 'startdate', 'enddate', 'expensedate', 'expectedreceiptdate',
+                          'prepaiddate', 'amortizstartdate', 'amortizationenddate', 'shipdate', 'actualshipdate'];
 
         // Known checkbox fields that need boolean conversion
-        var checkboxFields = ['paymenthold', 'landedcostperline', 'isbasecurrency'];
+        // Extended list to cover all common checkbox fields for dynamic form handling
+        var checkboxFields = [
+            'paymenthold', 'landedcostperline', 'isbasecurrency',
+            // Line-level checkboxes
+            'isbillable', 'billable', 'istaxable', 'taxable',
+            'isclosed', 'isopen', 'isdropship', 'isspecialorder',
+            // Expense report fields
+            'reimbursable', 'corporatecardexpense', 'receipt',
+            // Vendor bill fields
+            'prepaid', 'amortize',
+            // Custom checkbox pattern detection handled below
+        ];
 
         // Helper to check if a field is a date field
         function isDateField(fieldId) {
@@ -5425,7 +5443,13 @@ define([
         function isCheckboxField(fieldId) {
             if (!fieldId) return false;
             var lowerFieldId = fieldId.toLowerCase();
-            return checkboxFields.indexOf(lowerFieldId) !== -1;
+            // Check known checkbox fields
+            if (checkboxFields.indexOf(lowerFieldId) !== -1) return true;
+            // Dynamic detection: fields starting with 'is' (isbillable, istaxable, etc.)
+            if (lowerFieldId.match(/^is[a-z]/)) return true;
+            // Dynamic detection: fields ending with 'able' (billable, taxable, reimbursable, etc.)
+            if (lowerFieldId.match(/able$/)) return true;
+            return false;
         }
 
         // Helper to convert checkbox value to boolean

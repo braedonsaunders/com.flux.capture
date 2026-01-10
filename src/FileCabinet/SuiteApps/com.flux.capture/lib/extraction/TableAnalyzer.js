@@ -139,6 +139,34 @@ define(['N/log', '../FC_Debug'], function(log, fcDebug) {
         }
 
         /**
+         * Normalize description text case
+         * Converts ALL CAPS text to Title Case for better readability
+         * Preserves mixed case, acronyms, and properly formatted text
+         */
+        normalizeDescriptionCase(text) {
+            if (!text || typeof text !== 'string') return text;
+
+            const trimmed = text.trim();
+
+            // Check if text is mostly uppercase (>80% uppercase letters)
+            const letters = trimmed.replace(/[^a-zA-Z]/g, '');
+            if (letters.length === 0) return trimmed;
+
+            const upperCount = (letters.match(/[A-Z]/g) || []).length;
+            const isAllCaps = upperCount / letters.length > 0.8;
+
+            if (!isAllCaps) {
+                // Text is already properly formatted, return as-is
+                return trimmed;
+            }
+
+            // Convert to title case
+            return trimmed.toLowerCase().replace(/(?:^|[\s\-/])\w/g, function(match) {
+                return match.toUpperCase();
+            });
+        }
+
+        /**
          * Add a warning about extraction issues
          */
         addWarning(type, message, details = {}) {
@@ -1294,7 +1322,8 @@ define(['N/log', '../FC_Debug'], function(log, fcDebug) {
                         item.itemCode = text;
                         break;
                     case ColumnType.DESCRIPTION:
-                        item.description = text;
+                        // Normalize ALL CAPS descriptions to Title Case for readability
+                        item.description = this.normalizeDescriptionCase(text);
                         break;
                     case ColumnType.MEMO:
                         item.memo = text;
@@ -1357,7 +1386,8 @@ define(['N/log', '../FC_Debug'], function(log, fcDebug) {
             if (descCol) {
                 const addText = row[descCol.index]?.text || '';
                 if (addText) {
-                    item.description += ' ' + addText;
+                    // Normalize case when appending description text
+                    item.description += ' ' + this.normalizeDescriptionCase(addText);
                 }
             }
 

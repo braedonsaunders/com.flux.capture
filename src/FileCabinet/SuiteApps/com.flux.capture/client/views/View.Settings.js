@@ -82,8 +82,8 @@
                     setCheckbox('#require-invoice-number', anomaly.requireInvoiceNumber);
                     setCheckbox('#require-total-amount', anomaly.requireTotalAmount);
 
-                    // Transaction Creation Settings
-                    setCheckboxOff('#attach-file-to-transaction', settings.attachFileToTransaction);
+                    // Transaction Creation Settings (default ON)
+                    setCheckbox('#attach-file-to-transaction', settings.attachFileToTransaction);
                     setCheckbox('#delete-document-on-success', settings.deleteDocumentOnSuccess);
 
                     // Submit Button Mode Settings (per transaction type)
