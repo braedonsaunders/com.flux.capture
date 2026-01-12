@@ -103,32 +103,66 @@ define(['N/log', 'N/record', 'N/query', 'N/runtime', 'N/cache', '../FC_Debug'], 
             const normalizedText = this.normalizeAlias(text);
             const aliases = this.loadAllAliases();
 
-            // Exact match first
+            log.debug('AliasManager.findVendorByAlias', {
+                inputText: text,
+                normalizedText: normalizedText,
+                aliasCount: aliases.length
+            });
+
+            // Exact match first - check both original and normalized forms
             for (const alias of aliases) {
-                if (alias.aliases.some(a => this.normalizeAlias(a) === normalizedText)) {
+                if (!alias.aliases || !Array.isArray(alias.aliases)) continue;
+
+                const matched = alias.aliases.some(a => {
+                    const normalizedAlias = this.normalizeAlias(a);
+                    // Check exact match on normalized text
+                    if (normalizedAlias === normalizedText) return true;
+                    // Also check if input text contains the alias or vice versa (for partial matches)
+                    if (normalizedText.includes(normalizedAlias) || normalizedAlias.includes(normalizedText)) return true;
+                    return false;
+                });
+
+                if (matched) {
+                    log.debug('AliasManager.findVendorByAlias', {
+                        matchFound: true,
+                        vendorId: alias.vendorId,
+                        vendorName: alias.vendorName,
+                        matchedAliases: alias.aliases
+                    });
+
                     // Update usage stats (async, don't wait)
                     this.incrementUsage(alias.key);
 
                     return {
                         vendorId: alias.vendorId,
                         vendorName: alias.vendorName,
-                        confidence: alias.confidence,
+                        confidence: alias.confidence || 0.85,
                         matchType: 'exact_alias'
                     };
                 }
             }
 
+            log.debug('AliasManager.findVendorByAlias', 'No exact match, trying fuzzy match');
+
             // Fuzzy match
             const bestMatch = this.fuzzyMatchAlias(normalizedText, aliases);
             if (bestMatch && bestMatch.score >= 0.85) {
+                log.debug('AliasManager.findVendorByAlias', {
+                    fuzzyMatchFound: true,
+                    vendorId: bestMatch.vendorId,
+                    vendorName: bestMatch.vendorName,
+                    score: bestMatch.score
+                });
+
                 return {
                     vendorId: bestMatch.vendorId,
                     vendorName: bestMatch.vendorName,
-                    confidence: bestMatch.score * bestMatch.confidence,
+                    confidence: bestMatch.score * (bestMatch.confidence || 0.85),
                     matchType: 'fuzzy_alias'
                 };
             }
 
+            log.debug('AliasManager.findVendorByAlias', 'No alias match found');
             return null;
         }
 
@@ -289,12 +323,23 @@ define(['N/log', 'N/record', 'N/query', 'N/runtime', 'N/cache', '../FC_Debug'], 
                     results.results.forEach(row => {
                         try {
                             const data = JSON.parse(row.values[1] || '{}');
-                            aliases.push({
-                                key: row.values[0],
-                                ...data
-                            });
+                            // Ensure aliases array exists and is valid
+                            if (data.aliases && Array.isArray(data.aliases) && data.vendorId) {
+                                aliases.push({
+                                    key: row.values[0],
+                                    ...data
+                                });
+                            } else {
+                                log.debug('AliasManager.loadAllAliases', {
+                                    skipped: true,
+                                    key: row.values[0],
+                                    hasAliases: !!data.aliases,
+                                    hasVendorId: !!data.vendorId,
+                                    data: JSON.stringify(data).substring(0, 200)
+                                });
+                            }
                         } catch (e) {
-                            // Skip invalid records
+                            log.debug('AliasManager.loadAllAliases', 'Parse error: ' + e.message);
                         }
                     });
                 }
@@ -303,7 +348,16 @@ define(['N/log', 'N/record', 'N/query', 'N/runtime', 'N/cache', '../FC_Debug'], 
                 this.aliasCache = aliases;
                 this.cacheTime = Date.now();
 
-                fcDebug.debug('AliasManager.loadAllAliases', `Loaded ${aliases.length} alias records`);
+                // Log loaded aliases for debugging
+                log.debug('AliasManager.loadAllAliases', {
+                    count: aliases.length,
+                    aliases: aliases.map(a => ({
+                        key: a.key,
+                        aliases: a.aliases,
+                        vendorId: a.vendorId,
+                        vendorName: a.vendorName
+                    }))
+                });
 
                 return aliases;
             } catch (e) {

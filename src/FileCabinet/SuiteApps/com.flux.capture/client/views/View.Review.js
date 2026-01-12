@@ -4216,6 +4216,34 @@
                     self.updateSublistLine(sublistId, idx, fieldId, value, true);
                 });
 
+                // ========== MATH EXPRESSION EVALUATION ON BLUR ==========
+                // Allow users to type expressions like "10+10+10" in numeric fields
+                lineSection.addEventListener('blur', function(e) {
+                    var input = e.target;
+                    if (!input.classList.contains('line-input')) return;
+
+                    var row = input.closest('tr');
+                    if (!row) return;
+
+                    var fieldId = (input.dataset.field || '').toLowerCase();
+                    // Only evaluate math for numeric fields
+                    if (fieldId !== 'amount' && fieldId !== 'rate' && fieldId !== 'quantity') return;
+
+                    var value = input.value.trim();
+                    // Check if value contains math operators
+                    if (!/[+\-*/]/.test(value)) return;
+
+                    // Evaluate the math expression safely
+                    var result = self.evaluateMathExpression(value);
+                    if (result !== null && !isNaN(result)) {
+                        input.value = result.toFixed(2);
+                        // Update the data model
+                        var idx = parseInt(row.dataset.idx, 10);
+                        var sublistId = row.dataset.sublist;
+                        self.updateSublistLine(sublistId, idx, fieldId, result);
+                    }
+                }, true); // Use capture phase to ensure blur fires before other handlers
+
                 // ========== TYPEAHEAD SEARCH FOR SELECT FIELDS ==========
                 lineSection.addEventListener('input', function(e) {
                     var input = e.target;
@@ -5575,6 +5603,38 @@
                    fieldIds.indexOf('amount') !== -1;
         },
 
+        /**
+         * Safely evaluate a basic math expression (supports +, -, *, /)
+         * Examples: "10+10+10" -> 30, "100*0.5" -> 50, "50/2+10" -> 35
+         * Returns null if expression is invalid or contains non-numeric characters
+         */
+        evaluateMathExpression: function(expr) {
+            if (!expr || typeof expr !== 'string') return null;
+
+            // Clean the expression - remove spaces and currency symbols
+            var cleaned = expr.replace(/[$,\s]/g, '');
+
+            // Validate: only allow numbers, decimal points, and basic math operators
+            if (!/^[\d.+\-*/()]+$/.test(cleaned)) return null;
+
+            // Prevent empty expressions or expressions with only operators
+            if (!/\d/.test(cleaned)) return null;
+
+            try {
+                // Use Function constructor to safely evaluate the expression
+                // This is safer than eval() as it doesn't have access to local scope
+                var result = new Function('return (' + cleaned + ')')();
+
+                // Validate result is a finite number
+                if (typeof result !== 'number' || !isFinite(result)) return null;
+
+                return result;
+            } catch (e) {
+                // Invalid expression
+                return null;
+            }
+        },
+
         // Check if field is numeric (currency or integer type)
         isNumericField: function(fieldId, sublistId) {
             var schema = this.getSublistSchema(sublistId);
@@ -5724,6 +5784,35 @@
             var self = this;
             var collapsed = {};
 
+            // Helper to get numeric value from line, checking all case variants
+            function getNumericValue(line, fieldId) {
+                var lowerFieldId = fieldId.toLowerCase();
+                var val = parseFloat(line[fieldId]) || 0;
+                if (val === 0) val = parseFloat(line[lowerFieldId]) || 0;
+                if (val === 0) val = parseFloat(line[fieldId.charAt(0).toUpperCase() + fieldId.slice(1)]) || 0;
+                if (val === 0) val = parseFloat(line[fieldId.toUpperCase()]) || 0;
+                return val;
+            }
+
+            // Helper to set numeric value across all case variants
+            function setNumericValue(obj, fieldId, value) {
+                var lowerFieldId = fieldId.toLowerCase();
+                obj[lowerFieldId] = value;
+                if (lowerFieldId === 'amount') {
+                    obj.amount = value;
+                    obj.Amount = value;
+                    obj.AMOUNT = value;
+                } else if (lowerFieldId === 'rate') {
+                    obj.rate = value;
+                    obj.Rate = value;
+                    obj.RATE = value;
+                } else if (lowerFieldId === 'quantity') {
+                    obj.quantity = value;
+                    obj.Quantity = value;
+                    obj.QUANTITY = value;
+                }
+            }
+
             // Collect all unique keys from all lines
             var allKeys = {};
             lines.forEach(function(line) {
@@ -5735,10 +5824,11 @@
                 if (key.indexOf('_display') !== -1) return;
 
                 if (self.isNumericField(key, sublistId)) {
-                    // Sum numeric fields
-                    collapsed[key] = lines.reduce(function(sum, l) {
-                        return sum + (parseFloat(l[key]) || 0);
+                    // Sum numeric fields across all case variants
+                    var total = lines.reduce(function(sum, l) {
+                        return sum + getNumericValue(l, key);
                     }, 0);
+                    setNumericValue(collapsed, key, total);
                 } else {
                     // For non-numeric: collect unique non-empty values
                     var values = lines.map(function(l) { return l[key]; }).filter(function(v) {
@@ -5774,8 +5864,39 @@
             var groups = {};
             var displayKey = groupField + '_display';
 
+            // Helper to get numeric value from line, checking all case variants
+            function getNumericValue(line, fieldId) {
+                var lowerFieldId = fieldId.toLowerCase();
+                var val = parseFloat(line[fieldId]) || 0;
+                // Also check lowercase and uppercase variants
+                if (val === 0) val = parseFloat(line[lowerFieldId]) || 0;
+                if (val === 0) val = parseFloat(line[fieldId.charAt(0).toUpperCase() + fieldId.slice(1)]) || 0;
+                if (val === 0) val = parseFloat(line[fieldId.toUpperCase()]) || 0;
+                return val;
+            }
+
+            // Helper to set numeric value across all case variants
+            function setNumericValue(obj, fieldId, value) {
+                var lowerFieldId = fieldId.toLowerCase();
+                obj[lowerFieldId] = value;
+                // Also set other common case variants for amount, rate, quantity
+                if (lowerFieldId === 'amount') {
+                    obj.amount = value;
+                    obj.Amount = value;
+                    obj.AMOUNT = value;
+                } else if (lowerFieldId === 'rate') {
+                    obj.rate = value;
+                    obj.Rate = value;
+                    obj.RATE = value;
+                } else if (lowerFieldId === 'quantity') {
+                    obj.quantity = value;
+                    obj.Quantity = value;
+                    obj.QUANTITY = value;
+                }
+            }
+
             lines.forEach(function(line) {
-                var key = line[groupField] || '__empty__';
+                var key = line[groupField] || line[groupField.toLowerCase()] || '__empty__';
 
                 if (!groups[key]) {
                     // Clone first line as base (preserves all custom fields)
@@ -5784,7 +5905,8 @@
                     Object.keys(groups[key]).forEach(function(fieldId) {
                         if (fieldId.indexOf('_display') !== -1) return;
                         if (self.isNumericField(fieldId, sublistId)) {
-                            groups[key][fieldId] = parseFloat(line[fieldId]) || 0;
+                            var val = getNumericValue(line, fieldId);
+                            setNumericValue(groups[key], fieldId, val);
                         }
                     });
                 } else {
@@ -5792,8 +5914,9 @@
                     Object.keys(line).forEach(function(fieldId) {
                         if (fieldId.indexOf('_display') !== -1) return;
                         if (self.isNumericField(fieldId, sublistId)) {
-                            groups[key][fieldId] = (parseFloat(groups[key][fieldId]) || 0) +
-                                                   (parseFloat(line[fieldId]) || 0);
+                            var existingVal = getNumericValue(groups[key], fieldId);
+                            var newVal = getNumericValue(line, fieldId);
+                            setNumericValue(groups[key], fieldId, existingVal + newVal);
                         }
                     });
                 }
