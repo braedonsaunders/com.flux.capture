@@ -5684,6 +5684,78 @@ define([
             return null;
         }
 
+        // Mapping of field IDs to their NetSuite record types for resolution
+        var fieldRecordTypeMap = {
+            'department': 'department',
+            'class': 'classification',
+            'location': 'location',
+            'subsidiary': 'subsidiary',
+            'employee': 'employee',
+            'customer': 'customer',
+            'project': 'job',
+            'expensecategory': 'expensecategory',
+            'taxcode': 'salestaxitem',
+            'nexus': 'nexus'
+        };
+
+        // Generic helper to resolve text value to internal ID for any record type
+        function resolveRecordId(fieldId, textValue) {
+            if (!textValue || !isTextValue(textValue)) return textValue; // Already an ID
+
+            var recordType = fieldRecordTypeMap[fieldId.toLowerCase()];
+            if (!recordType) return textValue; // No mapping, use value as-is
+
+            var cacheKey = recordType + ':' + textValue.toLowerCase();
+            if (lookupCache[cacheKey] !== undefined) return lookupCache[cacheKey];
+
+            try {
+                // Try exact name match first
+                var recSearch = search.create({
+                    type: recordType,
+                    filters: [['name', 'is', textValue]],
+                    columns: ['internalid', 'name']
+                });
+                var results = recSearch.run().getRange({ start: 0, end: 1 });
+
+                // If no exact match, try contains for partial matching
+                if (!results || results.length === 0) {
+                    recSearch = search.create({
+                        type: recordType,
+                        filters: [['name', 'contains', textValue]],
+                        columns: ['internalid', 'name']
+                    });
+                    results = recSearch.run().getRange({ start: 0, end: 5 });
+
+                    // Find best match (prefer exact match or starts with)
+                    if (results && results.length > 0) {
+                        var lowerText = textValue.toLowerCase();
+                        var bestMatch = results.find(function(r) {
+                            var name = (r.getValue('name') || '').toLowerCase();
+                            return name === lowerText || name.indexOf(lowerText) === 0;
+                        }) || results[0];
+                        results = [bestMatch];
+                    }
+                }
+
+                if (results && results.length > 0) {
+                    var resolvedId = results[0].getValue('internalid');
+                    lookupCache[cacheKey] = resolvedId;
+                    log.debug('resolveRecordId', 'Resolved ' + recordType + ' "' + textValue + '" to ID: ' + resolvedId);
+                    return resolvedId;
+                }
+            } catch (e) {
+                log.debug('resolveRecordId', 'Could not resolve ' + recordType + ' "' + textValue + '": ' + e.message);
+            }
+
+            lookupCache[cacheKey] = null;
+            return null;
+        }
+
+        // Check if a field ID is a known list/record field that needs resolution
+        function isResolvableField(fieldId) {
+            return fieldRecordTypeMap.hasOwnProperty(fieldId.toLowerCase());
+        }
+
         // Track fields that were set successfully and those that failed
         var fieldSetResults = { success: [], failed: [] };
 
@@ -5710,6 +5782,15 @@ define([
                     valueToSet = resolveCurrencyIdForField(value);
                     if (!valueToSet) {
                         log.debug('setBodyField', 'Could not resolve currency: ' + value);
+                        return; // Skip if can't resolve
+                    }
+                }
+                // Resolve other list/record fields (department, class, location, etc.)
+                else if (isResolvableField(fieldId) && isTextValue(value)) {
+                    valueToSet = resolveRecordId(fieldId, value);
+                    if (!valueToSet) {
+                        log.debug('setBodyField', 'Could not resolve ' + fieldId + ': ' + value);
+                        fieldSetResults.failed.push({ field: fieldId, reason: 'could not resolve text to ID', value: String(value).substring(0, 50) });
                         return; // Skip if can't resolve
                     }
                 }
@@ -5753,6 +5834,15 @@ define([
                     if (!valueToSet) {
                         log.debug('setSublistField', 'Could not parse date for ' + sublistId + '.' + fieldId + ': ' + value);
                         fieldSetResults.failed.push({ field: sublistId + '.' + fieldId, reason: 'date parse failed', value: String(value).substring(0, 50) });
+                        return;
+                    }
+                }
+                // Resolve list/record fields (department, class, location, etc.)
+                else if (isResolvableField(fieldId) && isTextValue(value)) {
+                    valueToSet = resolveRecordId(fieldId, value);
+                    if (!valueToSet) {
+                        log.debug('setSublistField', 'Could not resolve ' + sublistId + '.' + fieldId + ': ' + value);
+                        fieldSetResults.failed.push({ field: sublistId + '.' + fieldId, reason: 'could not resolve text to ID', value: String(value).substring(0, 50) });
                         return;
                     }
                 }
