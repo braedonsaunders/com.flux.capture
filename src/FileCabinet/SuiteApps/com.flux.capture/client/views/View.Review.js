@@ -588,6 +588,53 @@
                 }
             });
 
+            // Initialize ALL fields from form schema (not just the 7 mapped above)
+            // This ensures custom fields and other standard fields are included
+            var schemaFields = (this.formFields && this.formFields.bodyFields) || [];
+            schemaFields.forEach(function(fieldDef) {
+                var fieldId = fieldDef.id;
+                if (!fieldId) return;
+
+                // Skip if already populated by the mappings above
+                if (bodyFields[fieldId] !== undefined && bodyFields[fieldId] !== '') return;
+
+                // Check extractedData for this field (try exact match and lowercase)
+                var value = extractedData[fieldId] || extractedData[fieldId.toLowerCase()];
+
+                // Also check doc-level fields
+                if (value === undefined || value === null || value === '') {
+                    value = doc[fieldId] || doc[fieldId.toLowerCase()];
+                }
+
+                if (value !== undefined && value !== null && value !== '') {
+                    bodyFields[fieldId] = value;
+                    // Check for display text
+                    var displayValue = extractedData[fieldId + '_display'] ||
+                                       extractedData[fieldId.toLowerCase() + '_display'] ||
+                                       doc[fieldId + '_display'];
+                    if (displayValue) {
+                        bodyFields[fieldId + '_display'] = displayValue;
+                    }
+                }
+            });
+
+            // Also pull in any remaining extractedData fields that aren't in the schema
+            // This preserves AI-extracted values even if they're not in the form definition
+            Object.keys(extractedData).forEach(function(key) {
+                // Skip internal/meta fields and display fields
+                if (key.indexOf('_') === 0 || key.indexOf('_display') !== -1) return;
+                // Skip if already set
+                if (bodyFields[key] !== undefined && bodyFields[key] !== '') return;
+
+                var value = extractedData[key];
+                if (value !== undefined && value !== null && value !== '' && typeof value !== 'object') {
+                    bodyFields[key] = value;
+                    if (extractedData[key + '_display']) {
+                        bodyFields[key + '_display'] = extractedData[key + '_display'];
+                    }
+                }
+            });
+
             // Handle entity field - vendor for bills, employee for expense reports
             if (doc.vendor) {
                 // Vendor bill - use vendor field from custom record
@@ -677,14 +724,21 @@
                 });
 
                 // Collect typeahead display values
+                // Priority: hidden input (ID) > display input (text for server-side resolution)
                 panel.querySelectorAll('.typeahead-select[data-field]').forEach(function(wrapper) {
                     var fieldId = wrapper.dataset.field;
                     var hiddenInput = wrapper.querySelector('input[type="hidden"]');
                     var displayInput = wrapper.querySelector('.typeahead-input');
 
                     if (hiddenInput && hiddenInput.value) {
+                        // Use the ID from hidden input (preferred)
                         bodyFields[fieldId] = hiddenInput.value;
+                    } else if (displayInput && displayInput.value) {
+                        // Hidden input is empty but display has text - use display value
+                        // Server-side resolution will attempt to convert text to ID
+                        bodyFields[fieldId] = displayInput.value;
                     }
+                    // Always capture display text for reference
                     if (displayInput && displayInput.value) {
                         bodyFields[fieldId + '_display'] = displayInput.value;
                     }
@@ -770,6 +824,27 @@
                     }
                 });
             }
+
+            // Also fall back to extractedData for any remaining empty fields
+            // This ensures AI-extracted values are preserved even if not rendered in DOM
+            var extractedData = (this.data && this.data.extractedData) || {};
+            Object.keys(extractedData).forEach(function(key) {
+                // Skip internal/meta fields, display fields, and objects
+                if (key.indexOf('_') === 0 || key.indexOf('_display') !== -1) return;
+                var value = extractedData[key];
+                if (typeof value === 'object') return;
+
+                // Only use extracted value if DOM/formData didn't provide one
+                if (bodyFields[key] === undefined || bodyFields[key] === '') {
+                    if (value !== undefined && value !== null && value !== '') {
+                        bodyFields[key] = value;
+                        // Also grab display value if available
+                        if (extractedData[key + '_display']) {
+                            bodyFields[key + '_display'] = extractedData[key + '_display'];
+                        }
+                    }
+                }
+            });
 
             // Update formData
             this.formData = this.formData || {};
@@ -3376,8 +3451,10 @@
                 }
 
                 if (isDisabled) {
-                    // Disabled select - just show display value
-                    html += '<input type="text" id="' + fieldId + '" value="' + escapeHtml(displayValue || value) + '" disabled>';
+                    // Disabled select - show display value but also store the actual ID value
+                    // Hidden input stores the ID, visible disabled input shows display text
+                    html += '<input type="hidden" id="' + fieldId + '" value="' + escapeHtml(value) + '" data-field="' + nsField.id + '">' +
+                        '<input type="text" value="' + escapeHtml(displayValue || value) + '" disabled>';
                 } else {
                     // Typeahead select for body fields
                     // Add data-needs-current-period for posting period fields that need async resolution
