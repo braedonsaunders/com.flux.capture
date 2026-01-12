@@ -314,9 +314,10 @@
                     self.isLoading = false;
                     self.render();
 
-                    // Fetch coding suggestions if vendor is already set
+                    // Fetch coding suggestions and vendor defaults if vendor is already set
                     if (self.data && self.data.vendorId) {
                         self.fetchCodingSuggestions(self.data.vendorId);
+                        self.fetchVendorDefaults(self.data.vendorId);
                     }
 
                     // Auto-load PO match data for vendor bills
@@ -1374,8 +1375,8 @@
                 invoiceDate = self.data.invoiceDate;
             }
 
-            // Fetch accounting periods from API
-            API.get('datasource', { type: 'accountingperiods' }).then(function(response) {
+            // Fetch accounting periods from API, passing invoice date for smart default
+            API.get('datasource', { type: 'accountingperiods', invoiceDate: invoiceDate }).then(function(response) {
                 var data = response.data || response;
                 var periods = data.options || [];
                 var matchedPeriod = null;
@@ -2638,6 +2639,20 @@
                 this.renderPOMatchDropdown(doc) +
             '</div>';
 
+            // ========== VENDOR NOTES SECTION ==========
+            // Show vendor notes/comments if available (fetched from vendor defaults)
+            var vendorNotes = (this.vendorDefaults && this.vendorDefaults.comments) || '';
+            html += '<div id="vendor-notes-section" class="vendor-notes-section" style="display:' + (vendorNotes ? 'block' : 'none') + ';">' +
+                '<div class="vendor-notes-header">' +
+                    '<i class="fas fa-sticky-note"></i>' +
+                    '<span>Vendor Notes</span>' +
+                    '<button class="btn-icon btn-toggle-notes" title="Toggle notes"><i class="fas fa-chevron-down"></i></button>' +
+                '</div>' +
+                '<div class="vendor-notes-body">' +
+                    '<p id="vendor-notes-content">' + escapeHtml(vendorNotes) + '</p>' +
+                '</div>' +
+            '</div>';
+
             // ========== ENTITY SECTION (vendor for bills, employee for expense reports) ==========
             var isEntityRequired = this.isFieldMandatory('entity', bodyFields);
             var isExpenseReport = this.transactionType === 'expensereport';
@@ -3859,6 +3874,17 @@
                 });
             }
 
+            // Toggle vendor notes section collapse/expand
+            var vendorNotesSection = el('#vendor-notes-section');
+            if (vendorNotesSection) {
+                var notesHeader = vendorNotesSection.querySelector('.vendor-notes-header');
+                if (notesHeader) {
+                    notesHeader.addEventListener('click', function() {
+                        vendorNotesSection.classList.toggle('collapsed');
+                    });
+                }
+            }
+
             // Toggle unified alerts dropdown (contains both anomalies and AI verification)
             var alertToggle = el('#alert-status-toggle');
             if (alertToggle) {
@@ -4467,6 +4493,7 @@
 
         // Select typeahead option for body fields
         selectBodyFieldTypeahead: function(wrapper, option) {
+            var self = this;
             var hiddenInput = wrapper.querySelector('input[type="hidden"]');
             var displayInput = wrapper.querySelector('.typeahead-input');
             var dropdown = this.getDropdownElement(wrapper);
@@ -4497,6 +4524,47 @@
                     this.changes[fieldId + '_employeeData'] = employeeData;
                 }
                 this.markUnsaved();
+            }
+
+            // When vendor (entity) is selected, fetch vendor defaults for auto-populating lines
+            var normalizedFieldId = (fieldId || '').toLowerCase();
+            if ((normalizedFieldId === 'entity' || normalizedFieldId === 'vendor') && value) {
+                this.fetchVendorDefaults(value);
+            }
+        },
+
+        // Fetch vendor defaults for auto-populating line items
+        fetchVendorDefaults: function(vendorId) {
+            var self = this;
+            if (!vendorId) return;
+
+            API.get('datasource', { type: 'vendordefaults', vendorId: vendorId })
+                .then(function(result) {
+                    var defaults = result.data || result;
+                    if (defaults) {
+                        self.vendorDefaults = defaults;
+                        FCDebug.log('[VendorDefaults] Loaded:', defaults);
+
+                        // Also store vendor notes for display in review panel
+                        if (defaults.comments) {
+                            self.updateVendorNotesDisplay(defaults.comments);
+                        }
+                    }
+                })
+                .catch(function(err) {
+                    FCDebug.log('[VendorDefaults] Error fetching:', err);
+                });
+        },
+
+        // Update vendor notes display in the review panel
+        updateVendorNotesDisplay: function(notes) {
+            var notesContainer = el('#vendor-notes-content');
+            if (notesContainer) {
+                notesContainer.textContent = notes || '';
+                var wrapper = el('#vendor-notes-section');
+                if (wrapper) {
+                    wrapper.style.display = notes ? 'block' : 'none';
+                }
             }
         },
 
@@ -5800,6 +5868,7 @@
 
         // Create empty line from schema (dynamic field aware with default values)
         createEmptyLine: function(sublistId) {
+            var self = this;
             var schema = this.getSublistSchema(sublistId);
             var line = {};
             // Support both 'columns' (from XML) and 'fields' (from server extraction)
@@ -5828,6 +5897,14 @@
             if (slType === 'expense') {
                 if (!line.hasOwnProperty('account')) line.account = '';
                 if (!line.hasOwnProperty('memo')) line.memo = '';
+
+                // Apply vendor default expense account if available and account is empty
+                if (self.vendorDefaults && self.vendorDefaults.expenseAccount && !line.account) {
+                    line.account = self.vendorDefaults.expenseAccount;
+                    if (self.vendorDefaults.expenseAccountName) {
+                        line.account_display = self.vendorDefaults.expenseAccountName;
+                    }
+                }
             } else if (slType === 'item') {
                 if (!line.hasOwnProperty('item')) line.item = '';
                 if (!line.hasOwnProperty('description')) line.description = '';
@@ -7288,6 +7365,12 @@
                         window.updateReviewBadge();
                     }
 
+                    // Dispatch event to notify documents list that this document was approved
+                    // This allows the documents view to immediately remove it without a full refresh
+                    window.dispatchEvent(new CustomEvent('flux-document-approved', {
+                        detail: { documentId: self.docId, transactionId: result.transactionId }
+                    }));
+
                     // Reset button states before transitioning
                     if (approveBtn) {
                         approveBtn.disabled = false;
@@ -7360,6 +7443,11 @@
             API.put('reject', { documentId: this.docId, reason: reason.trim() })
                 .then(function() {
                     UI.toast('Document rejected', 'success');
+
+                    // Dispatch event to notify documents list that this document was rejected
+                    window.dispatchEvent(new CustomEvent('flux-document-rejected', {
+                        detail: { documentId: self.docId }
+                    }));
 
                     // Go to next document or back to documents list
                     if (self.queueIndex >= 0 && self.queueIndex < self.queueIds.length - 1) {

@@ -1028,12 +1028,23 @@ define([
 
     /**
      * Get accounting periods for posting period dropdown
-     * Defaults to current open period
+     * Defaults to period matching invoice date, or current open period if no invoice date
+     * Only returns open periods (closed periods are filtered out)
      */
     function getAccountingPeriods(context) {
         try {
             var searchQuery = context.query || '';
             var includeDefault = context.includeDefault !== false;
+            var invoiceDate = context.invoiceDate || context.trandate || null;
+
+            // Parse invoice date if provided - use it to determine suggested period
+            var targetDate = new Date();
+            if (invoiceDate) {
+                var parsedDate = new Date(invoiceDate);
+                if (!isNaN(parsedDate.getTime())) {
+                    targetDate = parsedDate;
+                }
+            }
 
             var filters = [
                 ['isinactive', 'is', 'F'],
@@ -1062,7 +1073,8 @@ define([
             });
 
             var periods = [];
-            var currentPeriod = null;
+            var suggestedPeriod = null;
+            var fallbackPeriod = null;
             var today = new Date();
 
             var results = periodSearch.run().getRange({ start: 0, end: 100 });
@@ -1078,34 +1090,53 @@ define([
                 var start = startDate ? new Date(startDate) : null;
                 var end = endDate ? new Date(endDate) : null;
 
-                // Determine if this is the current period
-                var isCurrent = start && end && today >= start && today <= end;
-                if (isCurrent && !isClosed && !isApLocked && !currentPeriod) {
-                    currentPeriod = {
+                // Only include periods that are OPEN for AP posting
+                // (not closed and not AP-locked) - closed periods are hidden
+                if (isClosed || isApLocked) {
+                    return; // Skip closed/locked periods entirely
+                }
+
+                // Check if target date (invoice date or today) falls within this period
+                var matchesTargetDate = start && end && targetDate >= start && targetDate <= end;
+
+                // Check if this is the current calendar period (for fallback)
+                var isCurrentCalendar = start && end && today >= start && today <= end;
+
+                // If this period matches the invoice date and is open, it's our suggested period
+                if (matchesTargetDate && !suggestedPeriod) {
+                    suggestedPeriod = {
                         value: periodId,
-                        text: periodName
+                        text: periodName,
+                        matchedInvoiceDate: true
                     };
                 }
 
-                // Only include periods that are open for AP posting
-                // (not closed and not AP-locked)
-                if (!isClosed && !isApLocked) {
-                    periods.push({
+                // Track current calendar period as fallback
+                if (isCurrentCalendar && !fallbackPeriod) {
+                    fallbackPeriod = {
                         value: periodId,
                         text: periodName,
-                        startDate: startDate,
-                        endDate: endDate,
-                        isClosed: isClosed,
-                        isApLocked: isApLocked,
-                        isCurrent: isCurrent
-                    });
+                        matchedInvoiceDate: false
+                    };
                 }
+
+                periods.push({
+                    value: periodId,
+                    text: periodName,
+                    startDate: startDate,
+                    endDate: endDate,
+                    isCurrent: matchesTargetDate || isCurrentCalendar
+                });
             });
+
+            // Use suggested period (based on invoice date) or fall back to current period
+            var currentPeriod = suggestedPeriod || fallbackPeriod;
 
             // Return options with currentPeriod for smart defaults
             return Response.success({
                 options: periods,
-                currentPeriod: currentPeriod
+                currentPeriod: currentPeriod,
+                usedInvoiceDate: !!suggestedPeriod
             });
         } catch (e) {
             log.error('getAccountingPeriods Error', e);
@@ -1369,6 +1400,82 @@ define([
         } catch (e) {
             log.error('getCustomersAndProjects Error', e);
             return Response.error('CUSTOMERS_ERROR', e.message);
+        }
+    }
+
+    /**
+     * Get vendor defaults for auto-populating line items
+     * Returns expense account, department, class, location, etc.
+     */
+    function getVendorDefaults(context) {
+        try {
+            var vendorId = context.vendorId || context.id;
+            if (!vendorId) {
+                return Response.error('MISSING_PARAM', 'Vendor ID is required');
+            }
+
+            // Load vendor record to get defaults
+            var vendorRecord = record.load({
+                type: record.Type.VENDOR,
+                id: vendorId
+            });
+
+            var defaults = {
+                vendorId: vendorId,
+                vendorName: vendorRecord.getValue('companyname') || vendorRecord.getValue('entityid'),
+                // Default expense account from vendor record
+                expenseAccount: vendorRecord.getValue('expenseaccount') || '',
+                expenseAccountName: '',
+                // Classification defaults
+                subsidiary: vendorRecord.getValue('subsidiary') || '',
+                currency: vendorRecord.getValue('currency') || '',
+                terms: vendorRecord.getValue('terms') || '',
+                // Tax defaults
+                taxCode: vendorRecord.getValue('taxcode') || '',
+                taxItem: vendorRecord.getValue('taxitem') || '',
+                // Load vendor notes/comments for display in review panel
+                comments: vendorRecord.getValue('comments') || ''
+            };
+
+            // Get expense account name if we have an ID
+            if (defaults.expenseAccount) {
+                try {
+                    var accountLookup = search.lookupFields({
+                        type: search.Type.ACCOUNT,
+                        id: defaults.expenseAccount,
+                        columns: ['name', 'number']
+                    });
+                    defaults.expenseAccountName = accountLookup.number
+                        ? accountLookup.number + ' ' + accountLookup.name
+                        : accountLookup.name;
+                } catch (e) {
+                    // Account lookup failed, use ID as fallback
+                    defaults.expenseAccountName = String(defaults.expenseAccount);
+                }
+            }
+
+            // Check for custom entity fields that might hold default department/class/location
+            var customFields = {};
+            var fields = vendorRecord.getFields();
+            for (var i = 0; i < fields.length; i++) {
+                var fieldId = fields[i];
+                if (fieldId.indexOf('custentity_') === 0) {
+                    var value = vendorRecord.getValue(fieldId);
+                    if (value !== null && value !== '' && value !== undefined) {
+                        customFields[fieldId] = value;
+                    }
+                }
+            }
+
+            // Map common custom field patterns for defaults
+            defaults.department = customFields.custentity_default_department || '';
+            defaults.class = customFields.custentity_default_class || '';
+            defaults.location = customFields.custentity_default_location || '';
+
+            return Response.success(defaults);
+        } catch (e) {
+            log.error('getVendorDefaults Error', e);
+            return Response.error('VENDOR_DEFAULTS_ERROR', e.message);
         }
     }
 
@@ -1932,6 +2039,8 @@ define([
                 case 'accountingperiod':
                 case 'postingperiod':
                     return getAccountingPeriods(context);
+                case 'vendordefaults':
+                    return getVendorDefaults(context);
                 case 'approvalstatuses':
                 case 'approvalstatus':
                     return getApprovalStatuses();
@@ -4559,6 +4668,42 @@ define([
                 id: documentId
             });
 
+            // ===== DUPLICATE SUBMISSION PREVENTION =====
+            // Check if document already has a transaction (already submitted)
+            var existingTransactionId = docRecord.getValue('custrecord_flux_transaction_id');
+            if (existingTransactionId) {
+                return Response.error('ALREADY_SUBMITTED', 'This invoice has already been submitted and created transaction #' + existingTransactionId, {
+                    transactionId: existingTransactionId
+                });
+            }
+
+            // Check if document is currently being submitted (lock flag)
+            var submissionLock = docRecord.getValue('custrecord_flux_submission_lock');
+            if (submissionLock === 'T' || submissionLock === true) {
+                // Check if lock is stale (older than 2 minutes - in case of crash)
+                var lockTimestamp = docRecord.getValue('custrecord_flux_lock_timestamp');
+                var now = new Date().getTime();
+                var lockAge = lockTimestamp ? (now - new Date(lockTimestamp).getTime()) : 0;
+                var LOCK_TIMEOUT_MS = 120000; // 2 minutes
+
+                if (lockAge < LOCK_TIMEOUT_MS) {
+                    return Response.error('SUBMISSION_IN_PROGRESS', 'This invoice is currently being submitted. Please wait and try again.');
+                }
+                // Lock is stale, we can proceed
+                log.audit('approveDocument', 'Stale submission lock cleared for document ' + documentId);
+            }
+
+            // Set submission lock
+            docRecord.setValue('custrecord_flux_submission_lock', true);
+            docRecord.setValue('custrecord_flux_lock_timestamp', new Date());
+            docRecord.save();
+
+            // Reload to get fresh data after lock
+            docRecord = record.load({
+                type: 'customrecord_flux_document',
+                id: documentId
+            });
+
             var vendorId = docRecord.getValue('custrecord_flux_vendor');
             var documentType = docRecord.getValue('custrecord_flux_document_type');
             var fileId = docRecord.getValue('custrecord_flux_source_file');
@@ -4770,6 +4915,22 @@ define([
                 });
             }
 
+            // Clear submission lock on success (if document wasn't deleted)
+            if (!documentDeleted) {
+                try {
+                    record.submitFields({
+                        type: 'customrecord_flux_document',
+                        id: documentId,
+                        values: {
+                            'custrecord_flux_submission_lock': false,
+                            'custrecord_flux_lock_timestamp': ''
+                        }
+                    });
+                } catch (lockErr) {
+                    // Ignore lock clear errors
+                }
+            }
+
             return Response.success({
                 documentId: documentId,
                 transactionId: transactionId,
@@ -4791,6 +4952,20 @@ define([
                 failedFields: e.failedFields,
                 transactionType: e.transactionType
             });
+
+            // Clear submission lock on error so user can retry
+            try {
+                record.submitFields({
+                    type: 'customrecord_flux_document',
+                    id: documentId,
+                    values: {
+                        'custrecord_flux_submission_lock': false,
+                        'custrecord_flux_lock_timestamp': ''
+                    }
+                });
+            } catch (lockErr) {
+                // Ignore lock clear errors
+            }
 
             // Check for validation error type
             if (e.type === 'VALIDATION_ERROR') {
