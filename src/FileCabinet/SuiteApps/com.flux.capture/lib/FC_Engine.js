@@ -295,8 +295,8 @@ define([
                 // Stage 5: Cross-field validation (respects anomaly settings)
                 const validation = this.crossFieldValidator.validate(extractionResult, this.anomalySettings);
 
-                // Stage 6: Anomaly detection
-                const anomalies = this._detectAnomalies(extractionResult, vendorMatch, validation);
+                // Stage 6: Anomaly detection (pass documentId to exclude current document from duplicate checks)
+                const anomalies = this._detectAnomalies(extractionResult, vendorMatch, validation, options.documentId);
 
                 // Stage 7: Calculate confidence scores
                 const confidence = this._calculateConfidence(extractionResult, vendorMatch, validation);
@@ -445,8 +445,8 @@ define([
                 // Stage 5: Cross-field validation (respects anomaly settings)
                 const validation = this.crossFieldValidator.validate(extractionResult, this.anomalySettings);
 
-                // Stage 6: Anomaly detection
-                const anomalies = this._detectAnomalies(extractionResult, vendorMatch, validation);
+                // Stage 6: Anomaly detection (pass documentId to exclude current document from duplicate checks)
+                const anomalies = this._detectAnomalies(extractionResult, vendorMatch, validation, options.documentId);
 
                 // Stage 7: Calculate confidence scores
                 const confidence = this._calculateConfidence(extractionResult, vendorMatch, validation);
@@ -1104,6 +1104,36 @@ define([
             if (!rawText || !invoiceDate) return null;
 
             const normalized = rawText.replace(/\s+/g, ' ');
+
+            // First check for "Due on Receipt" / immediate payment terms (due date = invoice date)
+            const immediatePatterns = [
+                { regex: /due\s*(on|upon)\s*receipt/i, source: 'due_on_receipt' },
+                { regex: /payable\s*(on|upon)\s*receipt/i, source: 'payable_on_receipt' },
+                { regex: /\bC\.?O\.?D\.?\b/i, source: 'cod' },
+                { regex: /cash\s*(on|upon)\s*(delivery|receipt)/i, source: 'cash_on_delivery' },
+                { regex: /\bnet\s*0\b/i, source: 'net_0' },
+                { regex: /\bimmediate\s*(payment)?\b/i, source: 'immediate' },
+                { regex: /\bpayment\s*due\s*immediately\b/i, source: 'immediate' },
+                { regex: /\bupon\s*receipt\b/i, source: 'upon_receipt' }
+            ];
+
+            for (const pattern of immediatePatterns) {
+                const match = normalized.match(pattern.regex);
+                if (match) {
+                    const source = sourceHint
+                        ? `${sourceHint}:${pattern.source}`
+                        : pattern.source;
+
+                    return {
+                        date: new Date(invoiceDate.getTime()), // Same as invoice date
+                        days: 0,
+                        raw: match[0],
+                        source
+                    };
+                }
+            }
+
+            // Then check for Net X / day-based terms
             const patterns = [
                 { regex: /net\s*(\d{1,3})/i, source: 'net_terms' },
                 { regex: /due\s+in\s+(\d{1,3})\s+days/i, source: 'due_in_days' },
@@ -1348,8 +1378,12 @@ define([
 
         /**
          * Detect anomalies in extracted data
+         * @param {Object} extraction - Extraction results
+         * @param {Object} vendorMatch - Vendor matching results
+         * @param {Object} validation - Cross-field validation results
+         * @param {number} currentDocumentId - Current document ID to exclude from duplicate checks
          */
-        _detectAnomalies(extraction, vendorMatch, validation) {
+        _detectAnomalies(extraction, vendorMatch, validation, currentDocumentId) {
             const anomalies = [];
             const fields = extraction.fields;
             const settings = this.anomalySettings;
@@ -1388,9 +1422,9 @@ define([
                 });
             }
 
-            // Duplicate invoice number check
+            // Duplicate invoice number check (exclude current document)
             if (settings.detectDuplicateInvoice && vendorMatch.vendorId && fields.invoiceNumber) {
-                const isDuplicate = this._checkDuplicateInvoice(vendorMatch.vendorId, fields.invoiceNumber);
+                const isDuplicate = this._checkDuplicateInvoice(vendorMatch.vendorId, fields.invoiceNumber, currentDocumentId);
                 if (isDuplicate) {
                     anomalies.push({
                         type: 'duplicate_invoice',
@@ -1401,12 +1435,13 @@ define([
                 }
             }
 
-            // Duplicate payment check (vendor + amount + date)
+            // Duplicate payment check (vendor + amount + date, exclude current document)
             if (settings.detectDuplicatePayment && vendorMatch.vendorId && fields.totalAmount && fields.invoiceDate) {
                 const isDuplicatePayment = this._checkDuplicatePayment(
                     vendorMatch.vendorId,
                     fields.totalAmount,
-                    fields.invoiceDate
+                    fields.invoiceDate,
+                    currentDocumentId
                 );
                 if (isDuplicatePayment) {
                     anomalies.push({
@@ -1470,17 +1505,27 @@ define([
 
         /**
          * Check for duplicate invoice by invoice number
+         * @param {number} vendorId - Vendor internal ID
+         * @param {string} invoiceNumber - Invoice number to check
+         * @param {number} currentDocumentId - Current document ID to exclude from check
          */
-        _checkDuplicateInvoice(vendorId, invoiceNumber) {
+        _checkDuplicateInvoice(vendorId, invoiceNumber, currentDocumentId) {
             try {
+                // Exclude current document from duplicate check to avoid self-matching
+                const excludeClause = currentDocumentId ? ' AND id != ?' : '';
+                const params = currentDocumentId
+                    ? [vendorId, invoiceNumber, currentDocumentId]
+                    : [vendorId, invoiceNumber];
+
                 const sql = `
                     SELECT COUNT(*) as cnt
                     FROM customrecord_flux_document
                     WHERE custrecord_flux_vendor = ?
                     AND LOWER(custrecord_flux_invoice_number) = LOWER(?)
                     AND custrecord_flux_status IN (${DocStatus.EXTRACTED}, ${DocStatus.NEEDS_REVIEW}, ${DocStatus.COMPLETED})
+                    ${excludeClause}
                 `;
-                const result = query.runSuiteQL({ query: sql, params: [vendorId, invoiceNumber] });
+                const result = query.runSuiteQL({ query: sql, params: params });
                 return result.results[0].values[0] > 0;
             } catch (e) {
                 fcDebug.debug('FluxCapture._checkDuplicateInvoice', e.message);
@@ -1490,12 +1535,22 @@ define([
 
         /**
          * Check for duplicate payment (same vendor + amount + date)
+         * @param {number} vendorId - Vendor internal ID
+         * @param {number} amount - Invoice amount
+         * @param {Date|string} invoiceDate - Invoice date
+         * @param {number} currentDocumentId - Current document ID to exclude from check
          */
-        _checkDuplicatePayment(vendorId, amount, invoiceDate) {
+        _checkDuplicatePayment(vendorId, amount, invoiceDate, currentDocumentId) {
             try {
                 // Parse the date to get just the date portion
                 const dateObj = new Date(invoiceDate);
                 const dateStr = dateObj.toISOString().split('T')[0];
+
+                // Exclude current document from duplicate check to avoid self-matching
+                const excludeClause = currentDocumentId ? ' AND id != ?' : '';
+                const params = currentDocumentId
+                    ? [vendorId, amount, dateStr, currentDocumentId]
+                    : [vendorId, amount, dateStr];
 
                 const sql = `
                     SELECT COUNT(*) as cnt
@@ -1504,8 +1559,9 @@ define([
                     AND ABS(custrecord_flux_total_amount - ?) < 0.01
                     AND TO_CHAR(custrecord_flux_invoice_date, 'YYYY-MM-DD') = ?
                     AND custrecord_flux_status IN (${DocStatus.EXTRACTED}, ${DocStatus.NEEDS_REVIEW}, ${DocStatus.COMPLETED})
+                    ${excludeClause}
                 `;
-                const result = query.runSuiteQL({ query: sql, params: [vendorId, amount, dateStr] });
+                const result = query.runSuiteQL({ query: sql, params: params });
                 return result.results[0].values[0] > 0;
             } catch (e) {
                 fcDebug.debug('FluxCapture._checkDuplicatePayment', e.message);

@@ -1352,11 +1352,11 @@
             this.resolveCurrentPeriodDefault();
         },
 
-        // Resolve posting period to current period when configured with __CURRENT_PERIOD__ or no default
+        // Resolve posting period based on invoice date (preferred) or current period (fallback)
         resolveCurrentPeriodDefault: function() {
             var self = this;
 
-            // Find posting period field that needs current period resolution
+            // Find posting period field that needs period resolution
             var periodWrapper = document.querySelector('.typeahead-select[data-needs-current-period="true"]');
             if (!periodWrapper) return;
 
@@ -1366,15 +1366,53 @@
             // Only resolve if field exists and is empty
             if (!periodField || periodField.value || !periodDisplay) return;
 
-            // Fetch current period from API
+            // Get the invoice date from form data (prefer invoice date over current date)
+            var invoiceDate = null;
+            if (self.formData && self.formData.bodyFields && self.formData.bodyFields.trandate) {
+                invoiceDate = self.formData.bodyFields.trandate;
+            } else if (self.data && self.data.invoiceDate) {
+                invoiceDate = self.data.invoiceDate;
+            }
+
+            // Fetch accounting periods from API
             API.get('datasource', { type: 'accountingperiods' }).then(function(response) {
                 var data = response.data || response;
-                var currentPeriod = data.currentPeriod;
+                var periods = data.options || [];
+                var matchedPeriod = null;
 
-                // If we have a current period, auto-select it
-                if (currentPeriod && currentPeriod.value) {
-                    periodField.value = currentPeriod.value;
-                    periodDisplay.value = currentPeriod.text;
+                // If we have an invoice date, find the period that contains it
+                if (invoiceDate) {
+                    var targetDate = new Date(invoiceDate);
+                    targetDate.setHours(12, 0, 0, 0); // Normalize to noon to avoid timezone issues
+
+                    for (var i = 0; i < periods.length; i++) {
+                        var period = periods[i];
+                        // Skip closed or AP-locked periods
+                        if (period.isClosed || period.isApLocked) continue;
+
+                        if (period.startDate && period.endDate) {
+                            var start = new Date(period.startDate);
+                            var end = new Date(period.endDate);
+                            start.setHours(0, 0, 0, 0);
+                            end.setHours(23, 59, 59, 999);
+
+                            if (targetDate >= start && targetDate <= end) {
+                                matchedPeriod = period;
+                                break;
+                            }
+                        }
+                    }
+                }
+
+                // Fallback to current period if no match found
+                if (!matchedPeriod && data.currentPeriod) {
+                    matchedPeriod = data.currentPeriod;
+                }
+
+                // If we have a matched period, auto-select it
+                if (matchedPeriod && matchedPeriod.value) {
+                    periodField.value = matchedPeriod.value;
+                    periodDisplay.value = matchedPeriod.text;
                     // Note: Don't track as change - this is auto-initialization, not user edit
                     // Remove the data attribute since we've resolved it
                     periodWrapper.removeAttribute('data-needs-current-period');
@@ -6355,6 +6393,8 @@
                     if (isExpenseReport) {
                         ReviewController.changes.employeeName = name;
                         ReviewController.changes.employeeId = id;
+                        // Auto-populate department from employee defaults
+                        ReviewController.autoPopulateEmployeeDefaults(id);
                     } else {
                         ReviewController.changes.vendorName = name;
                         ReviewController.changes.vendorId = id;
@@ -6370,6 +6410,101 @@
         hideEntityDropdown: function() {
             var dropdown = el('#entity-dropdown');
             if (dropdown) dropdown.style.display = 'none';
+        },
+
+        /**
+         * Auto-populate department and other segmentation from employee defaults
+         * Called when an employee is selected for expense reports
+         * @param {string|number} employeeId - The selected employee ID
+         */
+        autoPopulateEmployeeDefaults: function(employeeId) {
+            var self = this;
+            if (!employeeId) return;
+
+            // Find the employee data from entitySuggestions (already fetched)
+            var employeeData = null;
+            if (this.entitySuggestions) {
+                for (var i = 0; i < this.entitySuggestions.length; i++) {
+                    if (String(this.entitySuggestions[i].value) === String(employeeId)) {
+                        employeeData = this.entitySuggestions[i].employeeData;
+                        break;
+                    }
+                }
+            }
+
+            if (!employeeData || !employeeData.departmentId) {
+                // No department data available from dropdown search
+                // Fetch it directly from API
+                API.get('datasource', { type: 'employees', query: '', id: employeeId }).then(function(response) {
+                    var data = response.data || response;
+                    if (data && data.length > 0) {
+                        var emp = data[0];
+                        if (emp.employeeData && emp.employeeData.departmentId) {
+                            self.applyEmployeeDepartmentToLines(emp.employeeData.departmentId, emp.employeeData.department);
+                        }
+                    }
+                }).catch(function() {
+                    // Ignore errors
+                });
+                return;
+            }
+
+            // Apply employee's department to expense lines
+            this.applyEmployeeDepartmentToLines(employeeData.departmentId, employeeData.department);
+        },
+
+        /**
+         * Apply employee's default department to all expense lines that don't have a department set
+         * @param {string} departmentId - The department internal ID
+         * @param {string} departmentName - The department display name
+         */
+        applyEmployeeDepartmentToLines: function(departmentId, departmentName) {
+            var self = this;
+            if (!departmentId) return;
+
+            // Update sublist data for expense lines
+            if (this.sublistData && this.sublistData.expense) {
+                var updated = false;
+                this.sublistData.expense.forEach(function(line, idx) {
+                    // Only set department if line doesn't already have one
+                    if (!line.department) {
+                        line.department = departmentId;
+                        line.department_display = departmentName || '';
+                        updated = true;
+                    }
+                });
+
+                if (updated) {
+                    // Also update formData
+                    if (this.formData && this.formData.sublists && this.formData.sublists.expense) {
+                        this.formData.sublists.expense.forEach(function(line, idx) {
+                            if (!line.department) {
+                                line.department = departmentId;
+                            }
+                        });
+                    }
+
+                    // Update the DOM to reflect department values
+                    var deptSelects = document.querySelectorAll('[data-sublist="expense"] [data-column="department"]');
+                    deptSelects.forEach(function(select) {
+                        var row = select.closest('.sublist-row');
+                        if (row) {
+                            var rowIdx = parseInt(row.dataset.rowIndex || row.dataset.row, 10);
+                            var lineData = self.sublistData.expense[rowIdx];
+                            if (lineData && !lineData.department) {
+                                // Set the value in DOM
+                                var hiddenInput = select.querySelector('input[type="hidden"]');
+                                var displayInput = select.querySelector('.typeahead-input');
+                                if (hiddenInput) hiddenInput.value = departmentId;
+                                if (displayInput) displayInput.value = departmentName || '';
+                            }
+                        }
+                    });
+
+                    this.markUnsaved();
+                    console.log('[Flux] Auto-populated department ' + departmentId + ' (' + departmentName + ') from employee defaults');
+                }
+            }
         },
 
         // ==========================================
