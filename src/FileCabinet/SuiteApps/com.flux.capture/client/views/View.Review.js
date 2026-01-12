@@ -3252,6 +3252,15 @@
             if (!value && nsField.defaultValue && !useCurrentPeriod) {
                 value = nsField.defaultValue;
                 usingDefaultValue = true;
+
+                // CRITICAL: Also update formData.bodyFields so collectFormData picks up the default
+                // Without this, defaults only render to DOM but aren't captured when saving
+                if (!this.formData) this.formData = {};
+                if (!this.formData.bodyFields) this.formData.bodyFields = {};
+                this.formData.bodyFields[nsField.id] = value;
+                if (nsField.defaultValueText) {
+                    this.formData.bodyFields[nsField.id + '_display'] = nsField.defaultValueText;
+                }
             }
 
             // Track default value text for select fields (to show display name)
@@ -3547,6 +3556,17 @@
             if (!value && field.defaultValue) {
                 value = field.defaultValue;
                 displayValue = field.defaultValueText || value;
+
+                // CRITICAL: Also update sublistData so collectFormData picks up the default
+                // Without this, defaults only render to DOM but aren't captured when saving
+                if (this.sublistData && this.sublistData[sublistId] && this.sublistData[sublistId][idx]) {
+                    this.sublistData[sublistId][idx][fieldId] = value;
+                    this.sublistData[sublistId][idx][normalizedFieldId] = value;
+                    if (displayValue) {
+                        this.sublistData[sublistId][idx][fieldId + '_display'] = displayValue;
+                        this.sublistData[sublistId][idx][normalizedFieldId + '_display'] = displayValue;
+                    }
+                }
             }
             var inputId = 'line-' + sublistId + '-' + idx + '-' + fieldId;
 
