@@ -90,6 +90,22 @@
             this.bindEvents();
             this.loadData();
             this.startRefresh();
+
+            // Listen for document status changes from other views (e.g., Review)
+            this._documentStatusHandler = function(e) {
+                var docId = e.detail && e.detail.documentId;
+                if (docId) {
+                    // Remove the approved/rejected document from local list immediately
+                    self.documents = self.documents.filter(function(d) {
+                        return String(d.id) !== String(docId);
+                    });
+                    self.applyFilters();
+                    self.render();
+                    self.updateBadges();
+                }
+            };
+            window.addEventListener('flux-document-approved', this._documentStatusHandler);
+            window.addEventListener('flux-document-rejected', this._documentStatusHandler);
         },
 
         cleanup: function() {
@@ -104,6 +120,12 @@
             if (this._keydownHandler) {
                 document.removeEventListener('keydown', this._keydownHandler);
                 this._keydownHandler = null;
+            }
+            // Remove document status change listeners
+            if (this._documentStatusHandler) {
+                window.removeEventListener('flux-document-approved', this._documentStatusHandler);
+                window.removeEventListener('flux-document-rejected', this._documentStatusHandler);
+                this._documentStatusHandler = null;
             }
         },
 
