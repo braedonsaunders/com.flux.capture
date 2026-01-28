@@ -5588,15 +5588,34 @@ define([
             return bodyOnlySkipFields.indexOf(lowerFieldId) !== -1;
         }
 
+        // Normalize field IDs from XML/scriptid wrappers
+        function normalizeFieldId(fieldId) {
+            if (!fieldId) return '';
+            var cleaned = String(fieldId).trim();
+            if (cleaned.charAt(0) === '[' && cleaned.charAt(cleaned.length - 1) === ']') {
+                var inner = cleaned.slice(1, -1);
+                var match = inner.match(/scriptid\s*=\s*([^,\]]+)/i) ||
+                            inner.match(/id\s*=\s*([^,\]]+)/i);
+                if (match && match[1]) {
+                    cleaned = match[1];
+                } else if (inner.indexOf('=') === -1) {
+                    cleaned = inner;
+                }
+            }
+            cleaned = cleaned.replace(/^['"]|['"]$/g, '');
+            return cleaned;
+        }
+
         // Normalize field map (case-insensitive) and skip internal/display fields
         function buildNormalizedFieldMap(fields, skipFn) {
             var map = {};
             if (!fields) return map;
             Object.keys(fields).forEach(function(fieldId) {
                 if (!fieldId) return;
-                if (skipFn && skipFn(fieldId)) return;
-                if (fieldId.indexOf('_') === 0) return;
-                var normalized = fieldId.toLowerCase();
+                var normalizedId = normalizeFieldId(fieldId);
+                if (skipFn && (skipFn(fieldId) || (normalizedId && skipFn(normalizedId)))) return;
+                if (normalizedId.indexOf('_') === 0) return;
+                var normalized = normalizedId.toLowerCase();
                 if (map[normalized] === undefined || map[normalized] === '') {
                     map[normalized] = fields[fieldId];
                 }
@@ -6069,9 +6088,207 @@ define([
             log.audit('createTransaction.failedFields', fieldSetResults.failed);
         }
 
+        // Reapply all formData fields after save to ensure no sourcing overrides
+        function reapplyFormDataToTransaction(transactionId, transactionType, formDataToApply) {
+            if (!transactionId || !formDataToApply) return;
+
+            var recordTypeMap = {
+                'vendorbill': record.Type.VENDOR_BILL,
+                'expensereport': record.Type.EXPENSE_REPORT,
+                'vendorcredit': record.Type.VENDOR_CREDIT,
+                'purchaseorder': record.Type.PURCHASE_ORDER
+            };
+            var nsRecordType = recordTypeMap[transactionType] || transactionType;
+
+            var rec;
+            try {
+                rec = record.load({
+                    type: nsRecordType,
+                    id: transactionId,
+                    isDynamic: false
+                });
+            } catch (loadErr) {
+                log.error('reapplyFormData.loadFailed', loadErr);
+                return;
+            }
+
+            var postResults = { success: [], failed: [] };
+            var bodyFieldTypeCache = {};
+            var sublistFieldTypeCache = {};
+
+            function normalizeFieldType(fieldType) {
+                return String(fieldType || '').toLowerCase();
+            }
+
+            function getBodyFieldType(fieldId) {
+                if (bodyFieldTypeCache.hasOwnProperty(fieldId)) return bodyFieldTypeCache[fieldId];
+                try {
+                    var field = rec.getField({ fieldId: fieldId });
+                    bodyFieldTypeCache[fieldId] = field ? normalizeFieldType(field.type) : '';
+                } catch (e) {
+                    bodyFieldTypeCache[fieldId] = '';
+                }
+                return bodyFieldTypeCache[fieldId];
+            }
+
+            function getSublistFieldType(sublistId, fieldId) {
+                sublistFieldTypeCache[sublistId] = sublistFieldTypeCache[sublistId] || {};
+                if (sublistFieldTypeCache[sublistId].hasOwnProperty(fieldId)) {
+                    return sublistFieldTypeCache[sublistId][fieldId];
+                }
+                try {
+                    var field = rec.getSublistField({ sublistId: sublistId, fieldId: fieldId, line: 0 });
+                    sublistFieldTypeCache[sublistId][fieldId] = field ? normalizeFieldType(field.type) : '';
+                } catch (e) {
+                    sublistFieldTypeCache[sublistId][fieldId] = '';
+                }
+                return sublistFieldTypeCache[sublistId][fieldId];
+            }
+
+            function isCheckboxType(fieldType) {
+                return fieldType.indexOf('checkbox') !== -1;
+            }
+
+            function isDateType(fieldType) {
+                return fieldType === 'date';
+            }
+
+            function isNumericType(fieldType) {
+                return fieldType === 'currency' || fieldType === 'float' || fieldType === 'integer' || fieldType === 'percent';
+            }
+
+            function isSelectType(fieldType) {
+                return fieldType === 'select' || fieldType === 'multiselect';
+            }
+
+            function setBodyFieldPost(fieldId, value) {
+                if (!fieldId || value === undefined || value === null || value === '') return;
+                if (shouldSkipBodyField(fieldId)) return;
+
+                try {
+                    var fieldType = getBodyFieldType(fieldId);
+                    var valueToSet = value;
+
+                    if (fieldType) {
+                        if (isCheckboxType(fieldType)) {
+                            valueToSet = toBoolean(value);
+                        } else if (isDateType(fieldType) && !(value instanceof Date)) {
+                            valueToSet = parseDateValue(value);
+                            if (!valueToSet) return;
+                        } else if (isNumericType(fieldType)) {
+                            valueToSet = parseFloat(value);
+                            if (isNaN(valueToSet)) return;
+                        } else if (isSelectType(fieldType) && isTextValue(value)) {
+                            try {
+                                rec.setText({ fieldId: fieldId, text: value });
+                                postResults.success.push(fieldId);
+                                return;
+                            } catch (e) {
+                                // Fall through to value-based set
+                            }
+                        }
+                    } else {
+                        if (isCheckboxField(fieldId)) {
+                            valueToSet = toBoolean(value);
+                        } else if (isDateField(fieldId) && !(value instanceof Date)) {
+                            valueToSet = parseDateValue(value);
+                            if (!valueToSet) return;
+                        }
+                    }
+
+                    rec.setValue({ fieldId: fieldId, value: valueToSet });
+                    postResults.success.push(fieldId);
+                } catch (e) {
+                    postResults.failed.push({ field: fieldId, reason: e.message, value: String(value).substring(0, 50) });
+                }
+            }
+
+            function setSublistFieldPost(sublistId, line, fieldId, value) {
+                if (!fieldId || value === undefined || value === null || value === '') return;
+                if (shouldSkipField(fieldId)) return;
+
+                try {
+                    var fieldType = getSublistFieldType(sublistId, fieldId);
+                    var valueToSet = value;
+
+                    if (fieldType) {
+                        if (isCheckboxType(fieldType)) {
+                            valueToSet = toBoolean(value);
+                        } else if (isDateType(fieldType) && !(value instanceof Date)) {
+                            valueToSet = parseDateValue(value);
+                            if (!valueToSet) return;
+                        } else if (isNumericType(fieldType)) {
+                            valueToSet = parseFloat(value);
+                            if (isNaN(valueToSet)) return;
+                        } else if (isSelectType(fieldType) && isTextValue(value)) {
+                            try {
+                                rec.setSublistText({ sublistId: sublistId, fieldId: fieldId, line: line, text: value });
+                                postResults.success.push(sublistId + '.' + fieldId);
+                                return;
+                            } catch (e) {
+                                // Fall through to value-based set
+                            }
+                        }
+                    } else {
+                        if (isCheckboxField(fieldId)) {
+                            valueToSet = toBoolean(value);
+                        } else if (isDateField(fieldId) && !(value instanceof Date)) {
+                            valueToSet = parseDateValue(value);
+                            if (!valueToSet) return;
+                        }
+                    }
+
+                    rec.setSublistValue({ sublistId: sublistId, fieldId: fieldId, line: line, value: valueToSet });
+                    postResults.success.push(sublistId + '.' + fieldId);
+                } catch (e) {
+                    postResults.failed.push({ field: sublistId + '.' + fieldId, reason: e.message, value: String(value).substring(0, 50) });
+                }
+            }
+
+            // Apply body fields
+            var postBodyFields = buildNormalizedFieldMap(formDataToApply.bodyFields || {}, shouldSkipBodyField);
+            Object.keys(postBodyFields).forEach(function(fieldId) {
+                setBodyFieldPost(fieldId.toLowerCase(), postBodyFields[fieldId]);
+            });
+
+            // Apply sublist fields
+            var postSublists = formDataToApply.sublists || {};
+            Object.keys(postSublists).forEach(function(sublistId) {
+                var normalizedSublistId = (sublistId || '').toLowerCase();
+                var lines = postSublists[sublistId] || [];
+                if (!Array.isArray(lines) || lines.length === 0) return;
+
+                var lineCount = 0;
+                try {
+                    lineCount = rec.getLineCount({ sublistId: normalizedSublistId });
+                } catch (e) {
+                    return;
+                }
+                var applyCount = Math.min(lines.length, lineCount);
+
+                for (var i = 0; i < applyCount; i++) {
+                    var lineMap = buildNormalizedFieldMap(lines[i], shouldSkipField);
+                    Object.keys(lineMap).forEach(function(fieldId) {
+                        setSublistFieldPost(normalizedSublistId, i, fieldId.toLowerCase(), lineMap[fieldId]);
+                    });
+                }
+            });
+
+            try {
+                rec.save();
+                if (postResults.failed.length > 0) {
+                    log.audit('reapplyFormData.failedFields', postResults.failed);
+                }
+            } catch (saveErr) {
+                log.error('reapplyFormData.saveFailed', saveErr);
+            }
+        }
+
         // Try to save and capture detailed error
         try {
-            return txnRecord.save();
+            var savedTransactionId = txnRecord.save();
+            reapplyFormDataToTransaction(savedTransactionId, transactionType, formData);
+            return savedTransactionId;
         } catch (saveError) {
             // Extract as much detail as possible from the error
             var errorDetails = {
