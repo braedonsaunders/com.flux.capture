@@ -1144,6 +1144,8 @@ define(['N/log', 'N/record', 'N/query', 'N/runtime', '../FC_Debug'], function(lo
                     configRecord = record.create({
                         type: this.CONFIG_RECORD_TYPE
                     });
+                    var recordName = String(type || 'learning') + '_' + String(key || 'config');
+                    configRecord.setValue('name', recordName.substring(0, 300));
                     configRecord.setValue('custrecord_flux_cfg_type', type);
                     configRecord.setValue('custrecord_flux_cfg_key', key);
                 }

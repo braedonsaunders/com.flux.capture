@@ -4796,6 +4796,28 @@ define([
                     var workflowConfig = settings.workflowSettings && settings.workflowSettings[actualTransactionType];
                     if (workflowConfig && workflowConfig.workflowId && workflowConfig.actionId) {
                         try {
+                            function resolveWorkflowId(workflowId) {
+                                if (!workflowId) return null;
+                                var workflowStr = String(workflowId).trim();
+                                if (/^\d+$/.test(workflowStr)) return workflowStr;
+
+                                try {
+                                    var wfSearch = search.create({
+                                        type: 'workflow',
+                                        filters: [['name', 'is', workflowStr]],
+                                        columns: ['internalid']
+                                    });
+                                    var wfResults = wfSearch.run().getRange({ start: 0, end: 1 });
+                                    if (wfResults && wfResults.length > 0) {
+                                        return wfResults[0].getValue('internalid');
+                                    }
+                                } catch (resolveErr) {
+                                    log.debug('approveDocument.workflow', 'Could not resolve workflow ID "' + workflowStr + '": ' + resolveErr.message);
+                                }
+
+                                return null;
+                            }
+
                             // Map transaction type to NetSuite record type
                             var recordTypeMap = {
                                 'vendorbill': record.Type.VENDOR_BILL,
@@ -4804,18 +4826,22 @@ define([
                                 'purchaseorder': record.Type.PURCHASE_ORDER
                             };
                             var nsRecordType = recordTypeMap[actualTransactionType] || actualTransactionType;
+                            var resolvedWorkflowId = resolveWorkflowId(workflowConfig.workflowId);
+                            if (!resolvedWorkflowId) {
+                                throw new Error('Invalid workflow ID ' + workflowConfig.workflowId);
+                            }
 
                             log.debug('approveDocument.workflow', 'Triggering workflow action: ' + JSON.stringify({
                                 recordType: nsRecordType,
                                 recordId: transactionId,
-                                workflowId: workflowConfig.workflowId,
+                                workflowId: resolvedWorkflowId,
                                 actionId: workflowConfig.actionId
                             }));
 
                             workflow.trigger({
                                 recordType: nsRecordType,
                                 recordId: transactionId,
-                                workflowId: workflowConfig.workflowId,
+                                workflowId: resolvedWorkflowId,
                                 actionId: workflowConfig.actionId
                             });
 
@@ -5623,6 +5649,35 @@ define([
             return map;
         }
 
+        function applyLineAliases(sublistId, fieldMap) {
+            var normalizedSublistId = (sublistId || '').toLowerCase();
+
+            // If memo is used on item sublist, map to description
+            if (normalizedSublistId === 'item' && fieldMap.memo !== undefined && fieldMap.memo !== '') {
+                fieldMap.description = fieldMap.memo;
+            }
+
+            // Billable alias mapping
+            if (fieldMap.billable !== undefined && (fieldMap.isbillable === undefined || fieldMap.isbillable === '')) {
+                fieldMap.isbillable = fieldMap.billable;
+            }
+            if (fieldMap.isbillable !== undefined && (fieldMap.billable === undefined || fieldMap.billable === '')) {
+                fieldMap.billable = fieldMap.isbillable;
+            }
+
+            // Markup alias mapping
+            if (fieldMap.markup !== undefined && fieldMap.markup !== '') {
+                if (fieldMap.markuppercent === undefined || fieldMap.markuppercent === '') {
+                    fieldMap.markuppercent = fieldMap.markup;
+                }
+                if (fieldMap.markupamount === undefined || fieldMap.markupamount === '') {
+                    fieldMap.markupamount = fieldMap.markup;
+                }
+            }
+
+            return fieldMap;
+        }
+
         // Known date fields that need conversion (NOT postingperiod - that's a select field)
         var dateFields = ['trandate', 'duedate', 'startdate', 'enddate', 'expensedate', 'expectedreceiptdate',
                           'prepaiddate', 'amortizstartdate', 'amortizationenddate', 'shipdate', 'actualshipdate'];
@@ -5932,7 +5987,7 @@ define([
 
         // Apply sublist fields in a stable order to avoid sourcing overrides
         function setSublistFieldsInOrder(txn, sublistId, line) {
-            var fieldMap = buildNormalizedFieldMap(line, shouldSkipField);
+            var fieldMap = applyLineAliases(sublistId, buildNormalizedFieldMap(line, shouldSkipField));
             var firstFields = ['item', 'account', 'expenseaccount', 'category', 'expensecategory', 'customer', 'job', 'project', 'projecttask'];
             var lastFields = ['isbillable', 'billable', 'markup', 'markupamount', 'markuppercent', 'memo', 'description', 'rate', 'quantity', 'amount', 'taxcode'];
 
@@ -6115,6 +6170,29 @@ define([
             var postResults = { success: [], failed: [] };
             var bodyFieldTypeCache = {};
             var sublistFieldTypeCache = {};
+            var bodyReapplyFields = {
+                memo: true,
+                paymenthold: true,
+                paymentholdreason: true,
+                prepaid: true,
+                prepaiddate: true,
+                amortize: true,
+                amortizationsched: true,
+                amortizstartdate: true,
+                amortizationenddate: true,
+                hold: true,
+                holddate: true,
+                paymentholddate: true
+            };
+            var lineReapplyFields = {
+                memo: true,
+                description: true,
+                isbillable: true,
+                billable: true,
+                markup: true,
+                markuppercent: true,
+                markupamount: true
+            };
 
             function normalizeFieldType(fieldType) {
                 return String(fieldType || '').toLowerCase();
@@ -6163,6 +6241,7 @@ define([
 
             function setBodyFieldPost(fieldId, value) {
                 if (!fieldId || value === undefined || value === null || value === '') return;
+                if (!bodyReapplyFields[fieldId]) return;
                 if (shouldSkipBodyField(fieldId)) return;
 
                 try {
@@ -6205,6 +6284,7 @@ define([
 
             function setSublistFieldPost(sublistId, line, fieldId, value) {
                 if (!fieldId || value === undefined || value === null || value === '') return;
+                if (!lineReapplyFields[fieldId]) return;
                 if (shouldSkipField(fieldId)) return;
 
                 try {
@@ -6267,7 +6347,7 @@ define([
                 var applyCount = Math.min(lines.length, lineCount);
 
                 for (var i = 0; i < applyCount; i++) {
-                    var lineMap = buildNormalizedFieldMap(lines[i], shouldSkipField);
+                    var lineMap = applyLineAliases(normalizedSublistId, buildNormalizedFieldMap(lines[i], shouldSkipField));
                     Object.keys(lineMap).forEach(function(fieldId) {
                         setSublistFieldPost(normalizedSublistId, i, fieldId.toLowerCase(), lineMap[fieldId]);
                     });
@@ -6275,7 +6355,8 @@ define([
             });
 
             try {
-                rec.save();
+                if (postResults.success.length === 0) return;
+                rec.save({ enableSourcing: false, ignoreMandatoryFields: true });
                 if (postResults.failed.length > 0) {
                     log.audit('reapplyFormData.failedFields', postResults.failed);
                 }
