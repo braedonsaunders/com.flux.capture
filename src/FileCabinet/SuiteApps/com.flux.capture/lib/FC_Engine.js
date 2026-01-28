@@ -1386,6 +1386,7 @@ define([
         _detectAnomalies(extraction, vendorMatch, validation, currentDocumentId) {
             const anomalies = [];
             const fields = extraction.fields;
+            const fieldConfidences = extraction.fieldConfidences || {};
             const settings = this.anomalySettings;
 
             // Add validation issues as anomalies (these are already filtered by CrossFieldValidator)
@@ -1423,8 +1424,10 @@ define([
             }
 
             // Duplicate invoice number check (exclude current document)
-            if (settings.detectDuplicateInvoice && vendorMatch.vendorId && fields.invoiceNumber) {
-                const isDuplicate = this._checkDuplicateInvoice(vendorMatch.vendorId, fields.invoiceNumber, currentDocumentId);
+            const invoiceNumber = this._normalizeInvoiceNumber(fields.invoiceNumber);
+            if (settings.detectDuplicateInvoice && vendorMatch.vendorId &&
+                this._isMeaningfulInvoiceNumber(invoiceNumber, fieldConfidences.invoiceNumber)) {
+                const isDuplicate = this._checkDuplicateInvoice(vendorMatch.vendorId, invoiceNumber, currentDocumentId);
                 if (isDuplicate) {
                     anomalies.push({
                         type: 'duplicate_invoice',
@@ -1469,8 +1472,9 @@ define([
             }
 
             // Invoice number format change detection
-            if (settings.detectInvoiceFormatChange && vendorMatch.vendorId && fields.invoiceNumber) {
-                const formatChanged = this._checkInvoiceFormatChange(vendorMatch.vendorId, fields.invoiceNumber);
+            if (settings.detectInvoiceFormatChange && vendorMatch.vendorId &&
+                this._isMeaningfulInvoiceNumber(invoiceNumber, fieldConfidences.invoiceNumber)) {
+                const formatChanged = this._checkInvoiceFormatChange(vendorMatch.vendorId, invoiceNumber);
                 if (formatChanged.changed) {
                     anomalies.push({
                         type: 'invoice_format_change',
@@ -1504,6 +1508,46 @@ define([
         }
 
         /**
+         * Normalize invoice number for comparisons and storage checks
+         * @param {string} invoiceNumber - Raw invoice number
+         * @returns {string}
+         */
+        _normalizeInvoiceNumber(invoiceNumber) {
+            if (invoiceNumber === null || invoiceNumber === undefined) return '';
+            return String(invoiceNumber).trim();
+        }
+
+        /**
+         * Determine if invoice number is meaningful enough for duplicate checks
+         * @param {string} invoiceNumber - Invoice number to evaluate
+         * @param {number} confidence - Optional extraction confidence
+         * @returns {boolean}
+         */
+        _isMeaningfulInvoiceNumber(invoiceNumber, confidence) {
+            if (!invoiceNumber) return false;
+
+            const trimmed = String(invoiceNumber).trim();
+            if (!trimmed) return false;
+
+            const compact = trimmed.replace(/[\s\-_.#\/\\]+/g, '').toLowerCase();
+            if (compact.length < 3) return false;
+
+            const blocked = [
+                'invoice', 'inv', 'invno', 'invnumber', 'invoiceno', 'invoicenumber',
+                'invoice#', 'inv#', 'bill', 'document', 'reference', 'ref', 'number',
+                'na', 'none', 'null', 'unknown', 'tbd', 'tba'
+            ];
+            if (blocked.indexOf(compact) !== -1) return false;
+
+            const hasDigit = /\d/.test(compact);
+            if (!hasDigit && compact.length < 6) return false;
+
+            if (typeof confidence === 'number' && confidence < 0.45) return false;
+
+            return true;
+        }
+
+        /**
          * Check for duplicate invoice by invoice number
          * @param {number} vendorId - Vendor internal ID
          * @param {string} invoiceNumber - Invoice number to check
@@ -1511,17 +1555,22 @@ define([
          */
         _checkDuplicateInvoice(vendorId, invoiceNumber, currentDocumentId) {
             try {
+                const normalized = this._normalizeInvoiceNumber(invoiceNumber);
+                if (!this._isMeaningfulInvoiceNumber(normalized)) {
+                    return false;
+                }
+
                 // Exclude current document from duplicate check to avoid self-matching
                 const excludeClause = currentDocumentId ? ' AND id != ?' : '';
                 const params = currentDocumentId
-                    ? [vendorId, invoiceNumber, currentDocumentId]
-                    : [vendorId, invoiceNumber];
+                    ? [vendorId, normalized, currentDocumentId]
+                    : [vendorId, normalized];
 
                 const sql = `
                     SELECT COUNT(*) as cnt
                     FROM customrecord_flux_document
                     WHERE custrecord_flux_vendor = ?
-                    AND LOWER(custrecord_flux_invoice_number) = LOWER(?)
+                    AND LOWER(TRIM(custrecord_flux_invoice_number)) = LOWER(?)
                     AND custrecord_flux_status IN (${DocStatus.EXTRACTED}, ${DocStatus.NEEDS_REVIEW}, ${DocStatus.COMPLETED})
                     ${excludeClause}
                 `;
