@@ -5569,8 +5569,8 @@ define([
         // Fields to skip when setting any fields
         var skipFields = ['_display', 'customform'];
         // Additional fields to skip only at body level (not sublists)
-        // Note: 'account' at body level is the AP account - skip it as NetSuite uses default
-        var bodyOnlySkipFields = ['account'];
+        // Keep empty to honor user-defined fields from the form
+        var bodyOnlySkipFields = [];
 
         // Helper to check if a field should be skipped (for all contexts)
         function shouldSkipField(fieldId) {
@@ -5586,6 +5586,22 @@ define([
             if (shouldSkipField(fieldId)) return true;
             var lowerFieldId = fieldId.toLowerCase();
             return bodyOnlySkipFields.indexOf(lowerFieldId) !== -1;
+        }
+
+        // Normalize field map (case-insensitive) and skip internal/display fields
+        function buildNormalizedFieldMap(fields, skipFn) {
+            var map = {};
+            if (!fields) return map;
+            Object.keys(fields).forEach(function(fieldId) {
+                if (!fieldId) return;
+                if (skipFn && skipFn(fieldId)) return;
+                if (fieldId.indexOf('_') === 0) return;
+                var normalized = fieldId.toLowerCase();
+                if (map[normalized] === undefined || map[normalized] === '') {
+                    map[normalized] = fields[fieldId];
+                }
+            });
+            return map;
         }
 
         // Known date fields that need conversion (NOT postingperiod - that's a select field)
@@ -5816,6 +5832,47 @@ define([
             }
         }
 
+        // Apply body fields in an order that preserves user overrides
+        function setBodyFieldsInOrder(txn, fields) {
+            var fieldMap = buildNormalizedFieldMap(fields, shouldSkipBodyField);
+            var firstFields = ['entity'];
+            var lastFields = [
+                'memo',
+                'paymenthold',
+                'paymentholdreason',
+                'prepaid',
+                'prepaiddate',
+                'amortize',
+                'amortizationsched',
+                'amortizstartdate',
+                'amortizationenddate',
+                'hold',
+                'holddate',
+                'paymentholddate'
+            ];
+
+            // Set entity first to allow sourcing
+            firstFields.forEach(function(fid) {
+                if (fieldMap[fid] !== undefined && fieldMap[fid] !== '') {
+                    setBodyField(txn, fid, fieldMap[fid]);
+                }
+            });
+
+            // Set all other fields
+            Object.keys(fieldMap).forEach(function(fid) {
+                if (firstFields.indexOf(fid) !== -1) return;
+                if (lastFields.indexOf(fid) !== -1) return;
+                setBodyField(txn, fid, fieldMap[fid]);
+            });
+
+            // Reapply fields that are commonly sourced/overridden
+            lastFields.forEach(function(fid) {
+                if (fieldMap[fid] !== undefined && fieldMap[fid] !== '') {
+                    setBodyField(txn, fid, fieldMap[fid]);
+                }
+            });
+        }
+
         // Helper to set sublist field value safely
         function setSublistField(txn, sublistId, fieldId, value) {
             if (!fieldId || value === undefined || value === null || value === '') return;
@@ -5854,6 +5911,34 @@ define([
             }
         }
 
+        // Apply sublist fields in a stable order to avoid sourcing overrides
+        function setSublistFieldsInOrder(txn, sublistId, line) {
+            var fieldMap = buildNormalizedFieldMap(line, shouldSkipField);
+            var firstFields = ['item', 'account', 'expenseaccount', 'category', 'expensecategory', 'customer', 'job', 'project', 'projecttask'];
+            var lastFields = ['isbillable', 'billable', 'markup', 'markupamount', 'markuppercent', 'memo', 'description', 'rate', 'quantity', 'amount', 'taxcode'];
+
+            // Set key fields first (drive sourcing)
+            firstFields.forEach(function(fid) {
+                if (fieldMap[fid] !== undefined && fieldMap[fid] !== '') {
+                    setSublistField(txn, sublistId, fid, fieldMap[fid]);
+                }
+            });
+
+            // Set remaining fields
+            Object.keys(fieldMap).forEach(function(fid) {
+                if (firstFields.indexOf(fid) !== -1) return;
+                if (lastFields.indexOf(fid) !== -1) return;
+                setSublistField(txn, sublistId, fid, fieldMap[fid]);
+            });
+
+            // Reapply fields that are commonly sourced/overridden
+            lastFields.forEach(function(fid) {
+                if (fieldMap[fid] !== undefined && fieldMap[fid] !== '') {
+                    setSublistField(txn, sublistId, fid, fieldMap[fid]);
+                }
+            });
+        }
+
         // Helper to add sublist lines
         function addSublistLines(txn, sublistId, lines) {
             if (!lines || !Array.isArray(lines) || lines.length === 0) return;
@@ -5861,15 +5946,7 @@ define([
             lines.forEach(function(line) {
                 txn.selectNewLine({ sublistId: sublistId });
 
-                Object.keys(line).forEach(function(fieldId) {
-                    // Skip display fields (e.g., account_display, ACCOUNT_display)
-                    if (fieldId.toLowerCase().indexOf('_display') !== -1) return;
-                    // Skip internal fields
-                    if (fieldId.indexOf('_') === 0) return;
-                    // Normalize field ID to lowercase for NetSuite
-                    var normalizedFieldId = fieldId.toLowerCase();
-                    setSublistField(txn, sublistId, normalizedFieldId, line[fieldId]);
-                });
+                setSublistFieldsInOrder(txn, sublistId, line);
 
                 txn.commitLine({ sublistId: sublistId });
             });
@@ -5879,13 +5956,7 @@ define([
             txnRecord = record.create({ type: record.Type.VENDOR_BILL, isDynamic: true });
 
             // Set all body fields from formData (normalize field IDs to lowercase)
-            Object.keys(bodyFields).forEach(function(fieldId) {
-                // Skip display fields and internal fields
-                if (fieldId.toLowerCase().indexOf('_display') !== -1) return;
-                if (fieldId.indexOf('_') === 0) return;
-                var normalizedFieldId = fieldId.toLowerCase();
-                setBodyField(txnRecord, normalizedFieldId, bodyFields[fieldId]);
-            });
+            setBodyFieldsInOrder(txnRecord, bodyFields);
 
             // Add expense lines
             if (sublists.expense && sublists.expense.length > 0) {
@@ -5910,12 +5981,7 @@ define([
         } else if (transactionType === 'vendorcredit') {
             txnRecord = record.create({ type: record.Type.VENDOR_CREDIT, isDynamic: true });
 
-            Object.keys(bodyFields).forEach(function(fieldId) {
-                if (fieldId.toLowerCase().indexOf('_display') !== -1) return;
-                if (fieldId.indexOf('_') === 0) return;
-                var normalizedFieldId = fieldId.toLowerCase();
-                setBodyField(txnRecord, normalizedFieldId, bodyFields[fieldId]);
-            });
+            setBodyFieldsInOrder(txnRecord, bodyFields);
 
             if (sublists.expense && sublists.expense.length > 0) {
                 addSublistLines(txnRecord, 'expense', sublists.expense);
@@ -5928,12 +5994,7 @@ define([
             txnRecord = record.create({ type: record.Type.EXPENSE_REPORT, isDynamic: true });
 
             // Set all body fields from formData (normalize field IDs to lowercase)
-            Object.keys(bodyFields).forEach(function(fieldId) {
-                if (fieldId.toLowerCase().indexOf('_display') !== -1) return;
-                if (fieldId.indexOf('_') === 0) return;
-                var normalizedFieldId = fieldId.toLowerCase();
-                setBodyField(txnRecord, normalizedFieldId, bodyFields[fieldId]);
-            });
+            setBodyFieldsInOrder(txnRecord, bodyFields);
 
             if (sublists.expense && sublists.expense.length > 0) {
                 addSublistLines(txnRecord, 'expense', sublists.expense);
@@ -5942,12 +6003,7 @@ define([
         } else if (transactionType === 'purchaseorder') {
             txnRecord = record.create({ type: record.Type.PURCHASE_ORDER, isDynamic: true });
 
-            Object.keys(bodyFields).forEach(function(fieldId) {
-                if (fieldId.toLowerCase().indexOf('_display') !== -1) return;
-                if (fieldId.indexOf('_') === 0) return;
-                var normalizedFieldId = fieldId.toLowerCase();
-                setBodyField(txnRecord, normalizedFieldId, bodyFields[fieldId]);
-            });
+            setBodyFieldsInOrder(txnRecord, bodyFields);
 
             if (sublists.item && sublists.item.length > 0) {
                 addSublistLines(txnRecord, 'item', sublists.item);
