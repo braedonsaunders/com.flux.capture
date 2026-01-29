@@ -3750,14 +3750,9 @@
                     textValue = displayValue || value;
                 } else if (value) {
                     // Value is text (from OCR/extraction) - not an ID
-                    // Leave idValue empty - server will resolve from text
-                    // Use value as display text
+                    // Store in _display field for server-side resolution
                     textValue = displayValue || value;
-
-                    // Also update sublistData to separate ID from display
                     if (this.sublistData && this.sublistData[sublistId] && this.sublistData[sublistId][idx]) {
-                        // Clear the main field (will be empty until resolved)
-                        // But keep _display populated for server-side resolution
                         this.sublistData[sublistId][idx][normalizedFieldId + '_display'] = textValue;
                     }
                 }

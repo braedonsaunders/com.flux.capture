@@ -5663,117 +5663,76 @@ define([
         var sublists = formData.sublists || {};
         var txnRecord;
 
-        // Fields to skip ONLY during SET operations (not normalization - we need _display for resolution)
-        var skipFieldsForSet = ['customform'];
-        // Additional fields to skip only at body level (not sublists)
-        var bodyOnlySkipFields = [];
-
-        // Helper to check if field should be skipped during SET (not normalization)
-        // This preserves _display fields in the map for resolution, but skips them when actually setting
-        function shouldSkipFieldForSet(fieldId) {
+        // Skip during normalization (keep _display for resolution)
+        function shouldSkipForNormalize(fieldId) {
             if (!fieldId) return true;
-            var lowerFieldId = fieldId.toLowerCase();
-            // Skip _display fields - they're resolution hints, not settable fields
-            if (lowerFieldId.indexOf('_display') !== -1) return true;
-            return skipFieldsForSet.some(function(skip) {
-                return lowerFieldId.indexOf(skip) !== -1;
-            });
+            return fieldId.toLowerCase() === 'customform';
         }
 
-        // Helper for normalization - ONLY skip customform, NOT _display (we need those for resolution)
-        function shouldSkipFieldForNormalize(fieldId) {
-            if (!fieldId) return true;
-            var lowerFieldId = fieldId.toLowerCase();
-            return lowerFieldId === 'customform';
-        }
-
-        // Legacy alias for backward compatibility
+        // Skip during setValue (skip _display - they're for resolution only)
         function shouldSkipField(fieldId) {
-            return shouldSkipFieldForNormalize(fieldId);
+            if (!fieldId) return true;
+            var lowerFieldId = fieldId.toLowerCase();
+            return lowerFieldId === 'customform' || lowerFieldId.indexOf('_display') !== -1;
         }
 
-        // Helper to check if a body field should be skipped during SET
         function shouldSkipBodyField(fieldId) {
-            if (shouldSkipFieldForSet(fieldId)) return true;
-            var lowerFieldId = (fieldId || '').toLowerCase();
-            return bodyOnlySkipFields.indexOf(lowerFieldId) !== -1;
+            return shouldSkipField(fieldId);
         }
 
 
+        // Apply field aliases for sublists
         function applyLineAliases(sublistId, fieldMap) {
             var normalizedSublistId = (sublistId || '').toLowerCase();
             function isEmptyValue(val) {
                 return val === undefined || val === null || val === '';
             }
 
-            // Log all account-related fields for debugging
-            var accountFields = ['account', 'account_display', 'expenseaccount', 'expenseaccount_display', 'category', 'category_display', 'expensecategory', 'expensecategory_display'];
-            var accountDebugInfo = {};
-            accountFields.forEach(function(f) {
-                if (fieldMap[f] !== undefined) accountDebugInfo[f] = fieldMap[f];
-            });
-            if (Object.keys(accountDebugInfo).length > 0) {
-                log.debug('applyLineAliases.accountFields', normalizedSublistId + ': ' + JSON.stringify(accountDebugInfo));
-            }
-
-            // COMPREHENSIVE ACCOUNT RESOLUTION - check ALL possible sources
-            // Priority: account > expenseaccount > category > expensecategory, then their _display variants
-            var accountValue = null;
-            var accountSources = [
-                { field: 'account', value: fieldMap.account },
-                { field: 'expenseaccount', value: fieldMap.expenseaccount },
-                { field: 'category', value: fieldMap.category },
-                { field: 'expensecategory', value: fieldMap.expensecategory },
-                { field: 'account_display', value: fieldMap.account_display },
-                { field: 'expenseaccount_display', value: fieldMap.expenseaccount_display },
-                { field: 'category_display', value: fieldMap.category_display },
-                { field: 'expensecategory_display', value: fieldMap.expensecategory_display }
-            ];
-
-            for (var i = 0; i < accountSources.length; i++) {
-                if (!isEmptyValue(accountSources[i].value)) {
-                    accountValue = accountSources[i].value;
-                    log.debug('applyLineAliases.accountResolved', 'Using ' + accountSources[i].field + ': ' + accountValue);
-                    break;
+            // Account field resolution - check multiple sources
+            // Priority: account > expenseaccount > category, then their _display variants
+            if (isEmptyValue(fieldMap.account)) {
+                var accountSources = [
+                    fieldMap.expenseaccount,
+                    fieldMap.category,
+                    fieldMap.expensecategory,
+                    fieldMap.account_display,
+                    fieldMap.expenseaccount_display,
+                    fieldMap.category_display
+                ];
+                for (var i = 0; i < accountSources.length; i++) {
+                    if (!isEmptyValue(accountSources[i])) {
+                        fieldMap.account = accountSources[i];
+                        break;
+                    }
                 }
             }
 
-            // Set the account field if we found a value from any source
-            if (accountValue && isEmptyValue(fieldMap.account)) {
-                fieldMap.account = accountValue;
-                log.debug('applyLineAliases.accountSet', 'Set account to: ' + accountValue);
-            }
-
-            // For expense sublist, also try to set expenseaccount if account exists
+            // For expense sublist, also set expenseaccount
             if (normalizedSublistId === 'expense') {
                 if (!isEmptyValue(fieldMap.account) && isEmptyValue(fieldMap.expenseaccount)) {
                     fieldMap.expenseaccount = fieldMap.account;
                 }
             }
 
-            // If memo is used on item sublist, map to description
-            if (normalizedSublistId === 'item' && fieldMap.memo !== undefined && fieldMap.memo !== '') {
-                if (!fieldMap.description || fieldMap.description === fieldMap.memo) {
+            // Memo to description for item sublist
+            if (normalizedSublistId === 'item' && !isEmptyValue(fieldMap.memo)) {
+                if (isEmptyValue(fieldMap.description)) {
                     fieldMap.description = fieldMap.memo;
                 }
             }
 
             // Billable alias mapping
-            if (fieldMap.billable !== undefined && (fieldMap.isbillable === undefined || fieldMap.isbillable === '')) {
+            if (!isEmptyValue(fieldMap.billable) && isEmptyValue(fieldMap.isbillable)) {
                 fieldMap.isbillable = fieldMap.billable;
             }
-            if (fieldMap.isbillable !== undefined && (fieldMap.billable === undefined || fieldMap.billable === '')) {
+            if (!isEmptyValue(fieldMap.isbillable) && isEmptyValue(fieldMap.billable)) {
                 fieldMap.billable = fieldMap.isbillable;
             }
 
             // Markup alias mapping
-            if (fieldMap.markup !== undefined && fieldMap.markup !== '') {
-                if (fieldMap.markuppercent === undefined || fieldMap.markuppercent === '') {
-                    fieldMap.markuppercent = fieldMap.markup;
-                }
-                if (fieldMap.markupamount === undefined || fieldMap.markupamount === '') {
-                    fieldMap.markupamount = fieldMap.markup;
-                }
+            if (!isEmptyValue(fieldMap.markup)) {
+                if (isEmptyValue(fieldMap.markuppercent)) fieldMap.markuppercent = fieldMap.markup;
+                if (isEmptyValue(fieldMap.markupamount)) fieldMap.markupamount = fieldMap.markup;
             }
 
             return fieldMap;
@@ -5897,95 +5856,74 @@ define([
             'expenseaccount': 'account'
         };
 
+        // Resolve account value to internal ID
+        // Accepts: internal ID, account number, or display text
         function resolveAccountId(value) {
-            if (!value) {
-                log.debug('resolveAccountId', 'Value is null/empty, returning null');
-                return null;
-            }
-            var textValue = String(value).trim();
-            if (!textValue) {
-                log.debug('resolveAccountId', 'Trimmed value is empty, returning null');
-                return null;
+            if (!value) return null;
+            var strValue = String(value).trim();
+            if (!strValue) return null;
+
+            // Already an internal ID - use directly
+            if (/^\d+$/.test(strValue)) {
+                return strValue;
             }
 
-            log.debug('resolveAccountId', 'Resolving account from: "' + textValue + '" (type: ' + typeof value + ')');
-
-            function findBestMatch(results, preferredName) {
-                if (!results || results.length === 0) return null;
-                if (!preferredName) return results[0].getValue('internalid');
-                var lowerPreferred = preferredName.toLowerCase();
-                var best = results.find(function(r) {
-                    var name = String(r.getValue('name') || '').toLowerCase();
-                    return name.indexOf(lowerPreferred) !== -1;
-                }) || results[0];
-                return best.getValue('internalid');
-            }
+            var accountType = (search.Type && search.Type.ACCOUNT) ? search.Type.ACCOUNT : 'account';
 
             try {
-                // If numeric, try internalid then account number
-                if (/^\d+$/.test(textValue)) {
-                    log.debug('resolveAccountId', 'Value is numeric, trying internal ID first');
-                    var idSearch = search.create({
-                        type: (search.Type && search.Type.ACCOUNT) ? search.Type.ACCOUNT : 'account',
-                        filters: [['internalid', 'is', textValue]],
-                        columns: ['internalid', 'name', 'number']
-                    });
-                    var idResults = idSearch.run().getRange({ start: 0, end: 1 });
-                    if (idResults && idResults.length > 0) {
-                        log.debug('resolveAccountId', 'Found by internal ID: ' + idResults[0].getValue('internalid'));
-                        return idResults[0].getValue('internalid');
-                    }
+                // Parse "1234 - Name" or "1234 : Name" format
+                var match = strValue.match(/^(\d+)\s*[-:]\s*(.*)$/);
+                var accountNumber = match ? match[1] : null;
+                var accountName = match ? match[2].trim() : strValue;
 
-                    log.debug('resolveAccountId', 'Not found by internal ID, trying account number');
-                    var numSearch = search.create({
-                        type: (search.Type && search.Type.ACCOUNT) ? search.Type.ACCOUNT : 'account',
-                        filters: [['number', 'is', textValue]],
+                // Extract child name from hierarchy "Parent : Child"
+                var colonIdx = accountName.lastIndexOf(':');
+                var childName = colonIdx > 0 ? accountName.substring(colonIdx + 1).trim() : accountName;
+
+                // Search strategies in order of specificity
+                var filters = [];
+
+                // 1. Try exact account number match first (most reliable)
+                if (accountNumber) {
+                    filters.push([['number', 'is', accountNumber]]);
+                    filters.push([['number', 'startswith', accountNumber]]);
+                }
+
+                // 2. Try name matches
+                if (childName) {
+                    filters.push([['name', 'is', childName]]);
+                    filters.push([['name', 'contains', childName]]);
+                }
+                if (accountName && accountName !== childName) {
+                    filters.push([['name', 'contains', accountName]]);
+                }
+
+                // 3. Try full text as last resort
+                filters.push([['name', 'contains', strValue]]);
+
+                for (var i = 0; i < filters.length; i++) {
+                    var results = search.create({
+                        type: accountType,
+                        filters: filters[i],
                         columns: ['internalid', 'name', 'number']
-                    });
-                    var numResults = numSearch.run().getRange({ start: 0, end: 5 });
-                    var numMatch = findBestMatch(numResults);
-                    if (numMatch) {
-                        log.debug('resolveAccountId', 'Found by account number: ' + numMatch);
-                        return numMatch;
+                    }).run().getRange({ start: 0, end: 5 });
+
+                    if (results && results.length > 0) {
+                        // If multiple results, prefer exact number match
+                        if (accountNumber && results.length > 1) {
+                            for (var j = 0; j < results.length; j++) {
+                                if (results[j].getValue('number') === accountNumber) {
+                                    return results[j].getValue('internalid');
+                                }
+                            }
+                        }
+                        return results[0].getValue('internalid');
                     }
                 }
 
-                // Try parse "1234 - Name" or "1234 Name"
-                var parsed = textValue.match(/^\s*(\d+)\s*[-:·]?\s*(.*)$/);
-                var numberPart = parsed && parsed[1] ? parsed[1] : null;
-                var namePart = parsed && parsed[2] ? parsed[2].trim() : null;
-                if (numberPart) {
-                    log.debug('resolveAccountId', 'Parsed number: "' + numberPart + '", name: "' + namePart + '"');
-                    var parsedNumSearch = search.create({
-                        type: (search.Type && search.Type.ACCOUNT) ? search.Type.ACCOUNT : 'account',
-                        filters: [['number', 'is', numberPart]],
-                        columns: ['internalid', 'name', 'number']
-                    });
-                    var parsedNumResults = parsedNumSearch.run().getRange({ start: 0, end: 5 });
-                    var parsedMatch = findBestMatch(parsedNumResults, namePart);
-                    if (parsedMatch) {
-                        log.debug('resolveAccountId', 'Found by parsed number: ' + parsedMatch);
-                        return parsedMatch;
-                    }
-                }
-
-                // Fallback to name search
-                log.debug('resolveAccountId', 'Trying name search for: "' + textValue + '"');
-                var nameSearch = search.create({
-                    type: (search.Type && search.Type.ACCOUNT) ? search.Type.ACCOUNT : 'account',
-                    filters: [['name', 'is', textValue], 'OR', ['name', 'contains', textValue]],
-                    columns: ['internalid', 'name', 'number']
-                });
-                var nameResults = nameSearch.run().getRange({ start: 0, end: 5 });
-                var nameMatch = findBestMatch(nameResults);
-                if (nameMatch) {
-                    log.debug('resolveAccountId', 'Found by name search: ' + nameMatch);
-                    return nameMatch;
-                }
-
-                log.debug('resolveAccountId', 'No match found for: "' + textValue + '"');
+                log.error('resolveAccountId', 'No account found for: ' + strValue.substring(0, 100));
             } catch (e) {
-                log.error('resolveAccountId', 'Error resolving account "' + textValue + '": ' + e.message);
+                log.error('resolveAccountId', 'Error: ' + e.message);
             }
 
             return null;
@@ -6052,65 +5990,51 @@ define([
         // Track fields that were set successfully and those that failed
         var fieldSetResults = { success: [], failed: [] };
 
+        // Cache for field type metadata
+        var fieldTypeCache = {};
+
+        // Get the actual field type from the record
+        function getFieldType(txn, fieldId) {
+            if (fieldTypeCache.hasOwnProperty(fieldId)) return fieldTypeCache[fieldId];
+            try {
+                var field = txn.getField({ fieldId: fieldId });
+                var fieldType = field ? String(field.type || '').toLowerCase() : '';
+                fieldTypeCache[fieldId] = fieldType;
+                return fieldType;
+            } catch (e) {
+                fieldTypeCache[fieldId] = '';
+                return '';
+            }
+        }
+
         // Helper to set body field value safely
         function setBodyField(txn, fieldId, value) {
             if (!fieldId || value === undefined || value === null || value === '') return;
             if (shouldSkipBodyField(fieldId)) return;
 
-            var lowerFieldId = fieldId.toLowerCase();
-
             try {
                 var valueToSet = value;
+                var actualFieldType = getFieldType(txn, fieldId);
 
-                // Resolve account text/number to internal ID
+                // Account fields - resolve to internal ID
                 if (isAccountField(fieldId)) {
-                    var resolvedAccount = resolveAccountId(value);
-                    if (resolvedAccount) {
-                        valueToSet = resolvedAccount;
-                    } else if (isTextValue(value)) {
-                        try {
-                            txn.setText({ fieldId: fieldId, text: String(value) });
-                            fieldSetResults.success.push(fieldId);
-                            return;
-                        } catch (e) {
-                            // Fall through to value-based set
-                        }
-                    }
-                }
-                // Resolve terms text to internal ID
-                if (lowerFieldId === 'terms' && isTextValue(value)) {
-                    valueToSet = resolveTermsId(value);
-                    if (!valueToSet) {
-                        log.debug('setBodyField', 'Could not resolve terms: ' + value);
-                        return; // Skip if can't resolve
-                    }
-                }
-                // Resolve currency text/code to internal ID
-                else if (lowerFieldId === 'currency' && isTextValue(value)) {
-                    valueToSet = resolveCurrencyIdForField(value);
-                    if (!valueToSet) {
-                        log.debug('setBodyField', 'Could not resolve currency: ' + value);
-                        return; // Skip if can't resolve
-                    }
-                }
-                // Resolve other list/record fields (department, class, location, etc.)
-                else if (isResolvableField(fieldId) && isTextValue(value)) {
-                    valueToSet = resolveRecordId(fieldId, value);
-                    if (!valueToSet) {
-                        log.debug('setBodyField', 'Could not resolve ' + fieldId + ': ' + value);
-                        fieldSetResults.failed.push({ field: fieldId, reason: 'could not resolve text to ID', value: String(value).substring(0, 50) });
-                        return; // Skip if can't resolve
+                    var accountId = resolveAccountId(value);
+                    if (accountId) {
+                        valueToSet = accountId;
+                    } else {
+                        // Body-level account usually sourced from vendor - skip if can't resolve
+                        fieldSetResults.failed.push({ field: fieldId, reason: 'could not resolve account', value: String(value).substring(0, 50) });
+                        return;
                     }
                 }
                 // Convert checkbox fields to boolean
-                else if (isCheckboxField(fieldId)) {
+                else if (actualFieldType === 'checkbox' || isCheckboxField(fieldId)) {
                     valueToSet = toBoolean(value);
                 }
                 // Convert date fields to proper Date objects
                 else if (isDateField(fieldId) && !(value instanceof Date)) {
                     valueToSet = parseDateValue(value);
                     if (!valueToSet) {
-                        log.debug('setBodyField', 'Could not parse date for ' + fieldId + ': ' + value);
                         fieldSetResults.failed.push({ field: fieldId, reason: 'date parse failed', value: String(value).substring(0, 50) });
                         return;
                     }
@@ -6119,25 +6043,13 @@ define([
                 txn.setValue({ fieldId: fieldId, value: valueToSet });
                 fieldSetResults.success.push(fieldId);
             } catch (e) {
-                log.debug('setBodyField', 'Could not set ' + fieldId + ': ' + e.message);
                 fieldSetResults.failed.push({ field: fieldId, reason: e.message, value: String(value).substring(0, 50) });
             }
         }
 
         // Apply body fields in an order that preserves user overrides
         function setBodyFieldsInOrder(txn, fields) {
-            // Use shouldSkipFieldForNormalize to KEEP _display fields for resolution
-            // setBodyField will skip _display fields when actually setting values
-            var fieldMap = buildNormalizedFieldMap(fields, shouldSkipFieldForNormalize);
-            function isEmptyValue(val) {
-                return val === undefined || val === null || val === '';
-            }
-
-            // If only display value exists for account, use it for resolution
-            if (isEmptyValue(fieldMap.account) && !isEmptyValue(fieldMap.account_display)) {
-                fieldMap.account = fieldMap.account_display;
-                log.debug('setBodyFieldsInOrder', 'Set account from account_display: ' + fieldMap.account_display);
-            }
+            var fieldMap = buildNormalizedFieldMap(fields, shouldSkipForNormalize);
             var firstFields = ['entity'];
             var lastFields = [
                 'memo',
@@ -6179,51 +6091,31 @@ define([
         // Helper to set sublist field value safely
         function setSublistField(txn, sublistId, fieldId, value) {
             if (!fieldId || value === undefined || value === null || value === '') return;
-            // Use shouldSkipFieldForSet to skip _display fields when actually setting (not during normalization)
-            if (shouldSkipFieldForSet(fieldId)) return;
+            if (shouldSkipField(fieldId)) return;
 
             try {
                 var valueToSet = value;
 
-                // Resolve account text/number to internal ID
+                // Account fields - resolve to internal ID
                 if (isAccountField(fieldId)) {
-                    log.debug('setSublistField.account', 'Resolving account for ' + sublistId + '.' + fieldId + ' = ' + String(value).substring(0, 100));
-                    var resolvedAccount = resolveAccountId(value);
-                    if (resolvedAccount) {
-                        log.debug('setSublistField.account', 'Resolved to ID: ' + resolvedAccount);
-                        valueToSet = resolvedAccount;
+                    var accountId = resolveAccountId(value);
+                    if (accountId) {
+                        valueToSet = accountId;
                     } else {
-                        log.debug('setSublistField.account', 'Could not resolve to ID, trying setText');
-                        try {
-                            txn.setCurrentSublistText({ sublistId: sublistId, fieldId: fieldId, text: String(value) });
-                            log.debug('setSublistField.account', 'setText succeeded for ' + fieldId);
-                            fieldSetResults.success.push(sublistId + '.' + fieldId);
-                            return;
-                        } catch (e) {
-                            log.debug('setSublistField.account', 'setText failed: ' + e.message + ', will try setValue');
-                            // Fall through to value-based set
-                        }
+                        log.error('setSublistField', 'Could not resolve account: ' + sublistId + '.' + fieldId + ' = ' + String(value).substring(0, 50));
+                        fieldSetResults.failed.push({ field: sublistId + '.' + fieldId, reason: 'could not resolve account', value: String(value).substring(0, 50) });
+                        return;
                     }
                 }
                 // Convert checkbox fields to boolean
-                if (isCheckboxField(fieldId)) {
+                else if (isCheckboxField(fieldId)) {
                     valueToSet = toBoolean(value);
                 }
                 // Convert date fields to proper Date objects
                 else if (isDateField(fieldId) && !(value instanceof Date)) {
                     valueToSet = parseDateValue(value);
                     if (!valueToSet) {
-                        log.debug('setSublistField', 'Could not parse date for ' + sublistId + '.' + fieldId + ': ' + value);
                         fieldSetResults.failed.push({ field: sublistId + '.' + fieldId, reason: 'date parse failed', value: String(value).substring(0, 50) });
-                        return;
-                    }
-                }
-                // Resolve list/record fields (department, class, location, etc.)
-                else if (isResolvableField(fieldId) && isTextValue(value)) {
-                    valueToSet = resolveRecordId(fieldId, value);
-                    if (!valueToSet) {
-                        log.debug('setSublistField', 'Could not resolve ' + sublistId + '.' + fieldId + ': ' + value);
-                        fieldSetResults.failed.push({ field: sublistId + '.' + fieldId, reason: 'could not resolve text to ID', value: String(value).substring(0, 50) });
                         return;
                     }
                 }
@@ -6231,29 +6123,15 @@ define([
                 txn.setCurrentSublistValue({ sublistId: sublistId, fieldId: fieldId, value: valueToSet });
                 fieldSetResults.success.push(sublistId + '.' + fieldId);
             } catch (e) {
-                log.debug('setSublistField', 'Could not set ' + sublistId + '.' + fieldId + ': ' + e.message);
                 fieldSetResults.failed.push({ field: sublistId + '.' + fieldId, reason: e.message, value: String(value).substring(0, 50) });
             }
         }
 
         // Apply sublist fields in a stable order to avoid sourcing overrides
         function setSublistFieldsInOrder(txn, sublistId, line) {
-            // Use shouldSkipFieldForNormalize (via shouldSkipField) to KEEP _display fields for resolution
-            var fieldMap = applyLineAliases(sublistId, buildNormalizedFieldMap(line, shouldSkipFieldForNormalize));
+            var fieldMap = applyLineAliases(sublistId, buildNormalizedFieldMap(line, shouldSkipForNormalize));
             var firstFields = ['item', 'account', 'expenseaccount', 'category', 'expensecategory', 'customer', 'job', 'project', 'projecttask'];
             var lastFields = ['isbillable', 'billable', 'markup', 'markupamount', 'markuppercent', 'memo', 'description', 'rate', 'quantity', 'amount', 'taxcode'];
-
-            // Log the final field map for debugging
-            log.debug('setSublistFieldsInOrder', sublistId + ' fieldMap keys: ' + Object.keys(fieldMap).join(', '));
-            if (fieldMap.account !== undefined || fieldMap.expenseaccount !== undefined || fieldMap.category !== undefined) {
-                log.debug('setSublistFieldsInOrder.account', JSON.stringify({
-                    sublistId: sublistId,
-                    account: fieldMap.account,
-                    expenseaccount: fieldMap.expenseaccount,
-                    category: fieldMap.category,
-                    expensecategory: fieldMap.expensecategory
-                }));
-            }
 
             // Set key fields first (drive sourcing)
             firstFields.forEach(function(fid) {
@@ -6262,7 +6140,7 @@ define([
                 }
             });
 
-            // Set remaining fields (setSublistField will skip _display fields)
+            // Set remaining fields
             Object.keys(fieldMap).forEach(function(fid) {
                 if (firstFields.indexOf(fid) !== -1) return;
                 if (lastFields.indexOf(fid) !== -1) return;
@@ -6282,27 +6160,9 @@ define([
             if (!lines || !Array.isArray(lines) || lines.length === 0) return;
 
             lines.forEach(function(line, index) {
-                log.debug('addSublistLines', 'Processing ' + sublistId + ' line ' + (index + 1) + ' of ' + lines.length);
-                log.debug('addSublistLines.lineData', sublistId + '[' + index + ']: ' + JSON.stringify(line).substring(0, 500));
-
                 txn.selectNewLine({ sublistId: sublistId });
-
                 setSublistFieldsInOrder(txn, sublistId, line);
-
-                try {
-                    txn.commitLine({ sublistId: sublistId });
-                    log.debug('addSublistLines', 'Committed ' + sublistId + ' line ' + (index + 1));
-                } catch (commitError) {
-                    // Log detailed error information
-                    log.error('addSublistLines.commitFailed', {
-                        sublistId: sublistId,
-                        lineIndex: index,
-                        error: commitError.name + ': ' + commitError.message,
-                        lineData: JSON.stringify(line).substring(0, 500),
-                        fieldSetResults: JSON.stringify(fieldSetResults)
-                    });
-                    throw commitError; // Re-throw to stop processing
-                }
+                txn.commitLine({ sublistId: sublistId });
             });
         }
 
@@ -6565,8 +6425,7 @@ define([
             function setSublistFieldPost(sublistId, line, fieldId, value) {
                 if (!fieldId || value === undefined || value === null || value === '') return;
                 if (!lineReapplyFields[fieldId]) return;
-                // Use shouldSkipFieldForSet to skip _display fields
-                if (shouldSkipFieldForSet(fieldId)) return;
+                if (shouldSkipField(fieldId)) return;
 
                 try {
                     var fieldType = getSublistFieldType(sublistId, fieldId);
@@ -6606,12 +6465,7 @@ define([
                 }
             }
 
-            // Apply body fields - use shouldSkipFieldForNormalize to keep _display for resolution
-            var postBodyFields = buildNormalizedFieldMap(formDataToApply.bodyFields || {}, shouldSkipFieldForNormalize);
-            // Check for account display fallback
-            if ((postBodyFields.account === undefined || postBodyFields.account === '') && postBodyFields.account_display) {
-                postBodyFields.account = postBodyFields.account_display;
-            }
+            var postBodyFields = buildNormalizedFieldMap(formDataToApply.bodyFields || {}, shouldSkipForNormalize);
             Object.keys(postBodyFields).forEach(function(fieldId) {
                 setBodyFieldPost(fieldId.toLowerCase(), postBodyFields[fieldId]);
             });
