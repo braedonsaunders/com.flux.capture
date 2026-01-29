@@ -4934,12 +4934,9 @@ define([
                 }
             }
 
-            // ===== CLEANUP OR UPDATE STATUS =====
-            if (transactionId && settings.deleteDocumentOnSuccess) {
-                // Delete the flux document record
-                record.delete({ type: 'customrecord_flux_document', id: documentId });
-                documentDeleted = true;
-
+            // ===== CLEANUP =====
+            // Always delete the Flux document record after successful transaction creation
+            if (transactionId) {
                 // Delete source file if not already moved during attachment
                 if (fileId) {
                     try {
@@ -4949,38 +4946,20 @@ define([
                     }
                 }
 
+                // Delete the flux document record
+                try {
+                    record.delete({ type: 'customrecord_flux_document', id: documentId });
+                    documentDeleted = true;
+                } catch (delErr) {
+                    log.debug('approveDocument.docCleanup', 'Could not delete document: ' + delErr.message);
+                }
+
                 log.audit('FluxCapture.DocumentCleanup', {
                     documentId: documentId,
                     transactionId: transactionId,
-                    fileDeleted: !!fileId
+                    fileDeleted: !!fileId,
+                    documentDeleted: documentDeleted
                 });
-            } else {
-                // Just update status to completed
-                record.submitFields({
-                    type: 'customrecord_flux_document',
-                    id: documentId,
-                    values: {
-                        'custrecord_flux_status': DocStatus.COMPLETED,
-                        'custrecord_flux_created_transaction': transactionId ? String(transactionId) : '',
-                        'custrecord_flux_modified_date': new Date()
-                    }
-                });
-            }
-
-            // Clear submission lock on success (if document wasn't deleted)
-            if (!documentDeleted) {
-                try {
-                    record.submitFields({
-                        type: 'customrecord_flux_document',
-                        id: documentId,
-                        values: {
-                            'custrecord_flux_submission_lock': false,
-                            'custrecord_flux_lock_timestamp': ''
-                        }
-                    });
-                } catch (lockErr) {
-                    // Ignore lock clear errors
-                }
             }
 
             return Response.success({
@@ -6079,6 +6058,7 @@ define([
             var fieldMap = buildNormalizedFieldMap(fields, shouldSkipForNormalize);
             var firstFields = ['entity'];
             var lastFields = [
+                'tranid',  // Invoice/reference number - set last to prevent sourcing override
                 'memo',
                 'paymenthold',
                 'paymentholdreason',
