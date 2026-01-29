@@ -5293,6 +5293,15 @@ define([
         var warnings = [];
         var bodyFields = formData.bodyFields || {};
         var sublists = formData.sublists || {};
+        function normalizeLine(line) {
+            return buildNormalizedFieldMap(line || {}, shouldSkipField);
+        }
+        function parseAmount(value) {
+            if (value === undefined || value === null || value === '') return 0;
+            var normalized = String(value).replace(/[^0-9.\-]/g, '');
+            var parsed = parseFloat(normalized);
+            return isNaN(parsed) ? 0 : parsed;
+        }
 
         // Debug logging to trace validation data
         log.debug('validateForTransaction.input', {
@@ -5351,7 +5360,7 @@ define([
         }
 
         // Total amount validation (always check)
-        var total = parseFloat(bodyFields.total) || parseFloat(bodyFields.usertotal) || 0;
+        var total = parseAmount(bodyFields.total) || parseAmount(bodyFields.usertotal) || 0;
         if (total <= 0) {
             errors.push({ field: 'total', message: 'Total amount must be greater than zero' });
         }
@@ -5379,14 +5388,15 @@ define([
             }
 
             // Validate each expense line
-            expenseLines.forEach(function(line, idx) {
+        expenseLines.forEach(function(line, idx) {
+            var normalizedLine = normalizeLine(line);
                 // Log line data for debugging
                 log.debug('validateForTransaction.expenseLine', {
                     lineIndex: idx,
-                    lineKeys: Object.keys(line),
-                    account: line.account,
-                    expenseaccount: line.expenseaccount,
-                    category: line.category
+                lineKeys: Object.keys(line),
+                account: normalizedLine.account,
+                expenseaccount: normalizedLine.expenseaccount,
+                category: normalizedLine.category
                 });
 
                 // Check mandatory fields from schema
@@ -5404,10 +5414,10 @@ define([
 
                 // ALWAYS check for account/category - required for all expense lines
                 // Check all possible field names used for expense account (case-insensitive)
-                var hasAccount = line.account || line.ACCOUNT ||
-                                 line.expenseaccount || line.EXPENSEACCOUNT ||
-                                 line.category || line.CATEGORY ||
-                                 line.expensecategory || line.EXPENSECATEGORY;
+            var hasAccount = normalizedLine.account || normalizedLine.expenseaccount ||
+                             normalizedLine.category || normalizedLine.expensecategory ||
+                             normalizedLine.account_display || normalizedLine.category_display ||
+                             normalizedLine.expenseaccount_display || normalizedLine.expensecategory_display;
                 if (!hasAccount) {
                     errors.push({
                         field: 'expense[' + idx + '].account',
@@ -5415,7 +5425,7 @@ define([
                     });
                 }
                 // Amount validation (case-insensitive)
-                var lineAmount = parseFloat(line.amount || line.AMOUNT) || 0;
+            var lineAmount = parseAmount(normalizedLine.amount) || 0;
                 if (lineAmount <= 0) {
                     errors.push({
                         field: 'expense[' + idx + '].amount',
@@ -5425,11 +5435,12 @@ define([
             });
 
             // Validate each item line
-            itemLines.forEach(function(line, idx) {
+        itemLines.forEach(function(line, idx) {
+            var normalizedLine = normalizeLine(line);
                 // Check mandatory fields from schema
                 itemFieldDefs.forEach(function(fieldDef) {
                     if (fieldDef.mandatory && fieldDef.id) {
-                        var value = line[fieldDef.id];
+                    var value = normalizedLine[fieldDef.id];
                         if (value === undefined || value === null || value === '') {
                             errors.push({
                                 field: 'item[' + idx + '].' + fieldDef.id,
@@ -5440,7 +5451,7 @@ define([
                 });
                 // Fallback: ensure item is set
                 if (itemFieldDefs.length === 0) {
-                    if (!line.item) {
+                if (!normalizedLine.item) {
                         errors.push({
                             field: 'item[' + idx + '].item',
                             message: 'Item line ' + (idx + 1) + ' requires an item'
@@ -5450,11 +5461,11 @@ define([
             });
 
             // ===== TOTAL RECONCILIATION (warning only) =====
-            var lineTotal = 0;
-            expenseLines.forEach(function(line) { lineTotal += parseFloat(line.amount) || 0; });
-            itemLines.forEach(function(line) { lineTotal += parseFloat(line.amount) || 0; });
+        var lineTotal = 0;
+        expenseLines.forEach(function(line) { lineTotal += parseAmount(line.amount); });
+        itemLines.forEach(function(line) { lineTotal += parseAmount(line.amount); });
 
-            if (Math.abs(lineTotal - total) > 0.01) {
+        if (total > 0 && lineTotal > 0 && Math.abs(lineTotal - total) > 0.01) {
                 warnings.push({
                     field: 'total',
                     message: 'Line items total (' + lineTotal.toFixed(2) + ') differs from header total (' + total.toFixed(2) + ')'
@@ -5650,6 +5661,9 @@ define([
         function buildNormalizedFieldMap(fields, skipFn) {
             var map = {};
             var priorityMap = {};
+            function isEmptyValue(val) {
+                return val === undefined || val === null || val === '';
+            }
             if (!fields) return map;
             Object.keys(fields).forEach(function(fieldId) {
                 if (!fieldId) return;
@@ -5662,8 +5676,8 @@ define([
                 var value = fields[fieldId];
                 var existingValue = map[normalized];
                 var existingPriority = priorityMap[normalized] || 0;
-                if (existingValue === undefined || existingValue === '' ||
-                    (value !== undefined && value !== '' && priority >= existingPriority)) {
+                if (isEmptyValue(existingValue) ||
+                    (!isEmptyValue(value) && priority >= existingPriority)) {
                     map[normalized] = value;
                     priorityMap[normalized] = priority;
                 }
@@ -5809,7 +5823,9 @@ define([
             'project': 'job',
             'expensecategory': 'expensecategory',
             'taxcode': 'salestaxitem',
-            'nexus': 'nexus'
+            'nexus': 'nexus',
+            'account': 'account',
+            'expenseaccount': 'account'
         };
 
         // Generic helper to resolve text value to internal ID for any record type
