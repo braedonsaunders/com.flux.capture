@@ -5756,6 +5756,12 @@ define([
             return false;
         }
 
+        function isAccountField(fieldId) {
+            if (!fieldId) return false;
+            var lowerFieldId = fieldId.toLowerCase();
+            return lowerFieldId === 'account' || lowerFieldId === 'expenseaccount';
+        }
+
         // Helper to convert checkbox value to boolean
         function toBoolean(value) {
             if (typeof value === 'boolean') return value;
@@ -5829,6 +5835,76 @@ define([
             'expenseaccount': 'account'
         };
 
+        function resolveAccountId(value) {
+            if (!value) return null;
+            var textValue = String(value).trim();
+            if (!textValue) return null;
+
+            function findBestMatch(results, preferredName) {
+                if (!results || results.length === 0) return null;
+                if (!preferredName) return results[0].getValue('internalid');
+                var lowerPreferred = preferredName.toLowerCase();
+                var best = results.find(function(r) {
+                    var name = String(r.getValue('name') || '').toLowerCase();
+                    return name.indexOf(lowerPreferred) !== -1;
+                }) || results[0];
+                return best.getValue('internalid');
+            }
+
+            try {
+                // If numeric, try internalid then account number
+                if (/^\d+$/.test(textValue)) {
+                var idSearch = search.create({
+                        type: (search.Type && search.Type.ACCOUNT) ? search.Type.ACCOUNT : 'account',
+                        filters: [['internalid', 'is', textValue]],
+                        columns: ['internalid', 'name', 'number']
+                    });
+                    var idResults = idSearch.run().getRange({ start: 0, end: 1 });
+                    if (idResults && idResults.length > 0) {
+                        return idResults[0].getValue('internalid');
+                    }
+
+                    var numSearch = search.create({
+                        type: (search.Type && search.Type.ACCOUNT) ? search.Type.ACCOUNT : 'account',
+                        filters: [['number', 'is', textValue]],
+                        columns: ['internalid', 'name', 'number']
+                    });
+                    var numResults = numSearch.run().getRange({ start: 0, end: 5 });
+                    var numMatch = findBestMatch(numResults);
+                    if (numMatch) return numMatch;
+                }
+
+                // Try parse "1234 - Name" or "1234 Name"
+                var parsed = textValue.match(/^\s*(\d+)\s*[-:·]?\s*(.*)$/);
+                var numberPart = parsed && parsed[1] ? parsed[1] : null;
+                var namePart = parsed && parsed[2] ? parsed[2].trim() : null;
+                if (numberPart) {
+                    var parsedNumSearch = search.create({
+                        type: (search.Type && search.Type.ACCOUNT) ? search.Type.ACCOUNT : 'account',
+                        filters: [['number', 'is', numberPart]],
+                        columns: ['internalid', 'name', 'number']
+                    });
+                    var parsedNumResults = parsedNumSearch.run().getRange({ start: 0, end: 5 });
+                    var parsedMatch = findBestMatch(parsedNumResults, namePart);
+                    if (parsedMatch) return parsedMatch;
+                }
+
+                // Fallback to name search
+                var nameSearch = search.create({
+                    type: (search.Type && search.Type.ACCOUNT) ? search.Type.ACCOUNT : 'account',
+                    filters: [['name', 'is', textValue], 'OR', ['name', 'contains', textValue]],
+                    columns: ['internalid', 'name', 'number']
+                });
+                var nameResults = nameSearch.run().getRange({ start: 0, end: 5 });
+                var nameMatch = findBestMatch(nameResults);
+                if (nameMatch) return nameMatch;
+            } catch (e) {
+                log.debug('resolveAccountId', 'Could not resolve account "' + textValue + '": ' + e.message);
+            }
+
+            return null;
+        }
+
         // Generic helper to resolve text value to internal ID for any record type
         function resolveRecordId(fieldId, textValue) {
             if (!textValue || !isTextValue(textValue)) return textValue; // Already an ID
@@ -5900,6 +5976,21 @@ define([
             try {
                 var valueToSet = value;
 
+                // Resolve account text/number to internal ID
+                if (isAccountField(fieldId)) {
+                    var resolvedAccount = resolveAccountId(value);
+                    if (resolvedAccount) {
+                        valueToSet = resolvedAccount;
+                    } else if (isTextValue(value)) {
+                        try {
+                            txn.setText({ fieldId: fieldId, text: String(value) });
+                            fieldSetResults.success.push(fieldId);
+                            return;
+                        } catch (e) {
+                            // Fall through to value-based set
+                        }
+                    }
+                }
                 // Resolve terms text to internal ID
                 if (lowerFieldId === 'terms' && isTextValue(value)) {
                     valueToSet = resolveTermsId(value);
@@ -5996,6 +6087,20 @@ define([
             try {
                 var valueToSet = value;
 
+                // Resolve account text/number to internal ID
+                if (isAccountField(fieldId)) {
+                    var resolvedAccount = resolveAccountId(value);
+                    if (resolvedAccount) {
+                        valueToSet = resolvedAccount;
+                    } else {
+                        try {
+                            txn.setCurrentSublistText({ sublistId: sublistId, fieldId: fieldId, text: String(value) });
+                            return;
+                        } catch (e) {
+                            // Fall through to value-based set
+                        }
+                    }
+                }
                 // Convert checkbox fields to boolean
                 if (isCheckboxField(fieldId)) {
                     valueToSet = toBoolean(value);
