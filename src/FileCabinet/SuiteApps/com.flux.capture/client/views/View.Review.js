@@ -765,6 +765,10 @@
                 }
             }
 
+            // CRITICAL: Sync DOM state to sublistData before collection
+            // This ensures typeahead selections (ID in hidden input) are captured
+            this.syncDOMToSublistData();
+
             // Collect sublist data from sublistData (already tracked)
             // Filter out empty/default rows that have no meaningful data
             if (this.sublistData) {
@@ -3732,11 +3736,37 @@
             // Select field requiring API lookup (large list like account, customer, item)
             else if (isSelectField) {
                 var lookupType = this.getLookupType(field.id, sublistId);
+
+                // CRITICAL: Separate ID from display text properly
+                // Hidden input should ONLY contain numeric ID, display input has text
+                var idValue = '';
+                var textValue = displayValue || value || '';
+
+                // Check if value looks like a numeric ID (internal ID)
+                if (value && /^\d+$/.test(String(value).trim())) {
+                    // Value is numeric - it's an ID
+                    idValue = value;
+                    // Keep display text as-is, or use ID if no display text
+                    textValue = displayValue || value;
+                } else if (value) {
+                    // Value is text (from OCR/extraction) - not an ID
+                    // Leave idValue empty - server will resolve from text
+                    // Use value as display text
+                    textValue = displayValue || value;
+
+                    // Also update sublistData to separate ID from display
+                    if (this.sublistData && this.sublistData[sublistId] && this.sublistData[sublistId][idx]) {
+                        // Clear the main field (will be empty until resolved)
+                        // But keep _display populated for server-side resolution
+                        this.sublistData[sublistId][idx][normalizedFieldId + '_display'] = textValue;
+                    }
+                }
+
                 var html = '<td class="select-cell fill-cell" data-field="' + field.id + '" data-row="' + idx + '" data-sublist="' + sublistId + '">' +
-                    '<div class="typeahead-select" data-field="' + field.id + '" data-lookup="' + lookupType + '">' +
-                    '<input type="hidden" class="line-input" id="' + inputId + '" value="' + escapeHtml(value) + '" data-field="' + field.id + '">' +
+                    '<div class="typeahead-select" data-field="' + field.id + '" data-lookup="' + lookupType + '" data-needs-resolution="' + (idValue ? 'false' : 'true') + '">' +
+                    '<input type="hidden" class="line-input" id="' + inputId + '" value="' + escapeHtml(idValue) + '" data-field="' + field.id + '">' +
                     '<input type="text" class="typeahead-input line-input" id="' + inputId + '-display" ' +
-                        'value="' + escapeHtml(displayValue || value) + '" placeholder="Search ' + escapeHtml(field.label) + '..." ' +
+                        'value="' + escapeHtml(textValue) + '" placeholder="Search ' + escapeHtml(field.label) + '..." ' +
                         'data-field="' + field.id + '" data-lookup="' + lookupType + '" autocomplete="off">' +
                     '<div class="typeahead-dropdown"></div>' +
                     '</div>' + fillHandle + '</td>';
@@ -5782,6 +5812,84 @@
             var normalizedId = String(sublistId).toLowerCase();
             var currentLines = (this.sublistData && this.sublistData[sublistId]) || [];
             this.formData.sublists[normalizedId] = currentLines;
+        },
+
+        // Sync DOM state back to sublistData before form collection
+        // CRITICAL: Ensures typeahead selections (ID in hidden input) are captured
+        syncDOMToSublistData: function() {
+            var self = this;
+            if (!this.sublistData) return;
+
+            Object.keys(this.sublistData).forEach(function(sublistId) {
+                var container = document.querySelector('#sublist-' + sublistId);
+                if (!container) return;
+
+                var rows = container.querySelectorAll('tr[data-idx]');
+                rows.forEach(function(row) {
+                    var idx = parseInt(row.dataset.idx, 10);
+                    if (isNaN(idx) || !self.sublistData[sublistId][idx]) return;
+
+                    var line = self.sublistData[sublistId][idx];
+
+                    // Find all typeahead selects in this row and sync their values
+                    var typeaheads = row.querySelectorAll('.typeahead-select');
+                    typeaheads.forEach(function(wrapper) {
+                        var fieldId = wrapper.dataset.field;
+                        if (!fieldId) return;
+
+                        var hiddenInput = wrapper.querySelector('input[type="hidden"]');
+                        var displayInput = wrapper.querySelector('.typeahead-input');
+                        var normalizedFieldId = fieldId.toLowerCase();
+
+                        // Get values from DOM
+                        var idValue = hiddenInput ? hiddenInput.value : '';
+                        var textValue = displayInput ? displayInput.value : '';
+
+                        // Update sublistData with DOM values
+                        // ID value takes precedence if present
+                        if (idValue && /^\d+$/.test(idValue.trim())) {
+                            // Hidden input has a numeric ID - use it
+                            line[normalizedFieldId] = idValue;
+                            line[fieldId] = idValue;
+                            console.log('[Flux] syncDOMToSublistData - ' + sublistId + '[' + idx + '].' + normalizedFieldId + ' = ID:' + idValue);
+                        } else if (textValue) {
+                            // Only display text exists - store for server resolution
+                            // Leave main field as-is (might be empty), ensure display is set
+                            line[normalizedFieldId + '_display'] = textValue;
+                            line[fieldId + '_display'] = textValue;
+                            console.log('[Flux] syncDOMToSublistData - ' + sublistId + '[' + idx + '].' + normalizedFieldId + '_display = ' + textValue);
+                        }
+
+                        // Always update display if present
+                        if (textValue) {
+                            line[normalizedFieldId + '_display'] = textValue;
+                        }
+                    });
+
+                    // Also sync regular inputs (text, number, checkbox)
+                    var inputs = row.querySelectorAll('.line-input:not(.typeahead-input)');
+                    inputs.forEach(function(input) {
+                        // Skip hidden inputs in typeahead wrappers
+                        if (input.type === 'hidden' && input.closest('.typeahead-select')) return;
+
+                        var fieldId = input.dataset.field;
+                        if (!fieldId) return;
+
+                        var normalizedFieldId = fieldId.toLowerCase();
+                        var value;
+
+                        if (input.type === 'checkbox') {
+                            value = input.checked ? 'T' : 'F';
+                        } else {
+                            value = input.value;
+                        }
+
+                        // Update line data
+                        line[normalizedFieldId] = value;
+                        line[fieldId] = value;
+                    });
+                });
+            });
         },
 
         // ==========================================
