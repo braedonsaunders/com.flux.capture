@@ -5688,6 +5688,17 @@ define([
 
         function applyLineAliases(sublistId, fieldMap) {
             var normalizedSublistId = (sublistId || '').toLowerCase();
+            function isEmptyValue(val) {
+                return val === undefined || val === null || val === '';
+            }
+
+            // If only display value exists for account fields, use it for resolution
+            if (isEmptyValue(fieldMap.account) && !isEmptyValue(fieldMap.account_display)) {
+                fieldMap.account = fieldMap.account_display;
+            }
+            if (isEmptyValue(fieldMap.expenseaccount) && !isEmptyValue(fieldMap.expenseaccount_display)) {
+                fieldMap.expenseaccount = fieldMap.expenseaccount_display;
+            }
 
             // If memo is used on item sublist, map to description
             if (normalizedSublistId === 'item' && fieldMap.memo !== undefined && fieldMap.memo !== '') {
@@ -6041,6 +6052,14 @@ define([
         // Apply body fields in an order that preserves user overrides
         function setBodyFieldsInOrder(txn, fields) {
             var fieldMap = buildNormalizedFieldMap(fields, shouldSkipBodyField);
+            function isEmptyValue(val) {
+                return val === undefined || val === null || val === '';
+            }
+
+            // If only display value exists for account, use it for resolution
+            if (isEmptyValue(fieldMap.account) && !isEmptyValue(fieldMap.account_display)) {
+                fieldMap.account = fieldMap.account_display;
+            }
             var firstFields = ['entity'];
             var lastFields = [
                 'memo',
