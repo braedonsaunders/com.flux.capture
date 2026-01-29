@@ -4749,7 +4749,14 @@ define([
             }
 
             // ===== VALIDATION =====
-            var validation = validateForTransaction(formData, actualTransactionType);
+            var validation;
+            try {
+                validation = validateForTransaction(formData, actualTransactionType);
+            } catch (validationErr) {
+                log.error('approveDocument.validationError', validationErr);
+                return Response.error('VALIDATION_ERROR', 'Validation failed: ' + validationErr.message);
+            }
+
             if (!validation.valid) {
                 return Response.error('VALIDATION_FAILED', 'Document failed validation', {
                     errors: validation.errors,
@@ -4777,7 +4784,12 @@ define([
             // ===== CREATE TRANSACTION =====
             var workflowTriggered = false;
             if (createTransaction && (vendorId || actualTransactionType === 'expensereport')) {
-                transactionId = createTransactionFromDocument(docRecord, actualTransactionType, formData);
+                try {
+                    transactionId = createTransactionFromDocument(docRecord, actualTransactionType, formData);
+                } catch (txnErr) {
+                    log.error('approveDocument.createTxnError', txnErr.message + '\n' + (txnErr.stack || ''));
+                    return Response.error('TXN_CREATE_FAILED', 'Transaction creation failed: ' + txnErr.message);
+                }
 
                 // ===== FILE ATTACHMENT (if enabled) =====
                 if (transactionId && settings.attachFileToTransaction && fileId) {
@@ -5856,6 +5868,9 @@ define([
             'expenseaccount': 'account'
         };
 
+        // Cache for account resolution
+        var accountCache = {};
+
         // Resolve account value to internal ID
         // Accepts: internal ID, account number, or display text
         function resolveAccountId(value) {
@@ -5866,6 +5881,12 @@ define([
             // Already an internal ID - use directly
             if (/^\d+$/.test(strValue)) {
                 return strValue;
+            }
+
+            // Check cache
+            var cacheKey = strValue.toLowerCase();
+            if (accountCache.hasOwnProperty(cacheKey)) {
+                return accountCache[cacheKey];
             }
 
             var accountType = (search.Type && search.Type.ACCOUNT) ? search.Type.ACCOUNT : 'account';
@@ -5890,42 +5911,48 @@ define([
                 }
 
                 // 2. Try name matches
-                if (childName) {
+                if (childName && childName.length > 2) {
                     filters.push([['name', 'is', childName]]);
                     filters.push([['name', 'contains', childName]]);
                 }
-                if (accountName && accountName !== childName) {
+                if (accountName && accountName !== childName && accountName.length > 2) {
                     filters.push([['name', 'contains', accountName]]);
                 }
 
-                // 3. Try full text as last resort
-                filters.push([['name', 'contains', strValue]]);
-
                 for (var i = 0; i < filters.length; i++) {
-                    var results = search.create({
-                        type: accountType,
-                        filters: filters[i],
-                        columns: ['internalid', 'name', 'number']
-                    }).run().getRange({ start: 0, end: 5 });
+                    try {
+                        var results = search.create({
+                            type: accountType,
+                            filters: filters[i],
+                            columns: ['internalid', 'name', 'number']
+                        }).run().getRange({ start: 0, end: 5 });
 
-                    if (results && results.length > 0) {
-                        // If multiple results, prefer exact number match
-                        if (accountNumber && results.length > 1) {
-                            for (var j = 0; j < results.length; j++) {
-                                if (results[j].getValue('number') === accountNumber) {
-                                    return results[j].getValue('internalid');
+                        if (results && results.length > 0) {
+                            // If multiple results, prefer exact number match
+                            if (accountNumber && results.length > 1) {
+                                for (var j = 0; j < results.length; j++) {
+                                    if (results[j].getValue('number') === accountNumber) {
+                                        var exactId = results[j].getValue('internalid');
+                                        accountCache[cacheKey] = exactId;
+                                        return exactId;
+                                    }
                                 }
                             }
+                            var foundId = results[0].getValue('internalid');
+                            accountCache[cacheKey] = foundId;
+                            return foundId;
                         }
-                        return results[0].getValue('internalid');
+                    } catch (searchErr) {
+                        // Continue to next filter strategy
                     }
                 }
 
-                log.error('resolveAccountId', 'No account found for: ' + strValue.substring(0, 100));
+                log.debug('resolveAccountId', 'No account found for: ' + strValue.substring(0, 50));
             } catch (e) {
                 log.error('resolveAccountId', 'Error: ' + e.message);
             }
 
+            accountCache[cacheKey] = null;
             return null;
         }
 
