@@ -5729,6 +5729,9 @@
             var normalizedLine = {};
             var priorityMap = {};
             var self = this;
+            function isEmptyValue(val) {
+                return val === undefined || val === null || val === '';
+            }
 
             Object.keys(line).forEach(function(key) {
                 if (!key) return;
@@ -5752,8 +5755,8 @@
 
                 var existingValue = normalizedLine[normalizedKey];
                 var existingPriority = priorityMap[normalizedKey] || 0;
-                if (existingValue === undefined || existingValue === '' ||
-                    (value !== undefined && value !== '' && priority >= existingPriority)) {
+                if (isEmptyValue(existingValue) ||
+                    (!isEmptyValue(value) && priority >= existingPriority)) {
                     normalizedLine[normalizedKey] = value;
                     priorityMap[normalizedKey] = priority;
                 }
