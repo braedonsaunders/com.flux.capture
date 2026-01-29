@@ -5279,6 +5279,52 @@ define([
         return ('FC-' + timestamp + '-' + random).toUpperCase();
     }
 
+    // Normalize field IDs from XML/scriptid wrappers
+    function normalizeFieldId(fieldId) {
+        if (!fieldId) return '';
+        var cleaned = String(fieldId).trim();
+        if (cleaned.charAt(0) === '[' && cleaned.charAt(cleaned.length - 1) === ']') {
+            var inner = cleaned.slice(1, -1);
+            var match = inner.match(/scriptid\s*=\s*([^,\]]+)/i) ||
+                        inner.match(/id\s*=\s*([^,\]]+)/i);
+            if (match && match[1]) {
+                cleaned = match[1];
+            } else if (inner.indexOf('=') === -1) {
+                cleaned = inner;
+            }
+        }
+        cleaned = cleaned.replace(/^['"]|['"]$/g, '');
+        return cleaned;
+    }
+
+    // Normalize field map (case-insensitive) and skip internal/display fields
+    function buildNormalizedFieldMap(fields, skipFn) {
+        var map = {};
+        var priorityMap = {};
+        function isEmptyValue(val) {
+            return val === undefined || val === null || val === '';
+        }
+        if (!fields) return map;
+        Object.keys(fields).forEach(function(fieldId) {
+            if (!fieldId) return;
+            var normalizedId = normalizeFieldId(fieldId);
+            if (skipFn && (skipFn(fieldId) || (normalizedId && skipFn(normalizedId)))) return;
+            if (normalizedId.indexOf('_') === 0) return;
+            var normalized = normalizedId.toLowerCase();
+            var isWrapped = fieldId.indexOf('[') === 0 && fieldId.indexOf(']') === fieldId.length - 1;
+            var priority = isWrapped ? 2 : 1;
+            var value = fields[fieldId];
+            var existingValue = map[normalized];
+            var existingPriority = priorityMap[normalized] || 0;
+            if (isEmptyValue(existingValue) ||
+                (!isEmptyValue(value) && priority >= existingPriority)) {
+                map[normalized] = value;
+                priorityMap[normalized] = priority;
+            }
+        });
+        return map;
+    }
+
     // ==================== Transaction Creation Helpers ====================
 
     /**
@@ -5294,7 +5340,7 @@ define([
         var bodyFields = formData.bodyFields || {};
         var sublists = formData.sublists || {};
         function normalizeLine(line) {
-            return buildNormalizedFieldMap(line || {}, shouldSkipField);
+            return buildNormalizedFieldMap(line || {}, null);
         }
         function parseAmount(value) {
             if (value === undefined || value === null || value === '') return 0;
@@ -5639,51 +5685,6 @@ define([
             return bodyOnlySkipFields.indexOf(lowerFieldId) !== -1;
         }
 
-        // Normalize field IDs from XML/scriptid wrappers
-        function normalizeFieldId(fieldId) {
-            if (!fieldId) return '';
-            var cleaned = String(fieldId).trim();
-            if (cleaned.charAt(0) === '[' && cleaned.charAt(cleaned.length - 1) === ']') {
-                var inner = cleaned.slice(1, -1);
-                var match = inner.match(/scriptid\s*=\s*([^,\]]+)/i) ||
-                            inner.match(/id\s*=\s*([^,\]]+)/i);
-                if (match && match[1]) {
-                    cleaned = match[1];
-                } else if (inner.indexOf('=') === -1) {
-                    cleaned = inner;
-                }
-            }
-            cleaned = cleaned.replace(/^['"]|['"]$/g, '');
-            return cleaned;
-        }
-
-        // Normalize field map (case-insensitive) and skip internal/display fields
-        function buildNormalizedFieldMap(fields, skipFn) {
-            var map = {};
-            var priorityMap = {};
-            function isEmptyValue(val) {
-                return val === undefined || val === null || val === '';
-            }
-            if (!fields) return map;
-            Object.keys(fields).forEach(function(fieldId) {
-                if (!fieldId) return;
-                var normalizedId = normalizeFieldId(fieldId);
-                if (skipFn && (skipFn(fieldId) || (normalizedId && skipFn(normalizedId)))) return;
-                if (normalizedId.indexOf('_') === 0) return;
-                var normalized = normalizedId.toLowerCase();
-                var isWrapped = fieldId.indexOf('[') === 0 && fieldId.indexOf(']') === fieldId.length - 1;
-                var priority = isWrapped ? 2 : 1;
-                var value = fields[fieldId];
-                var existingValue = map[normalized];
-                var existingPriority = priorityMap[normalized] || 0;
-                if (isEmptyValue(existingValue) ||
-                    (!isEmptyValue(value) && priority >= existingPriority)) {
-                    map[normalized] = value;
-                    priorityMap[normalized] = priority;
-                }
-            });
-            return map;
-        }
 
         function applyLineAliases(sublistId, fieldMap) {
             var normalizedSublistId = (sublistId || '').toLowerCase();
