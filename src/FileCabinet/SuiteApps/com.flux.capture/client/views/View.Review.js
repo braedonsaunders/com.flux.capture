@@ -772,6 +772,7 @@
                 Object.keys(this.sublistData).forEach(function(sublistId) {
                     var normalizedId = sublistId.toLowerCase();
                     var lines = self.sublistData[sublistId] || [];
+                    var normalizedLines = self.normalizeSublistLines(normalizedId, lines);
 
                     console.log('[Flux] collectFormData - sublist "' + sublistId + '" has ' + lines.length + ' lines');
                     if (lines.length > 0) {
@@ -780,12 +781,13 @@
                     }
 
                     // Filter out empty lines
-                    var nonEmptyLines = lines.filter(function(line) {
+                    var nonEmptyLines = normalizedLines.filter(function(line) {
                         return self.isSublistLinePopulated(normalizedId, line);
                     });
 
                     console.log('[Flux] collectFormData - after filter: ' + nonEmptyLines.length + ' non-empty lines');
                     sublists[normalizedId] = nonEmptyLines;
+                    self.sublistData[sublistId] = normalizedLines;
                 });
             } else {
                 console.log('[Flux] collectFormData - NO sublistData!');
@@ -3528,6 +3530,7 @@
             if (items.length === 0) {
                 items = [{}]; // Add one empty row
             }
+            items = this.normalizeSublistLines(sublistId, items);
             this.sublistData[sublistId] = items;
 
             // Determine visible columns (important fields first)
@@ -5578,6 +5581,9 @@
 
             // Convert numeric fields (case-insensitive check)
             var lowerFieldId = (fieldId || '').toLowerCase();
+            var normalizedFieldId = this.normalizeFieldId(fieldId);
+            var normalizedLowerFieldId = normalizedFieldId.toLowerCase();
+            var normalizedSublistId = (sublistId || '').toLowerCase();
             if (lowerFieldId === 'amount' || lowerFieldId === 'rate' || lowerFieldId === 'quantity') {
                 value = parseFloat(value) || 0;
             }
@@ -5586,7 +5592,32 @@
                 value = (value === true || value === 'true' || value === 'on') ? 'T' : 'F';
             }
 
+            // Update all existing case variants for this field (case-insensitive)
+            Object.keys(line).forEach(function(key) {
+                if (key && (key.toLowerCase() === lowerFieldId || key.toLowerCase() === normalizedLowerFieldId)) {
+                    line[key] = value;
+                }
+            });
+
+            // Always set the normalized and original keys
+            line[lowerFieldId] = value;
             line[fieldId] = value;
+            if (normalizedFieldId) {
+                line[normalizedFieldId] = value;
+                line[normalizedLowerFieldId] = value;
+            }
+
+            // Keep memo/description in sync for item sublist
+            if (normalizedSublistId === 'item' && (lowerFieldId === 'memo' || lowerFieldId === 'description')) {
+                line.memo = value;
+                line.description = value;
+            }
+
+            // Keep billable/isbillable in sync
+            if (lowerFieldId === 'billable' || lowerFieldId === 'isbillable') {
+                line.billable = value;
+                line.isbillable = value;
+            }
 
             // When amount is directly edited, update all case variants to ensure consistency
             if (lowerFieldId === 'amount') {
@@ -5663,6 +5694,71 @@
             if (totalEl) {
                 totalEl.textContent = '$' + total.toFixed(2);
             }
+        },
+
+        // Normalize field IDs from XML/scriptid wrappers
+        normalizeFieldId: function(fieldId) {
+            if (!fieldId) return '';
+            var cleaned = String(fieldId).trim();
+            if (cleaned.charAt(0) === '[' && cleaned.charAt(cleaned.length - 1) === ']') {
+                var inner = cleaned.slice(1, -1);
+                var match = inner.match(/scriptid\s*=\s*([^,\]]+)/i) ||
+                            inner.match(/id\s*=\s*([^,\]]+)/i);
+                if (match && match[1]) {
+                    cleaned = match[1];
+                } else if (inner.indexOf('=') === -1) {
+                    cleaned = inner;
+                }
+            }
+            return cleaned.replace(/^['"]|['"]$/g, '');
+        },
+
+        // Normalize a single sublist line to canonical field IDs
+        normalizeSublistLine: function(sublistId, line) {
+            if (!line || typeof line !== 'object') return {};
+            var normalizedLine = {};
+            var priorityMap = {};
+            var self = this;
+
+            Object.keys(line).forEach(function(key) {
+                if (!key) return;
+                if (key.indexOf('_') === 0) return;
+
+                var isDisplay = key.toLowerCase().indexOf('_display') === key.length - 8;
+                var baseKey = isDisplay ? key.slice(0, -8) : key;
+                var normalizedBase = self.normalizeFieldId(baseKey);
+                if (!normalizedBase) return;
+
+                var normalizedKey = normalizedBase.toLowerCase();
+                var value = line[key];
+                var isWrapped = baseKey.charAt(0) === '[' && baseKey.charAt(baseKey.length - 1) === ']';
+                var isCanonical = baseKey.toLowerCase() === normalizedKey;
+                var priority = isCanonical ? 3 : (isWrapped ? 2 : 1);
+
+                if (isDisplay) {
+                    normalizedLine[normalizedKey + '_display'] = value;
+                    return;
+                }
+
+                var existingValue = normalizedLine[normalizedKey];
+                var existingPriority = priorityMap[normalizedKey] || 0;
+                if (existingValue === undefined || existingValue === '' ||
+                    (value !== undefined && value !== '' && priority >= existingPriority)) {
+                    normalizedLine[normalizedKey] = value;
+                    priorityMap[normalizedKey] = priority;
+                }
+            });
+
+            return normalizedLine;
+        },
+
+        // Normalize all lines for a sublist
+        normalizeSublistLines: function(sublistId, lines) {
+            if (!Array.isArray(lines)) return [];
+            var self = this;
+            return lines.map(function(line) {
+                return self.normalizeSublistLine(sublistId, line);
+            });
         },
 
         // ==========================================
