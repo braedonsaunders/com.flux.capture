@@ -3512,11 +3512,17 @@
             var slType = (sublistId || '').toLowerCase();
             var items = [];
 
-            // FIRST: Check formData.sublists (saved user edits - highest priority)
-            if (this.formData && this.formData.sublists && this.formData.sublists[slType]) {
+            // FIRST: Use current sublistData (latest user edits)
+            if (this.sublistData && this.sublistData[sublistId]) {
+                items = this.sublistData[sublistId];
+            } else if (this.sublistData && this.sublistData[slType]) {
+                items = this.sublistData[slType];
+            }
+            // SECOND: Check formData.sublists (saved user edits)
+            else if (this.formData && this.formData.sublists && this.formData.sublists[slType]) {
                 items = this.formData.sublists[slType];
             }
-            // SECOND: Fall back to document data
+            // THIRD: Fall back to document data
             else if (slType === 'expense') {
                 items = doc.expenseLines || doc.lineItems || [];
             } else if (slType === 'item') {
@@ -3532,6 +3538,7 @@
             }
             items = this.normalizeSublistLines(sublistId, items);
             this.sublistData[sublistId] = items;
+            this.syncFormDataSublists(sublistId);
 
             // Determine visible columns (important fields first)
             var visibleFields = this.getVisibleSublistFields(sublist);
@@ -5557,6 +5564,7 @@
             this.sublistData[sublistId].push(newLine);
             var slType = (sublistId || '').toLowerCase();
             this.changes[slType + 'Lines'] = this.sublistData[sublistId];
+            this.syncFormDataSublists(sublistId);
             this.markUnsaved();
             this.refreshSublist(sublistId);
             this.updateTabCounts();
@@ -5568,6 +5576,7 @@
             var slType = (sublistId || '').toLowerCase();
             this.sublistData[sublistId].splice(idx, 1);
             this.changes[slType + 'Lines'] = this.sublistData[sublistId];
+            this.syncFormDataSublists(sublistId);
             this.markUnsaved();
             this.refreshSublist(sublistId);
             this.updateTabCounts();
@@ -5655,6 +5664,7 @@
             }
 
             this.changes[sublistId + 'Lines'] = this.sublistData[sublistId];
+            this.syncFormDataSublists(sublistId);
             this.markUnsaved();
             this.updateSublistTotal(sublistId);
         },
@@ -5759,6 +5769,16 @@
             return lines.map(function(line) {
                 return self.normalizeSublistLine(sublistId, line);
             });
+        },
+
+        // Sync sublistData into formData so re-renders don't revert edits
+        syncFormDataSublists: function(sublistId) {
+            if (!sublistId) return;
+            if (!this.formData) this.formData = {};
+            if (!this.formData.sublists) this.formData.sublists = {};
+            var normalizedId = String(sublistId).toLowerCase();
+            var currentLines = (this.sublistData && this.sublistData[sublistId]) || [];
+            this.formData.sublists[normalizedId] = currentLines;
         },
 
         // ==========================================
