@@ -4803,13 +4803,23 @@ define([
 
                                 try {
                                     var wfSearch = search.create({
-                                        type: 'workflow',
-                                        filters: [['name', 'is', workflowStr]],
-                                        columns: ['internalid']
+                                        type: (search.Type && search.Type.WORKFLOW) ? search.Type.WORKFLOW : 'workflow',
+                                        filters: [
+                                            ['scriptid', 'is', workflowStr],
+                                            'OR',
+                                            ['name', 'is', workflowStr],
+                                            'OR',
+                                            ['name', 'contains', workflowStr]
+                                        ],
+                                        columns: ['internalid', 'scriptid', 'name']
                                     });
-                                    var wfResults = wfSearch.run().getRange({ start: 0, end: 1 });
+                                    var wfResults = wfSearch.run().getRange({ start: 0, end: 5 });
                                     if (wfResults && wfResults.length > 0) {
-                                        return wfResults[0].getValue('internalid');
+                                        var exact = wfResults.find(function(r) {
+                                            return String(r.getValue('scriptid') || '').toLowerCase() === workflowStr.toLowerCase() ||
+                                                   String(r.getValue('name') || '').toLowerCase() === workflowStr.toLowerCase();
+                                        }) || wfResults[0];
+                                        return exact.getValue('internalid');
                                     }
                                 } catch (resolveErr) {
                                     log.debug('approveDocument.workflow', 'Could not resolve workflow ID "' + workflowStr + '": ' + resolveErr.message);
@@ -4828,7 +4838,11 @@ define([
                             var nsRecordType = recordTypeMap[actualTransactionType] || actualTransactionType;
                             var resolvedWorkflowId = resolveWorkflowId(workflowConfig.workflowId);
                             if (!resolvedWorkflowId) {
-                                throw new Error('Invalid workflow ID ' + workflowConfig.workflowId);
+                                warnings.push({
+                                    field: 'workflow',
+                                    message: 'Workflow not triggered. Set an internal ID or script ID for "' + workflowConfig.workflowId + '".'
+                                });
+                                return;
                             }
 
                             log.debug('approveDocument.workflow', 'Triggering workflow action: ' + JSON.stringify({
@@ -5635,6 +5649,7 @@ define([
         // Normalize field map (case-insensitive) and skip internal/display fields
         function buildNormalizedFieldMap(fields, skipFn) {
             var map = {};
+            var priorityMap = {};
             if (!fields) return map;
             Object.keys(fields).forEach(function(fieldId) {
                 if (!fieldId) return;
@@ -5642,8 +5657,15 @@ define([
                 if (skipFn && (skipFn(fieldId) || (normalizedId && skipFn(normalizedId)))) return;
                 if (normalizedId.indexOf('_') === 0) return;
                 var normalized = normalizedId.toLowerCase();
-                if (map[normalized] === undefined || map[normalized] === '') {
-                    map[normalized] = fields[fieldId];
+                var isWrapped = fieldId.indexOf('[') === 0 && fieldId.indexOf(']') === fieldId.length - 1;
+                var priority = isWrapped ? 2 : 1;
+                var value = fields[fieldId];
+                var existingValue = map[normalized];
+                var existingPriority = priorityMap[normalized] || 0;
+                if (existingValue === undefined || existingValue === '' ||
+                    (value !== undefined && value !== '' && priority >= existingPriority)) {
+                    map[normalized] = value;
+                    priorityMap[normalized] = priority;
                 }
             });
             return map;
@@ -5654,7 +5676,9 @@ define([
 
             // If memo is used on item sublist, map to description
             if (normalizedSublistId === 'item' && fieldMap.memo !== undefined && fieldMap.memo !== '') {
-                fieldMap.description = fieldMap.memo;
+                if (!fieldMap.description || fieldMap.description === fieldMap.memo) {
+                    fieldMap.description = fieldMap.memo;
+                }
             }
 
             // Billable alias mapping
