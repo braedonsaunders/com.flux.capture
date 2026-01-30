@@ -441,6 +441,9 @@ define([
     }
 
     function put(context) {
+        // Immediate logging to confirm PUT handler is reached
+        log.debug('PUT Handler', 'Action: ' + (context && context.action) + ', DocumentId: ' + (context && context.documentId));
+        
         var result;
         try {
             // LICENSE CHECK - Block unauthorized access
