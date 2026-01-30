@@ -5806,16 +5806,29 @@ define([
             if (lookupCache[cacheKey] !== undefined) return lookupCache[cacheKey];
 
             try {
+                // Try exact match first
                 var termSearch = search.create({
                     type: 'term',
                     filters: [['name', 'is', textValue]],
-                    columns: ['internalid']
+                    columns: ['internalid', 'name']
                 });
                 var results = termSearch.run().getRange({ start: 0, end: 1 });
                 if (results && results.length > 0) {
                     var termId = results[0].getValue('internalid');
                     lookupCache[cacheKey] = termId;
-                    log.debug('resolveTermsId', 'Resolved "' + textValue + '" to ID: ' + termId);
+                    return termId;
+                }
+
+                // Try contains search
+                termSearch = search.create({
+                    type: 'term',
+                    filters: [['name', 'contains', textValue]],
+                    columns: ['internalid', 'name']
+                });
+                results = termSearch.run().getRange({ start: 0, end: 5 });
+                if (results && results.length > 0) {
+                    var termId = results[0].getValue('internalid');
+                    lookupCache[cacheKey] = termId;
                     return termId;
                 }
             } catch (e) {
@@ -6037,6 +6050,7 @@ define([
             try {
                 var valueToSet = value;
                 var actualFieldType = getFieldType(txn, fieldId);
+                var lowerFieldId = fieldId.toLowerCase();
 
                 // Account fields - resolve to internal ID
                 if (isAccountField(fieldId)) {
@@ -6047,6 +6061,23 @@ define([
                         // Body-level account usually sourced from vendor - skip if can't resolve
                         fieldSetResults.failed.push({ field: fieldId, reason: 'could not resolve account', value: String(value).substring(0, 50) });
                         return;
+                    }
+                }
+                // Terms field - resolve display text to ID
+                else if (lowerFieldId === 'terms' && isTextValue(value)) {
+                    var termsId = resolveTermsId(value);
+                    if (termsId) {
+                        valueToSet = termsId;
+                    } else {
+                        // Try setText as fallback
+                        try {
+                            txn.setText({ fieldId: fieldId, text: String(value) });
+                            fieldSetResults.success.push(fieldId);
+                            return;
+                        } catch (textErr) {
+                            fieldSetResults.failed.push({ field: fieldId, reason: 'could not resolve terms', value: String(value).substring(0, 50) });
+                            return;
+                        }
                     }
                 }
                 // Convert checkbox fields to boolean

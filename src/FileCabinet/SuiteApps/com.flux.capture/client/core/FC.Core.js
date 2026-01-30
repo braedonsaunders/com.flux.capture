@@ -313,6 +313,9 @@
                     if (text.indexOf('login') !== -1 || text.indexOf('Login') !== -1) {
                         return self._handleSessionExpired('Session expired');
                     }
+                    // Log detailed error info for debugging
+                    console.error('[API] JSON parse failed. Length:', text.length, 'First 200 chars:', JSON.stringify(text.substring(0, 200)));
+                    console.error('[API] Parse error:', e.message);
                     throw new Error('Invalid JSON response: ' + text.substring(0, 100));
                 }
             }).then(function(data) {

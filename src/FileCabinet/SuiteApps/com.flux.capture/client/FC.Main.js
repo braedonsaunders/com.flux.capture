@@ -18,7 +18,7 @@
             }).length;
             UI.updateBadge(reviewCount);
         }).catch(function(err) {
-            FCDebug.log('[FC.Main] Failed to update review badge:', err);
+            console.error('[FC.Main] Failed to update review badge:', err);
         });
     }
 
