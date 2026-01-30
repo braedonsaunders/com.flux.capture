@@ -567,7 +567,7 @@
                 'duedate': ['dueDate', 'duedate'],
                 'currency': ['currency'],
                 'memo': ['memo', 'description'],
-                'terms': ['paymentTerms', 'terms']
+                'terms': ['termsId', 'paymentTerms', 'terms']
             };
 
             // Populate bodyFields from extractedData using mappings
