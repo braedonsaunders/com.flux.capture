@@ -9,22 +9,26 @@
     // ==========================================
     // KEYBOARD SHORTCUTS CONFIGURATION
     // ==========================================
+    // Note: Uses e.code (KeyA, KeyS) for letter keys, e.key for special keys (Escape, ArrowRight)
     var SHORTCUTS = {
-        'Tab': { action: 'nextField', description: 'Next field' },
-        'Shift+Tab': { action: 'prevField', description: 'Previous field' },
+        // Letter keys - use e.code format
         'KeyA': { action: 'approve', description: 'Create transaction' },
         'Shift+KeyA': { action: 'submitApproval', description: 'Submit for approval', shift: true },
         'KeyR': { action: 'reject', description: 'Reject document' },
         'KeyS': { action: 'skip', description: 'Skip to next' },
         'KeyX': { action: 'reprocess', description: 'Reprocess document' },
         'KeyV': { action: 'splitView', description: 'Toggle split view' },
+        // Special keys - use e.key format (as fallback)
         'Escape': { action: 'back', description: 'Back to documents' },
         'ArrowRight': { action: 'nextDoc', description: 'Next document' },
         'ArrowLeft': { action: 'prevDoc', description: 'Previous document' },
-        'Slash': { action: 'help', description: 'Show shortcuts' },
         'Equal': { action: 'zoomIn', description: 'Zoom in' },
         'Minus': { action: 'zoomOut', description: 'Zoom out' },
-        'Digit0': { action: 'zoomReset', description: 'Reset zoom', ctrl: true }
+        'Digit0': { action: 'zoomReset', description: 'Reset zoom', ctrl: true },
+        // Additional key mappings for different keyboard layouts
+        '+': { action: 'zoomIn', description: 'Zoom in' },
+        '-': { action: 'zoomOut', description: 'Zoom out' },
+        '0': { action: 'zoomReset', description: 'Reset zoom', ctrl: true }
     };
 
     // ==========================================
@@ -1225,21 +1229,24 @@
             this._keyboardShortcutsBound = true;
 
             document.addEventListener('keydown', function(e) {
-                // Don't trigger shortcuts when typing in inputs
-                if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA' || e.target.tagName === 'SELECT') {
+                // Don't trigger shortcuts when typing in inputs (except for specific shortcuts)
+                var isInInput = e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA' || e.target.tagName === 'SELECT';
+                var isContentEditable = e.target.isContentEditable;
+                
+                if (isInInput || isContentEditable) {
                     // Allow specific shortcuts even in inputs
                     if (e.key === 'Escape') {
                         e.target.blur();
                         return;
                     }
                     // Ctrl+S to save even in inputs
-                    if ((e.ctrlKey || e.metaKey) && e.key === 's') {
+                    if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') {
                         e.preventDefault();
                         self.saveChanges();
                         return;
                     }
                     // Cmd/Ctrl+Shift+V for Quick Assign palette (when in an input field)
-                    if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key === 'v') {
+                    if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key.toLowerCase() === 'v') {
                         e.preventDefault();
                         self.openQuickAssignPalette(e.target);
                         return;
@@ -1247,38 +1254,45 @@
                     return;
                 }
 
-                var key = e.code || e.key;
-
                 // Handle ? for help (Shift+/)
-                if ((e.key === '?' || (e.shiftKey && key === 'Slash'))) {
+                if (e.key === '?' || e.key === '/') {
                     e.preventDefault();
                     self.showShortcutsHelp();
                     return;
                 }
 
-                // Check for Shift+Key combinations first
+                // Try to find a matching shortcut using both e.code and e.key
+                var code = e.code || '';
+                var key = e.key || '';
                 var shortcut = null;
-                if (e.shiftKey && SHORTCUTS['Shift+' + key]) {
-                    shortcut = SHORTCUTS['Shift+' + key];
-                } else if (!e.shiftKey) {
-                    shortcut = SHORTCUTS[key];
+
+                // Check for Shift+Key combinations first
+                if (e.shiftKey) {
+                    shortcut = SHORTCUTS['Shift+' + code] || SHORTCUTS['Shift+' + key];
                 }
+                
+                // If no shift combo found, check regular shortcuts (only if shift not pressed, or if shift is required)
+                if (!shortcut && !e.shiftKey) {
+                    shortcut = SHORTCUTS[code] || SHORTCUTS[key];
+                }
+                
                 if (!shortcut) return;
 
                 // Check modifier requirements
                 if (shortcut.ctrl && !e.ctrlKey && !e.metaKey) return;
                 if (shortcut.shift && !e.shiftKey) return;
 
-                // Don't trigger action shortcuts if ctrl is pressed (except for zoom reset)
-                if (e.ctrlKey && !shortcut.ctrl && key !== 'Digit0') {
-                    return;
+                // Don't trigger letter shortcuts if ctrl/cmd is pressed (except for zoom reset)
+                if ((e.ctrlKey || e.metaKey) && !shortcut.ctrl) {
+                    // Allow Ctrl+0 for zoom reset
+                    if (code !== 'Digit0' && key !== '0') {
+                        return;
+                    }
                 }
 
                 e.preventDefault();
 
                 switch (shortcut.action) {
-                    case 'nextField': self.focusNextField(1); break;
-                    case 'prevField': self.focusNextField(-1); break;
                     case 'approve':
                         // In 'submit_for_approval' mode, 'A' submits for approval
                         // Otherwise, 'A' creates transaction (approved)

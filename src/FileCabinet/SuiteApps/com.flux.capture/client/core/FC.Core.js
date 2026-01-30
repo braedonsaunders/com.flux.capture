@@ -870,20 +870,23 @@
                     '<div class="shortcuts-grid">' +
                         '<div class="shortcut-section">' +
                             '<div class="shortcut-section-title">Actions</div>' +
-                            '<div class="shortcut-item"><kbd>A</kbd> <span>Approve & create</span></div>' +
+                            '<div class="shortcut-item"><kbd>A</kbd> <span>Create transaction</span></div>' +
+                            '<div class="shortcut-item"><kbd>Shift+A</kbd> <span>Submit for approval</span></div>' +
                             '<div class="shortcut-item"><kbd>R</kbd> <span>Reject document</span></div>' +
                             '<div class="shortcut-item"><kbd>S</kbd> <span>Skip to next</span></div>' +
-                            '<div class="shortcut-item"><kbd>Esc</kbd> <span>Back to documents</span></div>' +
+                            '<div class="shortcut-item"><kbd>X</kbd> <span>Reprocess document</span></div>' +
                         '</div>' +
                         '<div class="shortcut-section">' +
                             '<div class="shortcut-section-title">Navigation</div>' +
                             '<div class="shortcut-item"><kbd>←</kbd> <span>Previous document</span></div>' +
                             '<div class="shortcut-item"><kbd>→</kbd> <span>Next document</span></div>' +
+                            '<div class="shortcut-item"><kbd>Esc</kbd> <span>Back to documents</span></div>' +
                             '<div class="shortcut-item"><kbd>Tab</kbd> <span>Next field</span></div>' +
                             '<div class="shortcut-item"><kbd>Shift+Tab</kbd> <span>Previous field</span></div>' +
                         '</div>' +
                         '<div class="shortcut-section">' +
-                            '<div class="shortcut-section-title">Preview</div>' +
+                            '<div class="shortcut-section-title">View</div>' +
+                            '<div class="shortcut-item"><kbd>V</kbd> <span>Toggle split view</span></div>' +
                             '<div class="shortcut-item"><kbd>+</kbd> <span>Zoom in</span></div>' +
                             '<div class="shortcut-item"><kbd>-</kbd> <span>Zoom out</span></div>' +
                             '<div class="shortcut-item"><kbd>Ctrl+0</kbd> <span>Reset zoom</span></div>' +
@@ -892,7 +895,7 @@
                             '<div class="shortcut-section-title">Other</div>' +
                             '<div class="shortcut-item"><kbd>Ctrl+S</kbd> <span>Save changes</span></div>' +
                             '<div class="shortcut-item"><kbd>Ctrl+Shift+V</kbd> <span>Quick assign palette</span></div>' +
-                            '<div class="shortcut-item"><kbd>?</kbd> <span>Show this help</span></div>' +
+                            '<div class="shortcut-item"><kbd>?</kbd> or <kbd>/</kbd> <span>Show this help</span></div>' +
                         '</div>' +
                     '</div>' +
                     '<button class="btn btn-primary btn-block" onclick="this.closest(\'.shortcuts-modal\').remove()">Got it!</button>' +
