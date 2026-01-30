@@ -131,6 +131,7 @@
             this.docId = params && params.docId ? params.docId : null;
             this.changes = {};
             this.formData = null;
+            this.sublistData = {};  // Reset sublist data
             this.hasUnsavedChanges = false;
             this.zoom = 1;
             this.rotation = 0;
@@ -449,6 +450,7 @@
             this.rotation = 0;
             this.currentPage = 1;
             this.lineItems = [];
+            this.sublistData = {};  // Reset sublist data for new document
             this.pdfDoc = null;
             this.pdfPage = null;
             this.imageElement = null;
