@@ -4587,6 +4587,9 @@ define([
             formData._meta.lastSaved = new Date().toISOString();
             formData._meta.savedBy = runtime.getCurrentUser().id;
 
+            // Debug: log tranid from incoming formData
+            log.debug('updateDocument.tranid', 'tranid in formData: ' + JSON.stringify(formData.bodyFields && formData.bodyFields.tranid));
+
             var values = {
                 'custrecord_flux_modified_date': new Date(),
                 'custrecord_flux_form_data': JSON.stringify(formData)
@@ -4730,6 +4733,9 @@ define([
 
             // Load form data for validation and transaction creation
             var formData = JSON.parse(docRecord.getValue('custrecord_flux_form_data') || 'null');
+
+            // Debug: log tranid from loaded formData
+            log.debug('approveDocument.formData', 'tranid from loaded formData: ' + (formData && formData.bodyFields ? JSON.stringify(formData.bodyFields.tranid) : 'no formData'));
 
             // Fallback to legacy fields if no formData
             if (!formData) {
@@ -6015,8 +6021,18 @@ define([
 
         // Helper to set body field value safely
         function setBodyField(txn, fieldId, value) {
-            if (!fieldId || value === undefined || value === null || value === '') return;
+            if (!fieldId || value === undefined || value === null || value === '') {
+                if (fieldId === 'tranid') {
+                    log.debug('setBodyField.tranid', 'SKIPPED - value is empty: ' + JSON.stringify(value));
+                }
+                return;
+            }
             if (shouldSkipBodyField(fieldId)) return;
+
+            // Debug tranid
+            if (fieldId === 'tranid') {
+                log.debug('setBodyField.tranid', 'Setting tranid to: ' + JSON.stringify(value));
+            }
 
             try {
                 var valueToSet = value;
@@ -6056,6 +6072,10 @@ define([
         // Apply body fields in an order that preserves user overrides
         function setBodyFieldsInOrder(txn, fields) {
             var fieldMap = buildNormalizedFieldMap(fields, shouldSkipForNormalize);
+
+            // Debug: log tranid value
+            log.debug('setBodyFieldsInOrder.tranid', 'tranid in fieldMap: ' + JSON.stringify(fieldMap.tranid) + ', raw: ' + JSON.stringify(fields.tranid));
+
             var firstFields = ['entity'];
             var lastFields = [
                 'tranid',  // Invoice/reference number - set last to prevent sourcing override
