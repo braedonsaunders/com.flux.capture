@@ -301,6 +301,12 @@
             }
 
             return response.text().then(function(text) {
+                // Check for empty response (server error, timeout, or crash)
+                if (!text || text.trim() === '') {
+                    console.error('[API] Empty response received. Status:', response.status, 'URL:', response.url);
+                    throw new Error('Server returned empty response. The operation may have timed out or encountered an error. Please check the NetSuite execution log.');
+                }
+                
                 // Check if response is HTML (login redirect)
                 if (text.trim().startsWith('<!DOCTYPE') || text.trim().startsWith('<html')) {
                     return self._handleSessionExpired('Session expired');
