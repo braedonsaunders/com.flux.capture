@@ -6531,6 +6531,18 @@ define([
             }
         }
 
+        // Log field set results and key field values before save
+        log.debug('createTransaction.preSave', {
+            transactionType: transactionType,
+            entity: txnRecord.getValue('entity'),
+            trandate: txnRecord.getValue('trandate'),
+            tranid: txnRecord.getValue('tranid'),
+            subsidiary: txnRecord.getValue('subsidiary'),
+            successCount: fieldSetResults.success.length,
+            failedCount: fieldSetResults.failed.length,
+            failed: JSON.stringify(fieldSetResults.failed).substring(0, 500)
+        });
+
         // Try to save and capture detailed error
         try {
             var savedTransactionId = txnRecord.save();
