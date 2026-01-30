@@ -505,7 +505,19 @@ define([
             log.error('PUT Error', e);
             result = Response.error('PUT_FAILED', e.message);
         }
-        return JSON.stringify(result);
+        
+        // Safeguard: ensure we always return valid JSON
+        if (!result) {
+            log.error('PUT Empty Result', 'Action: ' + (context && context.action));
+            result = Response.error('EMPTY_RESULT', 'No result returned from action handler');
+        }
+        
+        try {
+            return JSON.stringify(result);
+        } catch (jsonErr) {
+            log.error('PUT JSON Error', jsonErr);
+            return JSON.stringify(Response.error('JSON_ERROR', 'Failed to serialize response: ' + jsonErr.message));
+        }
     }
 
     function _delete(context) {
@@ -4968,6 +4980,14 @@ define([
                 });
             }
 
+            log.audit('approveDocument.success', {
+                documentId: documentId,
+                transactionId: transactionId,
+                transactionType: actualTransactionType,
+                fileAttached: fileAttached,
+                documentDeleted: documentDeleted
+            });
+            
             return Response.success({
                 documentId: documentId,
                 transactionId: transactionId,
@@ -5295,6 +5315,8 @@ define([
     }
 
     // Normalize field map (case-insensitive) and skip internal/display fields
+    // Priority: [scriptid=xxx] wrapped (3) > UPPERCASE from DOM (2) > lowercase from extraction (1)
+    // First non-empty value at each priority level wins (user edits preserved)
     function buildNormalizedFieldMap(fields, skipFn) {
         var map = {};
         var priorityMap = {};
@@ -5309,12 +5331,15 @@ define([
             if (normalizedId.indexOf('_') === 0) return;
             var normalized = normalizedId.toLowerCase();
             var isWrapped = fieldId.indexOf('[') === 0 && fieldId.indexOf(']') === fieldId.length - 1;
-            var priority = isWrapped ? 2 : 1;
+            // Priority: wrapped fields (3) > UPPERCASE DOM fields (2) > lowercase extraction fields (1)
+            var isUppercase = fieldId === fieldId.toUpperCase() && fieldId !== fieldId.toLowerCase();
+            var priority = isWrapped ? 3 : (isUppercase ? 2 : 1);
             var value = fields[fieldId];
             var existingValue = map[normalized];
             var existingPriority = priorityMap[normalized] || 0;
-            if (isEmptyValue(existingValue) ||
-                (!isEmptyValue(value) && priority >= existingPriority)) {
+            // Only replace if: existing is empty, OR new has strictly higher priority
+            // This ensures first value at each priority level wins (user edits preserved)
+            if (isEmptyValue(existingValue) || priority > existingPriority) {
                 map[normalized] = value;
                 priorityMap[normalized] = priority;
             }
