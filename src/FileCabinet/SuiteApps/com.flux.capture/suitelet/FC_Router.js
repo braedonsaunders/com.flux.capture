@@ -3432,6 +3432,16 @@ define([
                         updateValues['custrecord_flux_currency'] = resolvedCurrency;
                     }
                 }
+                
+                // Resolve payment terms to internal ID during extraction
+                if (extraction.fields && extraction.fields.paymentTerms) {
+                    var resolvedTermsId = resolvePaymentTermsId(extraction.fields.paymentTerms);
+                    if (resolvedTermsId) {
+                        // Store the resolved ID - will be used for transaction creation
+                        extraction.fields.termsId = resolvedTermsId;
+                        log.debug('extractionComplete', 'Resolved terms "' + extraction.fields.paymentTerms + '" to ID: ' + resolvedTermsId);
+                    }
+                }
 
                 // Store ALL extracted data as JSON for flexible field mapping
                 // This allows mapping to any NetSuite field configured in form layout
@@ -4584,6 +4594,104 @@ define([
         return currencyCache[codeUpper] || null;
     }
 
+    // Cache for payment terms lookup
+    var termsCache = null;
+
+    /**
+     * Resolve payment terms text to NetSuite internal ID
+     * Called during extraction to convert "Net 30 days" -> internal ID
+     * @param {string} termsVal - Terms text (e.g., "Net 30", "Net 30 days", "Due on Receipt")
+     * @returns {number|null} - NetSuite internal ID or null if not found
+     */
+    function resolvePaymentTermsId(termsVal) {
+        if (!termsVal) return null;
+
+        // If already a numeric ID, return it
+        if (typeof termsVal === 'number') {
+            return termsVal;
+        }
+
+        var termsStr = String(termsVal).trim();
+        if (!termsStr) return null;
+
+        // If it's a numeric string, it's already an ID
+        if (/^\d+$/.test(termsStr)) {
+            return parseInt(termsStr, 10);
+        }
+
+        // Normalize: remove "days" suffix, extra spaces
+        var normalizedTerms = termsStr.toLowerCase().replace(/\s*days?\s*$/i, '').trim();
+
+        // Build cache if not already built
+        if (!termsCache) {
+            termsCache = {};
+            try {
+                var termSearch = search.create({
+                    type: 'term',
+                    columns: ['internalid', 'name']
+                });
+
+                termSearch.run().each(function(result) {
+                    var id = result.getValue('internalid');
+                    var name = result.getValue('name');
+
+                    if (name && id) {
+                        var nameLower = name.toLowerCase();
+                        termsCache[nameLower] = parseInt(id, 10);
+                        // Also cache without "days" suffix
+                        var withoutDays = nameLower.replace(/\s*days?\s*$/i, '').trim();
+                        if (withoutDays !== nameLower) {
+                            termsCache[withoutDays] = parseInt(id, 10);
+                        }
+                    }
+                    return true;
+                });
+            } catch (e) {
+                log.debug('resolvePaymentTermsId', 'Failed to build terms cache: ' + e.message);
+                termsCache = {};
+            }
+        }
+
+        // Try exact match first
+        if (termsCache[normalizedTerms]) {
+            return termsCache[normalizedTerms];
+        }
+
+        // Try with original text (in case normalization removed something important)
+        var originalLower = termsStr.toLowerCase();
+        if (termsCache[originalLower]) {
+            return termsCache[originalLower];
+        }
+
+        // Try extracting just the number (e.g., "30" from "Net 30 days")
+        var numMatch = termsStr.match(/\d+/);
+        if (numMatch) {
+            var num = numMatch[0];
+            // Look for "net X" pattern in cache
+            var netPattern = 'net ' + num;
+            if (termsCache[netPattern]) {
+                return termsCache[netPattern];
+            }
+            // Try just the number
+            if (termsCache[num]) {
+                return termsCache[num];
+            }
+        }
+
+        // Check for common patterns
+        if (normalizedTerms.indexOf('receipt') !== -1 || normalizedTerms.indexOf('due on') !== -1) {
+            // Look for "Due on Receipt" or similar
+            for (var key in termsCache) {
+                if (key.indexOf('receipt') !== -1) {
+                    return termsCache[key];
+                }
+            }
+        }
+
+        log.debug('resolvePaymentTermsId', 'Could not resolve terms "' + termsStr + '" - no match in cache');
+        return null;
+    }
+
     function updateDocument(context) {
         var documentId = context.documentId;
         var formData = context.formData;
@@ -4875,8 +4983,8 @@ define([
                                     field: 'workflow',
                                     message: 'Workflow not triggered. Set an internal ID or script ID for "' + workflowConfig.workflowId + '".'
                                 });
-                                return;
-                            }
+                                // Don't return - continue with the rest of the approval process
+                            } else {
 
                             log.debug('approveDocument.workflow', 'Triggering workflow action: ' + JSON.stringify({
                                 recordType: nsRecordType,
@@ -4894,6 +5002,7 @@ define([
 
                             workflowTriggered = true;
                             log.audit('approveDocument.workflow', 'Successfully triggered workflow action for transaction ' + transactionId);
+                            }
                         } catch (wfErr) {
                             log.error('approveDocument.workflow', 'Failed to trigger workflow: ' + wfErr.message);
                             warnings.push({
@@ -5834,10 +5943,14 @@ define([
             if (lookupCache[cacheKey] !== undefined) return lookupCache[cacheKey];
 
             try {
+                // Normalize: "Net 30 days" -> "Net 30", "30 days" -> "30"
+                var normalizedText = String(textValue).trim();
+                var withoutDays = normalizedText.replace(/\s*days?\s*$/i, '').trim();
+                
                 // Try exact match first
                 var termSearch = search.create({
                     type: 'term',
-                    filters: [['name', 'is', textValue]],
+                    filters: [['name', 'is', normalizedText]],
                     columns: ['internalid', 'name']
                 });
                 var results = termSearch.run().getRange({ start: 0, end: 1 });
@@ -5847,10 +5960,25 @@ define([
                     return termId;
                 }
 
-                // Try contains search
+                // Try without "days" suffix
+                if (withoutDays !== normalizedText) {
+                    termSearch = search.create({
+                        type: 'term',
+                        filters: [['name', 'is', withoutDays]],
+                        columns: ['internalid', 'name']
+                    });
+                    results = termSearch.run().getRange({ start: 0, end: 1 });
+                    if (results && results.length > 0) {
+                        var termId = results[0].getValue('internalid');
+                        lookupCache[cacheKey] = termId;
+                        return termId;
+                    }
+                }
+
+                // Try startswith search
                 termSearch = search.create({
                     type: 'term',
-                    filters: [['name', 'contains', textValue]],
+                    filters: [['name', 'startswith', normalizedText]],
                     columns: ['internalid', 'name']
                 });
                 results = termSearch.run().getRange({ start: 0, end: 5 });
@@ -5858,6 +5986,46 @@ define([
                     var termId = results[0].getValue('internalid');
                     lookupCache[cacheKey] = termId;
                     return termId;
+                }
+
+                // Try contains search
+                termSearch = search.create({
+                    type: 'term',
+                    filters: [['name', 'contains', withoutDays]],
+                    columns: ['internalid', 'name']
+                });
+                results = termSearch.run().getRange({ start: 0, end: 5 });
+                if (results && results.length > 0) {
+                    var termId = results[0].getValue('internalid');
+                    lookupCache[cacheKey] = termId;
+                    return termId;
+                }
+                
+                // Try extracting just the number (e.g., "30" from "Net 30 days")
+                var numMatch = normalizedText.match(/\d+/);
+                if (numMatch) {
+                    var numStr = numMatch[0];
+                    termSearch = search.create({
+                        type: 'term',
+                        filters: [['name', 'contains', numStr]],
+                        columns: ['internalid', 'name']
+                    });
+                    results = termSearch.run().getRange({ start: 0, end: 10 });
+                    // Find the best match - prefer "Net 30" over others
+                    for (var i = 0; i < results.length; i++) {
+                        var termName = results[i].getValue('name');
+                        if (termName && termName.toLowerCase().indexOf('net') !== -1) {
+                            var termId = results[i].getValue('internalid');
+                            lookupCache[cacheKey] = termId;
+                            return termId;
+                        }
+                    }
+                    // If no "Net" match, take the first result
+                    if (results && results.length > 0) {
+                        var termId = results[0].getValue('internalid');
+                        lookupCache[cacheKey] = termId;
+                        return termId;
+                    }
                 }
             } catch (e) {
                 log.debug('resolveTermsId', 'Could not resolve terms "' + textValue + '": ' + e.message);
