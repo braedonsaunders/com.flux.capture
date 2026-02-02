@@ -552,10 +552,16 @@
          */
         initializeFormData: function() {
             var doc = this.data;
+            var self = this;
 
             // If formData exists from server, use it
             if (doc.formData && typeof doc.formData === 'object') {
                 this.formData = doc.formData;
+                if (this.formFields && this.formFields.formInfo && this.formFields.formInfo.id) {
+                    this.formData._meta = this.formData._meta || {};
+                    this.formData._meta.formId = this.formFields.formInfo.id;
+                }
+                this.stripBodyAccountIfLineLevel(this.formData);
                 FCDebug.log('[FormData] Loaded from server:', this.formData);
                 return;
             }
@@ -563,6 +569,7 @@
             // Otherwise, initialize from extractedData and document fields
             var extractedData = doc.extractedData || {};
             var bodyFields = {};
+            var fieldContext = this.getFieldContextMaps();
 
             // Map extracted/document fields to NS field IDs
             // These are the common mappings between our extraction and NS fields
@@ -600,16 +607,24 @@
             schemaFields.forEach(function(fieldDef) {
                 var fieldId = fieldDef.id;
                 if (!fieldId) return;
+                var normalizedFieldId = self.normalizeFieldId(fieldId).toLowerCase();
+                var isAmbiguous = fieldContext.ambiguous[normalizedFieldId];
 
                 // Skip if already populated by the mappings above
                 if (bodyFields[fieldId] !== undefined && bodyFields[fieldId] !== '') return;
 
                 // Check extractedData for this field (try exact match and lowercase)
-                var value = extractedData[fieldId] || extractedData[fieldId.toLowerCase()];
+                var value = extractedData[fieldId] || extractedData[normalizedFieldId];
+                var valueFromExtracted = value !== undefined && value !== null && value !== '';
 
                 // Also check doc-level fields
-                if (value === undefined || value === null || value === '') {
-                    value = doc[fieldId] || doc[fieldId.toLowerCase()];
+                if (!valueFromExtracted) {
+                    value = doc[fieldId] || doc[normalizedFieldId];
+                }
+
+                // Avoid auto-populating ambiguous fields from extractedData
+                if (valueFromExtracted && isAmbiguous) {
+                    return;
                 }
 
                 if (value !== undefined && value !== null && value !== '') {
@@ -629,6 +644,9 @@
             Object.keys(extractedData).forEach(function(key) {
                 // Skip internal/meta fields and display fields
                 if (key.indexOf('_') === 0 || key.indexOf('_display') !== -1) return;
+                var normalizedKey = self.normalizeFieldId(key).toLowerCase();
+                // Skip keys that belong to body schema or any sublist schema
+                if (fieldContext.body[normalizedKey] || fieldContext.sublist[normalizedKey]) return;
                 // Skip if already set
                 if (bodyFields[key] !== undefined && bodyFields[key] !== '') return;
 
@@ -691,7 +709,8 @@
                 _meta: {
                     transactionType: this.transactionType,
                     initializedFrom: 'extractedData',
-                    initializedAt: new Date().toISOString()
+                    initializedAt: new Date().toISOString(),
+                    formId: (this.formFields && this.formFields.formInfo && this.formFields.formInfo.id) || null
                 }
             };
 
@@ -706,6 +725,30 @@
             var self = this;
             var bodyFields = {};
             var sublists = {};
+            var fieldContext = this.getFieldContextMaps();
+            var explicitBodyFields = {};
+
+            function normalizeBaseFieldId(fieldId) {
+                if (!fieldId) return '';
+                var baseId = String(fieldId);
+                if (baseId.toLowerCase().indexOf('_display') === baseId.length - 8) {
+                    baseId = baseId.slice(0, -8);
+                }
+                return self.normalizeFieldId(baseId).toLowerCase();
+            }
+
+            function markExplicit(fieldId) {
+                var normalized = normalizeBaseFieldId(fieldId);
+                if (normalized) explicitBodyFields[normalized] = true;
+            }
+
+            function shouldIncludeBodyField(fieldId) {
+                var normalized = normalizeBaseFieldId(fieldId);
+                if (!normalized) return false;
+                if (fieldContext.sublist[normalized] && !fieldContext.body[normalized]) return false;
+                if (fieldContext.ambiguous[normalized] && !explicitBodyFields[normalized]) return false;
+                return true;
+            }
 
             // Collect body fields from extraction panel
             var panel = el('#extraction-panel');
@@ -727,11 +770,12 @@
 
                     // Store the value
                     bodyFields[fieldId] = value;
+                    markExplicit(fieldId);
                 });
 
                 // Collect typeahead display values
                 // Priority: hidden input (ID) > display input (text for server-side resolution)
-                panel.querySelectorAll('.typeahead-select[data-field]').forEach(function(wrapper) {
+                panel.querySelectorAll('.typeahead-select.body-field-typeahead[data-field]').forEach(function(wrapper) {
                     var fieldId = wrapper.dataset.field;
                     var hiddenInput = wrapper.querySelector('input[type="hidden"]');
                     var displayInput = wrapper.querySelector('.typeahead-input');
@@ -739,14 +783,17 @@
                     if (hiddenInput && hiddenInput.value) {
                         // Use the ID from hidden input (preferred)
                         bodyFields[fieldId] = hiddenInput.value;
+                        markExplicit(fieldId);
                     } else if (displayInput && displayInput.value) {
                         // Hidden input is empty but display has text - use display value
                         // Server-side resolution will attempt to convert text to ID
                         bodyFields[fieldId] = displayInput.value;
+                        markExplicit(fieldId);
                     }
                     // Always capture display text for reference
                     if (displayInput && displayInput.value) {
                         bodyFields[fieldId + '_display'] = displayInput.value;
+                        markExplicit(fieldId + '_display');
                     }
                 });
             }
@@ -757,9 +804,11 @@
             var entityIdInput = el('#field-entityId');
             if (entityInput && entityInput.value) {
                 bodyFields.entity_display = entityInput.value;
+                markExplicit('entity_display');
             }
             if (entityIdInput && entityIdInput.value) {
                 bodyFields.entity = entityIdInput.value;
+                markExplicit('entity');
             }
 
             // Also check document-level data for entity (fallback if DOM not populated)
@@ -810,15 +859,21 @@
                     // Map change keys to bodyField keys
                     if (key === 'vendorName') {
                         bodyFields.entity_display = self.changes[key];
+                        markExplicit('entity_display');
                     } else if (key === 'vendorId') {
                         bodyFields.entity = self.changes[key];
+                        markExplicit('entity');
                     } else if (key === 'employeeName') {
                         bodyFields.entity_display = self.changes[key];
+                        markExplicit('entity_display');
                     } else if (key === 'employeeId') {
                         bodyFields.entity = self.changes[key];
+                        markExplicit('entity');
                     } else {
                         // For other changes, use as-is
+                        if (!shouldIncludeBodyField(key)) return;
                         bodyFields[key] = self.changes[key];
+                        markExplicit(key);
                     }
                 });
             }
@@ -831,6 +886,7 @@
                     // Only use existing value if we didn't collect a value from DOM
                     if (bodyFields[key] === undefined || bodyFields[key] === '') {
                         if (existingFields[key] !== undefined && existingFields[key] !== '') {
+                            if (!shouldIncludeBodyField(key)) return;
                             bodyFields[key] = existingFields[key];
                         }
                     }
@@ -849,6 +905,7 @@
                 // Only use extracted value if DOM/formData didn't provide one
                 if (bodyFields[key] === undefined || bodyFields[key] === '') {
                     if (value !== undefined && value !== null && value !== '') {
+                        if (!shouldIncludeBodyField(key)) return;
                         bodyFields[key] = value;
                         // Also grab display value if available
                         if (extractedData[key + '_display']) {
@@ -858,6 +915,9 @@
                 }
             });
 
+            // Remove line-level account values from body fields if they collide
+            this.stripBodyAccountIfLineLevel({ bodyFields: bodyFields, sublists: sublists });
+
             // Update formData
             this.formData = this.formData || {};
             this.formData.bodyFields = bodyFields;
@@ -865,6 +925,9 @@
             this.formData._meta = this.formData._meta || {};
             this.formData._meta.transactionType = this.transactionType;
             this.formData._meta.collectedAt = new Date().toISOString();
+            if (this.formFields && this.formFields.formInfo && this.formFields.formInfo.id) {
+                this.formData._meta.formId = this.formFields.formInfo.id;
+            }
 
             // Debug logging
             console.log('[Flux] collectFormData - panel exists:', !!panel);
@@ -5762,6 +5825,86 @@
                 }
             }
             return cleaned.replace(/^['"]|['"]$/g, '');
+        },
+
+        // Build field context maps to separate body vs sublist fields
+        getFieldContextMaps: function() {
+            var formFields = this.formFields || {};
+            var body = {};
+            var sublist = {};
+            var ambiguous = {};
+            var self = this;
+
+            (formFields.bodyFields || []).forEach(function(field) {
+                var fieldId = field && field.id;
+                var normalized = self.normalizeFieldId(fieldId);
+                if (!normalized) return;
+                body[normalized.toLowerCase()] = true;
+            });
+
+            (formFields.sublists || []).forEach(function(sublistDef) {
+                (sublistDef.fields || []).forEach(function(field) {
+                    var fieldId = field && field.id;
+                    var normalized = self.normalizeFieldId(fieldId);
+                    if (!normalized) return;
+                    sublist[normalized.toLowerCase()] = true;
+                });
+            });
+
+            Object.keys(body).forEach(function(fid) {
+                if (sublist[fid]) ambiguous[fid] = true;
+            });
+
+            return { body: body, sublist: sublist, ambiguous: ambiguous };
+        },
+
+        // Remove body-level account when it mirrors a line-level account
+        stripBodyAccountIfLineLevel: function(formData) {
+            if (!formData || !formData.bodyFields) return;
+            if (this.transactionType !== 'vendorbill' && this.transactionType !== 'vendorcredit') return;
+
+            var bodyAccount = formData.bodyFields.account;
+            var bodyAccountDisplay = formData.bodyFields.account_display;
+            if (bodyAccount === undefined && bodyAccountDisplay === undefined) return;
+
+            var bodyAccountStr = bodyAccount !== undefined && bodyAccount !== null ? String(bodyAccount) : '';
+            var bodyDisplayStr = bodyAccountDisplay ? String(bodyAccountDisplay) : '';
+            if (!bodyAccountStr && !bodyDisplayStr) return;
+
+            var sublists = formData.sublists || {};
+            var match = false;
+
+            function valueMatches(val) {
+                if (val === undefined || val === null || val === '') return false;
+                var strVal = String(val);
+                return (bodyAccountStr && strVal === bodyAccountStr) || (bodyDisplayStr && strVal === bodyDisplayStr);
+            }
+
+            Object.keys(sublists).forEach(function(sublistId) {
+                if (match) return;
+                var lines = sublists[sublistId];
+                if (!Array.isArray(lines)) return;
+                lines.forEach(function(line) {
+                    if (match || !line) return;
+                    var keys = [
+                        'account', 'account_display',
+                        'expenseaccount', 'expenseaccount_display',
+                        'category', 'category_display',
+                        'expensecategory', 'expensecategory_display'
+                    ];
+                    for (var i = 0; i < keys.length; i++) {
+                        if (valueMatches(line[keys[i]])) {
+                            match = true;
+                            break;
+                        }
+                    }
+                });
+            });
+
+            if (match) {
+                delete formData.bodyFields.account;
+                delete formData.bodyFields.account_display;
+            }
         },
 
         // Normalize a single sublist line to canonical field IDs
