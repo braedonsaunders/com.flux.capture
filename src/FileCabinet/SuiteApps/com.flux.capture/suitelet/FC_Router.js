@@ -2298,18 +2298,8 @@ define([
             var bodyFields = [];
             var customBodyFields = [];
 
-            // Fields we want to include (comprehensive list)
-            var relevantBodyFields = ['entity', 'trandate', 'duedate', 'tranid', 'memo', 'currency',
-                                      'terms', 'approvalstatus', 'subsidiary', 'department', 'class',
-                                      'location', 'account', 'postingperiod', 'exchangerate', 'nexus',
-                                      'total', 'usertotal', 'taxtotal', 'discountitem', 'discountrate',
-                                      'custform', 'customform', 'createdfrom', 'billaddress', 'billaddresslist'];
-
             bodyFieldIds.forEach(function(fieldId) {
                 var isCustom = fieldId.indexOf('custbody') === 0;
-                if (!isCustom && relevantBodyFields.indexOf(fieldId) === -1) {
-                    return; // Skip non-relevant standard fields
-                }
 
                 try {
                     var field = tempRecord.getField({ fieldId: fieldId });
@@ -5493,20 +5483,18 @@ define([
         });
 
         // Load form schema to get mandatory field definitions
-        var FormSchemaModule = null;
-        try {
-            FormSchemaModule = require('./FC_FormSchemaExtractor');
-        } catch (e) {
-            log.debug('validateForTransaction', 'Could not load FormSchemaExtractor: ' + e.message);
-        }
-
         var schema = null;
-        if (FormSchemaModule && FormSchemaModule.getSchema) {
-            try {
-                schema = FormSchemaModule.getSchema(transactionType);
-            } catch (e) {
-                log.debug('validateForTransaction', 'Could not get schema: ' + e.message);
+        try {
+            if (FormSchemaExtractor && FormSchemaExtractor.extractFormSchema) {
+                var formId = (formData && formData._meta && formData._meta.formId) ||
+                    (bodyFields && (bodyFields.customform || bodyFields.customForm)) || null;
+                var schemaResult = FormSchemaExtractor.extractFormSchema(transactionType, { formId: formId });
+                if (schemaResult && schemaResult.success && schemaResult.data) {
+                    schema = schemaResult.data;
+                }
             }
+        } catch (e) {
+            log.debug('validateForTransaction', 'Could not load schema: ' + e.message);
         }
 
         // ===== SCHEMA-BASED MANDATORY FIELD VALIDATION =====
@@ -5796,6 +5784,8 @@ define([
         var bodyFields = formData.bodyFields || {};
         var sublists = formData.sublists || {};
         var txnRecord;
+        stripBodyAccountIfLineLevel(bodyFields, sublists);
+        var schemaMaps = buildSchemaMaps(transactionType, formData, bodyFields);
 
         // Skip during normalization (keep _display for resolution)
         function shouldSkipForNormalize(fieldId) {
@@ -5812,6 +5802,186 @@ define([
 
         function shouldSkipBodyField(fieldId) {
             return shouldSkipField(fieldId);
+        }
+
+        function stripBodyAccountIfLineLevel(bodyFieldsToClean, sublistsToCheck) {
+            if (!bodyFieldsToClean) return;
+            if (transactionType !== 'vendorbill' && transactionType !== 'vendorcredit') return;
+
+            var bodyAccount = bodyFieldsToClean.account;
+            var bodyAccountDisplay = bodyFieldsToClean.account_display;
+            if (bodyAccount === undefined && bodyAccountDisplay === undefined) return;
+
+            var bodyAccountStr = bodyAccount !== undefined && bodyAccount !== null ? String(bodyAccount) : '';
+            var bodyDisplayStr = bodyAccountDisplay ? String(bodyAccountDisplay) : '';
+            if (!bodyAccountStr && !bodyDisplayStr) return;
+
+            var matched = false;
+            var sublistsObj = sublistsToCheck || {};
+            Object.keys(sublistsObj).forEach(function(sublistId) {
+                if (matched) return;
+                var lines = sublistsObj[sublistId] || [];
+                if (!Array.isArray(lines)) return;
+                lines.forEach(function(line) {
+                    if (matched || !line) return;
+                    var keys = [
+                        'account', 'account_display',
+                        'expenseaccount', 'expenseaccount_display',
+                        'category', 'category_display',
+                        'expensecategory', 'expensecategory_display'
+                    ];
+                    for (var i = 0; i < keys.length; i++) {
+                        var val = line[keys[i]];
+                        if (val === undefined || val === null || val === '') continue;
+                        var strVal = String(val);
+                        if ((bodyAccountStr && strVal === bodyAccountStr) ||
+                            (bodyDisplayStr && strVal === bodyDisplayStr)) {
+                            matched = true;
+                            break;
+                        }
+                    }
+                });
+            });
+
+            if (matched) {
+                delete bodyFieldsToClean.account;
+                delete bodyFieldsToClean.account_display;
+                log.debug('createTransaction.stripBodyAccount', 'Removed body account matching line-level account');
+            }
+        }
+
+        function normalizeFieldType(fieldType) {
+            return String(fieldType || '').toLowerCase();
+        }
+
+        function isCheckboxType(fieldType) {
+            return fieldType === 'checkbox';
+        }
+
+        function isDateType(fieldType) {
+            return fieldType === 'date' || fieldType === 'datetime';
+        }
+
+        function isNumericType(fieldType) {
+            return fieldType === 'currency' || fieldType === 'float' || fieldType === 'integer' || fieldType === 'percent';
+        }
+
+        function isSelectType(fieldType) {
+            return fieldType === 'select' || fieldType === 'multiselect';
+        }
+
+        function isCheckboxFieldId(fieldId) {
+            if (!fieldId) return false;
+            var lowerFieldId = String(fieldId).toLowerCase();
+            // Heuristic fallback for unknown field types
+            if (lowerFieldId.match(/^is[a-z]/)) return true;
+            if (lowerFieldId.match(/able$/)) return true;
+            return false;
+        }
+
+        function isDateFieldId(fieldId) {
+            if (!fieldId) return false;
+            var lowerFieldId = String(fieldId).toLowerCase();
+            return lowerFieldId.match(/date$/);
+        }
+
+        function parseNumericValue(value) {
+            if (value === undefined || value === null || value === '') return null;
+            if (typeof value === 'number') return value;
+            var normalized = String(value).replace(/[^0-9.\-]/g, '');
+            if (!normalized) return null;
+            var parsed = parseFloat(normalized);
+            return isNaN(parsed) ? null : parsed;
+        }
+
+        function buildSchemaMaps(txnType, formDataObj, bodyFieldsObj) {
+            var schema = null;
+            var formId = null;
+            try {
+                formId = (formDataObj && formDataObj._meta && formDataObj._meta.formId) ||
+                    (bodyFieldsObj && (bodyFieldsObj.customform || bodyFieldsObj.customForm)) || null;
+            } catch (e) { /* ignore */ }
+
+            try {
+                if (FormSchemaExtractor && FormSchemaExtractor.extractFormSchema) {
+                    var schemaResult = FormSchemaExtractor.extractFormSchema(txnType, { formId: formId });
+                    if (schemaResult && schemaResult.success && schemaResult.data) {
+                        schema = schemaResult.data;
+                    }
+                }
+            } catch (e) {
+                log.debug('createTransaction.schema', 'Could not load schema: ' + e.message);
+            }
+
+            var bodyFieldIds = {};
+            var sublistFieldIds = {};
+            var bodyFieldTypes = {};
+            var sublistFieldTypes = {};
+            var ambiguousFieldIds = {};
+
+            if (schema && schema.bodyFields) {
+                schema.bodyFields.forEach(function(fieldDef) {
+                    var fieldId = fieldDef && fieldDef.id;
+                    var normalized = normalizeFieldId(fieldId).toLowerCase();
+                    if (!normalized) return;
+                    bodyFieldIds[normalized] = true;
+                    if (fieldDef.type) {
+                        bodyFieldTypes[normalized] = normalizeFieldType(fieldDef.type);
+                    }
+                });
+            }
+
+            if (schema && schema.sublists) {
+                schema.sublists.forEach(function(sl) {
+                    var sublistId = (sl && sl.id ? sl.id : '').toLowerCase();
+                    if (!sublistId) return;
+                    sublistFieldTypes[sublistId] = sublistFieldTypes[sublistId] || {};
+                    (sl.fields || []).forEach(function(fieldDef) {
+                        var fieldId = fieldDef && fieldDef.id;
+                        var normalized = normalizeFieldId(fieldId).toLowerCase();
+                        if (!normalized) return;
+                        sublistFieldIds[normalized] = true;
+                        if (fieldDef.type) {
+                            sublistFieldTypes[sublistId][normalized] = normalizeFieldType(fieldDef.type);
+                        }
+                    });
+                });
+            }
+
+            Object.keys(bodyFieldIds).forEach(function(fid) {
+                if (sublistFieldIds[fid]) ambiguousFieldIds[fid] = true;
+            });
+
+            return {
+                schema: schema,
+                formId: formId,
+                bodyFieldIds: bodyFieldIds,
+                sublistFieldIds: sublistFieldIds,
+                bodyFieldTypes: bodyFieldTypes,
+                sublistFieldTypes: sublistFieldTypes,
+                ambiguousFieldIds: ambiguousFieldIds
+            };
+        }
+
+        function shouldApplyBodyFieldBySchema(fieldId) {
+            if (!fieldId) return false;
+            if (!schemaMaps || !schemaMaps.bodyFieldIds) return true;
+            var normalized = normalizeFieldId(fieldId).toLowerCase();
+            if (!normalized) return true;
+            if (schemaMaps.bodyFieldIds[normalized]) return true;
+            if (schemaMaps.sublistFieldIds && schemaMaps.sublistFieldIds[normalized]) return false;
+            return true;
+        }
+
+        function shouldApplySublistFieldBySchema(sublistId, fieldId) {
+            if (!fieldId) return false;
+            if (!schemaMaps || !schemaMaps.sublistFieldTypes) return true;
+            var normalizedSublistId = (sublistId || '').toLowerCase();
+            var normalizedFieldId = normalizeFieldId(fieldId).toLowerCase();
+            if (!normalizedSublistId || !normalizedFieldId) return true;
+            var sublistMap = schemaMaps.sublistFieldTypes[normalizedSublistId];
+            if (!sublistMap) return true;
+            return sublistMap.hasOwnProperty(normalizedFieldId);
         }
 
 
@@ -5870,45 +6040,6 @@ define([
             }
 
             return fieldMap;
-        }
-
-        // Known date fields that need conversion (NOT postingperiod - that's a select field)
-        var dateFields = ['trandate', 'duedate', 'startdate', 'enddate', 'expensedate', 'expectedreceiptdate',
-                          'prepaiddate', 'amortizstartdate', 'amortizationenddate', 'shipdate', 'actualshipdate'];
-
-        // Known checkbox fields that need boolean conversion
-        // Extended list to cover all common checkbox fields for dynamic form handling
-        var checkboxFields = [
-            'paymenthold', 'landedcostperline', 'isbasecurrency',
-            // Line-level checkboxes
-            'isbillable', 'billable', 'istaxable', 'taxable',
-            'isclosed', 'isopen', 'isdropship', 'isspecialorder',
-            // Expense report fields
-            'reimbursable', 'corporatecardexpense', 'receipt',
-            // Vendor bill fields
-            'prepaid', 'amortize',
-            // Custom checkbox pattern detection handled below
-        ];
-
-        // Helper to check if a field is a date field
-        function isDateField(fieldId) {
-            if (!fieldId) return false;
-            var lowerFieldId = fieldId.toLowerCase();
-            // Check known date fields or fields ending in 'date'
-            return dateFields.indexOf(lowerFieldId) !== -1 || lowerFieldId.match(/date$/);
-        }
-
-        // Helper to check if a field is a checkbox field
-        function isCheckboxField(fieldId) {
-            if (!fieldId) return false;
-            var lowerFieldId = fieldId.toLowerCase();
-            // Check known checkbox fields
-            if (checkboxFields.indexOf(lowerFieldId) !== -1) return true;
-            // Dynamic detection: fields starting with 'is' (isbillable, istaxable, etc.)
-            if (lowerFieldId.match(/^is[a-z]/)) return true;
-            // Dynamic detection: fields ending with 'able' (billable, taxable, reimbursable, etc.)
-            if (lowerFieldId.match(/able$/)) return true;
-            return false;
         }
 
         function isAccountField(fieldId) {
@@ -6064,6 +6195,16 @@ define([
 
         // Cache for account resolution
         var accountCache = {};
+        var accountTypeCache = {};
+        var accountType = (search.Type && search.Type.ACCOUNT) ? search.Type.ACCOUNT : 'account';
+        var accountSubsidiaryId = null;
+        try {
+            if (bodyFields && bodyFields.subsidiary) {
+                accountSubsidiaryId = resolveRecordId('subsidiary', bodyFields.subsidiary);
+            }
+        } catch (e) {
+            // Ignore subsidiary resolution failures (fallback to global account search)
+        }
 
         // Resolve account value to internal ID
         // Accepts: internal ID, account number, or display text
@@ -6072,18 +6213,37 @@ define([
             var strValue = String(value).trim();
             if (!strValue) return null;
 
-            // Already an internal ID - use directly
-            if (/^\d+$/.test(strValue)) {
-                return strValue;
-            }
-
             // Check cache
-            var cacheKey = strValue.toLowerCase();
+            var cacheKey = strValue.toLowerCase() + (accountSubsidiaryId ? '|sub:' + accountSubsidiaryId : '');
             if (accountCache.hasOwnProperty(cacheKey)) {
                 return accountCache[cacheKey];
             }
 
-            var accountType = (search.Type && search.Type.ACCOUNT) ? search.Type.ACCOUNT : 'account';
+            // If numeric, verify it's a valid account (and subsidiary if applicable)
+            if (/^\d+$/.test(strValue)) {
+                var isValidId = true;
+                if (accountSubsidiaryId) {
+                    try {
+                        var lookup = search.lookupFields({
+                            type: accountType,
+                            id: strValue,
+                            columns: ['subsidiary']
+                        });
+                        if (lookup && Array.isArray(lookup.subsidiary) && lookup.subsidiary.length > 0) {
+                            isValidId = lookup.subsidiary.some(function(sub) {
+                                return String(sub.value) === String(accountSubsidiaryId);
+                            });
+                        }
+                    } catch (e) {
+                        isValidId = false;
+                    }
+                }
+                if (isValidId) {
+                    accountCache[cacheKey] = strValue;
+                    return strValue;
+                }
+                // Fall through and try to resolve by account number/name
+            }
 
             try {
                 // Parse "1234 - Name" or "1234 : Name" format
@@ -6115,11 +6275,25 @@ define([
 
                 for (var i = 0; i < filters.length; i++) {
                     try {
+                        var baseFilter = filters[i];
+                        var filterWithSubsidiary = baseFilter;
+                        if (accountSubsidiaryId) {
+                            filterWithSubsidiary = baseFilter.slice();
+                            filterWithSubsidiary.push('AND', ['subsidiary', 'anyof', accountSubsidiaryId]);
+                        }
                         var results = search.create({
                             type: accountType,
-                            filters: filters[i],
+                            filters: filterWithSubsidiary,
                             columns: ['internalid', 'name', 'number']
                         }).run().getRange({ start: 0, end: 5 });
+
+                        if ((!results || results.length === 0) && accountSubsidiaryId) {
+                            results = search.create({
+                                type: accountType,
+                                filters: baseFilter,
+                                columns: ['internalid', 'name', 'number']
+                            }).run().getRange({ start: 0, end: 5 });
+                        }
 
                         if (results && results.length > 0) {
                             // If multiple results, prefer exact number match
@@ -6148,6 +6322,34 @@ define([
 
             accountCache[cacheKey] = null;
             return null;
+        }
+
+        function isApAccountId(accountId) {
+            if (!accountId) return false;
+            var cacheKey = String(accountId);
+            if (accountTypeCache.hasOwnProperty(cacheKey)) {
+                return accountTypeCache[cacheKey];
+            }
+            var isAp = false;
+            try {
+                var lookup = search.lookupFields({
+                    type: accountType,
+                    id: accountId,
+                    columns: ['accttype']
+                });
+                var acctType = lookup && lookup.accttype;
+                if (Array.isArray(acctType) && acctType.length > 0) {
+                    acctType = acctType[0].value || acctType[0].text;
+                }
+                var acctTypeStr = String(acctType || '').toLowerCase();
+                if (acctTypeStr.indexOf('payable') !== -1 || acctTypeStr === 'acctpay') {
+                    isAp = true;
+                }
+            } catch (e) {
+                // Ignore lookup errors and treat as non-AP
+            }
+            accountTypeCache[cacheKey] = isAp;
+            return isAp;
         }
 
         // Generic helper to resolve text value to internal ID for any record type
@@ -6213,17 +6415,54 @@ define([
 
         // Cache for field type metadata
         var fieldTypeCache = {};
+        var sublistFieldTypeCache = {};
 
         // Get the actual field type from the record
         function getFieldType(txn, fieldId) {
-            if (fieldTypeCache.hasOwnProperty(fieldId)) return fieldTypeCache[fieldId];
+            var cacheKey = normalizeFieldId(fieldId).toLowerCase();
+            if (fieldTypeCache.hasOwnProperty(cacheKey)) return fieldTypeCache[cacheKey];
             try {
                 var field = txn.getField({ fieldId: fieldId });
-                var fieldType = field ? String(field.type || '').toLowerCase() : '';
-                fieldTypeCache[fieldId] = fieldType;
+                var fieldType = field ? normalizeFieldType(field.type) : '';
+                fieldTypeCache[cacheKey] = fieldType;
                 return fieldType;
             } catch (e) {
-                fieldTypeCache[fieldId] = '';
+                fieldTypeCache[cacheKey] = '';
+                return '';
+            }
+        }
+
+        function getBodyFieldType(txn, fieldId) {
+            var normalized = normalizeFieldId(fieldId).toLowerCase();
+            if (schemaMaps && schemaMaps.bodyFieldTypes && schemaMaps.bodyFieldTypes[normalized]) {
+                return schemaMaps.bodyFieldTypes[normalized];
+            }
+            return getFieldType(txn, fieldId);
+        }
+
+        function getSublistFieldType(txn, sublistId, fieldId) {
+            var normalizedSublistId = (sublistId || '').toLowerCase();
+            var normalizedFieldId = normalizeFieldId(fieldId).toLowerCase();
+            sublistFieldTypeCache[normalizedSublistId] = sublistFieldTypeCache[normalizedSublistId] || {};
+            if (sublistFieldTypeCache[normalizedSublistId].hasOwnProperty(normalizedFieldId)) {
+                return sublistFieldTypeCache[normalizedSublistId][normalizedFieldId];
+            }
+
+            if (schemaMaps && schemaMaps.sublistFieldTypes &&
+                schemaMaps.sublistFieldTypes[normalizedSublistId] &&
+                schemaMaps.sublistFieldTypes[normalizedSublistId][normalizedFieldId]) {
+                var schemaType = schemaMaps.sublistFieldTypes[normalizedSublistId][normalizedFieldId];
+                sublistFieldTypeCache[normalizedSublistId][normalizedFieldId] = schemaType;
+                return schemaType;
+            }
+
+            try {
+                var field = txn.getCurrentSublistField({ sublistId: sublistId, fieldId: fieldId });
+                var fieldType = field ? normalizeFieldType(field.type) : '';
+                sublistFieldTypeCache[normalizedSublistId][normalizedFieldId] = fieldType;
+                return fieldType;
+            } catch (e) {
+                sublistFieldTypeCache[normalizedSublistId][normalizedFieldId] = '';
                 return '';
             }
         }
@@ -6237,6 +6476,7 @@ define([
                 return;
             }
             if (shouldSkipBodyField(fieldId)) return;
+            if (!shouldApplyBodyFieldBySchema(fieldId)) return;
 
             // Debug tranid
             if (fieldId === 'tranid') {
@@ -6245,13 +6485,20 @@ define([
 
             try {
                 var valueToSet = value;
-                var actualFieldType = getFieldType(txn, fieldId);
+                var fieldType = getBodyFieldType(txn, fieldId);
                 var lowerFieldId = fieldId.toLowerCase();
 
                 // Account fields - resolve to internal ID
                 if (isAccountField(fieldId)) {
                     var accountId = resolveAccountId(value);
                     if (accountId) {
+                        // For vendor bills/credits, only set header account if it's AP
+                        if (lowerFieldId === 'account' &&
+                            (transactionType === 'vendorbill' || transactionType === 'vendorcredit') &&
+                            !isApAccountId(accountId)) {
+                            log.debug('setBodyField.account', 'Skipping non-AP account for header: ' + accountId);
+                            return;
+                        }
                         valueToSet = accountId;
                     } else {
                         // Body-level account usually sourced from vendor - skip if can't resolve
@@ -6276,15 +6523,33 @@ define([
                         }
                     }
                 }
+                // Select fields: allow text values
+                else if (isSelectType(fieldType) && isTextValue(value)) {
+                    try {
+                        txn.setText({ fieldId: fieldId, text: String(value) });
+                        fieldSetResults.success.push(fieldId);
+                        return;
+                    } catch (textErr) {
+                        // Fall through to value-based set
+                    }
+                }
                 // Convert checkbox fields to boolean
-                else if (actualFieldType === 'checkbox' || isCheckboxField(fieldId)) {
+                else if (isCheckboxType(fieldType) || (!fieldType && isCheckboxFieldId(fieldId))) {
                     valueToSet = toBoolean(value);
                 }
                 // Convert date fields to proper Date objects
-                else if (isDateField(fieldId) && !(value instanceof Date)) {
+                else if ((isDateType(fieldType) || (!fieldType && isDateFieldId(fieldId))) && !(value instanceof Date)) {
                     valueToSet = parseDateValue(value);
                     if (!valueToSet) {
                         fieldSetResults.failed.push({ field: fieldId, reason: 'date parse failed', value: String(value).substring(0, 50) });
+                        return;
+                    }
+                }
+                // Convert numeric fields
+                else if (isNumericType(fieldType)) {
+                    valueToSet = parseNumericValue(value);
+                    if (valueToSet === null) {
+                        fieldSetResults.failed.push({ field: fieldId, reason: 'numeric parse failed', value: String(value).substring(0, 50) });
                         return;
                     }
                 }
@@ -6346,9 +6611,11 @@ define([
         function setSublistField(txn, sublistId, fieldId, value) {
             if (!fieldId || value === undefined || value === null || value === '') return;
             if (shouldSkipField(fieldId)) return;
+            if (!shouldApplySublistFieldBySchema(sublistId, fieldId)) return;
 
             try {
                 var valueToSet = value;
+                var fieldType = getSublistFieldType(txn, sublistId, fieldId);
 
                 // Account fields - resolve to internal ID
                 if (isAccountField(fieldId)) {
@@ -6361,15 +6628,33 @@ define([
                         return;
                     }
                 }
+                // Select fields: allow text values
+                else if (isSelectType(fieldType) && isTextValue(value)) {
+                    try {
+                        txn.setCurrentSublistText({ sublistId: sublistId, fieldId: fieldId, text: String(value) });
+                        fieldSetResults.success.push(sublistId + '.' + fieldId);
+                        return;
+                    } catch (textErr) {
+                        // Fall through to value-based set
+                    }
+                }
                 // Convert checkbox fields to boolean
-                else if (isCheckboxField(fieldId)) {
+                else if (isCheckboxType(fieldType) || (!fieldType && isCheckboxFieldId(fieldId))) {
                     valueToSet = toBoolean(value);
                 }
                 // Convert date fields to proper Date objects
-                else if (isDateField(fieldId) && !(value instanceof Date)) {
+                else if ((isDateType(fieldType) || (!fieldType && isDateFieldId(fieldId))) && !(value instanceof Date)) {
                     valueToSet = parseDateValue(value);
                     if (!valueToSet) {
                         fieldSetResults.failed.push({ field: sublistId + '.' + fieldId, reason: 'date parse failed', value: String(value).substring(0, 50) });
+                        return;
+                    }
+                }
+                // Convert numeric fields
+                else if (isNumericType(fieldType)) {
+                    valueToSet = parseNumericValue(value);
+                    if (valueToSet === null) {
+                        fieldSetResults.failed.push({ field: sublistId + '.' + fieldId, reason: 'numeric parse failed', value: String(value).substring(0, 50) });
                         return;
                     }
                 }
@@ -6564,109 +6849,69 @@ define([
             var postResults = { success: [], failed: [] };
             var bodyFieldTypeCache = {};
             var sublistFieldTypeCache = {};
-            var bodyReapplyFields = {
-                memo: true,
-                paymenthold: true,
-                paymentholdreason: true,
-                prepaid: true,
-                prepaiddate: true,
-                amortize: true,
-                amortizationsched: true,
-                amortizstartdate: true,
-                amortizationenddate: true,
-                hold: true,
-                holddate: true,
-                paymentholddate: true
-            };
-            var lineReapplyFields = {
-                memo: true,
-                description: true,
-                isbillable: true,
-                billable: true,
-                markup: true,
-                markuppercent: true,
-                markupamount: true
-            };
-
-            function normalizeFieldType(fieldType) {
-                return String(fieldType || '').toLowerCase();
-            }
 
             function getBodyFieldType(fieldId) {
-                if (bodyFieldTypeCache.hasOwnProperty(fieldId)) return bodyFieldTypeCache[fieldId];
+                var normalizedFieldId = normalizeFieldId(fieldId).toLowerCase();
+                if (schemaMaps && schemaMaps.bodyFieldTypes && schemaMaps.bodyFieldTypes[normalizedFieldId]) {
+                    return schemaMaps.bodyFieldTypes[normalizedFieldId];
+                }
+                if (bodyFieldTypeCache.hasOwnProperty(normalizedFieldId)) return bodyFieldTypeCache[normalizedFieldId];
                 try {
                     var field = rec.getField({ fieldId: fieldId });
-                    bodyFieldTypeCache[fieldId] = field ? normalizeFieldType(field.type) : '';
+                    bodyFieldTypeCache[normalizedFieldId] = field ? normalizeFieldType(field.type) : '';
                 } catch (e) {
-                    bodyFieldTypeCache[fieldId] = '';
+                    bodyFieldTypeCache[normalizedFieldId] = '';
                 }
-                return bodyFieldTypeCache[fieldId];
+                return bodyFieldTypeCache[normalizedFieldId];
             }
 
             function getSublistFieldType(sublistId, fieldId) {
-                sublistFieldTypeCache[sublistId] = sublistFieldTypeCache[sublistId] || {};
-                if (sublistFieldTypeCache[sublistId].hasOwnProperty(fieldId)) {
-                    return sublistFieldTypeCache[sublistId][fieldId];
+                var normalizedSublistId = (sublistId || '').toLowerCase();
+                var normalizedFieldId = normalizeFieldId(fieldId).toLowerCase();
+                sublistFieldTypeCache[normalizedSublistId] = sublistFieldTypeCache[normalizedSublistId] || {};
+                if (schemaMaps && schemaMaps.sublistFieldTypes &&
+                    schemaMaps.sublistFieldTypes[normalizedSublistId] &&
+                    schemaMaps.sublistFieldTypes[normalizedSublistId][normalizedFieldId]) {
+                    return schemaMaps.sublistFieldTypes[normalizedSublistId][normalizedFieldId];
+                }
+                if (sublistFieldTypeCache[normalizedSublistId].hasOwnProperty(normalizedFieldId)) {
+                    return sublistFieldTypeCache[normalizedSublistId][normalizedFieldId];
                 }
                 try {
                     var field = rec.getSublistField({ sublistId: sublistId, fieldId: fieldId, line: 0 });
-                    sublistFieldTypeCache[sublistId][fieldId] = field ? normalizeFieldType(field.type) : '';
+                    sublistFieldTypeCache[normalizedSublistId][normalizedFieldId] = field ? normalizeFieldType(field.type) : '';
                 } catch (e) {
-                    sublistFieldTypeCache[sublistId][fieldId] = '';
+                    sublistFieldTypeCache[normalizedSublistId][normalizedFieldId] = '';
                 }
-                return sublistFieldTypeCache[sublistId][fieldId];
-            }
-
-            function isCheckboxType(fieldType) {
-                return fieldType.indexOf('checkbox') !== -1;
-            }
-
-            function isDateType(fieldType) {
-                return fieldType === 'date';
-            }
-
-            function isNumericType(fieldType) {
-                return fieldType === 'currency' || fieldType === 'float' || fieldType === 'integer' || fieldType === 'percent';
-            }
-
-            function isSelectType(fieldType) {
-                return fieldType === 'select' || fieldType === 'multiselect';
+                return sublistFieldTypeCache[normalizedSublistId][normalizedFieldId];
             }
 
             function setBodyFieldPost(fieldId, value) {
                 if (!fieldId || value === undefined || value === null || value === '') return;
-                if (!bodyReapplyFields[fieldId]) return;
                 if (shouldSkipBodyField(fieldId)) return;
+                if (!shouldApplyBodyFieldBySchema(fieldId)) return;
 
                 try {
                     var fieldType = getBodyFieldType(fieldId);
                     var valueToSet = value;
 
-                    if (fieldType) {
-                        if (isCheckboxType(fieldType)) {
-                            valueToSet = toBoolean(value);
-                        } else if (isDateType(fieldType) && !(value instanceof Date)) {
-                            valueToSet = parseDateValue(value);
-                            if (!valueToSet) return;
-                        } else if (isNumericType(fieldType)) {
-                            valueToSet = parseFloat(value);
-                            if (isNaN(valueToSet)) return;
-                        } else if (isSelectType(fieldType) && isTextValue(value)) {
-                            try {
-                                rec.setText({ fieldId: fieldId, text: value });
-                                postResults.success.push(fieldId);
-                                return;
-                            } catch (e) {
-                                // Fall through to value-based set
-                            }
+                    if (isSelectType(fieldType) && isTextValue(value)) {
+                        try {
+                            rec.setText({ fieldId: fieldId, text: value });
+                            postResults.success.push(fieldId);
+                            return;
+                        } catch (e) {
+                            // Fall through to value-based set
                         }
-                    } else {
-                        if (isCheckboxField(fieldId)) {
-                            valueToSet = toBoolean(value);
-                        } else if (isDateField(fieldId) && !(value instanceof Date)) {
-                            valueToSet = parseDateValue(value);
-                            if (!valueToSet) return;
-                        }
+                    }
+                    if (isCheckboxType(fieldType) || (!fieldType && isCheckboxFieldId(fieldId))) {
+                        valueToSet = toBoolean(value);
+                    } else if ((isDateType(fieldType) || (!fieldType && isDateFieldId(fieldId))) && !(value instanceof Date)) {
+                        valueToSet = parseDateValue(value);
+                        if (!valueToSet) return;
+                    } else if (isNumericType(fieldType)) {
+                        valueToSet = parseNumericValue(value);
+                        if (valueToSet === null) return;
                     }
 
                     rec.setValue({ fieldId: fieldId, value: valueToSet });
@@ -6678,38 +6923,30 @@ define([
 
             function setSublistFieldPost(sublistId, line, fieldId, value) {
                 if (!fieldId || value === undefined || value === null || value === '') return;
-                if (!lineReapplyFields[fieldId]) return;
                 if (shouldSkipField(fieldId)) return;
+                if (!shouldApplySublistFieldBySchema(sublistId, fieldId)) return;
 
                 try {
                     var fieldType = getSublistFieldType(sublistId, fieldId);
                     var valueToSet = value;
 
-                    if (fieldType) {
-                        if (isCheckboxType(fieldType)) {
-                            valueToSet = toBoolean(value);
-                        } else if (isDateType(fieldType) && !(value instanceof Date)) {
-                            valueToSet = parseDateValue(value);
-                            if (!valueToSet) return;
-                        } else if (isNumericType(fieldType)) {
-                            valueToSet = parseFloat(value);
-                            if (isNaN(valueToSet)) return;
-                        } else if (isSelectType(fieldType) && isTextValue(value)) {
-                            try {
-                                rec.setSublistText({ sublistId: sublistId, fieldId: fieldId, line: line, text: value });
-                                postResults.success.push(sublistId + '.' + fieldId);
-                                return;
-                            } catch (e) {
-                                // Fall through to value-based set
-                            }
+                    if (isSelectType(fieldType) && isTextValue(value)) {
+                        try {
+                            rec.setSublistText({ sublistId: sublistId, fieldId: fieldId, line: line, text: value });
+                            postResults.success.push(sublistId + '.' + fieldId);
+                            return;
+                        } catch (e) {
+                            // Fall through to value-based set
                         }
-                    } else {
-                        if (isCheckboxField(fieldId)) {
-                            valueToSet = toBoolean(value);
-                        } else if (isDateField(fieldId) && !(value instanceof Date)) {
-                            valueToSet = parseDateValue(value);
-                            if (!valueToSet) return;
-                        }
+                    }
+                    if (isCheckboxType(fieldType) || (!fieldType && isCheckboxFieldId(fieldId))) {
+                        valueToSet = toBoolean(value);
+                    } else if ((isDateType(fieldType) || (!fieldType && isDateFieldId(fieldId))) && !(value instanceof Date)) {
+                        valueToSet = parseDateValue(value);
+                        if (!valueToSet) return;
+                    } else if (isNumericType(fieldType)) {
+                        valueToSet = parseNumericValue(value);
+                        if (valueToSet === null) return;
                     }
 
                     rec.setSublistValue({ sublistId: sublistId, fieldId: fieldId, line: line, value: valueToSet });
