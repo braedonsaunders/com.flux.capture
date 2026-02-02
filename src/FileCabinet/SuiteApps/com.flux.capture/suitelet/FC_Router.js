@@ -6452,14 +6452,21 @@ define([
 
         function getBodyFieldType(txn, fieldId) {
             var normalized = normalizeFieldId(fieldId).toLowerCase();
+            var schemaType = null;
             if (schemaMaps && schemaMaps.bodyFieldTypes && schemaMaps.bodyFieldTypes[normalized]) {
-                var schemaType = schemaMaps.bodyFieldTypes[normalized];
+                schemaType = schemaMaps.bodyFieldTypes[normalized];
                 // XML configs mark most fields as "text" - prefer record metadata in that case
                 if (schemaType && schemaType !== 'text') {
                     return schemaType;
                 }
             }
-            return getFieldType(txn, fieldId);
+            var recordType = getFieldType(txn, fieldId);
+            if (recordType) return recordType;
+            if (schemaType) {
+                fieldTypeCache[normalized] = schemaType;
+                return schemaType;
+            }
+            return recordType;
         }
 
         function getSublistFieldType(txn, sublistId, fieldId) {
@@ -6483,12 +6490,24 @@ define([
             try {
                 var field = txn.getCurrentSublistField({ sublistId: sublistId, fieldId: fieldId });
                 var fieldType = field ? normalizeFieldType(field.type) : '';
-                sublistFieldTypeCache[normalizedSublistId][normalizedFieldId] = fieldType;
-                return fieldType;
+                if (fieldType) {
+                    sublistFieldTypeCache[normalizedSublistId][normalizedFieldId] = fieldType;
+                    return fieldType;
+                }
             } catch (e) {
-                sublistFieldTypeCache[normalizedSublistId][normalizedFieldId] = '';
-                return '';
+                // ignore, fall through
             }
+            if (schemaMaps && schemaMaps.sublistFieldTypes &&
+                schemaMaps.sublistFieldTypes[normalizedSublistId] &&
+                schemaMaps.sublistFieldTypes[normalizedSublistId][normalizedFieldId]) {
+                var fallbackSchemaType = schemaMaps.sublistFieldTypes[normalizedSublistId][normalizedFieldId];
+                if (fallbackSchemaType) {
+                    sublistFieldTypeCache[normalizedSublistId][normalizedFieldId] = fallbackSchemaType;
+                    return fallbackSchemaType;
+                }
+            }
+            sublistFieldTypeCache[normalizedSublistId][normalizedFieldId] = '';
+            return '';
         }
 
         // Helper to set body field value safely
