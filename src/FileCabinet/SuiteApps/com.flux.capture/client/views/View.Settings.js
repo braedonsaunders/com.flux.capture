@@ -2286,6 +2286,23 @@
                     newDefaultText = defaultDisplayInput ? defaultDisplayInput.value : '';
                 }
 
+                // Enforce internal ID selection for select fields
+                var requiresId = isSelectField || isPostingPeriod;
+                if (requiresId) {
+                    var displayText = defaultDisplayInput ? defaultDisplayInput.value : '';
+                    var isSpecialPostingPeriod = isPostingPeriod && newDefault === '__CURRENT_PERIOD__';
+                    if (!isSpecialPostingPeriod) {
+                        if (displayText && !newDefault) {
+                            UI.toast('Select a value from the list to save the internal ID.', 'warning');
+                            return;
+                        }
+                        if (newDefault && !self.isInternalIdValue(newDefault)) {
+                            UI.toast('Default value must be selected from the list (internal ID required).', 'warning');
+                            return;
+                        }
+                    }
+                }
+
                 // Get employeeData if present (for employee/nextapprover fields)
                 var employeeData = null;
                 if (defaultValueInput && defaultValueInput.dataset.employeeData) {
@@ -2508,6 +2525,26 @@
                 'acctcorpcardexp'
             ];
             return selectFields.indexOf(id) !== -1 || id.indexOf('custbody') === 0;
+        },
+
+        isInternalIdValue: function(value) {
+            if (value === undefined || value === null || value === '') return false;
+            if (Array.isArray(value)) {
+                if (value.length === 0) return false;
+                return value.every(function(entry) {
+                    return entry !== undefined && entry !== null && /^\d+$/.test(String(entry).trim());
+                });
+            }
+            if (typeof value === 'number') {
+                return isFinite(value) && Math.floor(value) === value;
+            }
+            var str = String(value).trim();
+            if (str.indexOf(',') !== -1) {
+                var parts = str.split(',').map(function(part) { return part.trim(); }).filter(Boolean);
+                if (parts.length === 0) return false;
+                return parts.every(function(part) { return /^\d+$/.test(part); });
+            }
+            return /^\d+$/.test(str);
         },
 
         getConfigItem: function(dataset, type) {
