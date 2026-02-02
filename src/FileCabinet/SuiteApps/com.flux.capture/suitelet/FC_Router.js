@@ -6453,7 +6453,11 @@ define([
         function getBodyFieldType(txn, fieldId) {
             var normalized = normalizeFieldId(fieldId).toLowerCase();
             if (schemaMaps && schemaMaps.bodyFieldTypes && schemaMaps.bodyFieldTypes[normalized]) {
-                return schemaMaps.bodyFieldTypes[normalized];
+                var schemaType = schemaMaps.bodyFieldTypes[normalized];
+                // XML configs mark most fields as "text" - prefer record metadata in that case
+                if (schemaType && schemaType !== 'text') {
+                    return schemaType;
+                }
             }
             return getFieldType(txn, fieldId);
         }
@@ -6470,8 +6474,10 @@ define([
                 schemaMaps.sublistFieldTypes[normalizedSublistId] &&
                 schemaMaps.sublistFieldTypes[normalizedSublistId][normalizedFieldId]) {
                 var schemaType = schemaMaps.sublistFieldTypes[normalizedSublistId][normalizedFieldId];
-                sublistFieldTypeCache[normalizedSublistId][normalizedFieldId] = schemaType;
-                return schemaType;
+                if (schemaType && schemaType !== 'text') {
+                    sublistFieldTypeCache[normalizedSublistId][normalizedFieldId] = schemaType;
+                    return schemaType;
+                }
             }
 
             try {
