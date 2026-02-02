@@ -5919,31 +5919,48 @@ define([
             var sublistFieldTypes = {};
             var ambiguousFieldIds = {};
 
+            function addBodyField(fieldRef) {
+                var fieldId = fieldRef && fieldRef.id ? fieldRef.id : fieldRef;
+                var normalized = normalizeFieldId(fieldId).toLowerCase();
+                if (!normalized) return;
+                bodyFieldIds[normalized] = true;
+                if (fieldRef && fieldRef.type && !bodyFieldTypes[normalized]) {
+                    bodyFieldTypes[normalized] = normalizeFieldType(fieldRef.type);
+                }
+            }
+
+            function addSublistField(sublistId, fieldRef) {
+                var fieldId = fieldRef && fieldRef.id ? fieldRef.id : fieldRef;
+                var normalized = normalizeFieldId(fieldId).toLowerCase();
+                if (!normalized) return;
+                sublistFieldIds[normalized] = true;
+                sublistFieldTypes[sublistId] = sublistFieldTypes[sublistId] || {};
+                if (fieldRef && fieldRef.type && !sublistFieldTypes[sublistId][normalized]) {
+                    sublistFieldTypes[sublistId][normalized] = normalizeFieldType(fieldRef.type);
+                }
+            }
+
             if (schema && schema.bodyFields) {
-                schema.bodyFields.forEach(function(fieldDef) {
-                    var fieldId = fieldDef && fieldDef.id;
-                    var normalized = normalizeFieldId(fieldId).toLowerCase();
-                    if (!normalized) return;
-                    bodyFieldIds[normalized] = true;
-                    if (fieldDef.type) {
-                        bodyFieldTypes[normalized] = normalizeFieldType(fieldDef.type);
-                    }
-                });
+                schema.bodyFields.forEach(addBodyField);
             }
 
             if (schema && schema.sublists) {
                 schema.sublists.forEach(function(sl) {
                     var sublistId = (sl && sl.id ? sl.id : '').toLowerCase();
                     if (!sublistId) return;
-                    sublistFieldTypes[sublistId] = sublistFieldTypes[sublistId] || {};
-                    (sl.fields || []).forEach(function(fieldDef) {
-                        var fieldId = fieldDef && fieldDef.id;
-                        var normalized = normalizeFieldId(fieldId).toLowerCase();
-                        if (!normalized) return;
-                        sublistFieldIds[normalized] = true;
-                        if (fieldDef.type) {
-                            sublistFieldTypes[sublistId][normalized] = normalizeFieldType(fieldDef.type);
-                        }
+                    var fieldRefs = sl.fields || sl.columns || [];
+                    fieldRefs.forEach(function(fieldDef) {
+                        addSublistField(sublistId, fieldDef);
+                    });
+                });
+            }
+
+            if (schema && schema.tabs) {
+                schema.tabs.forEach(function(tab) {
+                    (tab.fieldGroups || []).forEach(function(group) {
+                        (group.fields || []).forEach(function(fieldRef) {
+                            addBodyField(fieldRef);
+                        });
                     });
                 });
             }
@@ -5981,6 +5998,7 @@ define([
             if (!normalizedSublistId || !normalizedFieldId) return true;
             var sublistMap = schemaMaps.sublistFieldTypes[normalizedSublistId];
             if (!sublistMap) return true;
+            if (Object.keys(sublistMap).length === 0) return true;
             return sublistMap.hasOwnProperty(normalizedFieldId);
         }
 
