@@ -774,20 +774,16 @@
                 });
 
                 // Collect typeahead display values
-                // Priority: hidden input (ID) > display input (text for server-side resolution)
+                // Priority: hidden input (ID) > display input (UI text only)
                 panel.querySelectorAll('.typeahead-select.body-field-typeahead[data-field]').forEach(function(wrapper) {
                     var fieldId = wrapper.dataset.field;
                     var hiddenInput = wrapper.querySelector('input[type="hidden"]');
                     var displayInput = wrapper.querySelector('.typeahead-input');
 
-                    if (hiddenInput && hiddenInput.value) {
-                        // Use the ID from hidden input (preferred)
-                        bodyFields[fieldId] = hiddenInput.value;
-                        markExplicit(fieldId);
-                    } else if (displayInput && displayInput.value) {
-                        // Hidden input is empty but display has text - use display value
-                        // Server-side resolution will attempt to convert text to ID
-                        bodyFields[fieldId] = displayInput.value;
+                    var idValue = hiddenInput ? hiddenInput.value : '';
+                    if (idValue && self.isInternalIdValue(idValue)) {
+                        // Use the internal ID from hidden input
+                        bodyFields[fieldId] = idValue;
                         markExplicit(fieldId);
                     }
                     // Always capture display text for reference
@@ -917,6 +913,12 @@
 
             // Remove line-level account values from body fields if they collide
             this.stripBodyAccountIfLineLevel({ bodyFields: bodyFields, sublists: sublists });
+
+            // Enforce internal IDs for select fields (no text fallbacks)
+            this.sanitizeSelectFieldValues(bodyFields, this.getBodyFieldTypeMap());
+            Object.keys(sublists).forEach(function(slId) {
+                self.sanitizeSublistSelectValues(slId, sublists[slId]);
+            });
 
             // Update formData
             this.formData = this.formData || {};
@@ -3534,18 +3536,23 @@
                 if (!displayValue) {
                     displayValue = usingDefaultValue ? defaultValueText : (doc[docKey + '_display'] || doc[docKey + '_text'] || '');
                 }
+                // Only store internal ID in hidden input
+                var idValue = this.isInternalIdValue(value) ? value : '';
+                if (!idValue && value && !displayValue) {
+                    displayValue = String(value);
+                }
 
                 if (isDisabled) {
                     // Disabled select - show display value but also store the actual ID value
                     // Hidden input stores the ID, visible disabled input shows display text
-                    html += '<input type="hidden" id="' + fieldId + '" value="' + escapeHtml(value) + '" data-field="' + nsField.id + '">' +
+                    html += '<input type="hidden" id="' + fieldId + '" value="' + escapeHtml(idValue) + '" data-field="' + nsField.id + '">' +
                         '<input type="text" value="' + escapeHtml(displayValue || value) + '" disabled>';
                 } else {
                     // Typeahead select for body fields
                     // Add data-needs-current-period for posting period fields that need async resolution
                     var currentPeriodAttr = needsCurrentPeriodResolution ? ' data-needs-current-period="true"' : '';
                     html += '<div class="typeahead-select body-field-typeahead" data-field="' + nsField.id + '" data-lookup="' + lookupType + '"' + currentPeriodAttr + '>' +
-                        '<input type="hidden" id="' + fieldId + '" value="' + escapeHtml(value) + '" data-field="' + nsField.id + '"' + (isRequired ? ' required' : '') + '>' +
+                        '<input type="hidden" id="' + fieldId + '" value="' + escapeHtml(idValue) + '" data-field="' + nsField.id + '"' + (isRequired ? ' required' : '') + '>' +
                         '<input type="text" class="typeahead-input" id="' + fieldId + '-display" ' +
                             'value="' + escapeHtml(displayValue) + '" placeholder="Search ' + escapeHtml(label) + '..." ' +
                             'data-field="' + nsField.id + '" data-lookup="' + lookupType + '" autocomplete="off">' +
@@ -3822,14 +3829,14 @@
                 var textValue = displayValue || value || '';
 
                 // Check if value looks like a numeric ID (internal ID)
-                if (value && /^\d+$/.test(String(value).trim())) {
+                if (value && this.isInternalIdValue(value)) {
                     // Value is numeric - it's an ID
                     idValue = value;
                     // Keep display text as-is, or use ID if no display text
                     textValue = displayValue || value;
                 } else if (value) {
                     // Value is text (from OCR/extraction) - not an ID
-                    // Store in _display field for server-side resolution
+                    // Store in _display field for UI only (ID must be selected)
                     textValue = displayValue || value;
                     if (this.sublistData && this.sublistData[sublistId] && this.sublistData[sublistId][idx]) {
                         this.sublistData[sublistId][idx][normalizedFieldId + '_display'] = textValue;
@@ -3913,6 +3920,247 @@
                 'job', 'project', 'projecttask', 'customform', 'acctcorpcardexp'
             ];
             return selectFields.indexOf(normalizedId) !== -1;
+        },
+
+        // Internal ID helpers for select fields
+        isInternalIdValue: function(value) {
+            if (value === undefined || value === null || value === '') return false;
+            if (Array.isArray(value)) {
+                if (value.length === 0) return false;
+                return value.every(function(entry) {
+                    return entry !== undefined && entry !== null && /^\d+$/.test(String(entry).trim());
+                });
+            }
+            if (typeof value === 'number') {
+                return isFinite(value) && Math.floor(value) === value;
+            }
+            var str = String(value).trim();
+            if (str.indexOf(',') !== -1) {
+                var parts = str.split(',').map(function(part) { return part.trim(); }).filter(Boolean);
+                if (parts.length === 0) return false;
+                return parts.every(function(part) { return /^\d+$/.test(part); });
+            }
+            return /^\d+$/.test(str);
+        },
+
+        requiresInternalId: function(fieldId, fieldType) {
+            var ft = (fieldType || '').toLowerCase();
+            if (ft === 'select' || ft === 'multiselect') return true;
+            return this.isSelectField(fieldId);
+        },
+
+        getBodyFieldTypeMap: function() {
+            var map = {};
+            var fields = (this.formFields && this.formFields.bodyFields) || [];
+            fields.forEach(function(f) {
+                if (f && f.id) {
+                    map[(f.id || '').toLowerCase()] = f;
+                }
+            });
+            return map;
+        },
+
+        getSublistFieldTypeMap: function(sublistId) {
+            var schema = this.getSublistSchema(sublistId);
+            var fields = (schema.columns || schema.fields || []);
+            var map = {};
+            fields.forEach(function(f) {
+                if (f && f.id) {
+                    map[(f.id || '').toLowerCase()] = f;
+                }
+            });
+            return map;
+        },
+
+        sanitizeSelectFieldValues: function(fieldMap, fieldTypeMap) {
+            var self = this;
+            if (!fieldMap) return;
+            var keys = Object.keys(fieldMap);
+            var seen = {};
+
+            keys.forEach(function(key) {
+                if (!key) return;
+                var lowerKey = key.toLowerCase();
+                if (lowerKey.indexOf('_display') === lowerKey.length - 8) return;
+                var normalized = self.normalizeFieldId(key).toLowerCase();
+                if (!normalized || seen[normalized]) return;
+                seen[normalized] = true;
+
+                var fieldDef = fieldTypeMap ? (fieldTypeMap[normalized] || fieldTypeMap[lowerKey]) : null;
+                var fieldType = fieldDef && fieldDef.type ? fieldDef.type : null;
+                if (!self.requiresInternalId(normalized, fieldType)) return;
+
+                var value = null;
+                keys.some(function(k) {
+                    var kLower = k.toLowerCase();
+                    if (kLower.indexOf('_display') === kLower.length - 8) return false;
+                    var normK = self.normalizeFieldId(k).toLowerCase();
+                    if (normK !== normalized) return false;
+                    var v = fieldMap[k];
+                    if (v !== undefined && v !== null && v !== '') {
+                        value = v;
+                        return true;
+                    }
+                    return false;
+                });
+
+                var defaultValue = fieldDef && fieldDef.defaultValue !== undefined ? fieldDef.defaultValue : null;
+                var defaultIsId = self.isInternalIdValue(defaultValue);
+                var defaultDisplay = fieldDef && fieldDef.defaultValueText ? fieldDef.defaultValueText : null;
+
+                function applyDefault() {
+                    keys.forEach(function(k) {
+                        var kLower = k.toLowerCase();
+                        if (kLower.indexOf('_display') === kLower.length - 8) return;
+                        var normK = self.normalizeFieldId(k).toLowerCase();
+                        if (normK === normalized) {
+                            fieldMap[k] = defaultValue;
+                        }
+                    });
+                    var displayKey = normalized + '_display';
+                    if (defaultDisplay) {
+                        fieldMap[displayKey] = defaultDisplay;
+                    } else if (!fieldMap[displayKey]) {
+                        fieldMap[displayKey] = String(defaultValue);
+                    }
+                }
+
+                if (value === null || value === undefined || value === '') {
+                    if (defaultIsId) applyDefault();
+                    return;
+                }
+                if (self.isInternalIdValue(value)) return;
+                if (defaultIsId) {
+                    applyDefault();
+                    return;
+                }
+
+                var displayKey = normalized + '_display';
+                if (!fieldMap[displayKey]) {
+                    fieldMap[displayKey] = String(value);
+                }
+
+                keys.forEach(function(k) {
+                    var kLower = k.toLowerCase();
+                    if (kLower.indexOf('_display') === kLower.length - 8) return;
+                    var normK = self.normalizeFieldId(k).toLowerCase();
+                    if (normK === normalized) {
+                        fieldMap[k] = '';
+                    }
+                });
+            });
+        },
+
+        sanitizeSublistSelectValues: function(sublistId, lines) {
+            if (!Array.isArray(lines)) return;
+            var fieldTypeMap = this.getSublistFieldTypeMap(sublistId);
+            var self = this;
+            lines.forEach(function(line) {
+                self.sanitizeSelectFieldValues(line, fieldTypeMap);
+            });
+        },
+
+        getSublistFieldLabel: function(sublistId, fieldId) {
+            var schema = this.getSublistSchema(sublistId);
+            var fields = (schema.fields || schema.columns || []);
+            var normalized = (fieldId || '').toLowerCase();
+            var field = fields.find(function(f) {
+                return (f.id || '').toLowerCase() === normalized;
+            });
+            return (field && field.label) ? field.label : fieldId;
+        },
+
+        validateInternalIds: function(formData) {
+            var self = this;
+            var data = formData || this.formData || {};
+            var bodyFields = data.bodyFields || {};
+            var sublists = data.sublists || {};
+            var bodyFieldMap = this.getBodyFieldTypeMap();
+
+            // Validate body select fields (display text without ID)
+            var bodyKeys = Object.keys(bodyFieldMap);
+            for (var b = 0; b < bodyKeys.length; b++) {
+                var fieldDef = bodyFieldMap[bodyKeys[b]];
+                if (!fieldDef || !fieldDef.id) continue;
+                if (!self.requiresInternalId(fieldDef.id, fieldDef.type)) continue;
+
+                var normalized = (fieldDef.id || '').toLowerCase();
+                var value = bodyFields[fieldDef.id] || bodyFields[normalized];
+                var display = bodyFields[normalized + '_display'] || bodyFields[fieldDef.id + '_display'];
+                if (display && !self.isInternalIdValue(value)) {
+                    var wrapper = document.querySelector('.typeahead-select.body-field-typeahead[data-field="' + fieldDef.id + '"]');
+                    var displayInput = wrapper ? wrapper.querySelector('.typeahead-input') : null;
+                    return {
+                        valid: false,
+                        message: self.getFieldLabel(fieldDef.id) + ' must be selected from the list',
+                        focusElement: displayInput
+                    };
+                }
+            }
+            // Fallback: if no schema fields are available, validate by bodyFields keys
+            if (bodyKeys.length === 0) {
+                var bodyFieldKeys = Object.keys(bodyFields);
+                for (var bf = 0; bf < bodyFieldKeys.length; bf++) {
+                    var rawKey = bodyFieldKeys[bf];
+                    if (!rawKey) continue;
+                    var rawLower = String(rawKey).toLowerCase();
+                    if (rawLower.indexOf('_display') === rawLower.length - 8) continue;
+                    if (!self.requiresInternalId(rawKey, null)) continue;
+
+                    var normalizedKey = self.normalizeFieldId(rawKey).toLowerCase();
+                    var value = bodyFields[rawKey] || bodyFields[normalizedKey];
+                    var display = bodyFields[normalizedKey + '_display'] || bodyFields[rawKey + '_display'];
+                    if (display && !self.isInternalIdValue(value)) {
+                        var wrapper = document.querySelector('.typeahead-select.body-field-typeahead[data-field="' + rawKey + '"]');
+                        var displayInput = wrapper ? wrapper.querySelector('.typeahead-input') : null;
+                        return {
+                            valid: false,
+                            message: self.getFieldLabel(rawKey) + ' must be selected from the list',
+                            focusElement: displayInput
+                        };
+                    }
+                }
+            }
+
+            // Validate sublist select fields (display text without ID)
+            var sublistIds = Object.keys(sublists);
+            for (var i = 0; i < sublistIds.length; i++) {
+                var sublistId = sublistIds[i];
+                var lines = sublists[sublistId] || [];
+                if (!Array.isArray(lines) || lines.length === 0) continue;
+                var sublistFieldMap = this.getSublistFieldTypeMap(sublistId);
+                var fieldKeys = Object.keys(sublistFieldMap);
+
+                for (var rowIdx = 0; rowIdx < lines.length; rowIdx++) {
+                    var line = lines[rowIdx] || {};
+                    var keysToCheck = fieldKeys.length > 0 ? fieldKeys : Object.keys(line);
+                    for (var k = 0; k < keysToCheck.length; k++) {
+                        var fieldKey = keysToCheck[k];
+                        if (!fieldKey) continue;
+                        var lowerKey = String(fieldKey).toLowerCase();
+                        if (lowerKey.indexOf('_display') === lowerKey.length - 8) continue;
+
+                        var fieldDef = sublistFieldMap[fieldKey] || { id: fieldKey, type: null };
+                        if (!fieldDef || !fieldDef.id) continue;
+                        if (!self.requiresInternalId(fieldDef.id, fieldDef.type)) continue;
+
+                        var normalizedFieldId = self.normalizeFieldId(fieldDef.id).toLowerCase();
+                        var value = line[fieldDef.id] || line[normalizedFieldId];
+                        var display = line[normalizedFieldId + '_display'] || line[fieldDef.id + '_display'];
+                        if (display && !self.isInternalIdValue(value)) {
+                            var row = document.querySelector('#sublist-' + sublistId + ' tr[data-idx="' + rowIdx + '"]');
+                            var input = row ? row.querySelector('.typeahead-input[data-field="' + fieldDef.id + '"]') : null;
+                            return {
+                                valid: false,
+                                message: 'Line ' + (rowIdx + 1) + ': ' + self.getSublistFieldLabel(sublistId, fieldDef.id) + ' must be selected from the list',
+                                focusElement: input
+                            };
+                        }
+                    }
+                }
+            }
+
+            return { valid: true };
         },
 
         // Detect date fields by ID or type
@@ -5705,6 +5953,35 @@
                 value = (value === true || value === 'true' || value === 'on') ? 'T' : 'F';
             }
 
+            // For select fields, only store internal IDs (non-ID values go to _display)
+            var schema = this.getSublistSchema(sublistId);
+            var schemaFields = (schema.fields || schema.columns || []);
+            var schemaField = schemaFields.find(function(f) {
+                return (f.id || '').toLowerCase() === normalizedLowerFieldId;
+            });
+            var schemaFieldType = schemaField && schemaField.type ? schemaField.type : null;
+            if (this.requiresInternalId(normalizedFieldId, schemaFieldType) &&
+                value !== undefined && value !== null && value !== '' &&
+                !this.isInternalIdValue(value)) {
+                var displayText = String(value);
+                line[normalizedLowerFieldId + '_display'] = displayText;
+                line[fieldId + '_display'] = displayText;
+                // Clear any non-display variants for this field
+                Object.keys(line).forEach(function(key) {
+                    if (!key) return;
+                    var keyLower = key.toLowerCase();
+                    if (keyLower.indexOf('_display') === keyLower.length - 8) return;
+                    if (keyLower === lowerFieldId || keyLower === normalizedLowerFieldId) {
+                        line[key] = '';
+                    }
+                });
+                this.changes[sublistId + 'Lines'] = this.sublistData[sublistId];
+                this.syncFormDataSublists(sublistId);
+                this.markUnsaved();
+                this.updateSublistTotal(sublistId);
+                return;
+            }
+
             // Update all existing case variants for this field (case-insensitive)
             Object.keys(line).forEach(function(key) {
                 if (key && (key.toLowerCase() === lowerFieldId || key.toLowerCase() === normalizedLowerFieldId)) {
@@ -5953,9 +6230,11 @@
         normalizeSublistLines: function(sublistId, lines) {
             if (!Array.isArray(lines)) return [];
             var self = this;
-            return lines.map(function(line) {
+            var normalized = lines.map(function(line) {
                 return self.normalizeSublistLine(sublistId, line);
             });
+            self.sanitizeSublistSelectValues(sublistId, normalized);
+            return normalized;
         },
 
         // Sync sublistData into formData so re-renders don't revert edits
@@ -6001,14 +6280,17 @@
 
                         // Update sublistData with DOM values
                         // ID value takes precedence if present
-                        if (idValue && /^\d+$/.test(idValue.trim())) {
+                        if (idValue && self.isInternalIdValue(idValue)) {
                             // Hidden input has a numeric ID - use it
                             line[normalizedFieldId] = idValue;
                             line[fieldId] = idValue;
                             console.log('[Flux] syncDOMToSublistData - ' + sublistId + '[' + idx + '].' + normalizedFieldId + ' = ID:' + idValue);
                         } else if (textValue) {
-                            // Only display text exists - store for server resolution
-                            // Leave main field as-is (might be empty), ensure display is set
+                            // Only display text exists - keep for UI only, ID is required for save
+                            if (!self.isInternalIdValue(line[normalizedFieldId]) && !self.isInternalIdValue(line[fieldId])) {
+                                line[normalizedFieldId] = '';
+                                line[fieldId] = '';
+                            }
                             line[normalizedFieldId + '_display'] = textValue;
                             line[fieldId + '_display'] = textValue;
                             console.log('[Flux] syncDOMToSublistData - ' + sublistId + '[' + idx + '].' + normalizedFieldId + '_display = ' + textValue);
@@ -7746,6 +8028,17 @@
                 return;
             }
 
+            // Ensure select fields have internal IDs (no display-only values)
+            var idValidation = this.validateInternalIds(formData);
+            if (!idValidation.valid) {
+                UI.toast(idValidation.message, 'warning');
+                if (idValidation.focusElement) {
+                    idValidation.focusElement.focus();
+                    idValidation.focusElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                }
+                return;
+            }
+
             this.isSaving = true;
             var saveBtn = el('#btn-save');
             if (saveBtn) {
@@ -7885,6 +8178,20 @@
 
             // Log collected form data for debugging
             console.log('[Flux] Collected formData for approval:', JSON.stringify(formData, null, 2));
+
+            // Ensure select fields have internal IDs (no display-only values)
+            var idValidation = this.validateInternalIds(formData);
+            if (!idValidation.valid) {
+                UI.toast(idValidation.message, 'warning');
+                if (idValidation.focusElement) {
+                    idValidation.focusElement.focus();
+                    idValidation.focusElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                }
+                if (approveBtn) approveBtn.disabled = false;
+                if (submitApprovalBtn) submitApprovalBtn.disabled = false;
+                self.configureSubmitButtons();
+                return;
+            }
 
             API.put('update', { documentId: this.docId, formData: formData })
                 .then(function() {

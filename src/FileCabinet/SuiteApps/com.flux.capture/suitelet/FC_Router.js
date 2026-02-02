@@ -6081,6 +6081,16 @@ define([
             return value.indexOf(' ') !== -1 || isNaN(parseInt(value, 10));
         }
 
+        function coerceInternalId(value) {
+            if (value === undefined || value === null) return null;
+            if (typeof value === 'number') {
+                return Number.isFinite(value) && Math.floor(value) === value ? String(value) : null;
+            }
+            var str = String(value).trim();
+            if (!str) return null;
+            return /^\d+$/.test(str) ? str : null;
+        }
+
         // Cache for resolved lookups
         var lookupCache = {};
 
@@ -6533,21 +6543,18 @@ define([
 
                 // Account fields - resolve to internal ID
                 if (isAccountField(fieldId)) {
-                    var accountId = resolveAccountId(value);
-                    if (accountId) {
-                        // For vendor bills/credits, only set header account if it's AP
-                        if (lowerFieldId === 'account' &&
-                            (transactionType === 'vendorbill' || transactionType === 'vendorcredit') &&
-                            !isApAccountId(accountId)) {
-                            log.debug('setBodyField.account', 'Skipping non-AP account for header: ' + accountId);
-                            return;
-                        }
-                        valueToSet = accountId;
-                    } else {
-                        // Body-level account usually sourced from vendor - skip if can't resolve
-                        fieldSetResults.failed.push({ field: fieldId, reason: 'could not resolve account', value: String(value).substring(0, 50) });
+                    var accountId = coerceInternalId(value);
+                    if (!accountId) {
+                        fieldSetResults.failed.push({ field: fieldId, reason: 'account requires internal ID', value: String(value).substring(0, 50) });
                         return;
                     }
+                    // Respect UI-selected/default account; only warn if not AP
+                    if (lowerFieldId === 'account' &&
+                        (transactionType === 'vendorbill' || transactionType === 'vendorcredit') &&
+                        !isApAccountId(accountId)) {
+                        log.debug('setBodyField.account', 'Using non-AP account from UI: ' + accountId);
+                    }
+                    valueToSet = accountId;
                 }
                 // Terms field - resolve display text to ID
                 else if (lowerFieldId === 'terms' && isTextValue(value)) {
@@ -6659,6 +6666,16 @@ define([
             try {
                 var valueToSet = value;
                 var fieldType = getSublistFieldType(txn, sublistId, fieldId);
+                var lowerFieldId = fieldId.toLowerCase();
+
+                if (lowerFieldId === 'taxcode') {
+                    var taxcodeId = coerceInternalId(value);
+                    if (!taxcodeId) {
+                        fieldSetResults.failed.push({ field: sublistId + '.' + fieldId, reason: 'taxcode requires internal ID', value: String(value).substring(0, 50) });
+                        return;
+                    }
+                    valueToSet = taxcodeId;
+                }
 
                 // Account fields - resolve to internal ID
                 if (isAccountField(fieldId)) {
@@ -6937,6 +6954,21 @@ define([
                 try {
                     var fieldType = getBodyFieldType(fieldId);
                     var valueToSet = value;
+                    var lowerFieldId = fieldId.toLowerCase();
+
+                    if (isAccountField(fieldId)) {
+                        var accountId = coerceInternalId(value);
+                        if (!accountId) {
+                            postResults.failed.push({ field: fieldId, reason: 'account requires internal ID', value: String(value).substring(0, 50) });
+                            return;
+                        }
+                        if (lowerFieldId === 'account' &&
+                            (transactionType === 'vendorbill' || transactionType === 'vendorcredit') &&
+                            !isApAccountId(accountId)) {
+                            log.debug('setBodyFieldPost.account', 'Using non-AP account from UI: ' + accountId);
+                        }
+                        valueToSet = accountId;
+                    }
 
                     if (isSelectType(fieldType) && isTextValue(value)) {
                         try {
@@ -6972,6 +7004,16 @@ define([
                 try {
                     var fieldType = getSublistFieldType(sublistId, fieldId);
                     var valueToSet = value;
+                    var lowerFieldId = fieldId.toLowerCase();
+
+                    if (lowerFieldId === 'taxcode') {
+                        var taxcodeId = coerceInternalId(value);
+                        if (!taxcodeId) {
+                            postResults.failed.push({ field: sublistId + '.' + fieldId, reason: 'taxcode requires internal ID', value: String(value).substring(0, 50) });
+                            return;
+                        }
+                        valueToSet = taxcodeId;
+                    }
 
                     if (isSelectType(fieldType) && isTextValue(value)) {
                         try {
