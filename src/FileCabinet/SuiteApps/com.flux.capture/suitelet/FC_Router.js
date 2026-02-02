@@ -4584,6 +4584,52 @@ define([
         return currencyCache[codeUpper] || null;
     }
 
+    function normalizeCurrencyInFormData(formData, docRecord) {
+        if (!formData) return null;
+        formData.bodyFields = formData.bodyFields || {};
+        var bodyFields = formData.bodyFields;
+
+        var displayText = bodyFields.currency_display || bodyFields.currencyText || bodyFields.currency_text || '';
+        var rawValue = bodyFields.currency;
+        var resolvedId = null;
+
+        if (rawValue) {
+            resolvedId = resolveCurrencyId(rawValue);
+            if (!displayText) {
+                var rawStr = String(rawValue).trim();
+                if (rawStr && !/^\d+$/.test(rawStr)) {
+                    displayText = rawStr;
+                }
+            }
+        }
+        if (!resolvedId && bodyFields.currency_display) {
+            resolvedId = resolveCurrencyId(bodyFields.currency_display);
+        }
+        if (!resolvedId && bodyFields.currencyText) {
+            resolvedId = resolveCurrencyId(bodyFields.currencyText);
+        }
+        if (!resolvedId && docRecord) {
+            try {
+                var docCurrencyId = docRecord.getValue('custrecord_flux_currency');
+                if (docCurrencyId) {
+                    resolvedId = resolveCurrencyId(docCurrencyId);
+                }
+                if (!displayText) {
+                    displayText = docRecord.getText('custrecord_flux_currency') || '';
+                }
+            } catch (e) { /* ignore */ }
+        }
+
+        if (resolvedId) {
+            bodyFields.currency = String(resolvedId);
+            if (displayText) {
+                bodyFields.currency_display = displayText;
+            }
+        }
+
+        return resolvedId;
+    }
+
     // Cache for payment terms lookup
     var termsCache = null;
 
@@ -4703,6 +4749,19 @@ define([
             // Debug: log tranid from incoming formData
             log.debug('updateDocument.tranid', 'tranid in formData: ' + JSON.stringify(formData.bodyFields && formData.bodyFields.tranid));
 
+            var resolvedCurrencyId = normalizeCurrencyInFormData(formData, null);
+            if (!resolvedCurrencyId) {
+                try {
+                    var currencyDoc = record.load({
+                        type: 'customrecord_flux_document',
+                        id: documentId
+                    });
+                    resolvedCurrencyId = normalizeCurrencyInFormData(formData, currencyDoc);
+                } catch (e) {
+                    // Ignore currency fallback errors
+                }
+            }
+
             var values = {
                 'custrecord_flux_modified_date': new Date(),
                 'custrecord_flux_form_data': JSON.stringify(formData)
@@ -4737,11 +4796,8 @@ define([
                 values['custrecord_flux_total_amount'] = bodyFields.total;
             }
             // Resolve currency - accepts both numeric IDs and text codes (USD, CAD, etc.)
-            if (bodyFields.currency) {
-                var resolvedCurrency = resolveCurrencyId(bodyFields.currency);
-                if (resolvedCurrency) {
-                    values['custrecord_flux_currency'] = resolvedCurrency;
-                }
+            if (resolvedCurrencyId) {
+                values['custrecord_flux_currency'] = resolvedCurrencyId;
             }
             // Update document type if changed
             if (bodyFields.documentType) {
@@ -4865,6 +4921,22 @@ define([
                         expense: JSON.parse(docRecord.getValue('custrecord_flux_line_items') || '[]')
                     }
                 };
+            }
+
+            var resolvedCurrencyId = normalizeCurrencyInFormData(formData, docRecord);
+            if (resolvedCurrencyId) {
+                try {
+                    record.submitFields({
+                        type: 'customrecord_flux_document',
+                        id: documentId,
+                        values: {
+                            'custrecord_flux_currency': resolvedCurrencyId,
+                            'custrecord_flux_form_data': JSON.stringify(formData)
+                        }
+                    });
+                } catch (currencyErr) {
+                    log.debug('approveDocument.currencyNormalize', currencyErr.message);
+                }
             }
 
             // ===== VALIDATION =====
