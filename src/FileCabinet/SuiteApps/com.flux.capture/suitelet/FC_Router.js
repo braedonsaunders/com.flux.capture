@@ -1448,6 +1448,7 @@ define([
                 terms: vendorRecord.getValue('terms') || '',
                 // Tax defaults
                 taxCode: vendorRecord.getValue('taxcode') || '',
+                taxCodeText: vendorRecord.getText('taxcode') || '',
                 taxItem: vendorRecord.getValue('taxitem') || '',
                 // Load vendor notes/comments for display in review panel
                 comments: vendorRecord.getValue('comments') || ''
@@ -2533,6 +2534,9 @@ define([
 
             // Transform to response format
             var schema = result.data;
+            var settingsResult = getSettings();
+            var settings = (settingsResult && settingsResult.data) ? settingsResult.data : (settingsResult || {});
+            normalizeFormConfigDefaults(schema, settings);
             return Response.success({
                 formInfo: schema.formInfo,
                 bodyFields: schema.bodyFields,
@@ -2570,6 +2574,9 @@ define([
         }
 
         try {
+            var settingsResult = getSettings();
+            var settings = (settingsResult && settingsResult.data) ? settingsResult.data : (settingsResult || {});
+            normalizeFormConfigDefaults(config, settings);
             var result = FormSchemaExtractor.saveUserConfig(transactionType, formId, config, source);
             if (!result.success) {
                 return Response.error('CONFIG_SAVE_ERROR', result.error);
@@ -4651,18 +4658,27 @@ define([
         var resolvedId = null;
 
         if (settings && settings.multiCurrencyEnabled === false) {
-            if (settings.companyCurrencyId) {
-                bodyFields.currency = String(settings.companyCurrencyId);
-                if (settings.companyCurrencyText) {
-                    bodyFields.currency_display = settings.companyCurrencyText;
+            var baseId = settings.companyCurrencyId || '';
+            var baseText = settings.companyCurrencyText || settings.companyCurrency || '';
+            if (!baseId) {
+                var baseInfo = getBaseCurrencyInfo();
+                baseId = baseInfo && baseInfo.id ? String(baseInfo.id) : '';
+                if (!baseText && baseInfo && baseInfo.text) {
+                    baseText = baseInfo.text;
+                }
+            }
+            if (baseId) {
+                bodyFields.currency = String(baseId);
+                if (baseText) {
+                    bodyFields.currency_display = baseText;
                 }
                 return bodyFields.currency;
             }
             if (rawValue && !/^\d+$/.test(String(rawValue).trim())) {
                 delete bodyFields.currency;
             }
-            if (settings.companyCurrency) {
-                bodyFields.currency_display = settings.companyCurrency;
+            if (baseText) {
+                bodyFields.currency_display = baseText;
             }
             return null;
         }
@@ -4740,6 +4756,122 @@ define([
         }
 
         return resolvedId;
+    }
+
+    function isInternalIdValue(value) {
+        if (value === undefined || value === null || value === '') return false;
+        var str = String(value).trim();
+        return /^\d+$/.test(str);
+    }
+
+    function getDatasourceTypeForField(fieldId) {
+        var id = String(fieldId || '').toLowerCase();
+        switch (id) {
+            case 'account': return 'accounts';
+            case 'expenseaccount': return 'expenseaccounts';
+            case 'item': return 'items';
+            case 'customer': return 'customers';
+            case 'department': return 'departments';
+            case 'class': return 'classes';
+            case 'location': return 'locations';
+            case 'entity': return 'vendors';
+            case 'vendor': return 'vendors';
+            case 'job':
+            case 'project': return 'projects';
+            case 'subsidiary': return 'subsidiaries';
+            case 'currency': return 'currencies';
+            case 'terms': return 'terms';
+            case 'taxcode': return 'taxcodes';
+            case 'category':
+            case 'expensecategory': return 'expensecategories';
+            case 'employee':
+            case 'nextapprover': return 'employees';
+            case 'postingperiod': return 'accountingperiods';
+            case 'approvalstatus': return 'approvalstatuses';
+            case 'projecttask': return 'projecttasks';
+            case 'acctcorpcardexp': return 'accounts';
+            default: return null;
+        }
+    }
+
+    function resolveDefaultFromDatasource(dsType, query) {
+        if (!dsType || !query) return null;
+        var dsResult = getDatasource({ type: dsType, query: query, limit: 50 });
+        if (!dsResult || !dsResult.success) return null;
+        var options = dsResult.data || [];
+        if (!Array.isArray(options)) return null;
+
+        var normalizedQuery = String(query).trim().toLowerCase();
+        var matches = options.filter(function(opt) {
+            var text = String(opt.text || '').trim().toLowerCase();
+            var value = String(opt.value || '').trim().toLowerCase();
+            return text === normalizedQuery || value === normalizedQuery;
+        });
+        if (matches.length === 1) return matches[0];
+        if (options.length === 1) return options[0];
+        return null;
+    }
+
+    function normalizeFieldDefault(fieldDef, settings) {
+        if (!fieldDef || !fieldDef.id) return false;
+        var fieldId = fieldDef.id;
+        var fieldType = String(fieldDef.type || '').toLowerCase();
+        var isSelect = fieldType === 'select' || fieldType === 'multiselect';
+        var dsType = getDatasourceTypeForField(fieldId);
+        if (!isSelect && !dsType) return false;
+
+        if (String(fieldId).toLowerCase() === 'currency' && settings && settings.multiCurrencyEnabled === false) {
+            if (settings.companyCurrencyId) {
+                fieldDef.defaultValue = String(settings.companyCurrencyId);
+                fieldDef.defaultValueText = settings.companyCurrencyText || settings.companyCurrency || '';
+                return true;
+            }
+        }
+
+        var defaultValue = fieldDef.defaultValue;
+        var defaultText = fieldDef.defaultValueText;
+
+        if (isInternalIdValue(defaultValue)) {
+            return true;
+        }
+
+        var textToResolve = defaultText || defaultValue;
+        if (!textToResolve) return false;
+        if (!dsType) return false;
+
+        var resolved = resolveDefaultFromDatasource(dsType, textToResolve);
+        if (resolved && resolved.value) {
+            fieldDef.defaultValue = String(resolved.value);
+            fieldDef.defaultValueText = resolved.text || String(resolved.value);
+            return true;
+        }
+
+        delete fieldDef.defaultValue;
+        delete fieldDef.defaultValueText;
+        return false;
+    }
+
+    function normalizeDefaultsInFields(fields, settings) {
+        if (!Array.isArray(fields)) return;
+        fields.forEach(function(fieldDef) {
+            normalizeFieldDefault(fieldDef, settings);
+        });
+    }
+
+    function normalizeFormConfigDefaults(config, settings) {
+        if (!config) return;
+        normalizeDefaultsInFields(config.bodyFields || [], settings);
+
+        var sublists = config.sublists || [];
+        sublists.forEach(function(sl) {
+            var columns = sl && (sl.columns || sl.fields || []);
+            normalizeDefaultsInFields(columns, settings);
+        });
+
+        var sublistFields = config.sublistFields || {};
+        Object.keys(sublistFields).forEach(function(sublistId) {
+            normalizeDefaultsInFields(sublistFields[sublistId] || [], settings);
+        });
     }
 
     // Cache for payment terms lookup
