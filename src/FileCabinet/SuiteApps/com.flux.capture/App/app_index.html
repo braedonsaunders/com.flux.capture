@@ -1134,6 +1134,19 @@
                         </div>
                         <div class="setting-row">
                             <div class="setting-label">
+                                <span>Default Currency</span>
+                                <small>Fallback when vendor/extraction currency is missing</small>
+                            </div>
+                            <div class="setting-control">
+                                <div class="typeahead-select" id="default-currency-wrapper" data-lookup="currencies">
+                                    <input type="hidden" id="default-currency-id">
+                                    <input type="text" class="typeahead-input" id="default-currency-display" placeholder="Search currency..." autocomplete="off">
+                                    <div class="typeahead-dropdown"></div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="setting-row">
+                            <div class="setting-label">
                                 <span>Max Extraction Pages</span>
                                 <small>Limit pages processed per document (0 = no limit). Useful for large utility bills where only first pages contain invoice data.</small>
                             </div>

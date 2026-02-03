@@ -2726,6 +2726,8 @@ define([
             // Company locale settings - critical for reliable currency detection
             companyCountry: savedSettings.companyCountry || 'CA', // Default to Canada
             companyCurrency: savedSettings.companyCurrency || 'CAD', // Default to CAD
+            defaultCurrency: savedSettings.defaultCurrency || '',
+            defaultCurrencyText: savedSettings.defaultCurrencyText || '',
             anomalyDetection: anomalyDefaults,
             // Transaction creation settings
             attachFileToTransaction: savedSettings.attachFileToTransaction !== false, // Default ON
@@ -2808,6 +2810,8 @@ define([
                 defaultDocumentType: context.defaultDocumentType || existingSettings.defaultDocumentType || 'auto',
                 defaultLineSublist: context.defaultLineSublist || existingSettings.defaultLineSublist || 'auto',
                 maxExtractionPages: parseInt(context.maxExtractionPages, 10) || 0,
+                defaultCurrency: context.defaultCurrency !== undefined ? context.defaultCurrency : (existingSettings.defaultCurrency || ''),
+                defaultCurrencyText: context.defaultCurrencyText !== undefined ? context.defaultCurrencyText : (existingSettings.defaultCurrencyText || ''),
                 // Company locale settings
                 companyCountry: context.companyCountry || 'CA',
                 companyCurrency: context.companyCurrency || 'CAD',
@@ -4584,7 +4588,7 @@ define([
         return currencyCache[codeUpper] || null;
     }
 
-    function normalizeCurrencyInFormData(formData, docRecord) {
+    function normalizeCurrencyInFormData(formData, docRecord, settings) {
         if (!formData) return null;
         formData.bodyFields = formData.bodyFields || {};
         var bodyFields = formData.bodyFields;
@@ -4618,6 +4622,44 @@ define([
                     displayText = docRecord.getText('custrecord_flux_currency') || '';
                 }
             } catch (e) { /* ignore */ }
+        }
+
+        if (!resolvedId) {
+            var vendorId = bodyFields.entity;
+            if (!vendorId && docRecord) {
+                try {
+                    vendorId = docRecord.getValue('custrecord_flux_vendor');
+                } catch (e) { /* ignore */ }
+            }
+            if (vendorId) {
+                try {
+                    var vendorLookup = search.lookupFields({
+                        type: record.Type.VENDOR,
+                        id: vendorId,
+                        columns: ['currency']
+                    });
+                    var vendorCurrency = vendorLookup && vendorLookup.currency;
+                    if (Array.isArray(vendorCurrency) && vendorCurrency.length > 0) {
+                        vendorCurrency = vendorCurrency[0].value || vendorCurrency[0].text;
+                    } else if (vendorCurrency && vendorCurrency.value) {
+                        vendorCurrency = vendorCurrency.value;
+                    }
+                    resolvedId = resolveCurrencyId(vendorCurrency);
+                } catch (e) { /* ignore */ }
+            }
+        }
+
+        if (!resolvedId && settings && settings.defaultCurrency) {
+            resolvedId = resolveCurrencyId(settings.defaultCurrency);
+            if (!displayText && settings.defaultCurrencyText) {
+                displayText = settings.defaultCurrencyText;
+            }
+        }
+        if (!resolvedId && settings && settings.companyCurrency) {
+            resolvedId = resolveCurrencyId(settings.companyCurrency);
+            if (!displayText) {
+                displayText = settings.companyCurrency;
+            }
         }
 
         if (resolvedId) {
@@ -4749,18 +4791,19 @@ define([
             // Debug: log tranid from incoming formData
             log.debug('updateDocument.tranid', 'tranid in formData: ' + JSON.stringify(formData.bodyFields && formData.bodyFields.tranid));
 
-            var resolvedCurrencyId = normalizeCurrencyInFormData(formData, null);
-            if (!resolvedCurrencyId) {
-                try {
-                    var currencyDoc = record.load({
-                        type: 'customrecord_flux_document',
-                        id: documentId
-                    });
-                    resolvedCurrencyId = normalizeCurrencyInFormData(formData, currencyDoc);
-                } catch (e) {
-                    // Ignore currency fallback errors
-                }
+            var settingsResult = getSettings();
+            var settings = (settingsResult && settingsResult.data) ? settingsResult.data : {};
+            var resolvedCurrencyId = null;
+            var currencyDoc = null;
+            try {
+                currencyDoc = record.load({
+                    type: 'customrecord_flux_document',
+                    id: documentId
+                });
+            } catch (e) {
+                // Ignore currency fallback errors
             }
+            resolvedCurrencyId = normalizeCurrencyInFormData(formData, currencyDoc, settings);
 
             var values = {
                 'custrecord_flux_modified_date': new Date(),
@@ -4923,7 +4966,7 @@ define([
                 };
             }
 
-            var resolvedCurrencyId = normalizeCurrencyInFormData(formData, docRecord);
+            var resolvedCurrencyId = normalizeCurrencyInFormData(formData, docRecord, settings);
             if (resolvedCurrencyId) {
                 try {
                     record.submitFields({
