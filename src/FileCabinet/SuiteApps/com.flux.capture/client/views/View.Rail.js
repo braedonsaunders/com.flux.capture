@@ -660,7 +660,7 @@
                     }
                 })
                 .catch(function(err) {
-                    console.debug('Email inbox info not available:', err);
+                    FCDebug.log('Email inbox info not available:', err);
                 });
         },
 
@@ -701,7 +701,5 @@
         function() { FlowController.init(); },
         function() { FlowController.cleanup(); }
     );
-
-    FCDebug.log('[View.Ingest] Card-Based Ingest Loaded');
 
 })();

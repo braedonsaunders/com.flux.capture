@@ -17,6 +17,7 @@ define([
     'N/query',
     'N/runtime',
     'N/error',
+    'N/config',
     'N/log',
     'N/encode',
     'N/email',
@@ -29,7 +30,7 @@ define([
     '/SuiteApps/com.flux.capture/lib/llm/GeminiVerifier',
     '/SuiteApps/com.flux.capture/lib/matching/POMatchingEngine',
     '/SuiteApps/com.flux.capture/lib/FC_LicenseGuard'
-], function(file, record, search, query, runtime, errorModule, log, encode, email, format, task, workflow, FC_Engine, fcDebug, FormSchemaExtractor, GeminiVerifierModule, POMatchingEngine, License) {
+], function(file, record, search, query, runtime, errorModule, config, log, encode, email, format, task, workflow, FC_Engine, fcDebug, FormSchemaExtractor, GeminiVerifierModule, POMatchingEngine, License) {
 
     const API_VERSION = '2.0.0';
 
@@ -1983,6 +1984,15 @@ define([
                 return Response.error('MISSING_PARAM', 'Datasource type is required');
             }
 
+            if ((dsTypeLower === 'currency' || dsTypeLower === 'currencies') && !isMultiCurrencyEnabled()) {
+                var settingsResult = getSettings();
+                var settings = (settingsResult && settingsResult.data) ? settingsResult.data : (settingsResult || {});
+                var baseValue = settings.companyCurrencyId || settings.companyCurrency || '';
+                var baseText = settings.companyCurrencyText || settings.companyCurrency || 'Base Currency';
+                var single = baseValue ? [{ value: baseValue, text: baseText }] : [];
+                return Response.success(single);
+            }
+
             var searchType;
             var columns = [];
             var filters = [['isinactive', 'is', 'F']];
@@ -2728,6 +2738,11 @@ define([
             }
         };
 
+        var multiCurrencyEnabled = isMultiCurrencyEnabled();
+        var baseCurrencyInfo = getBaseCurrencyInfo();
+        var companyCurrencyText = (baseCurrencyInfo && baseCurrencyInfo.text) || savedSettings.companyCurrency || 'CAD';
+        var companyCurrencyId = (baseCurrencyInfo && baseCurrencyInfo.id) ? String(baseCurrencyInfo.id) : '';
+
         var settings = {
             // License key (if saved)
             licenseKey: savedSettings.licenseKey || '',
@@ -2740,7 +2755,10 @@ define([
             supportedFileTypes: ['pdf', 'png', 'jpg', 'jpeg', 'tiff', 'tif', 'gif', 'bmp'],
             // Company locale settings - critical for reliable currency detection
             companyCountry: savedSettings.companyCountry || 'CA', // Default to Canada
-            companyCurrency: savedSettings.companyCurrency || 'CAD', // Default to CAD
+            companyCurrency: companyCurrencyText,
+            companyCurrencyId: companyCurrencyId,
+            companyCurrencyText: companyCurrencyText,
+            multiCurrencyEnabled: multiCurrencyEnabled,
             defaultCurrency: savedSettings.defaultCurrency || '',
             defaultCurrencyText: savedSettings.defaultCurrencyText || '',
             anomalyDetection: anomalyDefaults,
@@ -4546,6 +4564,26 @@ define([
      */
     var currencyCache = null;
 
+    function isMultiCurrencyEnabled() {
+        try {
+            return runtime.isFeatureInEffect({ feature: 'MULTICURRENCY' }) === true;
+        } catch (e) {
+            return false;
+        }
+    }
+
+    function getBaseCurrencyInfo() {
+        try {
+            var companyInfo = config.load({ type: config.Type.COMPANY_INFORMATION });
+            return {
+                id: companyInfo.getValue({ fieldId: 'basecurrency' }),
+                text: companyInfo.getText({ fieldId: 'basecurrency' })
+            };
+        } catch (e) {
+            return null;
+        }
+    }
+
     /**
      * Helper to resolve currency value to NetSuite internal ID
      * Accepts either a numeric ID (passed through) or a currency code (USD, CAD, etc.)
@@ -4611,6 +4649,23 @@ define([
         var displayText = bodyFields.currency_display || bodyFields.currencyText || bodyFields.currency_text || '';
         var rawValue = bodyFields.currency;
         var resolvedId = null;
+
+        if (settings && settings.multiCurrencyEnabled === false) {
+            if (settings.companyCurrencyId) {
+                bodyFields.currency = String(settings.companyCurrencyId);
+                if (settings.companyCurrencyText) {
+                    bodyFields.currency_display = settings.companyCurrencyText;
+                }
+                return bodyFields.currency;
+            }
+            if (rawValue && !/^\d+$/.test(String(rawValue).trim())) {
+                delete bodyFields.currency;
+            }
+            if (settings.companyCurrency) {
+                bodyFields.currency_display = settings.companyCurrency;
+            }
+            return null;
+        }
 
         if (rawValue) {
             resolvedId = resolveCurrencyId(rawValue);

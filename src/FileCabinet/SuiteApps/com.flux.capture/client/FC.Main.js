@@ -183,8 +183,6 @@
      * Start the application
      */
     function startApp() {
-        FCDebug.log('[FC.Main] Starting application...');
-
         // Set up navigation
         initNavigation();
 
@@ -194,7 +192,6 @@
         // Check license status and navigate appropriately
         if (License.isUnlicensedMode()) {
             // Unlicensed - go directly to settings for license configuration
-            FCDebug.log('[FC.Main] Unlicensed mode - redirecting to settings');
             Router.navigate('settings');
             UI.toast('Please configure your license in Settings', 'warning');
         } else {
@@ -205,8 +202,6 @@
 
         // Hide loading screen
         UI.hideLoading();
-
-        FCDebug.log('[FC.Main] Application started');
     }
 
     // Start when DOM is ready

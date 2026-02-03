@@ -823,16 +823,16 @@
             // Collect sublist data from sublistData (already tracked)
             // Filter out empty/default rows that have no meaningful data
             if (this.sublistData) {
-                console.log('[Flux] collectFormData - sublistData keys:', Object.keys(this.sublistData));
+                FCDebug.log('[Flux] collectFormData - sublistData keys:', Object.keys(this.sublistData));
                 Object.keys(this.sublistData).forEach(function(sublistId) {
                     var normalizedId = sublistId.toLowerCase();
                     var lines = self.sublistData[sublistId] || [];
                     var normalizedLines = self.normalizeSublistLines(normalizedId, lines);
 
-                    console.log('[Flux] collectFormData - sublist "' + sublistId + '" has ' + lines.length + ' lines');
+                    FCDebug.log('[Flux] collectFormData - sublist "' + sublistId + '" has ' + lines.length + ' lines');
                     if (lines.length > 0) {
-                        console.log('[Flux] collectFormData - first line keys:', Object.keys(lines[0]));
-                        console.log('[Flux] collectFormData - first line data:', JSON.stringify(lines[0]));
+                        FCDebug.log('[Flux] collectFormData - first line keys:', Object.keys(lines[0]));
+                        FCDebug.log('[Flux] collectFormData - first line data:', JSON.stringify(lines[0]));
                     }
 
                     // Filter out empty lines
@@ -840,12 +840,12 @@
                         return self.isSublistLinePopulated(normalizedId, line);
                     });
 
-                    console.log('[Flux] collectFormData - after filter: ' + nonEmptyLines.length + ' non-empty lines');
+                    FCDebug.log('[Flux] collectFormData - after filter: ' + nonEmptyLines.length + ' non-empty lines');
                     sublists[normalizedId] = nonEmptyLines;
                     self.sublistData[sublistId] = normalizedLines;
                 });
             } else {
-                console.log('[Flux] collectFormData - NO sublistData!');
+                FCDebug.log('[Flux] collectFormData - NO sublistData!');
             }
 
             // Merge tracked changes into bodyFields
@@ -932,11 +932,11 @@
             }
 
             // Debug logging
-            console.log('[Flux] collectFormData - panel exists:', !!panel);
-            console.log('[Flux] collectFormData - entityInput:', entityInput ? entityInput.value : 'NOT FOUND');
-            console.log('[Flux] collectFormData - entityIdInput:', entityIdInput ? entityIdInput.value : 'NOT FOUND');
-            console.log('[Flux] collectFormData - this.changes:', this.changes);
-            console.log('[Flux] collectFormData - bodyFields:', bodyFields);
+            FCDebug.log('[Flux] collectFormData - panel exists:', !!panel);
+            FCDebug.log('[Flux] collectFormData - entityInput:', entityInput ? entityInput.value : 'NOT FOUND');
+            FCDebug.log('[Flux] collectFormData - entityIdInput:', entityIdInput ? entityIdInput.value : 'NOT FOUND');
+            FCDebug.log('[Flux] collectFormData - this.changes:', this.changes);
+            FCDebug.log('[Flux] collectFormData - bodyFields:', bodyFields);
 
             FCDebug.log('[FormData] Collected from DOM:', this.formData);
             return this.formData;
@@ -3946,6 +3946,10 @@
         requiresInternalId: function(fieldId, fieldType) {
             var ft = (fieldType || '').toLowerCase();
             if (ft === 'select' || ft === 'multiselect') return true;
+            var normalized = (fieldId || '').toLowerCase();
+            if (normalized === 'currency' && this.settings && this.settings.multiCurrencyEnabled === false) {
+                return false;
+            }
             return this.isSelectField(fieldId);
         },
 
@@ -6284,7 +6288,7 @@
                             // Hidden input has a numeric ID - use it
                             line[normalizedFieldId] = idValue;
                             line[fieldId] = idValue;
-                            console.log('[Flux] syncDOMToSublistData - ' + sublistId + '[' + idx + '].' + normalizedFieldId + ' = ID:' + idValue);
+                            FCDebug.log('[Flux] syncDOMToSublistData - ' + sublistId + '[' + idx + '].' + normalizedFieldId + ' = ID:' + idValue);
                         } else if (textValue) {
                             // Only display text exists - keep for UI only, ID is required for save
                             if (!self.isInternalIdValue(line[normalizedFieldId]) && !self.isInternalIdValue(line[fieldId])) {
@@ -6293,7 +6297,7 @@
                             }
                             line[normalizedFieldId + '_display'] = textValue;
                             line[fieldId + '_display'] = textValue;
-                            console.log('[Flux] syncDOMToSublistData - ' + sublistId + '[' + idx + '].' + normalizedFieldId + '_display = ' + textValue);
+                            FCDebug.log('[Flux] syncDOMToSublistData - ' + sublistId + '[' + idx + '].' + normalizedFieldId + '_display = ' + textValue);
                         }
 
                         // Always update display if present
@@ -7462,7 +7466,7 @@
                     });
 
                     this.markUnsaved();
-                    console.log('[Flux] Auto-populated department ' + departmentId + ' (' + departmentName + ') from employee defaults');
+                    FCDebug.log('[Flux] Auto-populated department ' + departmentId + ' (' + departmentName + ') from employee defaults');
                 }
             }
         },
@@ -8177,7 +8181,7 @@
             var formData = this.collectFormData();
 
             // Log collected form data for debugging
-            console.log('[Flux] Collected formData for approval:', JSON.stringify(formData, null, 2));
+            FCDebug.log('[Flux] Collected formData for approval:', JSON.stringify(formData, null, 2));
 
             // Ensure select fields have internal IDs (no display-only values)
             var idValidation = this.validateInternalIds(formData);
@@ -11396,7 +11400,5 @@
         function(params) { ReviewController.init(params); },
         function() { ReviewController.cleanup(); }
     );
-
-    FCDebug.log('[View.Review] World-Class Review Loaded');
 
 })();

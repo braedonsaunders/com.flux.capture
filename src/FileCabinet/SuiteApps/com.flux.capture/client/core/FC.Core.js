@@ -284,7 +284,6 @@
                 clearInterval(self._intervals[id]);
             });
             this._intervals = {};
-            FCDebug.log('[API] All polling stopped');
         },
 
         /**
@@ -362,7 +361,6 @@
                 this.sessionExpired = true;
                 this.stopAllPolling();
                 UI.toast('Session expired. Please refresh and log in again.', 'error');
-                FCDebug.log('[API] Session expired:', message);
             }
             return Promise.reject(new Error(message));
         },
@@ -521,12 +519,10 @@
          */
         navigate: function(route, params) {
             var self = this;
-            FCDebug.log('[Router] navigate called:', route, params);
             params = params || {};
 
             // License check - block non-settings routes if unlicensed
             if (!License.isRouteAllowed(route)) {
-                FCDebug.log('[Router] Route blocked - license required:', route);
                 License.showLicenseOverlay();
                 return;
             }
@@ -536,7 +532,6 @@
 
             // Prevent navigation during transition
             if (this.isTransitioning) {
-                FCDebug.log('[Router] Navigation blocked - transition in progress');
                 return;
             }
 
@@ -635,16 +630,12 @@
      * @param {string} containerId - Container element ID (without #)
      */
     function renderTemplate(templateId, containerId) {
-        FCDebug.log('[renderTemplate] Called:', templateId, '->', containerId);
         var template = el('#' + templateId);
         var container = el('#' + containerId);
-        FCDebug.log('[renderTemplate] template:', template, 'container:', container);
 
         if (template && container) {
             var content = template.innerHTML;
-            FCDebug.log('[renderTemplate] Content length:', content.length);
             container.innerHTML = content;
-            FCDebug.log('[renderTemplate] Done, container.innerHTML length:', container.innerHTML.length);
         } else {
             console.warn('[Template] Not found:', templateId, containerId);
         }
@@ -717,15 +708,11 @@
          * Respects minimum display time for animation to complete
          */
         hideLoading: function() {
-            FCDebug.log('[UI] hideLoading called');
             var loading = el('#loading-screen');
-            FCDebug.log('[UI] loading-screen element:', loading);
             if (!loading) return;
 
             var elapsedTime = Date.now() - LOADING_START_TIME;
             var remainingTime = Math.max(0, MINIMUM_LOADING_TIME - elapsedTime);
-
-            FCDebug.log('[UI] Loading elapsed:', elapsedTime, 'remaining:', remainingTime);
 
             function performHide() {
                 // Add hidden class to trigger CSS fade animation
@@ -736,7 +723,6 @@
                     if (loading.parentNode) {
                         loading.parentNode.removeChild(loading);
                     }
-                    FCDebug.log('[UI] Loading screen removed');
                 }, 500);
             }
 
@@ -934,7 +920,5 @@
             console.error('[License] Initialization error:', error);
         });
     });
-
-    FCDebug.log('[FC.Core] Loaded');
 
 })();
