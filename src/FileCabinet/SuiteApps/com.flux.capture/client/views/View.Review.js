@@ -820,6 +820,24 @@
             // This ensures typeahead selections (ID in hidden input) are captured
             this.syncDOMToSublistData();
 
+            // Apply vendor default tax code to lines missing an internal ID
+            if (this.vendorDefaults && this.vendorDefaults.taxCode && this.sublistData) {
+                Object.keys(this.sublistData).forEach(function(sublistId) {
+                    var lines = self.sublistData[sublistId] || [];
+                    lines.forEach(function(line) {
+                        if (!line) return;
+                        var currentTax = line.taxcode || line.TAXCODE || line.TaxCode;
+                        if (!self.isInternalIdValue(currentTax)) {
+                            line.taxcode = self.vendorDefaults.taxCode;
+                            line.TAXCODE = self.vendorDefaults.taxCode;
+                            if (self.vendorDefaults.taxCodeText && !line.taxcode_display) {
+                                line.taxcode_display = self.vendorDefaults.taxCodeText;
+                            }
+                        }
+                    });
+                });
+            }
+
             // Collect sublist data from sublistData (already tracked)
             // Filter out empty/default rows that have no meaningful data
             if (this.sublistData) {
@@ -6772,11 +6790,24 @@
                         line.account_display = self.vendorDefaults.expenseAccountName;
                     }
                 }
+                // Apply vendor default tax code if available and taxcode is empty
+                if (self.vendorDefaults && self.vendorDefaults.taxCode && !line.taxcode) {
+                    line.taxcode = self.vendorDefaults.taxCode;
+                    if (self.vendorDefaults.taxCodeText) {
+                        line.taxcode_display = self.vendorDefaults.taxCodeText;
+                    }
+                }
             } else if (slType === 'item') {
                 if (!line.hasOwnProperty('item')) line.item = '';
                 if (!line.hasOwnProperty('description')) line.description = '';
                 if (!line.hasOwnProperty('quantity')) line.quantity = 1;
                 if (!line.hasOwnProperty('rate')) line.rate = 0;
+                if (self.vendorDefaults && self.vendorDefaults.taxCode && !line.taxcode) {
+                    line.taxcode = self.vendorDefaults.taxCode;
+                    if (self.vendorDefaults.taxCodeText) {
+                        line.taxcode_display = self.vendorDefaults.taxCodeText;
+                    }
+                }
             }
 
             return line;
