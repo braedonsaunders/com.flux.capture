@@ -2491,6 +2491,19 @@
 
             if (!input || !hiddenInput || !dropdown) return;
 
+            function renderOptions(options) {
+                if (!options || options.length === 0) {
+                    dropdown.style.display = 'none';
+                    return;
+                }
+                dropdown.innerHTML = options.map(function(opt) {
+                    var dataAttrs = 'data-value="' + escapeHtml(opt.value) + '" data-text="' + escapeHtml(opt.text) + '"';
+                    return '<div class="typeahead-option" ' + dataAttrs + '>' +
+                        escapeHtml(opt.text) + '</div>';
+                }).join('');
+                dropdown.style.display = 'block';
+            }
+
             input.addEventListener('input', function() {
                 var query = this.value.trim();
                 if (!query) {
@@ -2503,19 +2516,14 @@
 
                 clearTimeout(debounceTimer);
                 debounceTimer = setTimeout(function() {
-                    self.fetchTypeaheadOptions(lookupType, query, function(options) {
-                        if (options.length === 0) {
-                            dropdown.style.display = 'none';
-                            return;
-                        }
-                        dropdown.innerHTML = options.map(function(opt) {
-                            var dataAttrs = 'data-value="' + escapeHtml(opt.value) + '" data-text="' + escapeHtml(opt.text) + '"';
-                            return '<div class="typeahead-option" ' + dataAttrs + '>' +
-                                escapeHtml(opt.text) + '</div>';
-                        }).join('');
-                        dropdown.style.display = 'block';
-                    });
+                    self.fetchTypeaheadOptions(lookupType, query, renderOptions);
                 }, 300);
+            });
+
+            input.addEventListener('focus', function() {
+                var query = this.value.trim();
+                if (query.length >= 2) return;
+                self.fetchTypeaheadOptions(lookupType, '', renderOptions);
             });
 
             dropdown.addEventListener('click', function(e) {
