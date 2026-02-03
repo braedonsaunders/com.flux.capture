@@ -1987,9 +1987,9 @@ define([
             if ((dsTypeLower === 'currency' || dsTypeLower === 'currencies') && !isMultiCurrencyEnabled()) {
                 var settingsResult = getSettings();
                 var settings = (settingsResult && settingsResult.data) ? settingsResult.data : (settingsResult || {});
-                var baseValue = settings.companyCurrencyId || settings.companyCurrency || '';
+                var baseValue = settings.companyCurrencyId || settings.companyCurrency || 'BASE';
                 var baseText = settings.companyCurrencyText || settings.companyCurrency || 'Base Currency';
-                var single = baseValue ? [{ value: baseValue, text: baseText }] : [];
+                var single = [{ value: baseValue, text: baseText }];
                 return Response.success(single);
             }
 

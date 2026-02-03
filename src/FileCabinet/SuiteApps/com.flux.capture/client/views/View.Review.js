@@ -3945,11 +3945,11 @@
 
         requiresInternalId: function(fieldId, fieldType) {
             var ft = (fieldType || '').toLowerCase();
-            if (ft === 'select' || ft === 'multiselect') return true;
             var normalized = (fieldId || '').toLowerCase();
             if (normalized === 'currency' && this.settings && this.settings.multiCurrencyEnabled === false) {
                 return false;
             }
+            if (ft === 'select' || ft === 'multiselect') return true;
             return this.isSelectField(fieldId);
         },
 
