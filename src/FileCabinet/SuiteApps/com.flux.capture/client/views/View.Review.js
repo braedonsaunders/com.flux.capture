@@ -61,6 +61,7 @@
         queueIndex: -1,
         isLoading: false,
         isSaving: false,
+        isResolvingTypeahead: false,
         fieldConfidences: {},
         formFields: null, // Dynamic form fields from NetSuite
         transactionType: 'vendorbill', // Default transaction type
@@ -7821,6 +7822,110 @@
             dropdown.innerHTML = html;
         },
 
+        normalizeTypeaheadText: function(text) {
+            return String(text || '')
+                .toLowerCase()
+                .replace(/\s+/g, ' ')
+                .trim();
+        },
+
+        findExactTypeaheadMatch: function(options, displayText, lookupType) {
+            var self = this;
+            if (!Array.isArray(options)) return null;
+            var target = this.normalizeTypeaheadText(displayText);
+            if (!target) return null;
+
+            function exactMatch(candidate) {
+                if (!candidate || !candidate.text) return false;
+                return self.normalizeTypeaheadText(candidate.text) === target;
+            }
+
+            var matches = options.filter(exactMatch);
+            if (matches.length === 1) return matches[0];
+
+            // Terms: allow "days/day" suffix to be omitted
+            if (matches.length === 0 && String(lookupType || '').toLowerCase() === 'terms') {
+                var targetNoDays = target.replace(/\bdays?\b/g, '').replace(/\s+/g, ' ').trim();
+                if (targetNoDays) {
+                    matches = options.filter(function(candidate) {
+                        if (!candidate || !candidate.text) return false;
+                        var normalized = self.normalizeTypeaheadText(candidate.text)
+                            .replace(/\bdays?\b/g, '')
+                            .replace(/\s+/g, ' ')
+                            .trim();
+                        return normalized === targetNoDays;
+                    });
+                    if (matches.length === 1) return matches[0];
+                }
+            }
+
+            return null;
+        },
+
+        resolveBodyTypeaheadIds: function() {
+            var self = this;
+            var wrappers = document.querySelectorAll('.typeahead-select.body-field-typeahead[data-field]');
+            if (!wrappers || wrappers.length === 0) {
+                return Promise.resolve(false);
+            }
+
+            var tasks = [];
+            wrappers.forEach(function(wrapper) {
+                var fieldId = wrapper.dataset.field;
+                if (!fieldId) return;
+
+                var hiddenInput = wrapper.querySelector('input[type="hidden"]');
+                var displayInput = wrapper.querySelector('.typeahead-input');
+                var displayText = displayInput ? displayInput.value.trim() : '';
+                if (!displayText) return;
+
+                var idValue = hiddenInput ? hiddenInput.value : '';
+                if (self.isInternalIdValue(idValue)) return;
+
+                var lookupType = wrapper.dataset.lookup || self.getLookupType(fieldId);
+                if (!lookupType) return;
+
+                tasks.push(
+                    API.get('datasource', { type: lookupType, query: displayText, limit: 100 })
+                        .then(function(result) {
+                            var data = result.data || result;
+                            var options = Array.isArray(data) ? data : (data.options || data);
+                            var match = self.findExactTypeaheadMatch(options, displayText, lookupType);
+                            if (!match || !match.value) return false;
+
+                            if (hiddenInput) hiddenInput.value = match.value;
+                            if (displayInput) displayInput.value = match.text || displayText;
+
+                            if (!self.changes) self.changes = {};
+                            self.changes[fieldId] = String(match.value);
+                            if (displayInput && displayInput.value) {
+                                self.changes[fieldId + '_display'] = displayInput.value;
+                            } else if (match.text) {
+                                self.changes[fieldId + '_display'] = match.text;
+                            }
+
+                            return true;
+                        })
+                        .catch(function(err) {
+                            FCDebug.log('[Review] Failed to resolve select field "' + fieldId + '":', err);
+                            return false;
+                        })
+                );
+            });
+
+            if (tasks.length === 0) {
+                return Promise.resolve(false);
+            }
+
+            return Promise.all(tasks).then(function(results) {
+                var resolved = results.some(function(r) { return r; });
+                if (resolved) {
+                    self.markUnsaved();
+                }
+                return resolved;
+            });
+        },
+
         // Get dropdown element even when it has been moved out of the wrapper
         getDropdownElement: function(wrapper) {
             if (!wrapper) return null;
@@ -8052,54 +8157,66 @@
         // ==========================================
         saveChanges: function() {
             var self = this;
-            if (this.isSaving) return;
+            if (this.isSaving || this.isResolvingTypeahead) return;
 
-            // Collect current form state from DOM
-            var formData = this.collectFormData();
+            function runSave() {
+                // Collect current form state from DOM
+                var formData = self.collectFormData();
 
-            // Check if there's anything to save
-            if (!formData || (!formData.bodyFields && !formData.sublists)) {
-                UI.toast('No changes to save', 'info');
-                return;
-            }
-
-            // Ensure select fields have internal IDs (no display-only values)
-            var idValidation = this.validateInternalIds(formData);
-            if (!idValidation.valid) {
-                UI.toast(idValidation.message, 'warning');
-                if (idValidation.focusElement) {
-                    idValidation.focusElement.focus();
-                    idValidation.focusElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                // Check if there's anything to save
+                if (!formData || (!formData.bodyFields && !formData.sublists)) {
+                    UI.toast('No changes to save', 'info');
+                    return;
                 }
-                return;
-            }
 
-            this.isSaving = true;
-            var saveBtn = el('#btn-save');
-            if (saveBtn) {
-                saveBtn.disabled = true;
-                saveBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Saving...';
-            }
-
-            API.put('update', { documentId: this.docId, formData: formData })
-                .then(function() {
-                    self.changes = {};
-                    self.hasUnsavedChanges = false;
-                    self.isSaving = false;
-                    self.markSaved();
-                    UI.toast('Changes saved', 'success');
-                    if (saveBtn) {
-                        saveBtn.disabled = false;
-                        saveBtn.innerHTML = '<i class="fas fa-save"></i> Save Changes <span class="shortcut-hint">Ctrl+S</span>';
+                // Ensure select fields have internal IDs (no display-only values)
+                var idValidation = self.validateInternalIds(formData);
+                if (!idValidation.valid) {
+                    UI.toast(idValidation.message, 'warning');
+                    if (idValidation.focusElement) {
+                        idValidation.focusElement.focus();
+                        idValidation.focusElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
                     }
-                })
+                    return;
+                }
+
+                self.isSaving = true;
+                var saveBtn = el('#btn-save');
+                if (saveBtn) {
+                    saveBtn.disabled = true;
+                    saveBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Saving...';
+                }
+
+                API.put('update', { documentId: self.docId, formData: formData })
+                    .then(function() {
+                        self.changes = {};
+                        self.hasUnsavedChanges = false;
+                        self.isSaving = false;
+                        self.markSaved();
+                        UI.toast('Changes saved', 'success');
+                        if (saveBtn) {
+                            saveBtn.disabled = false;
+                            saveBtn.innerHTML = '<i class="fas fa-save"></i> Save Changes <span class="shortcut-hint">Ctrl+S</span>';
+                        }
+                    })
+                    .catch(function(err) {
+                        self.isSaving = false;
+                        UI.toast('Error: ' + err.message, 'error');
+                        if (saveBtn) {
+                            saveBtn.disabled = false;
+                            saveBtn.innerHTML = '<i class="fas fa-save"></i> Save Changes <span class="shortcut-hint">Ctrl+S</span>';
+                        }
+                    });
+            }
+
+            this.isResolvingTypeahead = true;
+            this.resolveBodyTypeaheadIds()
                 .catch(function(err) {
-                    self.isSaving = false;
-                    UI.toast('Error: ' + err.message, 'error');
-                    if (saveBtn) {
-                        saveBtn.disabled = false;
-                        saveBtn.innerHTML = '<i class="fas fa-save"></i> Save Changes <span class="shortcut-hint">Ctrl+S</span>';
-                    }
+                    FCDebug.log('[Review] Failed to resolve selections before save:', err);
+                })
+                .then(function() {
+                    self.isResolvingTypeahead = false;
+                    runSave();
                 });
         },
 
@@ -8190,45 +8307,49 @@
                 return;
             }
 
-            // Show processing state - determine which button was clicked
-            var approveBtn = el('#btn-approve');
-            var submitApprovalBtn = el('#btn-submit-approval');
-            var activeBtn = isApprovalMode && this.submitButtonMode === 'both' ? submitApprovalBtn : approveBtn;
-            var activeBtnText = activeBtn ? activeBtn.querySelector('.btn-text') : null;
-            var activeBtnIcon = activeBtn ? activeBtn.querySelector('i') : null;
+            if (this.isResolvingTypeahead) return;
+            this.isResolvingTypeahead = true;
 
-            // Disable both buttons during processing
-            if (approveBtn) approveBtn.disabled = true;
-            if (submitApprovalBtn) submitApprovalBtn.disabled = true;
+            function runApproval() {
+                // Show processing state - determine which button was clicked
+                var approveBtn = el('#btn-approve');
+                var submitApprovalBtn = el('#btn-submit-approval');
+                var activeBtn = isApprovalMode && self.submitButtonMode === 'both' ? submitApprovalBtn : approveBtn;
+                var activeBtnText = activeBtn ? activeBtn.querySelector('.btn-text') : null;
+                var activeBtnIcon = activeBtn ? activeBtn.querySelector('i') : null;
 
-            if (activeBtn) {
-                if (activeBtnIcon) activeBtnIcon.className = 'fas fa-spinner fa-spin';
-                if (activeBtnText) {
-                    activeBtnText.textContent = isApprovalMode ? 'Submitting for Approval...' : 'Creating Transaction...';
+                // Disable both buttons during processing
+                if (approveBtn) approveBtn.disabled = true;
+                if (submitApprovalBtn) submitApprovalBtn.disabled = true;
+
+                if (activeBtn) {
+                    if (activeBtnIcon) activeBtnIcon.className = 'fas fa-spinner fa-spin';
+                    if (activeBtnText) {
+                        activeBtnText.textContent = isApprovalMode ? 'Submitting for Approval...' : 'Creating Transaction...';
+                    }
                 }
-            }
 
-            // Always save current form state before approval to ensure transaction uses latest data
-            var formData = this.collectFormData();
+                // Always save current form state before approval to ensure transaction uses latest data
+                var formData = self.collectFormData();
 
-            // Log collected form data for debugging
-            FCDebug.log('[Flux] Collected formData for approval:', JSON.stringify(formData, null, 2));
+                // Log collected form data for debugging
+                FCDebug.log('[Flux] Collected formData for approval:', JSON.stringify(formData, null, 2));
 
-            // Ensure select fields have internal IDs (no display-only values)
-            var idValidation = this.validateInternalIds(formData);
-            if (!idValidation.valid) {
-                UI.toast(idValidation.message, 'warning');
-                if (idValidation.focusElement) {
-                    idValidation.focusElement.focus();
-                    idValidation.focusElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                // Ensure select fields have internal IDs (no display-only values)
+                var idValidation = self.validateInternalIds(formData);
+                if (!idValidation.valid) {
+                    UI.toast(idValidation.message, 'warning');
+                    if (idValidation.focusElement) {
+                        idValidation.focusElement.focus();
+                        idValidation.focusElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                    }
+                    if (approveBtn) approveBtn.disabled = false;
+                    if (submitApprovalBtn) submitApprovalBtn.disabled = false;
+                    self.configureSubmitButtons();
+                    return;
                 }
-                if (approveBtn) approveBtn.disabled = false;
-                if (submitApprovalBtn) submitApprovalBtn.disabled = false;
-                self.configureSubmitButtons();
-                return;
-            }
 
-            API.put('update', { documentId: this.docId, formData: formData })
+                API.put('update', { documentId: self.docId, formData: formData })
                 .then(function() {
                     return API.put('approve', {
                         documentId: self.docId,
@@ -8353,6 +8474,16 @@
                     } else {
                         UI.toast('Error: ' + (err.message || 'Unknown error'), 'error');
                     }
+                });
+            }
+
+            this.resolveBodyTypeaheadIds()
+                .catch(function(err) {
+                    FCDebug.log('[Review] Failed to resolve selections before approval:', err);
+                })
+                .then(function() {
+                    self.isResolvingTypeahead = false;
+                    runApproval();
                 });
         },
 
