@@ -74,9 +74,4 @@
     // Expose to global scope
     window.FCDebug = Debug;
 
-    // Only log load message if debug mode is on (check after FC_CONFIG is available)
-    if (isDebugMode()) {
-        console.log('[FC.Debug] Debug utility loaded, debug mode is ON');
-    }
-
 })();

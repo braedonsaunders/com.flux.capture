@@ -1500,6 +1500,4 @@
         function() { DocumentsController.cleanup(); }
     );
 
-    FCDebug.log('[View.Documents] Loaded');
-
 })();

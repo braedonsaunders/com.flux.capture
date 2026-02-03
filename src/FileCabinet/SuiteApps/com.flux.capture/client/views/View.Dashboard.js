@@ -13,5 +13,4 @@
         function() {}
     );
 
-    FCDebug.log('[View.Dashboard] Dashboard route registered (redirects to ingest)');
 })();

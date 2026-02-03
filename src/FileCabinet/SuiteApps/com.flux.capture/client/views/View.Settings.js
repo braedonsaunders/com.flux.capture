@@ -2474,6 +2474,21 @@
             if (!select) return;
 
             select.innerHTML = '<option value="">-- Select --</option>';
+            select.disabled = false;
+
+            if (settings && settings.multiCurrencyEnabled === false) {
+                var baseValue = settings.companyCurrencyId || settings.companyCurrency || '';
+                var baseText = settings.companyCurrencyText || settings.companyCurrency || 'Base Currency';
+                if (baseValue) {
+                    var baseOption = document.createElement('option');
+                    baseOption.value = baseValue;
+                    baseOption.textContent = baseText;
+                    select.appendChild(baseOption);
+                    select.value = baseValue;
+                }
+                select.disabled = true;
+                return;
+            }
 
             API.get('datasource', { type: 'currencies', query: '', limit: 1000 })
                 .then(function(response) {
@@ -3883,7 +3898,7 @@
                         btn.innerHTML = '<i class="fas fa-plug"></i> Test Connection';
                     }
 
-                    console.log('[LLM Test] Response:', JSON.stringify(result));
+                    FCDebug.log('[LLM Test] Response:', JSON.stringify(result));
 
                     // API.post returns data.data directly, so result IS the data object
                     // Check if connected is truthy in the unwrapped data
@@ -5040,7 +5055,5 @@
         function(params) { SettingsController.init(params); },
         function() { SettingsController.cleanup(); }
     );
-
-    FCDebug.log('[View.Settings] Loaded');
 
 })();
