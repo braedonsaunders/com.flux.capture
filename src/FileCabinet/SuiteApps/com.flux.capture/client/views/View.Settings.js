@@ -19,13 +19,13 @@
         init: function() {
             renderTemplate('tpl-settings', 'view-container');
             this.bindEvents();
-            this.setupDefaultCurrencyTypeahead();
             this.loadGeneralSettings();
             this.loadFormConfig(this.currentFormType);
             this.loadProviderConfig();
         },
 
         loadGeneralSettings: function() {
+            var self = this;
             API.get('settings')
                 .then(function(result) {
                     var settings = result.data || result;
@@ -46,15 +46,7 @@
                     if (maxPagesEl && typeof settings.maxExtractionPages !== 'undefined') {
                         maxPagesEl.value = settings.maxExtractionPages;
                     }
-
-                    var defaultCurrencyIdEl = el('#default-currency-id');
-                    var defaultCurrencyDisplayEl = el('#default-currency-display');
-                    if (defaultCurrencyIdEl && settings.defaultCurrency) {
-                        defaultCurrencyIdEl.value = settings.defaultCurrency;
-                    }
-                    if (defaultCurrencyDisplayEl) {
-                        defaultCurrencyDisplayEl.value = settings.defaultCurrencyText || settings.defaultCurrency || '';
-                    }
+                    self.loadCurrencyOptions(settings);
 
                     // Anomaly Detection Settings - Duplicate Detection
                     var setCheckbox = function(id, value) {
@@ -2477,69 +2469,51 @@
             });
         },
 
-        setupDefaultCurrencyTypeahead: function() {
-            var self = this;
-            var wrapper = el('#default-currency-wrapper');
-            if (!wrapper || wrapper._bound) return;
-            wrapper._bound = true;
+        loadCurrencyOptions: function(settings) {
+            var select = el('#default-currency');
+            if (!select) return;
 
-            var input = wrapper.querySelector('.typeahead-input');
-            var hiddenInput = wrapper.querySelector('input[type="hidden"]');
-            var dropdown = wrapper.querySelector('.typeahead-dropdown');
-            var lookupType = wrapper.dataset.lookup || 'currencies';
-            var debounceTimer = null;
+            select.innerHTML = '<option value="">-- Select --</option>';
 
-            if (!input || !hiddenInput || !dropdown) return;
+            API.get('datasource', { type: 'currencies', query: '', limit: 1000 })
+                .then(function(response) {
+                    var data = response.data || response;
+                    var options = Array.isArray(data) ? data : (data.options || data.results || []);
+                    options.sort(function(a, b) {
+                        return (a.text || '').localeCompare(b.text || '');
+                    });
 
-            function renderOptions(options) {
-                if (!options || options.length === 0) {
-                    dropdown.style.display = 'none';
-                    return;
-                }
-                dropdown.innerHTML = options.map(function(opt) {
-                    var dataAttrs = 'data-value="' + escapeHtml(opt.value) + '" data-text="' + escapeHtml(opt.text) + '"';
-                    return '<div class="typeahead-option" ' + dataAttrs + '>' +
-                        escapeHtml(opt.text) + '</div>';
-                }).join('');
-                dropdown.style.display = 'block';
-            }
+                    options.forEach(function(opt) {
+                        var value = opt.value || opt.id || opt.internalid || '';
+                        var text = opt.text || opt.name || opt.label || opt.value || '';
+                        if (!value) return;
+                        var option = document.createElement('option');
+                        option.value = value;
+                        option.textContent = text;
+                        select.appendChild(option);
+                    });
 
-            input.addEventListener('input', function() {
-                var query = this.value.trim();
-                if (!query) {
-                    hiddenInput.value = '';
-                }
-                if (query.length < 2) {
-                    dropdown.style.display = 'none';
-                    return;
-                }
-
-                clearTimeout(debounceTimer);
-                debounceTimer = setTimeout(function() {
-                    self.fetchTypeaheadOptions(lookupType, query, renderOptions);
-                }, 300);
-            });
-
-            input.addEventListener('focus', function() {
-                var query = this.value.trim();
-                if (query.length >= 2) return;
-                self.fetchTypeaheadOptions(lookupType, '', renderOptions);
-            });
-
-            dropdown.addEventListener('click', function(e) {
-                var option = e.target.closest('.typeahead-option');
-                if (option) {
-                    hiddenInput.value = option.dataset.value;
-                    input.value = option.dataset.text;
-                    dropdown.style.display = 'none';
-                }
-            });
-
-            input.addEventListener('blur', function() {
-                setTimeout(function() {
-                    dropdown.style.display = 'none';
-                }, 200);
-            });
+                    var defaultId = settings && settings.defaultCurrency ? String(settings.defaultCurrency) : '';
+                    if (defaultId) {
+                        var hasOption = false;
+                        for (var i = 0; i < select.options.length; i++) {
+                            if (String(select.options[i].value) === defaultId) {
+                                hasOption = true;
+                                break;
+                            }
+                        }
+                        if (!hasOption) {
+                            var fallback = document.createElement('option');
+                            fallback.value = defaultId;
+                            fallback.textContent = (settings.defaultCurrencyText || defaultId);
+                            select.appendChild(fallback);
+                        }
+                        select.value = defaultId;
+                    }
+                })
+                .catch(function(err) {
+                    console.warn('Could not load currencies:', err);
+                });
         },
 
         fetchTypeaheadOptions: function(lookupType, query, callback) {
@@ -2974,13 +2948,12 @@
                 var elem = el(id);
                 return elem ? elem.value : 'create';
             };
-            var defaultCurrencyIdEl = el('#default-currency-id');
-            var defaultCurrencyDisplayEl = el('#default-currency-display');
-            var defaultCurrencyId = defaultCurrencyIdEl ? defaultCurrencyIdEl.value : '';
-            var defaultCurrencyText = defaultCurrencyDisplayEl ? defaultCurrencyDisplayEl.value : '';
-            if (defaultCurrencyText && !defaultCurrencyId) {
-                UI.toast('Select a default currency from the list.', 'warning');
-                return;
+            var defaultCurrencySelect = el('#default-currency');
+            var defaultCurrencyId = defaultCurrencySelect ? defaultCurrencySelect.value : '';
+            var defaultCurrencyText = '';
+            if (defaultCurrencySelect && defaultCurrencyId) {
+                var selectedOption = defaultCurrencySelect.options[defaultCurrencySelect.selectedIndex];
+                defaultCurrencyText = selectedOption ? selectedOption.text : '';
             }
             var settings = {
                 defaultDocumentType: el('#default-type').value || 'auto',
