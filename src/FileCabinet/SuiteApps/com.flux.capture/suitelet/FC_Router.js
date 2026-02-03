@@ -1975,6 +1975,7 @@ define([
     function getDatasource(context) {
         try {
             var dsType = context.type || context.datasource;
+            var dsTypeLower = String(dsType || '').toLowerCase();
             var searchQuery = context.query || '';
             var limit = Math.min(parseInt(context.limit) || 200, 1000);
 
@@ -1987,7 +1988,7 @@ define([
             var filters = [['isinactive', 'is', 'F']];
             var displayFormat = 'name'; // 'name', 'number-name', 'id-name'
 
-            switch (dsType.toLowerCase()) {
+            switch (dsTypeLower) {
                 case 'departments':
                 case 'department':
                     searchType = search.Type.DEPARTMENT;
@@ -2071,9 +2072,23 @@ define([
 
             // Add search filter if query provided
             if (searchQuery && searchQuery.length >= 1) {
-                var searchCol = columns[1] || 'name';
-                filters.push('AND');
-                filters.push([searchCol, 'contains', searchQuery]);
+                if (dsTypeLower === 'currency' || dsTypeLower === 'currencies') {
+                    var currencyId = resolveCurrencyId(searchQuery);
+                    var currencyFilters = [
+                        ['name', 'contains', searchQuery],
+                        'OR',
+                        ['symbol', 'contains', searchQuery]
+                    ];
+                    if (currencyId) {
+                        currencyFilters.push('OR', ['internalid', 'anyof', String(currencyId)]);
+                    }
+                    filters.push('AND');
+                    filters.push(currencyFilters);
+                } else {
+                    var searchCol = columns[1] || 'name';
+                    filters.push('AND');
+                    filters.push([searchCol, 'contains', searchQuery]);
+                }
             }
 
             var dsSearch = search.create({
