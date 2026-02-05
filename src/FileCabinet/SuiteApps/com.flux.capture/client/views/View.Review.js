@@ -7862,6 +7862,87 @@
             return null;
         },
 
+        getAIPaymentTerms: function() {
+            var doc = this.data || {};
+            var extractedData = doc.extractedData || {};
+            var aiVerification = doc.aiVerification || extractedData.aiVerification || null;
+            var aiTerms = aiVerification && aiVerification.paymentTerms && aiVerification.paymentTerms.detected;
+            return aiTerms ? String(aiTerms).trim() : '';
+        },
+
+        getExtractedPaymentTerms: function() {
+            var doc = this.data || {};
+            var extractedData = doc.extractedData || {};
+            var terms = extractedData.paymentTerms || extractedData.terms || doc.paymentTerms || doc.terms || '';
+            return terms ? String(terms).trim() : '';
+        },
+
+        buildTermsCandidates: function(displayText) {
+            var self = this;
+            var candidates = [];
+
+            function addCandidate(value) {
+                var normalized = self.normalizeTypeaheadText(value);
+                if (!normalized) return;
+                var exists = candidates.some(function(c) { return c.normalized === normalized; });
+                if (!exists) {
+                    candidates.push({ value: String(value).trim(), normalized: normalized });
+                }
+            }
+
+            addCandidate(displayText);
+            addCandidate(this.getAIPaymentTerms());
+            addCandidate(this.getExtractedPaymentTerms());
+
+            return candidates;
+        },
+
+        resolveTermsField: function(wrapper, fieldId, displayText) {
+            var self = this;
+            if (!wrapper || !fieldId) return Promise.resolve(false);
+
+            var hiddenInput = wrapper.querySelector('input[type="hidden"]');
+            var displayInput = wrapper.querySelector('.typeahead-input');
+            var candidates = this.buildTermsCandidates(displayText);
+            if (candidates.length === 0) {
+                return Promise.resolve(false);
+            }
+
+            function applyResolved(resolvedId, resolvedText) {
+                if (hiddenInput) hiddenInput.value = resolvedId;
+                if (displayInput && resolvedText) {
+                    displayInput.value = resolvedText;
+                }
+
+                if (!self.changes) self.changes = {};
+                self.changes[fieldId] = String(resolvedId);
+                if (displayInput && displayInput.value) {
+                    self.changes[fieldId + '_display'] = displayInput.value;
+                } else if (resolvedText) {
+                    self.changes[fieldId + '_display'] = resolvedText;
+                }
+            }
+
+            function tryCandidate(idx) {
+                if (idx >= candidates.length) return Promise.resolve(false);
+                var candidate = candidates[idx];
+                return API.get('resolveTerms', { terms: candidate.value })
+                    .then(function(result) {
+                        var data = result.data || result;
+                        if (data && data.resolved && data.value) {
+                            applyResolved(data.value, data.text || candidate.value);
+                            return true;
+                        }
+                        return tryCandidate(idx + 1);
+                    })
+                    .catch(function() {
+                        return tryCandidate(idx + 1);
+                    });
+            }
+
+            return tryCandidate(0);
+        },
+
         resolveBodyTypeaheadIds: function() {
             var self = this;
             var wrappers = document.querySelectorAll('.typeahead-select.body-field-typeahead[data-field]');
@@ -7884,6 +7965,12 @@
 
                 var lookupType = wrapper.dataset.lookup || self.getLookupType(fieldId);
                 if (!lookupType) return;
+
+                var normalizedFieldId = (fieldId || '').toLowerCase();
+                if (normalizedFieldId === 'terms') {
+                    tasks.push(self.resolveTermsField(wrapper, fieldId, displayText));
+                    return;
+                }
 
                 tasks.push(
                     API.get('datasource', { type: lookupType, query: displayText, limit: 100 })
@@ -10865,7 +10952,12 @@
                 'poNumber': 'custbody_po_number',
                 'purchaseOrderNumber': 'custbody_po_number',
                 'vendorName': 'vendor',
-                'memo': 'memo'
+                'memo': 'memo',
+                'paymentTerms': 'terms',
+                'payment_terms': 'terms',
+                'Terms': 'terms',
+                'Payment Terms': 'terms',
+                'terms': 'terms'
             };
 
             var formFieldId = fieldMapping[fieldName] || fieldName;
@@ -10877,7 +10969,25 @@
                 input = document.querySelector('[data-field="' + formFieldId + '"]');
             }
 
-            if (input) {
+            var typeaheadWrapper = document.querySelector('.typeahead-select.body-field-typeahead[data-field="' + formFieldId + '"]');
+            var displayInput = typeaheadWrapper ? typeaheadWrapper.querySelector('.typeahead-input') : el('#field-' + formFieldId + '-display');
+            var hiddenInput = typeaheadWrapper ? typeaheadWrapper.querySelector('input[type="hidden"]') : null;
+
+            if (displayInput) {
+                displayInput.value = value;
+                displayInput.classList.add('ai-corrected');
+                if (hiddenInput) hiddenInput.value = '';
+                self.changes[formFieldId + '_display'] = value;
+                self.markUnsaved();
+
+                // Flash effect to show the change
+                displayInput.style.backgroundColor = 'var(--color-success-light, #d4edda)';
+                setTimeout(function() {
+                    displayInput.style.backgroundColor = '';
+                }, 1500);
+
+                UI.toast('Applied AI correction to ' + fieldName, 'success');
+            } else if (input) {
                 input.value = value;
                 input.classList.add('ai-corrected');
                 self.changes[formFieldId] = value;

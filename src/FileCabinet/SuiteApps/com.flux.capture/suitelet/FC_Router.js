@@ -378,6 +378,9 @@ define([
                 case 'pocandidates':
                     result = getPOCandidates(context.docId || context.id);
                     break;
+                case 'resolveTerms':
+                    result = resolveTerms(context);
+                    break;
                 default:
                     result = Response.error('INVALID_ACTION', 'Unknown action: ' + action);
             }
@@ -4877,6 +4880,15 @@ define([
     // Cache for payment terms lookup
     var termsCache = null;
 
+    function normalizeTermsKey(value) {
+        return String(value || '')
+            .toLowerCase()
+            .replace(/[^a-z0-9\s]/g, ' ')
+            .replace(/\s*days?\s*$/i, '')
+            .replace(/\s+/g, ' ')
+            .trim();
+    }
+
     /**
      * Resolve payment terms text to NetSuite internal ID
      * Called during extraction to convert "Net 30 days" -> internal ID
@@ -4899,8 +4911,8 @@ define([
             return parseInt(termsStr, 10);
         }
 
-        // Normalize: remove "days" suffix, extra spaces
-        var normalizedTerms = termsStr.toLowerCase().replace(/\s*days?\s*$/i, '').trim();
+        // Normalize: remove punctuation, "days" suffix, extra spaces
+        var normalizedTerms = normalizeTermsKey(termsStr);
 
         // Build cache if not already built
         if (!termsCache) {
@@ -4918,6 +4930,11 @@ define([
                     if (name && id) {
                         var nameLower = name.toLowerCase();
                         termsCache[nameLower] = parseInt(id, 10);
+                        // Also cache normalized variants for punctuation/spacing differences
+                        var normalizedName = normalizeTermsKey(nameLower);
+                        if (normalizedName && !termsCache[normalizedName]) {
+                            termsCache[normalizedName] = parseInt(id, 10);
+                        }
                         // Also cache without "days" suffix
                         var withoutDays = nameLower.replace(/\s*days?\s*$/i, '').trim();
                         if (withoutDays !== nameLower) {
@@ -4970,6 +4987,45 @@ define([
 
         log.debug('resolvePaymentTermsId', 'Could not resolve terms "' + termsStr + '" - no match in cache');
         return null;
+    }
+
+    /**
+     * Resolve payment terms text to an internal ID
+     * Uses the same normalization as extraction (AI second pass compatible)
+     */
+    function resolveTerms(context) {
+        try {
+            var raw = context.terms || context.value || context.text || context.query || '';
+            if (!raw) {
+                return Response.error('MISSING_PARAM', 'Terms value is required');
+            }
+
+            var resolvedId = resolvePaymentTermsId(raw);
+            if (!resolvedId) {
+                return Response.success({ resolved: false });
+            }
+
+            var resolvedText = null;
+            try {
+                var lookup = search.lookupFields({
+                    type: search.Type.TERM,
+                    id: resolvedId,
+                    columns: ['name']
+                });
+                resolvedText = lookup && lookup.name ? lookup.name : null;
+            } catch (e) {
+                // Ignore lookup errors, ID is sufficient
+            }
+
+            return Response.success({
+                resolved: true,
+                value: String(resolvedId),
+                text: resolvedText || null
+            });
+        } catch (e) {
+            log.error('resolveTerms', e);
+            return Response.error('RESOLVE_TERMS_FAILED', e.message);
+        }
     }
 
     function updateDocument(context) {
