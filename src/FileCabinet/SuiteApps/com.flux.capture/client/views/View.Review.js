@@ -321,13 +321,14 @@
                     self.render();
 
                     // Fetch coding suggestions and vendor defaults if vendor is already set
-                    if (self.data && self.data.vendorId) {
-                        self.fetchCodingSuggestions(self.data.vendorId);
-                        self.fetchVendorDefaults(self.data.vendorId);
+                    var vendorId = self.data && (self.data.vendorId || self.data.vendor);
+                    if (vendorId) {
+                        self.fetchCodingSuggestions(vendorId);
+                        self.fetchVendorDefaults(vendorId);
                     }
 
                     // Auto-load PO match data for vendor bills
-                    if (self.transactionType === 'vendorbill' && self.data && self.data.vendorId) {
+                    if (self.transactionType === 'vendorbill' && vendorId) {
                         self.loadPOMatchData();
                     }
                 })
@@ -534,8 +535,9 @@
                         self.animateContentEnter();
 
                         // Fetch coding suggestions if vendor is set
-                        if (self.data && self.data.vendorId) {
-                            self.fetchCodingSuggestions(self.data.vendorId);
+                        var vendorId = self.data && (self.data.vendorId || self.data.vendor);
+                        if (vendorId) {
+                            self.fetchCodingSuggestions(vendorId);
                         }
                     })
                     .catch(function(err) {
@@ -810,8 +812,8 @@
 
             // Also check document-level data for entity (fallback if DOM not populated)
             if (!bodyFields.entity && this.data) {
-                if (this.data.vendorId) {
-                    bodyFields.entity = this.data.vendorId;
+                if (this.data.vendorId || this.data.vendor) {
+                    bodyFields.entity = this.data.vendorId || this.data.vendor;
                 } else if (this.data.employeeId) {
                     bodyFields.entity = this.data.employeeId;
                 }
@@ -2862,7 +2864,7 @@
                             '<input type="text" id="field-entity" class="entity-input" value="' + escapeHtml(doc.vendorName || '') + '" placeholder="Search or enter vendor name..." autocomplete="off">' +
                             '<div class="entity-dropdown" id="entity-dropdown" style="display:none;"></div>' +
                         '</div>' +
-                        (doc.vendorId ? '<input type="hidden" id="field-entityId" value="' + doc.vendorId + '">' : '') +
+                        ((doc.vendorId || doc.vendor) ? '<input type="hidden" id="field-entityId" value="' + (doc.vendorId || doc.vendor) + '">' : '') +
                         (doc.vendorMatchConfidence ? '<div class="field-match-info"><i class="fas fa-check-circle"></i> Matched with ' + Math.round(doc.vendorMatchConfidence * 100) + '% confidence</div>' : '') +
                     '</div>' +
                 '</div>';
@@ -5034,6 +5036,7 @@
                     if (defaults) {
                         self.vendorDefaults = defaults;
                         FCDebug.log('[VendorDefaults] Loaded:', defaults);
+                        self.applyVendorDefaultTerms(defaults);
 
                         // Also store vendor notes for display in review panel
                         if (defaults.comments) {
@@ -5044,6 +5047,22 @@
                 .catch(function(err) {
                     FCDebug.log('[VendorDefaults] Error fetching:', err);
                 });
+        },
+
+        applyVendorDefaultTerms: function(defaults) {
+            if (!defaults || !this.isInternalIdValue(defaults.terms)) return;
+
+            if (!this.formData) this.formData = {};
+            if (!this.formData.bodyFields) this.formData.bodyFields = {};
+
+            var bodyFields = this.formData.bodyFields;
+            var currentTerms = bodyFields.terms;
+            if (this.isInternalIdValue(currentTerms)) return;
+
+            bodyFields.terms = String(defaults.terms);
+            if (defaults.termsText && !bodyFields.terms_display) {
+                bodyFields.terms_display = defaults.termsText;
+            }
         },
 
         // Update vendor notes display in the review panel
@@ -7943,14 +7962,97 @@
             return tryCandidate(0);
         },
 
+        resolveHiddenTermsId: function() {
+            var self = this;
+            if (this.transactionType === 'expensereport') return Promise.resolve(false);
+
+            var visibleWrapper = document.querySelector('.typeahead-select.body-field-typeahead[data-field="terms"]');
+            if (visibleWrapper && visibleWrapper.offsetParent !== null) return Promise.resolve(false);
+
+            if (!this.formData) this.formData = {};
+            if (!this.formData.bodyFields) this.formData.bodyFields = {};
+
+            var bodyFields = this.formData.bodyFields;
+            var currentValue = bodyFields.terms;
+            if (this.isInternalIdValue(currentValue)) return Promise.resolve(false);
+
+            var vendorId = bodyFields.entity;
+            if (!this.isInternalIdValue(vendorId)) {
+                vendorId = this.data && (this.data.vendorId || this.data.vendor) ? (this.data.vendorId || this.data.vendor) : null;
+            }
+
+            function applyResolved(id, text) {
+                bodyFields.terms = String(id);
+                if (text) bodyFields.terms_display = text;
+
+                self.changes = self.changes || {};
+                self.changes.terms = String(id);
+                if (text) self.changes.terms_display = text;
+                self.markUnsaved();
+            }
+
+            function resolveFromText() {
+                var displayText = bodyFields.terms_display || (currentValue && !self.isInternalIdValue(currentValue) ? currentValue : '');
+                var candidates = self.buildTermsCandidates(displayText);
+                if (candidates.length === 0) return Promise.resolve(false);
+
+                function tryCandidate(idx) {
+                    if (idx >= candidates.length) return Promise.resolve(false);
+                    var candidate = candidates[idx];
+                    return API.get('resolveTerms', { terms: candidate.value })
+                        .then(function(result) {
+                            var data = result.data || result;
+                            if (data && data.resolved && data.value) {
+                                applyResolved(data.value, data.text || candidate.value);
+                                return true;
+                            }
+                            return tryCandidate(idx + 1);
+                        })
+                        .catch(function() {
+                            return tryCandidate(idx + 1);
+                        });
+                }
+
+                return tryCandidate(0);
+            }
+
+            if (this.vendorDefaults && this.isInternalIdValue(this.vendorDefaults.terms)) {
+                applyResolved(this.vendorDefaults.terms, this.vendorDefaults.termsText || null);
+                return Promise.resolve(true);
+            }
+
+            if (vendorId) {
+                return API.get('datasource', { type: 'vendordefaults', vendorId: vendorId })
+                    .then(function(result) {
+                        var defaults = result.data || result;
+                        if (defaults && self.isInternalIdValue(defaults.terms)) {
+                            self.vendorDefaults = defaults;
+                            applyResolved(defaults.terms, defaults.termsText || null);
+                            return true;
+                        }
+                        return false;
+                    })
+                    .then(function(resolved) {
+                        if (resolved) return true;
+                        return resolveFromText();
+                    })
+                    .catch(function() {
+                        return resolveFromText();
+                    });
+            }
+
+            return resolveFromText();
+        },
+
         resolveBodyTypeaheadIds: function() {
             var self = this;
             var wrappers = document.querySelectorAll('.typeahead-select.body-field-typeahead[data-field]');
             if (!wrappers || wrappers.length === 0) {
-                return Promise.resolve(false);
+                return this.resolveHiddenTermsId();
             }
 
             var tasks = [];
+            tasks.push(this.resolveHiddenTermsId());
             wrappers.forEach(function(wrapper) {
                 var fieldId = wrapper.dataset.field;
                 if (!fieldId) return;
