@@ -774,6 +774,8 @@
                     // Handle checkboxes
                     if (input.type === 'checkbox') {
                         value = input.checked ? 'T' : 'F';
+                    } else if (self.isDateField(fieldId, self.getBodyFieldType(fieldId))) {
+                        value = self.normalizeDateValue(value);
                     }
 
                     // Store the value
@@ -894,7 +896,12 @@
                     } else {
                         // For other changes, use as-is
                         if (!shouldIncludeBodyField(key)) return;
-                        bodyFields[key] = self.changes[key];
+                        var isDisplayKey = String(key).toLowerCase().indexOf('_display') === String(key).length - 8;
+                        var changeValue = self.changes[key];
+                        if (!isDisplayKey && self.isDateField(key, self.getBodyFieldType(key))) {
+                            changeValue = self.normalizeDateValue(changeValue);
+                        }
+                        bodyFields[key] = changeValue;
                         markExplicit(key);
                     }
                 });
@@ -3586,7 +3593,9 @@
                     '</div>';
                 }
             } else if (inferredType === 'date') {
-                html += '<input type="date" id="' + fieldId + '" class="ns-field-input" data-field="' + nsField.id + '" value="' + formatDateInput(value) + '"' +
+                var datePattern = this.getDateFormatPattern();
+                var displayDate = this.formatDateForDisplay(value);
+                html += '<input type="text" id="' + fieldId + '" class="ns-field-input ns-date-input" data-field="' + nsField.id + '" data-date-format="' + escapeHtml(datePattern) + '" value="' + escapeHtml(displayDate) + '" placeholder="' + escapeHtml(datePattern) + '"' +
                     (isDisabled ? ' disabled' : '') + (isRequired ? ' required' : '') + '>';
             } else if (inferredType === 'currency' || inferredType === 'float') {
                 html += '<div class="input-with-prefix">' +
@@ -3889,6 +3898,14 @@
             else if (field.type === 'integer' || field.id === 'quantity') {
                 return '<td class="fill-cell" data-field="' + field.id + '" data-row="' + idx + '" data-sublist="' + sublistId + '">' +
                     '<input type="number" step="1" class="line-input line-qty" id="' + inputId + '" value="' + (parseInt(value) || 0) + '" data-field="' + field.id + '">' +
+                    fillHandle + '</td>';
+            }
+            // Date fields
+            else if (this.isDateField(fieldId, field.type)) {
+                var lineDatePattern = this.getDateFormatPattern();
+                var lineDisplayDate = this.formatDateForDisplay(value);
+                return '<td class="fill-cell" data-field="' + field.id + '" data-row="' + idx + '" data-sublist="' + sublistId + '">' +
+                    '<input type="text" class="line-input line-date" id="' + inputId + '" value="' + escapeHtml(lineDisplayDate) + '" data-field="' + field.id + '" data-date-format="' + escapeHtml(lineDatePattern) + '" placeholder="' + escapeHtml(lineDatePattern) + '">' +
                     fillHandle + '</td>';
             }
             // Checkbox fields - handle same as header-level checkboxes
@@ -4205,6 +4222,195 @@
             return dateFields.indexOf(normalizedId) !== -1 || normalizedId.indexOf('date') !== -1;
         },
 
+        getBodyFieldType: function(fieldId) {
+            var fields = (this.formFields && this.formFields.bodyFields) || [];
+            var normalized = this.normalizeFieldId(fieldId).toLowerCase();
+            for (var i = 0; i < fields.length; i++) {
+                var candidate = fields[i];
+                var candidateId = this.normalizeFieldId(candidate && candidate.id).toLowerCase();
+                if (candidateId === normalized) {
+                    return candidate.type || null;
+                }
+            }
+            return null;
+        },
+
+        getDateFormatPattern: function() {
+            var preference = (this.settings && this.settings.dateFieldFormat) || 'netsuite';
+            if (preference === 'netsuite') {
+                return (this.settings && this.settings.netsuiteDateFormat) || 'MM/DD/YYYY';
+            }
+            return preference;
+        },
+
+        formatISODate: function(date) {
+            if (!date) return '';
+            var year = date.getFullYear();
+            var month = date.getMonth() + 1;
+            var day = date.getDate();
+            var pad2 = function(num) { return (num < 10 ? '0' : '') + num; };
+            return year + '-' + pad2(month) + '-' + pad2(day);
+        },
+
+        formatDateWithPattern: function(date, pattern) {
+            if (!date || !pattern) return '';
+            var pad2 = function(num) { return (num < 10 ? '0' : '') + num; };
+            var monthNamesShort = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+            var monthNamesLong = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+            var monthIndex = date.getMonth();
+            var tokens = {
+                'YYYY': String(date.getFullYear()),
+                'MM': pad2(monthIndex + 1),
+                'DD': pad2(date.getDate()),
+                'MMM': monthNamesShort[monthIndex],
+                'MMMM': monthNamesLong[monthIndex]
+            };
+            return pattern.replace(/YYYY|MMMM|MMM|MM|DD/g, function(token) {
+                return tokens[token] || token;
+            });
+        },
+
+        parseDateByPattern: function(value, pattern) {
+            if (!value || !pattern) return null;
+            var str = String(value).trim();
+            if (!str) return null;
+
+            var escapeRegex = function(ch) {
+                return ch.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+            };
+
+            var tokens = [];
+            var regexStr = '^';
+            var upper = pattern.toUpperCase();
+            var i = 0;
+
+            while (i < pattern.length) {
+                var remaining = upper.slice(i);
+                if (remaining.indexOf('YYYY') === 0) {
+                    tokens.push('year');
+                    regexStr += '(\\d{4})';
+                    i += 4;
+                    continue;
+                }
+                if (remaining.indexOf('MMMM') === 0) {
+                    tokens.push('monthName');
+                    regexStr += '([A-Za-z]+)';
+                    i += 4;
+                    continue;
+                }
+                if (remaining.indexOf('MMM') === 0) {
+                    tokens.push('monthName');
+                    regexStr += '([A-Za-z]{3,})';
+                    i += 3;
+                    continue;
+                }
+                if (remaining.indexOf('MM') === 0) {
+                    tokens.push('month');
+                    regexStr += '(\\d{1,2})';
+                    i += 2;
+                    continue;
+                }
+                if (remaining.indexOf('DD') === 0) {
+                    tokens.push('day');
+                    regexStr += '(\\d{1,2})';
+                    i += 2;
+                    continue;
+                }
+
+                regexStr += escapeRegex(pattern.charAt(i));
+                i += 1;
+            }
+
+            regexStr += '$';
+            var match = new RegExp(regexStr, 'i').exec(str);
+            if (!match) return null;
+
+            var year = null;
+            var month = null;
+            var day = null;
+            var idx = 1;
+            var monthMap = {
+                JAN: 1, FEB: 2, MAR: 3, APR: 4, MAY: 5, JUN: 6,
+                JUL: 7, AUG: 8, SEP: 9, OCT: 10, NOV: 11, DEC: 12
+            };
+
+            tokens.forEach(function(token) {
+                var part = match[idx++];
+                if (!part) return;
+                if (token === 'year') {
+                    year = parseInt(part, 10);
+                } else if (token === 'month') {
+                    month = parseInt(part, 10);
+                } else if (token === 'day') {
+                    day = parseInt(part, 10);
+                } else if (token === 'monthName') {
+                    var key = part.trim().slice(0, 3).toUpperCase();
+                    month = monthMap[key] || null;
+                }
+            });
+
+            if (!year || !month || !day) return null;
+            var date = new Date(year, month - 1, day);
+            if (date.getFullYear() !== year || date.getMonth() !== month - 1 || date.getDate() !== day) {
+                return null;
+            }
+            return date;
+        },
+
+        parseDateFlexible: function(value, preferredPattern) {
+            if (!value) return null;
+            if (value instanceof Date) return value;
+            if (typeof value === 'number') {
+                var numDate = new Date(value);
+                return isNaN(numDate.getTime()) ? null : numDate;
+            }
+
+            var str = String(value).trim();
+            if (!str) return null;
+
+            if (str.indexOf('T') > -1) {
+                var isoDate = new Date(str);
+                if (!isNaN(isoDate.getTime())) return isoDate;
+            }
+
+            var patterns = [];
+            if (preferredPattern) patterns.push(preferredPattern);
+            [
+                'YYYY-MM-DD', 'YYYY/MM/DD', 'YYYY.MM.DD',
+                'MM/DD/YYYY', 'DD/MM/YYYY',
+                'MM-DD-YYYY', 'DD-MM-YYYY',
+                'MM.DD.YYYY', 'DD.MM.YYYY',
+                'YYYYMMDD', 'DDMMYYYY', 'MMDDYYYY',
+                'DD-MMM-YYYY', 'DD-MMMM-YYYY',
+                'MMM DD, YYYY', 'MMMM DD, YYYY'
+            ].forEach(function(pattern) {
+                if (patterns.indexOf(pattern) === -1) patterns.push(pattern);
+            });
+
+            for (var i = 0; i < patterns.length; i++) {
+                var parsed = this.parseDateByPattern(str, patterns[i]);
+                if (parsed) return parsed;
+            }
+
+            var fallback = new Date(str);
+            if (!isNaN(fallback.getTime())) return fallback;
+
+            return null;
+        },
+
+        normalizeDateValue: function(value) {
+            if (!value) return value;
+            var parsed = this.parseDateFlexible(value, this.getDateFormatPattern());
+            return parsed ? this.formatISODate(parsed) : value;
+        },
+
+        formatDateForDisplay: function(value) {
+            if (!value) return '';
+            var parsed = this.parseDateFlexible(value, this.getDateFormatPattern());
+            if (!parsed) return String(value);
+            return this.formatDateWithPattern(parsed, this.getDateFormatPattern());
+        },
+
         // Detect checkbox fields
         isCheckboxField: function(fieldId, fieldType) {
             var ft = (fieldType || '').toLowerCase();
@@ -4492,7 +4698,11 @@
             panel.querySelectorAll('input:not(.line-input):not(.line-desc):not(.line-qty):not(.line-price):not(.line-amount), select:not(.line-input)').forEach(function(input) {
                 input.addEventListener('change', function() {
                     var field = this.id.replace('field-', '');
-                    self.changes[field] = this.value;
+                    var value = this.value;
+                    if (self.isDateField(field, self.getBodyFieldType(field))) {
+                        value = self.normalizeDateValue(value);
+                    }
+                    self.changes[field] = value;
                     self.markUnsaved();
                 });
             });
@@ -5865,16 +6075,23 @@
             }
 
             if (input) {
-                input.value = value;
+                var fieldType = this.getBodyFieldType(fieldId);
+                var displayValue = value;
+                var storedValue = value;
+                if (this.isDateField(fieldId, fieldType)) {
+                    storedValue = this.normalizeDateValue(value);
+                    displayValue = this.formatDateForDisplay(value);
+                }
+                input.value = displayValue;
 
                 // Also update display input for typeahead fields
                 var displayInput = el('#field-' + fieldId + '-display');
                 if (displayInput) {
-                    displayInput.value = value;
+                    displayInput.value = displayValue;
                 }
 
                 // Track the change
-                this.changes[fieldId] = value;
+                this.changes[fieldId] = storedValue;
                 this.markUnsaved();
 
                 // Remove the suggestion button and highlight
@@ -5888,7 +6105,8 @@
                 this.updateApplyAllButton();
 
                 // Show brief success feedback
-                UI.toast('Applied: ' + (value.length > 20 ? value.substring(0, 20) + '...' : value), 'success');
+                var toastValue = String(displayValue || '');
+                UI.toast('Applied: ' + (toastValue.length > 20 ? toastValue.substring(0, 20) + '...' : toastValue), 'success');
             }
         },
 
@@ -5914,14 +6132,21 @@
                 }
 
                 if (input) {
-                    input.value = value;
+                    var fieldType = self.getBodyFieldType(fieldId);
+                    var displayValue = value;
+                    var storedValue = value;
+                    if (self.isDateField(fieldId, fieldType)) {
+                        storedValue = self.normalizeDateValue(value);
+                        displayValue = self.formatDateForDisplay(value);
+                    }
+                    input.value = displayValue;
 
                     var displayInput = el('#field-' + fieldId + '-display');
                     if (displayInput) {
-                        displayInput.value = value;
+                        displayInput.value = displayValue;
                     }
 
-                    self.changes[fieldId] = value;
+                    self.changes[fieldId] = storedValue;
 
                     var formField = btn.closest('.form-field');
                     if (formField) {
@@ -5992,6 +6217,16 @@
             var normalizedFieldId = this.normalizeFieldId(fieldId);
             var normalizedLowerFieldId = normalizedFieldId.toLowerCase();
             var normalizedSublistId = (sublistId || '').toLowerCase();
+            var schema = this.getSublistSchema(sublistId);
+            var schemaFields = (schema.fields || schema.columns || []);
+            var schemaField = schemaFields.find(function(f) {
+                return (f.id || '').toLowerCase() === normalizedLowerFieldId;
+            });
+            var schemaFieldType = schemaField && schemaField.type ? schemaField.type : null;
+
+            if (this.isDateField(normalizedFieldId, schemaFieldType)) {
+                value = this.normalizeDateValue(value);
+            }
             if (lowerFieldId === 'amount' || lowerFieldId === 'rate' || lowerFieldId === 'quantity') {
                 value = parseFloat(value) || 0;
             }
@@ -6001,12 +6236,6 @@
             }
 
             // For select fields, only store internal IDs (non-ID values go to _display)
-            var schema = this.getSublistSchema(sublistId);
-            var schemaFields = (schema.fields || schema.columns || []);
-            var schemaField = schemaFields.find(function(f) {
-                return (f.id || '').toLowerCase() === normalizedLowerFieldId;
-            });
-            var schemaFieldType = schemaField && schemaField.type ? schemaField.type : null;
             if (this.requiresInternalId(normalizedFieldId, schemaFieldType) &&
                 value !== undefined && value !== null && value !== '' &&
                 !this.isInternalIdValue(value)) {
@@ -6304,6 +6533,8 @@
                 var container = document.querySelector('#sublist-' + sublistId);
                 if (!container) return;
 
+                var schema = self.getSublistSchema(sublistId);
+                var schemaFields = (schema.fields || schema.columns || []);
                 var rows = container.querySelectorAll('tr[data-idx]');
                 rows.forEach(function(row) {
                     var idx = parseInt(row.dataset.idx, 10);
@@ -6365,6 +6596,14 @@
                             value = input.checked ? 'T' : 'F';
                         } else {
                             value = input.value;
+                        }
+
+                        var schemaField = schemaFields.find(function(f) {
+                            return (f.id || '').toLowerCase() === normalizedFieldId;
+                        });
+                        var schemaFieldType = schemaField && schemaField.type ? schemaField.type : null;
+                        if (self.isDateField(fieldId, schemaFieldType)) {
+                            value = self.normalizeDateValue(value);
                         }
 
                         // Update line data
@@ -7590,6 +7829,351 @@
         },
 
         /**
+         * Smart auto-coding helpers
+         */
+        getCodingSuggestionsTargetSublistId: function() {
+            if (this.codingSuggestionsSublistId) return this.codingSuggestionsSublistId;
+            var sublists = this.formData && this.formData.sublists ? this.formData.sublists : null;
+            if (sublists) {
+                if (Array.isArray(sublists.expense) && sublists.expense.length > 0) return 'expense';
+                if (Array.isArray(sublists.item) && sublists.item.length > 0) return 'item';
+                if (Array.isArray(sublists.expense)) return 'expense';
+                if (Array.isArray(sublists.item)) return 'item';
+            }
+            if (el('#sublist-expense')) return 'expense';
+            if (el('#sublist-item')) return 'item';
+            return null;
+        },
+
+        getCodingSuggestionOptionLabel: function(options, value) {
+            if (!options || value === undefined || value === null || value === '') return '';
+            var valueStr = String(value);
+            for (var i = 0; i < options.length; i++) {
+                var opt = options[i];
+                if (!opt) continue;
+                var optValue = (opt.value !== undefined && opt.value !== null) ? opt.value :
+                    (opt.id !== undefined && opt.id !== null) ? opt.id :
+                    (opt.internalId !== undefined && opt.internalId !== null) ? opt.internalId : null;
+                if (optValue === null || optValue === undefined) continue;
+                if (String(optValue) === valueStr) {
+                    return opt.text || opt.name || opt.label || opt.display || String(optValue);
+                }
+            }
+            return '';
+        },
+
+        getCodingSuggestionDisplayText: function(fieldKey, value) {
+            if (value === undefined || value === null || value === '') return '';
+            var key = (fieldKey || '').toLowerCase();
+            var label = '';
+            if (key === 'account' || key === 'expenseaccount') {
+                var accountOptions = [].concat(this.expenseAccountsData || [], this.cogsAccountsData || []);
+                label = this.getCodingSuggestionOptionLabel(accountOptions, value);
+            } else if (key === 'item') {
+                label = this.getCodingSuggestionOptionLabel(this.itemsData || [], value);
+            }
+            return label || String(value);
+        },
+
+        getCodingSuggestionDisplayLabel: function(fieldKey, value) {
+            if (value === undefined || value === null || value === '') return '';
+            var displayText = this.getCodingSuggestionDisplayText(fieldKey, value);
+            var valueStr = String(value);
+            if (displayText && displayText !== valueStr) {
+                return displayText + ' (ID ' + valueStr + ')';
+            }
+            return valueStr;
+        },
+
+        getHeaderFieldLabel: function(fieldId) {
+            var fields = (this.formFields && this.formFields.bodyFields) || [];
+            var match = fields.find(function(f) { return f && f.id === fieldId; });
+            return (match && match.label) || fieldId;
+        },
+
+        getHeaderFieldValue: function(fieldId) {
+            if (this.formData && this.formData.bodyFields) {
+                var directValue = this.formData.bodyFields[fieldId];
+                if (directValue !== undefined && directValue !== null && String(directValue).trim() !== '') {
+                    return directValue;
+                }
+                var displayValue = this.formData.bodyFields[fieldId + '_display'];
+                if (displayValue !== undefined && displayValue !== null && String(displayValue).trim() !== '') {
+                    return displayValue;
+                }
+            }
+            var input = el('#field-' + fieldId);
+            if (input && input.value) return input.value;
+            var displayInput = el('#field-' + fieldId + '-display');
+            if (displayInput && displayInput.value) return displayInput.value;
+            return '';
+        },
+
+        lineFieldHasValue: function(line, fieldId) {
+            if (!line) return false;
+            var keys = [fieldId];
+            if ((fieldId || '').toLowerCase() === 'account') {
+                keys.push('expenseaccount');
+            }
+            for (var i = 0; i < keys.length; i++) {
+                var key = keys[i];
+                if (!key) continue;
+                var normalized = String(key).toLowerCase();
+                var value = line[key] || line[normalized];
+                if (value !== undefined && value !== null && String(value).trim() !== '') {
+                    return true;
+                }
+                var display = line[key + '_display'] || line[normalized + '_display'];
+                if (display !== undefined && display !== null && String(display).trim() !== '') {
+                    return true;
+                }
+            }
+            return false;
+        },
+
+        buildCodingSuggestionsSummary: function(sublistId) {
+            var self = this;
+            var targetSublistId = sublistId || this.getCodingSuggestionsTargetSublistId();
+            var summary = {
+                sublistId: targetSublistId,
+                headerCount: 0,
+                lineCount: 0,
+                applyableCount: 0,
+                headerDetails: [],
+                lineDetails: []
+            };
+
+            var headerDefaults = this.codingSuggestions.headerDefaults || {};
+            Object.keys(headerDefaults).forEach(function(field) {
+                var suggestion = headerDefaults[field];
+                if (!suggestion || suggestion.value === undefined || suggestion.value === null || suggestion.value === '') return;
+                var label = self.getHeaderFieldLabel(field);
+                var currentValue = self.getHeaderFieldValue(field);
+                var isEmpty = !currentValue;
+                summary.headerCount += 1;
+                if (isEmpty) summary.applyableCount += 1;
+                summary.headerDetails.push({
+                    fieldId: field,
+                    label: label,
+                    value: suggestion.value,
+                    displayLabel: String(suggestion.value),
+                    confidence: suggestion.confidence || null,
+                    isEmpty: isEmpty
+                });
+            });
+
+            var lineSuggestions = this.codingSuggestions.lineItemSuggestions || [];
+            var fieldMap = [
+                { key: 'account', label: 'Account', valueKey: 'accountId' },
+                { key: 'department', label: 'Department', valueKey: 'id' },
+                { key: 'class', label: 'Class', valueKey: 'id' },
+                { key: 'location', label: 'Location', valueKey: 'id' },
+                { key: 'item', label: 'Item', valueKey: 'itemId' }
+            ];
+
+            lineSuggestions.forEach(function(lineSugg, idx) {
+                if (!lineSugg) return;
+                var lineIndex = (lineSugg.index !== undefined && lineSugg.index !== null) ? lineSugg.index : idx;
+                var line = null;
+                if (targetSublistId) {
+                    if (self.sublistData && self.sublistData[targetSublistId] && self.sublistData[targetSublistId][lineIndex]) {
+                        line = self.sublistData[targetSublistId][lineIndex];
+                    } else if (self.formData && self.formData.sublists && self.formData.sublists[targetSublistId] &&
+                        self.formData.sublists[targetSublistId][lineIndex]) {
+                        line = self.formData.sublists[targetSublistId][lineIndex];
+                    }
+                }
+
+                var fields = [];
+                fieldMap.forEach(function(fieldDef) {
+                    var suggestion = lineSugg[fieldDef.key];
+                    if (!suggestion) return;
+                    var rawValue = suggestion[fieldDef.valueKey];
+                    if (rawValue === undefined || rawValue === null || rawValue === '') return;
+                    var isEmpty = line ? !self.lineFieldHasValue(line, fieldDef.key) : false;
+                    if (isEmpty) summary.applyableCount += 1;
+                    fields.push({
+                        fieldKey: fieldDef.key,
+                        label: fieldDef.label,
+                        value: rawValue,
+                        displayText: self.getCodingSuggestionDisplayText(fieldDef.key, rawValue),
+                        displayLabel: self.getCodingSuggestionDisplayLabel(fieldDef.key, rawValue),
+                        confidence: suggestion.confidence || null,
+                        isEmpty: isEmpty
+                    });
+                });
+
+                if (fields.length > 0) {
+                    summary.lineCount += 1;
+                    summary.lineDetails.push({
+                        index: lineIndex,
+                        fields: fields
+                    });
+                }
+            });
+
+            return summary;
+        },
+
+        renderCodingSuggestionsDetails: function(summary) {
+            var html = '';
+            if (!summary) return html;
+
+            function renderField(field) {
+                var conf = typeof field.confidence === 'number' ? Math.round(field.confidence * 100) : null;
+                var confClass = conf >= 80 ? 'high' : conf >= 60 ? 'medium' : 'low';
+                var confHtml = conf !== null ? '<span class="suggestion-confidence ' + confClass + '">' + conf + '%</span>' : '';
+                var statusText = field.isEmpty ? 'empty' : 'filled';
+                return '<span class="coding-suggestion-field ' + (field.isEmpty ? 'is-empty' : 'is-filled') + '">' +
+                    '<span class="coding-suggestion-label">' + escapeHtml(field.label) + ':</span>' +
+                    '<span class="coding-suggestion-value">' + escapeHtml(field.displayLabel || '') + '</span>' +
+                    confHtml +
+                    '<span class="coding-suggestion-status">' + statusText + '</span>' +
+                '</span>';
+            }
+
+            if (summary.headerDetails.length > 0) {
+                html += '<div class="coding-suggestions-group">' +
+                    '<div class="coding-suggestions-group-title">Header Defaults</div>';
+                summary.headerDetails.forEach(function(detail) {
+                    html += '<div class="coding-suggestion-item">' +
+                        '<div class="coding-suggestion-line">Header</div>' +
+                        '<div class="coding-suggestion-fields">' +
+                            renderField({
+                                label: detail.label,
+                                displayLabel: detail.displayLabel || String(detail.value),
+                                confidence: detail.confidence,
+                                isEmpty: detail.isEmpty
+                            }) +
+                        '</div>' +
+                    '</div>';
+                });
+                html += '</div>';
+            }
+
+            if (summary.lineDetails.length > 0) {
+                html += '<div class="coding-suggestions-group">' +
+                    '<div class="coding-suggestions-group-title">Line Suggestions</div>';
+                summary.lineDetails.forEach(function(line) {
+                    html += '<div class="coding-suggestion-item">' +
+                        '<div class="coding-suggestion-line">Line ' + (line.index + 1) + '</div>' +
+                        '<div class="coding-suggestion-fields">' +
+                            line.fields.map(renderField).join('') +
+                        '</div>' +
+                    '</div>';
+                });
+                html += '</div>';
+            }
+
+            if (!html) {
+                html = '<div class="coding-suggestions-empty">No preview available.</div>';
+            }
+
+            return html;
+        },
+
+        getSublistFieldElements: function(row, fieldKey) {
+            if (!row || !fieldKey) return null;
+            var candidates = [fieldKey];
+            if (String(fieldKey).toLowerCase() === 'account') {
+                candidates.push('expenseaccount');
+            }
+
+            for (var i = 0; i < candidates.length; i++) {
+                var candidate = String(candidates[i]).toLowerCase();
+                var wrapper = null;
+                row.querySelectorAll('.typeahead-select[data-field]').forEach(function(el) {
+                    if (!wrapper && (el.dataset.field || '').toLowerCase() === candidate) {
+                        wrapper = el;
+                    }
+                });
+                if (wrapper) {
+                    return {
+                        fieldId: wrapper.dataset.field,
+                        wrapper: wrapper,
+                        hiddenInput: wrapper.querySelector('input[type="hidden"]'),
+                        displayInput: wrapper.querySelector('.typeahead-input')
+                    };
+                }
+
+                var input = null;
+                row.querySelectorAll('.line-input[data-field]').forEach(function(el) {
+                    if (!input && (el.dataset.field || '').toLowerCase() === candidate) {
+                        input = el;
+                    }
+                });
+                if (input) {
+                    return {
+                        fieldId: input.dataset.field,
+                        input: input
+                    };
+                }
+            }
+            return null;
+        },
+
+        applyCodingSuggestionToLine: function(sublistId, lineIdx, fieldKey, value, displayText) {
+            if (!sublistId && sublistId !== '') return false;
+            if (lineIdx === undefined || lineIdx === null) return false;
+
+            var row = el('#sublist-' + sublistId + ' tr[data-idx="' + lineIdx + '"]');
+            var lineExists = false;
+            if (this.sublistData && this.sublistData[sublistId] && this.sublistData[sublistId][lineIdx]) {
+                lineExists = true;
+            } else if (this.formData && this.formData.sublists && this.formData.sublists[sublistId] &&
+                this.formData.sublists[sublistId][lineIdx]) {
+                lineExists = true;
+            }
+            if (!row && !lineExists) return false;
+            var fieldEls = this.getSublistFieldElements(row, fieldKey);
+            var fieldId = fieldKey;
+            if (fieldEls && fieldEls.fieldId) {
+                fieldId = fieldEls.fieldId;
+            }
+
+            var schema = this.getSublistSchema(sublistId);
+            var schemaFields = (schema.fields || schema.columns || []);
+            var schemaField = schemaFields.find(function(f) {
+                return (f.id || '').toLowerCase() === String(fieldId).toLowerCase();
+            });
+            var schemaFieldType = schemaField && schemaField.type ? schemaField.type : null;
+            var isDateField = this.isDateField(fieldId, schemaFieldType);
+            var displayValue = displayText || String(value || '');
+            var storedValue = value;
+            if (isDateField) {
+                storedValue = this.normalizeDateValue(value);
+                displayValue = this.formatDateForDisplay(value);
+            }
+
+            if (fieldEls) {
+                if (fieldEls.hiddenInput) fieldEls.hiddenInput.value = storedValue;
+                if (fieldEls.displayInput) fieldEls.displayInput.value = displayValue;
+                if (fieldEls.input) fieldEls.input.value = isDateField ? displayValue : value;
+
+                var highlightTarget = fieldEls.displayInput || fieldEls.input || fieldEls.hiddenInput;
+                if (highlightTarget) highlightTarget.classList.add('field-suggested');
+            }
+
+            this.updateSublistLine(sublistId, lineIdx, fieldId, storedValue);
+
+            var displayValueToStore = displayText || (fieldEls && fieldEls.displayInput ? fieldEls.displayInput.value : '');
+            if (displayValueToStore) {
+                var line = this.sublistData && this.sublistData[sublistId] && this.sublistData[sublistId][lineIdx];
+                if (line) {
+                    line[fieldId + '_display'] = displayValueToStore;
+                    line[String(fieldId).toLowerCase() + '_display'] = displayValueToStore;
+                }
+                if (this.formData && this.formData.sublists && this.formData.sublists[sublistId] &&
+                    this.formData.sublists[sublistId][lineIdx]) {
+                    this.formData.sublists[sublistId][lineIdx][fieldId + '_display'] = displayValueToStore;
+                    this.formData.sublists[sublistId][lineIdx][String(fieldId).toLowerCase() + '_display'] = displayValueToStore;
+                }
+            }
+
+            return true;
+        },
+
+        /**
          * Show indicator that suggestions are available
          */
         showSuggestionsIndicator: function() {
@@ -7597,47 +8181,73 @@
             var existing = el('#suggestions-indicator');
             if (existing) existing.remove();
 
-            // Count available suggestions
-            var headerCount = Object.keys(this.codingSuggestions.headerDefaults || {}).length;
-            var lineCount = (this.codingSuggestions.lineItemSuggestions || []).filter(function(l) {
-                return l.account || l.department || l.class || l.location;
-            }).length;
+            var summary = this.buildCodingSuggestionsSummary();
+            if (!summary || (summary.headerCount === 0 && summary.lineCount === 0)) return;
 
-            if (headerCount === 0 && lineCount === 0) return;
-
-            // Add indicator after entity section
-            var entitySection = el('.entity-field');
-            if (!entitySection) return;
+            var summaryBits = [];
+            if (summary.lineCount > 0) {
+                summaryBits.push(summary.lineCount + ' line suggestion' + (summary.lineCount > 1 ? 's' : ''));
+            }
+            if (summary.headerCount > 0) {
+                summaryBits.push(summary.headerCount + ' header default' + (summary.headerCount > 1 ? 's' : ''));
+            }
+            var summaryText = summaryBits.join(', ') || 'Suggestions available';
+            if (summary.applyableCount === 0) {
+                summaryText += ' · All suggested fields already have values';
+            }
 
             var indicator = document.createElement('div');
             indicator.id = 'suggestions-indicator';
-            indicator.className = 'suggestions-indicator';
+            indicator.className = 'suggestions-indicator coding-suggestions-panel';
             indicator.innerHTML =
                 '<div class="suggestions-banner">' +
                     '<i class="fas fa-magic"></i>' +
                     '<span class="suggestions-text">' +
-                        '<strong>Smart Coding Available</strong> - ' +
-                        (headerCount > 0 ? headerCount + ' header field' + (headerCount > 1 ? 's' : '') : '') +
-                        (headerCount > 0 && lineCount > 0 ? ', ' : '') +
-                        (lineCount > 0 ? lineCount + ' line suggestion' + (lineCount > 1 ? 's' : '') : '') +
+                        '<strong>Smart Coding Suggestions</strong> - ' +
+                        summaryText +
                     '</span>' +
-                    '<button type="button" class="btn btn-sm btn-primary" id="btn-apply-suggestions">' +
-                        '<i class="fas fa-check"></i> Apply All' +
+                    '<button type="button" class="btn btn-sm btn-primary btn-apply-coding-suggestions"' +
+                        (summary.applyableCount > 0 ? '' : ' disabled') + '>' +
+                        '<i class="fas fa-check"></i> Apply Blanks' +
+                        (summary.applyableCount > 0 ? ' (' + summary.applyableCount + ')' : '') +
                     '</button>' +
-                    '<button type="button" class="btn btn-sm btn-ghost" id="btn-dismiss-suggestions">' +
+                    '<button type="button" class="btn btn-sm btn-ghost btn-toggle-coding-suggestions" title="Preview">' +
+                        '<i class="fas fa-eye"></i>' +
+                    '</button>' +
+                    '<button type="button" class="btn btn-sm btn-ghost btn-dismiss-coding-suggestions" title="Dismiss">' +
                         '<i class="fas fa-times"></i>' +
                     '</button>' +
+                '</div>' +
+                '<div class="coding-suggestions-details" style="display:none;">' +
+                    this.renderCodingSuggestionsDetails(summary) +
                 '</div>';
 
-            entitySection.parentNode.insertBefore(indicator, entitySection.nextSibling);
+            var targetSublistId = summary.sublistId;
+            var sublistContainer = targetSublistId ? el('#sublist-' + targetSublistId) : null;
+            var lineTable = targetSublistId ? el('#lines-' + targetSublistId) : null;
+            if (sublistContainer && lineTable) {
+                sublistContainer.insertBefore(indicator, lineTable);
+            } else {
+                var entitySection = el('.entity-field');
+                if (!entitySection || !entitySection.parentNode) return;
+                entitySection.parentNode.insertBefore(indicator, entitySection.nextSibling);
+            }
 
-            // Bind events
-            var applyBtn = el('#btn-apply-suggestions');
-            var dismissBtn = el('#btn-dismiss-suggestions');
+            var applyBtn = indicator.querySelector('.btn-apply-coding-suggestions');
+            var toggleBtn = indicator.querySelector('.btn-toggle-coding-suggestions');
+            var dismissBtn = indicator.querySelector('.btn-dismiss-coding-suggestions');
+            var details = indicator.querySelector('.coding-suggestions-details');
 
             if (applyBtn) {
                 applyBtn.addEventListener('click', function() {
                     ReviewController.applySuggestions();
+                });
+            }
+            if (toggleBtn && details) {
+                toggleBtn.addEventListener('click', function() {
+                    var isHidden = details.style.display === 'none' || details.style.display === '';
+                    details.style.display = isHidden ? 'block' : 'none';
+                    toggleBtn.classList.toggle('active', isHidden);
                 });
             }
             if (dismissBtn) {
@@ -7653,93 +8263,56 @@
         applySuggestions: function() {
             var self = this;
             var applied = 0;
+            var summary = this.buildCodingSuggestionsSummary();
 
-            // Apply header defaults
-            var headerDefaults = this.codingSuggestions.headerDefaults || {};
-            Object.keys(headerDefaults).forEach(function(field) {
-                var suggestion = headerDefaults[field];
-                if (!suggestion || !suggestion.value) return;
+            summary.headerDetails.forEach(function(detail) {
+                if (!detail.isEmpty) return;
+                var field = detail.fieldId;
+                var suggestionValue = detail.value;
+                if (suggestionValue === undefined || suggestionValue === null || suggestionValue === '') return;
 
-                // Find the field element
                 var fieldEl = el('#field-' + field) || el('[name="' + field + '"]');
                 if (fieldEl && !fieldEl.value) {
-                    fieldEl.value = suggestion.value;
-                    self.changes[field] = suggestion.value;
+                    var fieldType = self.getBodyFieldType(field);
+                    var displayValue = suggestionValue;
+                    var storedValue = suggestionValue;
+                    if (self.isDateField(field, fieldType)) {
+                        storedValue = self.normalizeDateValue(suggestionValue);
+                        displayValue = self.formatDateForDisplay(suggestionValue);
+                    }
+                    fieldEl.value = displayValue;
+                    self.changes[field] = storedValue;
 
-                    // Update formData
                     if (self.formData && self.formData.bodyFields) {
-                        self.formData.bodyFields[field] = suggestion.value;
+                        self.formData.bodyFields[field] = storedValue;
                     }
 
-                    // Add visual indicator
                     fieldEl.classList.add('field-suggested');
                     applied++;
                 }
             });
 
-            // Apply line item suggestions
-            var lineSuggestions = this.codingSuggestions.lineItemSuggestions || [];
-            lineSuggestions.forEach(function(lineSugg, index) {
-                if (!lineSugg) return;
-
-                // Apply account suggestion
-                if (lineSugg.account && lineSugg.account.accountId) {
-                    var accountField = el('#line-account-' + index);
-                    if (accountField && !accountField.value) {
-                        accountField.value = lineSugg.account.accountId;
-                        accountField.classList.add('field-suggested');
-                        applied++;
-
-                        // Update formData
-                        if (self.formData && self.formData.sublists) {
-                            var sublists = self.formData.sublists;
-                            var lines = sublists.expense || sublists.item || [];
-                            if (lines[index]) {
-                                lines[index].account = lineSugg.account.accountId;
-                            }
-                        }
-                    }
-                }
-
-                // Apply department suggestion
-                if (lineSugg.department && lineSugg.department.id) {
-                    var deptField = el('#line-department-' + index);
-                    if (deptField && !deptField.value) {
-                        deptField.value = lineSugg.department.id;
-                        deptField.classList.add('field-suggested');
-                        applied++;
-                    }
-                }
-
-                // Apply class suggestion
-                if (lineSugg.class && lineSugg.class.id) {
-                    var classField = el('#line-class-' + index);
-                    if (classField && !classField.value) {
-                        classField.value = lineSugg.class.id;
-                        classField.classList.add('field-suggested');
-                        applied++;
-                    }
-                }
-
-                // Apply location suggestion
-                if (lineSugg.location && lineSugg.location.id) {
-                    var locField = el('#line-location-' + index);
-                    if (locField && !locField.value) {
-                        locField.value = lineSugg.location.id;
-                        locField.classList.add('field-suggested');
-                        applied++;
-                    }
-                }
+            summary.lineDetails.forEach(function(lineDetail) {
+                lineDetail.fields.forEach(function(fieldDetail) {
+                    if (!fieldDetail.isEmpty) return;
+                    var didApply = self.applyCodingSuggestionToLine(
+                        summary.sublistId,
+                        lineDetail.index,
+                        fieldDetail.fieldKey,
+                        fieldDetail.value,
+                        fieldDetail.displayText
+                    );
+                    if (didApply) applied++;
+                });
             });
 
-            this.suggestionsApplied = true;
-            this.markUnsaved();
+            if (applied > 0) {
+                this.suggestionsApplied = true;
+                this.markUnsaved();
+            }
 
-            // Remove the indicator
-            var indicator = el('#suggestions-indicator');
-            if (indicator) indicator.remove();
+            this.showSuggestionsIndicator();
 
-            // Show success message
             if (applied > 0) {
                 UI.toast('Applied ' + applied + ' coding suggestion' + (applied > 1 ? 's' : ''), 'success');
             } else {

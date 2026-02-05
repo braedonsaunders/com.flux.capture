@@ -11856,6 +11856,95 @@ body.extraction-selecting .form-field:hover {
     background: rgba(0, 0, 0, 0.05);
 }
 
+.coding-suggestions-panel {
+    margin: var(--space-md) 0;
+}
+
+.coding-suggestions-details {
+    margin-top: var(--space-sm);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-md);
+    background: var(--surface-card);
+    padding: var(--space-sm);
+}
+
+.coding-suggestions-group {
+    margin-bottom: var(--space-sm);
+}
+
+.coding-suggestions-group:last-child {
+    margin-bottom: 0;
+}
+
+.coding-suggestions-group-title {
+    font-size: var(--font-size-xs);
+    color: var(--text-tertiary);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    margin-bottom: var(--space-xs);
+}
+
+.coding-suggestion-item {
+    display: flex;
+    gap: var(--space-md);
+    padding: var(--space-xs) 0;
+    border-bottom: 1px dashed var(--border-color);
+}
+
+.coding-suggestion-item:last-child {
+    border-bottom: none;
+}
+
+.coding-suggestion-line {
+    min-width: 70px;
+    font-weight: 600;
+    color: var(--text-primary);
+    font-size: var(--font-size-sm);
+}
+
+.coding-suggestion-fields {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-sm);
+}
+
+.coding-suggestion-field {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 2px 6px;
+    border-radius: 6px;
+    background: rgba(148, 163, 184, 0.15);
+    font-size: var(--font-size-sm);
+    color: var(--text-secondary);
+}
+
+.coding-suggestion-field.is-empty {
+    background: rgba(147, 51, 234, 0.12);
+}
+
+.coding-suggestion-label {
+    font-weight: 600;
+    color: var(--text-secondary);
+}
+
+.coding-suggestion-value {
+    color: var(--text-primary);
+}
+
+.coding-suggestion-status {
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--text-tertiary);
+}
+
+.coding-suggestions-empty {
+    font-size: var(--font-size-sm);
+    color: var(--text-tertiary);
+    padding: var(--space-xs) 0;
+}
+
 /* Field with applied suggestion indicator */
 .field-suggested {
     background-color: rgba(147, 51, 234, 0.08) !important;

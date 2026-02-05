@@ -2666,6 +2666,70 @@ define([
         }
     }
 
+    function normalizeNetSuiteDateFormat(preference) {
+        if (!preference) return '';
+        var raw = String(preference);
+        var upper = raw.toUpperCase();
+        var result = '';
+        var i = 0;
+
+        while (i < raw.length) {
+            var remaining = upper.slice(i);
+            if (remaining.indexOf('MONTH') === 0) {
+                result += 'MMMM';
+                i += 5;
+                continue;
+            }
+            if (remaining.indexOf('MON') === 0) {
+                result += 'MMM';
+                i += 3;
+                continue;
+            }
+            if (remaining.indexOf('YYYY') === 0) {
+                result += 'YYYY';
+                i += 4;
+                continue;
+            }
+            if (remaining.indexOf('YY') === 0) {
+                result += 'YYYY';
+                i += 2;
+                continue;
+            }
+            if (remaining.indexOf('MM') === 0) {
+                result += 'MM';
+                i += 2;
+                continue;
+            }
+            if (remaining.indexOf('DD') === 0) {
+                result += 'DD';
+                i += 2;
+                continue;
+            }
+
+            var ch = raw.charAt(i);
+            if (ch === 'M' || ch === 'm') {
+                result += 'MM';
+            } else if (ch === 'D' || ch === 'd') {
+                result += 'DD';
+            } else {
+                result += ch;
+            }
+            i += 1;
+        }
+
+        return result;
+    }
+
+    function getNetSuiteDateFormat() {
+        try {
+            var preference = runtime.getCurrentUser().getPreference({ name: 'DATEFORMAT' });
+            return normalizeNetSuiteDateFormat(preference);
+        } catch (e) {
+            log.debug('getNetSuiteDateFormat', 'Could not read preference: ' + e.message);
+            return '';
+        }
+    }
+
     function getSettings() {
         // Try to load saved settings from config record
         var savedSettings = {};
@@ -2753,6 +2817,7 @@ define([
         var baseCurrencyInfo = getBaseCurrencyInfo();
         var companyCurrencyText = (baseCurrencyInfo && baseCurrencyInfo.text) || savedSettings.companyCurrency || 'CAD';
         var companyCurrencyId = (baseCurrencyInfo && baseCurrencyInfo.id) ? String(baseCurrencyInfo.id) : '';
+        var netsuiteDateFormat = getNetSuiteDateFormat();
 
         var settings = {
             // License key (if saved)
@@ -2772,6 +2837,8 @@ define([
             multiCurrencyEnabled: multiCurrencyEnabled,
             defaultCurrency: savedSettings.defaultCurrency || '',
             defaultCurrencyText: savedSettings.defaultCurrencyText || '',
+            dateFieldFormat: savedSettings.dateFieldFormat || 'netsuite',
+            netsuiteDateFormat: netsuiteDateFormat || 'MM/DD/YYYY',
             anomalyDetection: anomalyDefaults,
             // Transaction creation settings
             attachFileToTransaction: savedSettings.attachFileToTransaction !== false, // Default ON
@@ -2857,6 +2924,9 @@ define([
                 maxExtractionPages: parseInt(context.maxExtractionPages, 10) || 0,
                 defaultCurrency: context.defaultCurrency !== undefined ? context.defaultCurrency : (existingSettings.defaultCurrency || ''),
                 defaultCurrencyText: context.defaultCurrencyText !== undefined ? context.defaultCurrencyText : (existingSettings.defaultCurrencyText || ''),
+                dateFieldFormat: context.dateFieldFormat !== undefined
+                    ? context.dateFieldFormat
+                    : (existingSettings.dateFieldFormat || 'netsuite'),
                 // Company locale settings
                 companyCountry: context.companyCountry || 'CA',
                 companyCurrency: context.companyCurrency || 'CAD',

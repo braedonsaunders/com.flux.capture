@@ -48,6 +48,15 @@
                     }
                     self.loadCurrencyOptions(settings);
 
+                    var dateFormatSelect = el('#date-field-format');
+                    if (dateFormatSelect) {
+                        dateFormatSelect.value = settings.dateFieldFormat || 'netsuite';
+                        var netsuiteOption = dateFormatSelect.querySelector('option[value="netsuite"]');
+                        if (netsuiteOption && settings.netsuiteDateFormat) {
+                            netsuiteOption.textContent = 'NetSuite Preference (' + settings.netsuiteDateFormat + ')';
+                        }
+                    }
+
                     // Anomaly Detection Settings - Duplicate Detection
                     var setCheckbox = function(id, value) {
                         var elem = el(id);
@@ -2977,6 +2986,7 @@
                 maxExtractionPages: isNaN(maxPagesVal) ? 0 : maxPagesVal,
                 defaultCurrency: defaultCurrencyId,
                 defaultCurrencyText: defaultCurrencyText,
+                dateFieldFormat: el('#date-field-format') ? el('#date-field-format').value : 'netsuite',
                 // Transaction Creation Settings
                 attachFileToTransaction: getChecked('#attach-file-to-transaction'),
                 deleteDocumentOnSuccess: getChecked('#delete-document-on-success'),
