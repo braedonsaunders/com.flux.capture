@@ -290,7 +290,8 @@ define([
                     const processed = engine.processWithRawResult(normalizedResult, {
                         documentType: doc.documentType,
                         enableVendorMatching: true,
-                        maxExtractionPages: maxExtractionPages
+                        maxExtractionPages: maxExtractionPages,
+                        documentId: doc.id
                     });
 
                     if (processed.success) {
