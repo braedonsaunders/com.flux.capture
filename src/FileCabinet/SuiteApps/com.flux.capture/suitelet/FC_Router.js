@@ -2776,6 +2776,7 @@ define([
             // Transaction creation settings
             attachFileToTransaction: savedSettings.attachFileToTransaction !== false, // Default ON
             deleteDocumentOnSuccess: savedSettings.deleteDocumentOnSuccess !== false, // Default ON
+            preventTaxRecalculation: savedSettings.preventTaxRecalculation === true, // Default OFF
             // Submit button mode per transaction type: 'create', 'submit_for_approval', or 'both'
             submitButtonMode: submitButtonModeDefaults,
             // Workflow settings for triggering approval workflows (optional)
@@ -2862,6 +2863,9 @@ define([
                 // Transaction creation settings
                 attachFileToTransaction: context.attachFileToTransaction === true,
                 deleteDocumentOnSuccess: context.deleteDocumentOnSuccess !== false,
+                preventTaxRecalculation: context.preventTaxRecalculation !== undefined
+                    ? context.preventTaxRecalculation === true
+                    : (existingSettings.preventTaxRecalculation === true),
                 // Submit button mode per transaction type
                 submitButtonMode: {
                     vendorbill: submitModes.vendorbill || 'create',
@@ -6193,6 +6197,8 @@ define([
 
         var bodyFields = formData.bodyFields || {};
         var sublists = formData.sublists || {};
+        var settingsResult = getSettings();
+        var settings = (settingsResult && settingsResult.data) ? settingsResult.data : {};
         var txnRecord;
         stripBodyAccountIfLineLevel(bodyFields, sublists);
         var schemaMaps = buildSchemaMaps(transactionType, formData, bodyFields);
@@ -6302,6 +6308,44 @@ define([
             if (!normalized) return null;
             var parsed = parseFloat(normalized);
             return isNaN(parsed) ? null : parsed;
+        }
+
+        function shouldPreventTaxRecalcFor(txnType) {
+            return settings && settings.preventTaxRecalculation === true && txnType === 'vendorbill';
+        }
+
+        function getTaxTotalFromBodyFields(fields) {
+            if (!fields) return null;
+            var normalized = buildNormalizedFieldMap(fields, shouldSkipForNormalize);
+            var raw = normalized.taxtotal;
+            if (raw === undefined || raw === null || raw === '') {
+                raw = normalized.taxamount;
+            }
+            var parsed = parseNumericValue(raw);
+            return parsed === null ? null : parsed;
+        }
+
+        function setValueIfFieldExists(txn, fieldId, value) {
+            try {
+                txn.setValue({ fieldId: fieldId, value: value });
+                return true;
+            } catch (e) {
+                log.debug('applyTaxOverride', 'Failed to set ' + fieldId + ': ' + e.message);
+                return false;
+            }
+        }
+
+        function applyTaxOverrideIfEnabled(txn, fields, txnType) {
+            if (!shouldPreventTaxRecalcFor(txnType)) return;
+            var taxTotal = getTaxTotalFromBodyFields(fields);
+            if (taxTotal === null || taxTotal === undefined) return;
+
+            var overrideApplied = setValueIfFieldExists(txn, 'taxoverride', true);
+            if (!overrideApplied) {
+                setValueIfFieldExists(txn, 'taxtotal', taxTotal);
+                return;
+            }
+            setValueIfFieldExists(txn, 'taxtotal', taxTotal);
         }
 
         function buildSchemaMaps(txnType, formDataObj, bodyFieldsObj) {
@@ -7201,6 +7245,8 @@ define([
                 txnRecord.commitLine({ sublistId: 'expense' });
             }
 
+            applyTaxOverrideIfEnabled(txnRecord, bodyFields, transactionType);
+
         } else if (transactionType === 'vendorcredit') {
             txnRecord = record.create({ type: record.Type.VENDOR_CREDIT, isDynamic: true });
 
@@ -7481,6 +7527,7 @@ define([
 
             try {
                 if (postResults.success.length === 0) return;
+                applyTaxOverrideIfEnabled(rec, postBodyFields, transactionType);
                 rec.save({ enableSourcing: false, ignoreMandatoryFields: true });
                 if (postResults.failed.length > 0) {
                     log.audit('reapplyFormData.failedFields', postResults.failed);

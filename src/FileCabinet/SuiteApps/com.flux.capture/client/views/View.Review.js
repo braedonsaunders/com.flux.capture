@@ -76,6 +76,7 @@
             lineItemSuggestions: [],
             meta: { hasLearning: false }
         },
+        codingSuggestionsSublistId: null,
         suggestionsApplied: false,
 
         // ==========================================
@@ -473,6 +474,7 @@
                 lineItemSuggestions: [],
                 meta: { hasLearning: false }
             };
+            this.codingSuggestionsSublistId = null;
             this.suggestionsApplied = false;
 
             // Reset extraction pool
@@ -7541,9 +7543,23 @@
 
             // Build line items array from current form data
             var lineItems = [];
+            var sublistId = null;
             if (this.formData && this.formData.sublists) {
                 var sublists = this.formData.sublists;
-                var lines = sublists.expense || sublists.item || [];
+                var lines = [];
+                if (Array.isArray(sublists.expense) && sublists.expense.length > 0) {
+                    lines = sublists.expense;
+                    sublistId = 'expense';
+                } else if (Array.isArray(sublists.item) && sublists.item.length > 0) {
+                    lines = sublists.item;
+                    sublistId = 'item';
+                } else if (Array.isArray(sublists.expense)) {
+                    lines = sublists.expense;
+                    sublistId = 'expense';
+                } else if (Array.isArray(sublists.item)) {
+                    lines = sublists.item;
+                    sublistId = 'item';
+                }
                 lines.forEach(function(line) {
                     lineItems.push({
                         description: line.memo || line.description || '',
@@ -7554,6 +7570,7 @@
                     });
                 });
             }
+            this.codingSuggestionsSublistId = sublistId;
 
             API.get('codingSuggestions', {
                 vendorId: vendorId,

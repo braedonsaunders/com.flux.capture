@@ -1518,6 +1518,16 @@ define([
         }
 
         /**
+         * Compact invoice number for fuzzy comparisons
+         * @param {string} invoiceNumber - Raw invoice number
+         * @returns {string}
+         */
+        _compactInvoiceNumber(invoiceNumber) {
+            if (invoiceNumber === null || invoiceNumber === undefined) return '';
+            return String(invoiceNumber).trim().replace(/[\s\-_.#\/]+/g, '').toLowerCase();
+        }
+
+        /**
          * Determine if invoice number is meaningful enough for duplicate checks
          * @param {string} invoiceNumber - Invoice number to evaluate
          * @param {number} confidence - Optional extraction confidence
@@ -1529,8 +1539,8 @@ define([
             const trimmed = String(invoiceNumber).trim();
             if (!trimmed) return false;
 
-            const compact = trimmed.replace(/[\s\-_.#\/\\]+/g, '').toLowerCase();
-            if (compact.length < 3) return false;
+            const compact = this._compactInvoiceNumber(trimmed);
+            if (!compact || compact.length < 3) return false;
 
             const blocked = [
                 'invoice', 'inv', 'invno', 'invnumber', 'invoiceno', 'invoicenumber',
@@ -1548,6 +1558,15 @@ define([
         }
 
         /**
+         * Build SuiteQL expression to normalize invoice numbers for comparison
+         * @param {string} columnRef - Column reference to normalize
+         * @returns {string}
+         */
+        _buildCompactInvoiceSql(columnRef) {
+            return `LOWER(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(TRIM(${columnRef}), ' ', ''), '-', ''), '_', ''), '.', ''), '#', ''), '/', ''))`;
+        }
+
+        /**
          * Check for duplicate invoice by invoice number
          * @param {number} vendorId - Vendor internal ID
          * @param {string} invoiceNumber - Invoice number to check
@@ -1560,24 +1579,90 @@ define([
                     return false;
                 }
 
+                const normalizedLower = normalized.toLowerCase();
+                const compact = this._compactInvoiceNumber(normalized);
+
+                // Always check real transactions first (vendor bills)
+                const txnDuplicate = this._checkDuplicateInvoiceTransaction(vendorId, normalizedLower, compact);
+                if (txnDuplicate) {
+                    return true;
+                }
+
+                // Fallback: check other Flux documents still in-flight
+                return this._checkDuplicateInvoiceDocument(vendorId, normalizedLower, compact, currentDocumentId);
+            } catch (e) {
+                fcDebug.debug('FluxCapture._checkDuplicateInvoice', e.message);
+                return false;
+            }
+        }
+
+        /**
+         * Check for duplicate invoice on vendor bills (real transactions)
+         * @param {number} vendorId - Vendor internal ID
+         * @param {string} normalizedLower - Lowercased invoice number
+         * @param {string} compact - Compact invoice number (no separators)
+         * @returns {boolean}
+         */
+        _checkDuplicateInvoiceTransaction(vendorId, normalizedLower, compact) {
+            try {
+                const compactTranidSql = this._buildCompactInvoiceSql('t.tranid');
+                const compactOtherSql = this._buildCompactInvoiceSql('t.otherrefnum');
+                const sql = `
+                    SELECT COUNT(*) as cnt
+                    FROM transaction t
+                    WHERE t.type = 'VendBill'
+                    AND t.mainline = 'T'
+                    AND t.entity = ?
+                    AND (
+                        LOWER(TRIM(t.tranid)) = ?
+                        OR LOWER(TRIM(t.otherrefnum)) = ?
+                        OR ${compactTranidSql} = ?
+                        OR ${compactOtherSql} = ?
+                    )
+                `;
+                const result = query.runSuiteQL({
+                    query: sql,
+                    params: [vendorId, normalizedLower, normalizedLower, compact, compact]
+                });
+                return result.results[0].values[0] > 0;
+            } catch (e) {
+                fcDebug.debug('FluxCapture._checkDuplicateInvoiceTransaction', e.message);
+                return false;
+            }
+        }
+
+        /**
+         * Check for duplicate invoice among Flux documents still in-flight
+         * @param {number} vendorId - Vendor internal ID
+         * @param {string} normalizedLower - Lowercased invoice number
+         * @param {string} compact - Compact invoice number (no separators)
+         * @param {number} currentDocumentId - Current document ID to exclude from check
+         * @returns {boolean}
+         */
+        _checkDuplicateInvoiceDocument(vendorId, normalizedLower, compact, currentDocumentId) {
+            try {
                 // Exclude current document from duplicate check to avoid self-matching
                 const excludeClause = currentDocumentId ? ' AND id != ?' : '';
                 const params = currentDocumentId
-                    ? [vendorId, normalized, currentDocumentId]
-                    : [vendorId, normalized];
+                    ? [vendorId, normalizedLower, compact, currentDocumentId]
+                    : [vendorId, normalizedLower, compact];
 
+                const compactSql = this._buildCompactInvoiceSql('custrecord_flux_invoice_number');
                 const sql = `
                     SELECT COUNT(*) as cnt
                     FROM customrecord_flux_document
                     WHERE custrecord_flux_vendor = ?
-                    AND LOWER(TRIM(custrecord_flux_invoice_number)) = LOWER(?)
+                    AND (
+                        LOWER(TRIM(custrecord_flux_invoice_number)) = ?
+                        OR ${compactSql} = ?
+                    )
                     AND custrecord_flux_status IN (${DocStatus.EXTRACTED}, ${DocStatus.NEEDS_REVIEW}, ${DocStatus.COMPLETED})
                     ${excludeClause}
                 `;
                 const result = query.runSuiteQL({ query: sql, params: params });
                 return result.results[0].values[0] > 0;
             } catch (e) {
-                fcDebug.debug('FluxCapture._checkDuplicateInvoice', e.message);
+                fcDebug.debug('FluxCapture._checkDuplicateInvoiceDocument', e.message);
                 return false;
             }
         }

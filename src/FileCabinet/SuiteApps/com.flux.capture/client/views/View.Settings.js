@@ -87,6 +87,7 @@
                     // Transaction Creation Settings (default ON)
                     setCheckbox('#attach-file-to-transaction', settings.attachFileToTransaction);
                     setCheckbox('#delete-document-on-success', settings.deleteDocumentOnSuccess);
+                    setCheckboxOff('#prevent-tax-recalc', settings.preventTaxRecalculation);
 
                     // Submit Button Mode Settings (per transaction type)
                     var submitModes = settings.submitButtonMode || {};
@@ -2979,6 +2980,7 @@
                 // Transaction Creation Settings
                 attachFileToTransaction: getChecked('#attach-file-to-transaction'),
                 deleteDocumentOnSuccess: getChecked('#delete-document-on-success'),
+                preventTaxRecalculation: getChecked('#prevent-tax-recalc'),
                 // Submit Button Mode Settings (per transaction type)
                 submitButtonMode: {
                     vendorbill: getSelectValue('#submit-mode-vendorbill'),

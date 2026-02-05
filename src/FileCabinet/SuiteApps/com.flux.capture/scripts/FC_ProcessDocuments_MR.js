@@ -192,7 +192,8 @@ define([
                     documentType: documentType,
                     enableVendorMatching: true,
                     enableLearning: true,
-                    maxExtractionPages: maxExtractionPages
+                    maxExtractionPages: maxExtractionPages,
+                    documentId: documentId
                 });
 
                 const processingTime = Date.now() - startTime;
@@ -343,7 +344,8 @@ define([
                     documentType: documentType,
                     enableVendorMatching: true,
                     maxExtractionPages: maxExtractionPages,
-                    fileId: fileId
+                    fileId: fileId,
+                    documentId: documentId
                 });
 
                 const processingTime = Date.now() - startTime;
