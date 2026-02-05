@@ -142,6 +142,7 @@
             this.rotation = 0;
             this.currentPage = 1;
             this.lineItems = [];
+            this.vendorDefaults = null;
             this.formFields = null;
             this.transactionType = 'vendorbill'; // Reset to default, will be set from document
             this.accountsData = [];
@@ -456,6 +457,7 @@
             this.rotation = 0;
             this.currentPage = 1;
             this.lineItems = [];
+            this.vendorDefaults = null;
             this.sublistData = {};  // Reset sublist data for new document
             this.pdfDoc = null;
             this.pdfPage = null;
@@ -534,10 +536,11 @@
                         // Animate content in
                         self.animateContentEnter();
 
-                        // Fetch coding suggestions if vendor is set
+                        // Fetch coding suggestions and vendor defaults if vendor is set
                         var vendorId = self.data && (self.data.vendorId || self.data.vendor);
                         if (vendorId) {
                             self.fetchCodingSuggestions(vendorId);
+                            self.fetchVendorDefaults(vendorId);
                         }
                     })
                     .catch(function(err) {
@@ -7415,6 +7418,8 @@
                         ReviewController.changes.vendorId = id;
                         // Fetch coding suggestions for this vendor
                         ReviewController.fetchCodingSuggestions(id);
+                        // Fetch vendor defaults (terms, tax, notes)
+                        ReviewController.fetchVendorDefaults(id);
                     }
                     ReviewController.markUnsaved();
                     ReviewController.hideEntityDropdown();
