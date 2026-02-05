@@ -1449,6 +1449,7 @@ define([
                 subsidiary: vendorRecord.getValue('subsidiary') || '',
                 currency: vendorRecord.getValue('currency') || '',
                 terms: vendorRecord.getValue('terms') || '',
+                termsText: vendorRecord.getText('terms') || '',
                 // Tax defaults
                 taxCode: vendorRecord.getValue('taxcode') || '',
                 taxCodeText: vendorRecord.getText('taxcode') || '',
@@ -4989,6 +4990,38 @@ define([
         return null;
     }
 
+    function applyVendorTermsToFormData(formData, docRecord) {
+        if (!formData || !formData.bodyFields) return;
+
+        var bodyFields = formData.bodyFields;
+        var currentTerms = bodyFields.terms;
+        if (currentTerms !== undefined && currentTerms !== null && /^\d+$/.test(String(currentTerms).trim())) {
+            return; // Already set as internal ID
+        }
+
+        var vendorId = bodyFields.entity || bodyFields.vendor;
+        if ((!vendorId || !/^\d+$/.test(String(vendorId).trim())) && docRecord) {
+            vendorId = docRecord.getValue('custrecord_flux_vendor');
+        }
+        if (!vendorId || !/^\d+$/.test(String(vendorId).trim())) return;
+
+        try {
+            var vendorRecord = record.load({
+                type: record.Type.VENDOR,
+                id: vendorId
+            });
+            var vendorTerms = vendorRecord.getValue('terms') || '';
+            if (vendorTerms) {
+                bodyFields.terms = String(vendorTerms);
+                if (!bodyFields.terms_display) {
+                    bodyFields.terms_display = vendorRecord.getText('terms') || '';
+                }
+            }
+        } catch (e) {
+            log.debug('applyVendorTermsToFormData', 'Failed to apply vendor terms: ' + e.message);
+        }
+    }
+
     /**
      * Resolve payment terms text to an internal ID
      * Uses the same normalization as extraction (AI second pass compatible)
@@ -5063,11 +5096,6 @@ define([
             }
             resolvedCurrencyId = normalizeCurrencyInFormData(formData, currencyDoc, settings);
 
-            var values = {
-                'custrecord_flux_modified_date': new Date(),
-                'custrecord_flux_form_data': JSON.stringify(formData)
-            };
-
             // Also update key indexed fields for search/filtering purposes
             // These are derived from formData but stored separately for queries
             var bodyFields = formData.bodyFields || {};
@@ -5075,6 +5103,15 @@ define([
             // Only set custrecord_flux_vendor for non-expense-report documents
             // For expense reports, entity is an employee ID, not a vendor ID
             var transactionType = formData._meta && formData._meta.transactionType;
+            if (transactionType !== 'expensereport') {
+                applyVendorTermsToFormData(formData, currencyDoc);
+            }
+
+            var values = {
+                'custrecord_flux_modified_date': new Date(),
+                'custrecord_flux_form_data': JSON.stringify(formData)
+            };
+
             if (bodyFields.entity && transactionType !== 'expensereport') {
                 values['custrecord_flux_vendor'] = bodyFields.entity;
             }
