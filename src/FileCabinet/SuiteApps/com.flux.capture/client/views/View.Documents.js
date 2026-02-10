@@ -194,10 +194,14 @@
                         return (d.anomalies && d.anomalies.length > 0) || String(d.status) === DocStatus.ERROR;
                     });
                     break;
+                case 'rejected':
+                    docs = docs.filter(function(d) {
+                        return String(d.status) === DocStatus.REJECTED;
+                    });
+                    break;
                 case 'completed':
                     docs = docs.filter(function(d) {
-                        var s = String(d.status);
-                        return s === DocStatus.COMPLETED || s === DocStatus.REJECTED;
+                        return String(d.status) === DocStatus.COMPLETED;
                     });
                     break;
                 case 'all':
@@ -565,7 +569,7 @@
             var self = this;
 
             // Count documents for each filter
-            var reviewCount = 0, highCount = 0, medCount = 0, lowCount = 0, flaggedCount = 0, completedCount = 0;
+            var reviewCount = 0, highCount = 0, medCount = 0, lowCount = 0, flaggedCount = 0, completedCount = 0, rejectedCount = 0;
 
             this.documents.forEach(function(d) {
                 var s = String(d.status);
@@ -579,8 +583,9 @@
                     else if (conf >= 60) medCount++;
                     else lowCount++;
                 }
+                if (s === DocStatus.REJECTED) rejectedCount++;
                 if (hasFlagged) flaggedCount++;
-                if (s === DocStatus.COMPLETED || s === DocStatus.REJECTED) completedCount++;
+                if (s === DocStatus.COMPLETED) completedCount++;
             });
 
             // Update counts
@@ -590,6 +595,7 @@
                 medium: medCount,
                 low: lowCount,
                 flagged: flaggedCount,
+                rejected: rejectedCount,
                 completed: completedCount,
                 all: this.documents.length
             };

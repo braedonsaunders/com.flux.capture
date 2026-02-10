@@ -848,7 +848,7 @@ define([
                 'COALESCE(custrecord_flux_created_date, custrecord_flux_email_received, created) as createdDate, ' +
                 'custrecord_flux_anomalies as anomalies, custrecord_flux_error_message as errorMessage, custrecord_flux_original_filename as originalFilename FROM customrecord_flux_document ' +
                 'WHERE custrecord_flux_status IN (' + DocStatus.PENDING + ', ' + DocStatus.PROCESSING + ', ' +
-                DocStatus.EXTRACTED + ', ' + DocStatus.NEEDS_REVIEW + ', ' + DocStatus.ERROR + ') ' +
+                DocStatus.EXTRACTED + ', ' + DocStatus.NEEDS_REVIEW + ', ' + DocStatus.REJECTED + ', ' + DocStatus.ERROR + ') ' +
                 'ORDER BY ' + sortColumn + ' ' + sortDir + ' NULLS LAST';
 
             fcDebug.debug('getProcessingQueue', 'SQL: ' + sql);
@@ -886,7 +886,7 @@ define([
 
             var countSql = 'SELECT custrecord_flux_status as status, COUNT(*) as count FROM customrecord_flux_document ' +
                 'WHERE custrecord_flux_status IN (' + DocStatus.PENDING + ', ' + DocStatus.PROCESSING + ', ' +
-                DocStatus.EXTRACTED + ', ' + DocStatus.NEEDS_REVIEW + ', ' + DocStatus.ERROR + ') GROUP BY custrecord_flux_status';
+                DocStatus.EXTRACTED + ', ' + DocStatus.NEEDS_REVIEW + ', ' + DocStatus.REJECTED + ', ' + DocStatus.ERROR + ') GROUP BY custrecord_flux_status';
 
             var countResults = query.runSuiteQL({ query: countSql });
             var statusCounts = {};
@@ -6076,12 +6076,12 @@ define([
                         message: 'Expense line ' + (idx + 1) + ' requires an account or category'
                     });
                 }
-                // Amount validation (case-insensitive)
-            var lineAmount = parseAmount(normalizedLine.amount) || 0;
-                if (lineAmount <= 0) {
+                // Amount validation (case-insensitive) - allow negative amounts (NetSuite supports them)
+                var lineAmount = parseAmount(normalizedLine.amount) || 0;
+                if (lineAmount === 0) {
                     errors.push({
                         field: 'expense[' + idx + '].amount',
-                        message: 'Expense line ' + (idx + 1) + ' requires a positive amount'
+                        message: 'Expense line ' + (idx + 1) + ' requires a non-zero amount'
                     });
                 }
             });
@@ -7062,6 +7062,12 @@ define([
 
             try {
                 var valueToSet = value;
+
+                // Clean tranid: strip leading # signs and leading zeros (preserve at least one digit)
+                if (fieldId === 'tranid' && typeof valueToSet === 'string') {
+                    valueToSet = valueToSet.replace(/^[#]+/, '').replace(/^0+(?=\d)/, '');
+                    log.debug('setBodyField.tranid', 'Cleaned tranid to: ' + JSON.stringify(valueToSet));
+                }
                 var fieldType = getBodyFieldType(txn, fieldId);
                 var lowerFieldId = fieldId.toLowerCase();
 

@@ -1514,7 +1514,8 @@ define([
          */
         _normalizeInvoiceNumber(invoiceNumber) {
             if (invoiceNumber === null || invoiceNumber === undefined) return '';
-            return String(invoiceNumber).trim();
+            // Strip leading # signs and leading zeros (preserve at least one digit)
+            return String(invoiceNumber).trim().replace(/^[#]+/, '').replace(/^0+(?=\d)/, '');
         }
 
         /**

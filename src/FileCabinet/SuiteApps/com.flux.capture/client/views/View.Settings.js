@@ -42,6 +42,11 @@
                         defaultLineSublistEl.value = settings.defaultLineSublist;
                     }
 
+                    var preferVendorAccountToggleSettings = el('#llm-prefer-vendor-account');
+                    if (preferVendorAccountToggleSettings) {
+                        preferVendorAccountToggleSettings.checked = settings.preferVendorDefaultAccount === true;
+                    }
+
                     var maxPagesEl = el('#max-extraction-pages');
                     if (maxPagesEl && typeof settings.maxExtractionPages !== 'undefined') {
                         maxPagesEl.value = settings.maxExtractionPages;
@@ -2983,6 +2988,7 @@
             var settings = {
                 defaultDocumentType: el('#default-type').value || 'auto',
                 defaultLineSublist: el('#default-line-sublist') ? el('#default-line-sublist').value : 'auto',
+                preferVendorDefaultAccount: getChecked('#llm-prefer-vendor-account'),
                 maxExtractionPages: isNaN(maxPagesVal) ? 0 : maxPagesVal,
                 defaultCurrency: defaultCurrencyId,
                 defaultCurrencyText: defaultCurrencyText,
@@ -3804,6 +3810,7 @@
                     var enhanceLineItemsToggle = el('#llm-enhance-line-items');
                     var fieldGuessingPanel = el('#llm-field-guessing-panel');
                     var guessAccountsToggle = el('#llm-guess-accounts');
+                    var preferVendorAccountToggle = el('#llm-prefer-vendor-account');
                     var guessDepartmentsToggle = el('#llm-guess-departments');
                     var guessClassesToggle = el('#llm-guess-classes');
                     var guessLocationsToggle = el('#llm-guess-locations');
@@ -3818,6 +3825,10 @@
 
                     if (guessAccountsToggle) {
                         guessAccountsToggle.checked = config.guessAccounts === true;
+                    }
+
+                    if (preferVendorAccountToggle) {
+                        preferVendorAccountToggle.checked = config.preferVendorDefaultAccount === true;
                     }
 
                     if (guessDepartmentsToggle) {
@@ -3957,6 +3968,7 @@
             // Line Item Enhancement options
             var enhanceLineItems = el('#llm-enhance-line-items')?.checked || false;
             var guessAccounts = el('#llm-guess-accounts')?.checked || false;
+            var preferVendorDefaultAccount = el('#llm-prefer-vendor-account')?.checked || false;
             var guessDepartments = el('#llm-guess-departments')?.checked || false;
             var guessClasses = el('#llm-guess-classes')?.checked || false;
             var guessLocations = el('#llm-guess-locations')?.checked || false;
@@ -3981,6 +3993,7 @@
                 // Line Item Enhancement options
                 enhanceLineItems: enhanceLineItems,
                 guessAccounts: guessAccounts,
+                preferVendorDefaultAccount: preferVendorDefaultAccount,
                 guessDepartments: guessDepartments,
                 guessClasses: guessClasses,
                 guessLocations: guessLocations,
@@ -4016,6 +4029,7 @@
                         maxPages: maxPages,
                         enhanceLineItems: enhanceLineItems,
                         guessAccounts: guessAccounts,
+                        preferVendorDefaultAccount: preferVendorDefaultAccount,
                         guessDepartments: guessDepartments,
                         guessClasses: guessClasses,
                         guessLocations: guessLocations,
