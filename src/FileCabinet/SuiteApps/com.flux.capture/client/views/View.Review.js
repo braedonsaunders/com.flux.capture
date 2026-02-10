@@ -1992,10 +1992,13 @@
                 // Calculate scale to fit container
                 var container = el('#pdf-container');
                 var containerWidth = container ? container.clientWidth - 40 : 600;
-                var originalViewport = page.getViewport({ scale: 1 });
+                // Combine page's inherent rotation with user rotation
+                // PDF.js getViewport rotation param is the TOTAL rotation (replaces, not adds to, page.rotate)
+                var totalRotation = (page.rotate || 0) + self.rotation;
+                var originalViewport = page.getViewport({ scale: 1, rotation: totalRotation });
                 var baseScale = (containerWidth / originalViewport.width) * self.zoom;
 
-                var viewport = page.getViewport({ scale: baseScale, rotation: self.rotation });
+                var viewport = page.getViewport({ scale: baseScale, rotation: totalRotation });
 
                 // Create page wrapper
                 var pageWrapper = document.createElement('div');
@@ -2561,9 +2564,10 @@
             if (this.pdfPage && this.pdfCanvas) {
                 // Use CSS dimensions (not canvas.width which includes DPI scaling)
                 var cssWidth = parseFloat(this.pdfCanvas.style.width) || this.pdfCanvas.clientWidth;
+                var totalRotation = (this.pdfPage.rotate || 0) + this.rotation;
                 var viewport = this.pdfPage.getViewport({
-                    scale: cssWidth / this.pdfPage.getViewport({ scale: 1 }).width,
-                    rotation: this.rotation
+                    scale: cssWidth / this.pdfPage.getViewport({ scale: 1, rotation: totalRotation }).width,
+                    rotation: totalRotation
                 });
                 if (this.extractionPool.showAnnotations) {
                     this.renderExtractionAnnotations(viewport);
@@ -11121,9 +11125,10 @@
                 } else if (this.pdfPage && this.pdfCanvas) {
                     // Legacy single-page mode
                     var cssWidth = parseFloat(this.pdfCanvas.style.width) || this.pdfCanvas.clientWidth;
+                    var totalRotation = (this.pdfPage.rotate || 0) + this.rotation;
                     var viewport = this.pdfPage.getViewport({
-                        scale: cssWidth / this.pdfPage.getViewport({ scale: 1 }).width,
-                        rotation: this.rotation
+                        scale: cssWidth / this.pdfPage.getViewport({ scale: 1, rotation: totalRotation }).width,
+                        rotation: totalRotation
                     });
                     this.renderExtractionAnnotations(viewport);
                 }
@@ -11554,9 +11559,10 @@
                                 } else if (self.pdfPage && self.pdfCanvas) {
                                     // Legacy single-page mode
                                     var cssWidth = parseFloat(self.pdfCanvas.style.width) || self.pdfCanvas.clientWidth;
+                                    var totalRotation = (self.pdfPage.rotate || 0) + self.rotation;
                                     var viewport = self.pdfPage.getViewport({
-                                        scale: cssWidth / self.pdfPage.getViewport({ scale: 1 }).width,
-                                        rotation: self.rotation
+                                        scale: cssWidth / self.pdfPage.getViewport({ scale: 1, rotation: totalRotation }).width,
+                                        rotation: totalRotation
                                     });
                                     self.renderExtractionAnnotations(viewport);
                                 }
