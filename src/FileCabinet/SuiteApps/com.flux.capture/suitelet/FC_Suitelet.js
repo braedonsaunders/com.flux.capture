@@ -399,6 +399,19 @@ define(['N/file', 'N/runtime', 'N/url', 'N/ui/serverWidget', 'N/search', 'N/task
      * Resolve all file URLs from FILE_MANIFEST
      * Uses search fallback if direct path fails
      */
+    function buildCacheToken(fileObj) {
+        if (!fileObj) return String(Date.now());
+        var token = fileObj.lastModifiedDate || fileObj.lastModified || fileObj.size || fileObj.id;
+        if (!token) token = Date.now();
+        return String(token).replace(/\s+/g, '');
+    }
+
+    function appendCacheBust(url, token) {
+        if (!url || !token) return url;
+        var separator = url.indexOf('?') === -1 ? '?' : '&';
+        return url + separator + 'v=' + encodeURIComponent(token);
+    }
+
     function resolveFileUrls() {
         var fileUrls = {};
 
@@ -408,8 +421,9 @@ define(['N/file', 'N/runtime', 'N/url', 'N/ui/serverWidget', 'N/search', 'N/task
 
             try {
                 var fileObj = file.load({ id: fullPath });
-                fileUrls[key] = fileObj.url;
-                fcDebug.debug('File Loaded', key + ' -> ' + fileObj.url);
+                var cacheToken = buildCacheToken(fileObj);
+                fileUrls[key] = appendCacheBust(fileObj.url, cacheToken);
+                fcDebug.debug('File Loaded', key + ' -> ' + fileUrls[key]);
             } catch (e) {
                 log.error('File Load Failed', key + ' -> ' + fullPath + ' : ' + e.message);
 
@@ -419,11 +433,13 @@ define(['N/file', 'N/runtime', 'N/url', 'N/ui/serverWidget', 'N/search', 'N/task
                     var fileSearch = search.create({
                         type: 'file',
                         filters: [['name', 'is', fileName]],
-                        columns: ['url', 'folder']
+                        columns: ['url', 'folder', 'internalid', 'lastmodified']
                     });
                     var results = fileSearch.run().getRange({ start: 0, end: 1 });
                     if (results && results.length > 0) {
-                        fileUrls[key] = results[0].getValue('url');
+                        var rawUrl = results[0].getValue('url');
+                        var cacheToken = results[0].getValue('lastmodified') || results[0].getValue('internalid');
+                        fileUrls[key] = appendCacheBust(rawUrl, cacheToken || Date.now());
                         fcDebug.debug('File Found via Search', key + ' -> ' + fileUrls[key]);
                     } else {
                         log.error('File Search Failed', 'No results for: ' + fileName);

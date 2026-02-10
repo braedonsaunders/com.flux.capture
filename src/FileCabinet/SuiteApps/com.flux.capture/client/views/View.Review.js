@@ -778,6 +778,11 @@
                         value = self.normalizeDateValue(value);
                     }
 
+                    // Clean tranid: strip leading # signs and leading zeros
+                    if (fieldId === 'tranid' && typeof value === 'string') {
+                        value = value.replace(/^[#]+/, '').replace(/^0+(?=\d)/, '');
+                    }
+
                     // Store the value
                     bodyFields[fieldId] = value;
                     markExplicit(fieldId);
@@ -2260,40 +2265,38 @@
                 box.style.height = h + 'px';
 
                 // Add tooltip
-                box.title = (field.label || key) + ': ' + (field.value || '') + (isMatched ? ' (Matched)' : ' (Drag to assign)');
+                box.title = (field.label || key) + ': ' + (field.value || '') + (isMatched ? ' (Matched - drag to reassign)' : ' (Drag to assign)');
 
-                // Make unmatched annotations draggable
-                if (!isMatched) {
-                    box.draggable = true;
-                    box.style.cursor = 'grab';
+                // Make ALL annotations draggable (including matched/green ones for reassignment)
+                box.draggable = true;
+                box.style.cursor = 'grab';
 
-                    box.addEventListener('dragstart', function(e) {
-                        self.extractionPool.dragActive = true;
-                        e.dataTransfer.effectAllowed = 'copy';
-                        e.dataTransfer.setData('text/plain', JSON.stringify({
-                            key: key,
-                            value: field.value || '',
-                            id: 'annotation_' + key
-                        }));
-                        box.classList.add('dragging');
-                        document.body.classList.add('extraction-dragging');
+                box.addEventListener('dragstart', function(e) {
+                    self.extractionPool.dragActive = true;
+                    e.dataTransfer.effectAllowed = 'copy';
+                    e.dataTransfer.setData('text/plain', JSON.stringify({
+                        key: key,
+                        value: field.value || '',
+                        id: 'annotation_' + key
+                    }));
+                    box.classList.add('dragging');
+                    document.body.classList.add('extraction-dragging');
+                });
+
+                box.addEventListener('dragend', function() {
+                    self.extractionPool.dragActive = false;
+                    box.classList.remove('dragging');
+                    document.body.classList.remove('extraction-dragging');
+                    document.querySelectorAll('.form-field.drop-target').forEach(function(f) {
+                        f.classList.remove('drop-target', 'drop-hover');
                     });
+                });
 
-                    box.addEventListener('dragend', function() {
-                        self.extractionPool.dragActive = false;
-                        box.classList.remove('dragging');
-                        document.body.classList.remove('extraction-dragging');
-                        document.querySelectorAll('.form-field.drop-target').forEach(function(f) {
-                            f.classList.remove('drop-target', 'drop-hover');
-                        });
-                    });
-
-                    // Click handler as alternative
-                    box.addEventListener('click', function(e) {
-                        e.stopPropagation();
-                        self.showAnnotationAssignPopover(box, field, key);
-                    });
-                }
+                // Click handler as alternative
+                box.addEventListener('click', function(e) {
+                    e.stopPropagation();
+                    self.showAnnotationAssignPopover(box, field, key);
+                });
 
                 overlayEl.appendChild(box);
             });
@@ -6840,6 +6843,11 @@
                 return val;
             }
 
+            // Round to 2 decimal places to avoid floating point precision issues
+            function round2(val) {
+                return Math.round(val * 100) / 100;
+            }
+
             // Helper to set numeric value across all case variants
             function setNumericValue(obj, fieldId, value) {
                 var lowerFieldId = fieldId.toLowerCase();
@@ -6870,11 +6878,11 @@
                 if (key.indexOf('_display') !== -1) return;
 
                 if (self.isNumericField(key, sublistId)) {
-                    // Sum numeric fields across all case variants
+                    // Sum numeric fields across all case variants, rounded to avoid floating point issues
                     var total = lines.reduce(function(sum, l) {
                         return sum + getNumericValue(l, key);
                     }, 0);
-                    setNumericValue(collapsed, key, total);
+                    setNumericValue(collapsed, key, round2(total));
                 } else {
                     // For non-numeric: collect unique non-empty values
                     var values = lines.map(function(l) { return l[key]; }).filter(function(v) {
@@ -6921,6 +6929,11 @@
                 return val;
             }
 
+            // Round to 2 decimal places to avoid floating point precision issues
+            function round2(val) {
+                return Math.round(val * 100) / 100;
+            }
+
             // Helper to set numeric value across all case variants
             function setNumericValue(obj, fieldId, value) {
                 var lowerFieldId = fieldId.toLowerCase();
@@ -6956,13 +6969,13 @@
                         }
                     });
                 } else {
-                    // Merge subsequent lines - sum numeric fields only
+                    // Merge subsequent lines - sum numeric fields only, rounded to avoid floating point issues
                     Object.keys(line).forEach(function(fieldId) {
                         if (fieldId.indexOf('_display') !== -1) return;
                         if (self.isNumericField(fieldId, sublistId)) {
                             var existingVal = getNumericValue(groups[key], fieldId);
                             var newVal = getNumericValue(line, fieldId);
-                            setNumericValue(groups[key], fieldId, existingVal + newVal);
+                            setNumericValue(groups[key], fieldId, round2(existingVal + newVal));
                         }
                     });
                 }
@@ -7047,8 +7060,10 @@
                 if (!line.hasOwnProperty('account')) line.account = '';
                 if (!line.hasOwnProperty('memo')) line.memo = '';
 
-                // Apply vendor default expense account if available and account is empty
-                if (self.vendorDefaults && self.vendorDefaults.expenseAccount && !line.account) {
+                // Apply vendor default expense account if available
+                // If "Prefer Vendor Default Account" setting is on, override any AI-guessed account
+                var preferVendorAccount = self.settings && self.settings.preferVendorDefaultAccount;
+                if (self.vendorDefaults && self.vendorDefaults.expenseAccount && (!line.account || preferVendorAccount)) {
                     line.account = self.vendorDefaults.expenseAccount;
                     if (self.vendorDefaults.expenseAccountName) {
                         line.account_display = self.vendorDefaults.expenseAccountName;
@@ -7840,6 +7855,14 @@
                 if (Array.isArray(sublists.expense)) return 'expense';
                 if (Array.isArray(sublists.item)) return 'item';
             }
+            var activeContainer = document.querySelector('.sublist-container.active');
+            if (activeContainer) {
+                var activeId = activeContainer.dataset.sublistId || activeContainer.getAttribute('data-sublist-id');
+                if (!activeId && activeContainer.id) {
+                    activeId = activeContainer.id.replace('sublist-', '');
+                }
+                if (activeId) return activeId;
+            }
             if (el('#sublist-expense')) return 'expense';
             if (el('#sublist-item')) return 'item';
             return null;
@@ -8225,9 +8248,18 @@
             var targetSublistId = summary.sublistId;
             var sublistContainer = targetSublistId ? el('#sublist-' + targetSublistId) : null;
             var lineTable = targetSublistId ? el('#lines-' + targetSublistId) : null;
+            var inserted = false;
             if (sublistContainer && lineTable) {
                 sublistContainer.insertBefore(indicator, lineTable);
+                inserted = true;
             } else {
+                var lineSection = document.querySelector('.line-section');
+                if (lineSection) {
+                    lineSection.insertBefore(indicator, lineSection.firstChild);
+                    inserted = true;
+                }
+            }
+            if (!inserted) {
                 var entitySection = el('.entity-field');
                 if (!entitySection || !entitySection.parentNode) return;
                 entitySection.parentNode.insertBefore(indicator, entitySection.nextSibling);

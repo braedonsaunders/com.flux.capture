@@ -1959,6 +1959,19 @@
 
                                     <div class="setting-row">
                                         <div class="setting-label">
+                                            <span>Prefer Vendor Default Account</span>
+                                            <small>Use the vendor's default expense account instead of AI-guessed accounts</small>
+                                        </div>
+                                        <div class="setting-control">
+                                            <label class="toggle">
+                                                <input type="checkbox" id="llm-prefer-vendor-account">
+                                                <span class="toggle-track"><span class="toggle-thumb"></span></span>
+                                            </label>
+                                        </div>
+                                    </div>
+
+                                    <div class="setting-row">
+                                        <div class="setting-label">
                                             <span>Guess Departments</span>
                                             <small>Suggest departments based on invoice context</small>
                                         </div>
@@ -2482,6 +2495,11 @@
                     <span class="tab-count" id="tab-count-flagged">0</span>
                 </button>
                 <div class="triage-divider"></div>
+                <button class="triage-tab" data-filter="rejected">
+                    <i class="fas fa-ban"></i>
+                    <span class="tab-label">Rejected</span>
+                    <span class="tab-count" id="tab-count-rejected">0</span>
+                </button>
                 <button class="triage-tab" data-filter="completed">
                     <span class="tab-label">Completed</span>
                     <span class="tab-count" id="tab-count-completed">0</span>
