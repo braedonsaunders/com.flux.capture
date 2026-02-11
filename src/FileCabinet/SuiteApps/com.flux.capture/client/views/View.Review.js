@@ -290,13 +290,15 @@
                     // Derive transaction type from document's documentType
                     self.transactionType = self.getTransactionType(data.documentType);
 
-                    // Now load form schema for the correct transaction type, plus accounts, items, and settings
+                    // Now load form schema for the correct transaction type, plus accounts, items, settings, and vendor defaults
+                    var vendorId = data && (data.vendorId || data.vendor);
                     return Promise.all([
                         API.get('formschema', { transactionType: self.transactionType }),
                         API.get('accounts', { accountType: 'Expense' }),
                         API.get('accounts', { accountType: 'COGS' }),
                         API.get('items', {}),
-                        API.get('settings')
+                        API.get('settings'),
+                        vendorId ? API.get('datasource', { type: 'vendordefaults', vendorId: vendorId }) : Promise.resolve(null)
                     ]);
                 })
                 .then(function(results) {
@@ -305,12 +307,14 @@
                     var cogsAccountsData = results[2] || [];
                     var itemsData = results[3] || [];
                     var settingsData = results[4] || {};
+                    var vendorDefaultsResult = results[5];
 
                     self.formFields = formSchemaData; // Now contains layout, config, etc.
                     self.expenseAccountsData = expenseAccountsData; // Expense accounts for expense sublist
                     self.cogsAccountsData = cogsAccountsData; // COGS accounts for item sublist
                     self.itemsData = itemsData; // Cache for document type changes
                     self.settings = settingsData.data || settingsData; // General app settings
+                    self.vendorDefaults = vendorDefaultsResult && (vendorDefaultsResult.data || vendorDefaultsResult) || null;
 
                     // Inject accounts into expense sublist 'account' field
                     // Inject items into item sublist 'item' field
@@ -322,10 +326,11 @@
                     self.isLoading = false;
                     self.render();
 
-                    // Fetch coding suggestions and vendor defaults if vendor is already set
+                    // Fetch coding suggestions (vendor defaults already loaded above)
                     var vendorId = self.data && (self.data.vendorId || self.data.vendor);
                     if (vendorId) {
                         self.fetchCodingSuggestions(vendorId);
+                        // Re-fetch vendor defaults to keep in sync (e.g. terms, notes) - overwrites with same data
                         self.fetchVendorDefaults(vendorId);
                     }
 
@@ -500,13 +505,15 @@
                         self.data = data;
                         self.transactionType = self.getTransactionType(data.documentType);
 
-                        // Load form schema and supporting data
+                        // Load form schema and supporting data, including vendor defaults for line-level population
+                        var vendorId = data && (data.vendorId || data.vendor);
                         return Promise.all([
                             API.get('formschema', { transactionType: self.transactionType }),
                             API.get('accounts', { accountType: 'Expense' }),
                             API.get('accounts', { accountType: 'COGS' }),
                             API.get('items', {}),
-                            API.get('settings')
+                            API.get('settings'),
+                            vendorId ? API.get('datasource', { type: 'vendordefaults', vendorId: vendorId }) : Promise.resolve(null)
                         ]);
                     })
                     .then(function(results) {
@@ -515,6 +522,8 @@
                         self.cogsAccountsData = results[2] || [];
                         self.itemsData = results[3] || [];
                         self.settings = results[4] && results[4].data ? results[4].data : results[4] || {};
+                        var vendorDefaultsResult = results[5];
+                        self.vendorDefaults = vendorDefaultsResult && (vendorDefaultsResult.data || vendorDefaultsResult) || null;
 
                         self.injectSublistOptions(self.expenseAccountsData, self.cogsAccountsData, self.itemsData);
                         self.initializeFormData();
@@ -538,7 +547,7 @@
                         // Animate content in
                         self.animateContentEnter();
 
-                        // Fetch coding suggestions and vendor defaults if vendor is set
+                        // Fetch coding suggestions (vendor defaults already loaded above)
                         var vendorId = self.data && (self.data.vendorId || self.data.vendor);
                         if (vendorId) {
                             self.fetchCodingSuggestions(vendorId);
@@ -690,17 +699,25 @@
             // Use defaultLineSublist setting: 'auto' (detect), 'expense', or 'item'
             var defaultSublist = (this.settings && this.settings.defaultLineSublist) || 'auto';
             var lineItems = doc.lineItems || [];
+            var preferVendorAccount = this.settings && this.settings.preferVendorDefaultAccount;
             if (Array.isArray(lineItems) && lineItems.length > 0) {
                 lineItems.forEach(function(line) {
                     // Determine which sublist based on setting and line content
+                    var isExpenseLine = defaultSublist === 'expense' ||
+                        (defaultSublist !== 'item' && !line.item);
+                    // Apply vendor default expense account to expense lines from extraction (same as createEmptyLine)
+                    if (isExpenseLine && self.vendorDefaults && self.vendorDefaults.expenseAccount &&
+                        (!line.account || preferVendorAccount)) {
+                        line.account = self.vendorDefaults.expenseAccount;
+                        if (self.vendorDefaults.expenseAccountName) {
+                            line.account_display = self.vendorDefaults.expenseAccountName;
+                        }
+                    }
                     if (defaultSublist === 'item') {
-                        // Force all lines to item sublist
                         sublists.item.push(line);
                     } else if (defaultSublist === 'expense') {
-                        // Force all lines to expense sublist
                         sublists.expense.push(line);
                     } else {
-                        // Auto-detect: if line has 'item' field populated, use item sublist
                         if (line.item) {
                             sublists.item.push(line);
                         } else {
