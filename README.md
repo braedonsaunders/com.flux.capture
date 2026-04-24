@@ -66,21 +66,6 @@ Flux Capture is especially useful when:
 - Your AP team needs to review extracted document data in the same shape as the final NetSuite transaction
 - Your capture rules need to evolve by vendor, document layout, or account coding history
 
-## Is Open Source Allowed For NetSuite SuiteApps?
-
-In general, NetSuite's SuiteCloud/SDF tooling is designed around file-based projects and standard software development workflows, including revision control. Oracle's docs describe SDF projects as file-based projects that can be used for internal use or commercial distribution, and SuiteApp projects as self-contained SDF projects for deployment to NetSuite accounts.
-
-The important caveat is license compatibility. The SuiteCloud Terms of Service define "Prohibited Open Source Software" broadly and specifically call out AGPL, GPL, and LGPL style licenses. For that reason this repository uses MIT, and contributors should avoid adding copyleft dependencies to any code that is deployed into NetSuite.
-
-Useful references:
-
-- [SuiteCloud Development Framework overview](https://docs.oracle.com/en/cloud/saas/netsuite/ns-online-help/chapter_4702622163.html)
-- [SuiteCloud project structure](https://docs.oracle.com/en/cloud/saas/netsuite/ns-online-help/section_4724963992.html)
-- [SuiteApp projects](https://docs.oracle.com/en/cloud/saas/netsuite/ns-online-help/subsect_1509931104.html)
-- [SuiteCloud Terms of Service](https://www.netsuite.com/portal/assets/pdf/Cloud_SuiteCloud_TOS_v102219_US_ENG.pdf)
-
-This README is not legal advice. If you plan to publish a SuiteApp through SDN or SuiteApp Marketplace, review your own Oracle/NetSuite agreements.
-
 ## Features
 
 - Document upload and queue management for vendor bills, receipts, credit memos, expense reports, purchase orders, invoices, sales orders, and journal entries
@@ -202,6 +187,4 @@ For public forks, leave those secrets unset and deploy manually from your own en
 
 ## License
 
-Flux Capture is released under the [MIT License](LICENSE).
-
-When contributing, keep deployed SuiteApp dependencies permissively licensed. Avoid AGPL, GPL, LGPL, or similar copyleft dependencies in SuiteScript/File Cabinet code unless you have reviewed the SuiteCloud terms and your own Oracle/NetSuite agreements.
+Flux Capture is released under the [MIT License](LICENSE); contributions should keep any code deployed into NetSuite on permissive licenses.
