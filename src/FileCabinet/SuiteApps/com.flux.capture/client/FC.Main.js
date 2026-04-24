@@ -189,16 +189,8 @@
         // Initialize UI controls (dark mode, fullscreen)
         initUIControls();
 
-        // Check license status and navigate appropriately
-        if (License.isUnlicensedMode()) {
-            // Unlicensed - go directly to settings for license configuration
-            Router.navigate('settings');
-            UI.toast('Please configure your license in Settings', 'warning');
-        } else {
-            // Licensed - normal startup
-            updateReviewBadge();
-            Router.navigate('ingest');
-        }
+        updateReviewBadge();
+        Router.navigate('ingest');
 
         // Hide loading screen
         UI.hideLoading();

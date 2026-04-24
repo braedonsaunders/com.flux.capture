@@ -3,7 +3,7 @@
  * Flux Capture - Installation Verification Script
  *
  * This script verifies that Flux Capture is properly installed in a NetSuite account.
- * It's designed to be called from your website's installation portal.
+ * It calls the Flux Capture RESTlet health endpoint with NetSuite TBA credentials.
  *
  * Usage:
  *   node verify-installation.js --account TSTDRV123456 --restlet-url <url>
@@ -152,53 +152,6 @@ async function verifyViaRestlet(accountId, restletUrl, credentials) {
 }
 
 /**
- * Simple verification via license check endpoint
- * This doesn't require credentials - just checks if the account responds
- */
-async function verifyViaLicenseCheck(accountId) {
-    return new Promise((resolve, reject) => {
-        const postData = JSON.stringify({
-            account: accountId,
-            product: 'capture',
-            client_version: '1.0.0',
-            action: 'verify_installation'
-        });
-
-        const options = {
-            hostname: 'fluxfornetsuite.com',
-            path: '/api/v1/verify-installation',
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'Content-Length': Buffer.byteLength(postData)
-            },
-            timeout: CONFIG.timeout
-        };
-
-        const req = https.request(options, (res) => {
-            let data = '';
-            res.on('data', chunk => data += chunk);
-            res.on('end', () => {
-                try {
-                    const result = JSON.parse(data);
-                    resolve(result);
-                } catch (e) {
-                    resolve({
-                        installed: false,
-                        error: 'Invalid response'
-                    });
-                }
-            });
-        });
-
-        req.on('error', reject);
-        req.on('timeout', () => reject(new Error('Request timeout')));
-        req.write(postData);
-        req.end();
-    });
-}
-
-/**
  * Generate installation report
  */
 function generateReport(verification) {
@@ -231,9 +184,6 @@ function generateReport(verification) {
         lines.push('HEALTH CHECK:');
         lines.push(`  Status: ${verification.health.status}`);
         lines.push(`  Version: ${verification.health.version || 'Unknown'}`);
-        if (verification.health.license) {
-            lines.push(`  License: ${verification.health.license.valid ? 'Valid' : 'Invalid'}`);
-        }
     }
 
     if (verification.error) {
@@ -267,7 +217,6 @@ async function verify(options) {
 
     try {
         if (options.restletUrl && options.consumerKey) {
-            // Full verification via RESTlet
             console.log('Verifying via RESTlet...');
             const restletResult = await verifyViaRestlet(options.account, options.restletUrl, {
                 consumerKey: options.consumerKey,
@@ -283,14 +232,7 @@ async function verify(options) {
                 result.error = `RESTlet returned status ${restletResult.statusCode}`;
             }
         } else {
-            // Simple verification via license check
-            console.log('Verifying via license check endpoint...');
-            const licenseResult = await verifyViaLicenseCheck(options.account);
-            result.success = licenseResult.installed === true;
-            result.health = licenseResult.health;
-            if (!result.success && licenseResult.error) {
-                result.error = licenseResult.error;
-            }
+            result.error = 'RESTlet URL and TBA credentials are required for verification.';
         }
     } catch (e) {
         result.error = e.message;
@@ -333,11 +275,11 @@ function parseArgs() {
 Flux Capture Installation Verification
 
 Usage:
-  node verify-installation.js --account <ACCOUNT_ID> [options]
+  node verify-installation.js --account <ACCOUNT_ID> --restlet-url <URL> [credentials]
 
 Options:
   --account <id>           NetSuite account ID (required)
-  --restlet-url <url>      FC Router RESTlet URL (for full verification)
+  --restlet-url <url>      FC Router RESTlet URL
   --consumer-key <key>     OAuth consumer key
   --consumer-secret <sec>  OAuth consumer secret
   --token-id <id>          OAuth token ID
@@ -345,10 +287,6 @@ Options:
   --help                   Show this help
 
 Examples:
-  # Simple verification (uses license check endpoint)
-  node verify-installation.js --account TSTDRV123456
-
-  # Full verification with TBA credentials
   node verify-installation.js --account TSTDRV123456 \\
     --restlet-url "https://123456.restlets.api.netsuite.com/..." \\
     --consumer-key "abc..." --consumer-secret "xyz..." \\

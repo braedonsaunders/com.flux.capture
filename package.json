@@ -1,8 +1,28 @@
 {
   "name": "com.flux.capture",
   "version": "1.0.0",
-  "description": "Flux Capture - Intelligent Document Capture for NetSuite",
-  "private": true,
+  "description": "Open source document capture SuiteApp for NetSuite",
+  "private": false,
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/braedonsaunders/com.flux.capture.git"
+  },
+  "bugs": {
+    "url": "https://github.com/braedonsaunders/com.flux.capture/issues"
+  },
+  "homepage": "https://github.com/braedonsaunders/com.flux.capture#readme",
+  "keywords": [
+    "netsuite",
+    "suiteapp",
+    "suitecloud",
+    "suitescript",
+    "sdf",
+    "document-capture",
+    "ocr",
+    "accounts-payable",
+    "invoice-processing"
+  ],
   "scripts": {
     "sync": "node scripts/sync.js",
     "sync:all": "node scripts/sync.js --all",
@@ -10,13 +30,10 @@
     "sync:watch": "node scripts/sync.js --watch",
     "build": "node scripts/build-distribution.js",
     "build:bundle": "node scripts/build-distribution.js --bundle",
-    "build:obfuscate": "node scripts/build-distribution.js --obfuscate",
     "verify-installation": "node scripts/verify-installation.js"
   },
   "devDependencies": {
-    "javascript-obfuscator": "^4.1.0",
-    "archiver": "^6.0.1",
-    "glob": "^10.3.10"
+    "archiver": "^6.0.1"
   },
   "engines": {
     "node": ">=18.0.0"

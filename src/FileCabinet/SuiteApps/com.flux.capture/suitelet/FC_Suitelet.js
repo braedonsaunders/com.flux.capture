@@ -6,7 +6,7 @@
  * Flux Capture - Main Suitelet
  * Uses iframe to preserve NetSuite menu while serving app
  */
-define(['N/file', 'N/runtime', 'N/url', 'N/ui/serverWidget', 'N/search', 'N/task', 'N/log', '/SuiteApps/com.flux.capture/lib/FC_Debug', '/SuiteApps/com.flux.capture/lib/FC_LicenseGuard'], function(file, runtime, url, serverWidget, search, task, log, fcDebug, License) {
+define(['N/file', 'N/runtime', 'N/url', 'N/ui/serverWidget', 'N/search', 'N/task', 'N/log', '/SuiteApps/com.flux.capture/lib/FC_Debug'], function(file, runtime, url, serverWidget, search, task, log, fcDebug) {
 
     'use strict';
 
@@ -38,17 +38,6 @@ define(['N/file', 'N/runtime', 'N/url', 'N/ui/serverWidget', 'N/search', 'N/task
     function onRequest(context) {
         // Handle POST requests for API actions (like triggering processing)
         if (context.request.method === 'POST') {
-            // License check for POST actions
-            try {
-                License.require();
-            } catch (licError) {
-                context.response.setHeader({ name: 'Content-Type', value: 'application/json' });
-                context.response.write(JSON.stringify({
-                    success: false,
-                    error: { code: 'FLUX_LICENSE_REQUIRED', message: 'Valid license required' }
-                }));
-                return;
-            }
             handlePostRequest(context);
             return;
         }
@@ -62,18 +51,9 @@ define(['N/file', 'N/runtime', 'N/url', 'N/ui/serverWidget', 'N/search', 'N/task
             var isInnerFrame = context.request.parameters.fc_mode === 'content';
 
             if (isInnerFrame) {
-                // Check license for iframe content - pass status to client
-                var licenseValid = false;
-                try {
-                    var lic = License.validate();
-                    licenseValid = lic && lic.valid === true;
-                } catch (e) {
-                    licenseValid = false;
-                }
-                serveAppContent(context, licenseValid);
+                serveAppContent(context);
             } else {
                 // ALWAYS serve wrapper - preserves NetSuite navbar
-                // License state is handled by the iframe content
                 serveWrapper(context);
             }
         } catch (error) {
@@ -334,9 +314,8 @@ define(['N/file', 'N/runtime', 'N/url', 'N/ui/serverWidget', 'N/search', 'N/task
     /**
      * MODE 2: APP CONTENT (Raw HTML inside iframe)
      * @param {Object} context - Request context
-     * @param {boolean} licenseValid - Whether license is valid (from server check)
      */
-    function serveAppContent(context, licenseValid) {
+    function serveAppContent(context) {
         // 1. Resolve all file URLs
         var fileUrls = resolveFileUrls();
 
@@ -364,7 +343,7 @@ define(['N/file', 'N/runtime', 'N/url', 'N/ui/serverWidget', 'N/search', 'N/task
         htmlContent = htmlContent.replace(/\{\{JS_VIEW_SETTINGS_URL\}\}/g, fileUrls['js_view_settings'] || '');
         htmlContent = htmlContent.replace(/\{\{JS_VIEW_DOCUMENTS_URL\}\}/g, fileUrls['js_view_documents'] || '');
 
-        // 5. Inject runtime configuration (including license status from server)
+        // 5. Inject runtime configuration
         var currentUser = runtime.getCurrentUser();
         var isDebugMode = fcDebug.isDebugMode();
         var configScript = '<script>\n' +
@@ -372,7 +351,6 @@ define(['N/file', 'N/runtime', 'N/url', 'N/ui/serverWidget', 'N/search', 'N/task
             '    apiUrl: "' + routerUrl + '",\n' +
             '    accountId: "' + runtime.accountId + '",\n' +
             '    isDebugMode: ' + isDebugMode + ',\n' +
-            '    licenseValid: ' + (licenseValid === true) + ',\n' +
             '    user: {\n' +
             '        id: ' + currentUser.id + ',\n' +
             '        name: "' + escapeJs(currentUser.name) + '",\n' +

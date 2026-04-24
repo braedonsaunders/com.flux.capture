@@ -3,7 +3,7 @@
  * @NScriptType UserEventScript
  * @NModuleScope SameAccount
  */
-define(['N/task', 'N/log', '/SuiteApps/com.flux.capture/lib/FC_LicenseGuard'], function(task, log, License) {
+define(['N/task', 'N/log'], function(task, log) {
 
     const SCRIPT_IDS = {
         PROCESS_DOCUMENTS_MR: 'customscript_fc_process_docs_mr',
@@ -15,14 +15,6 @@ define(['N/task', 'N/log', '/SuiteApps/com.flux.capture/lib/FC_LicenseGuard'], f
     }
 
     function afterSubmit(context) {
-        // LICENSE CHECK - Block if unlicensed
-        try {
-            License.require();
-        } catch (licError) {
-            log.error('FC_Document_UE', 'License validation failed - blocking operation');
-            return;
-        }
-
         log.audit('FC_Document_UE.afterSubmit', 'Triggered - Type: ' + context.type);
 
         if (context.type !== context.UserEventType.CREATE) {

@@ -530,26 +530,6 @@
             // Load LLM config on init
             this.loadLLMConfig();
 
-            // License activation button
-            var activateLicenseBtn = el('#btn-activate-license');
-            if (activateLicenseBtn) {
-                activateLicenseBtn.addEventListener('click', function() {
-                    self.activateLicense();
-                });
-            }
-
-            // License validate button
-            var validateLicenseBtn = el('#btn-validate-license');
-            if (validateLicenseBtn) {
-                validateLicenseBtn.addEventListener('click', function() {
-                    self.validateLicense();
-                });
-            }
-
-            // If unlicensed, auto-switch to license tab
-            if (License.isUnlicensedMode()) {
-                this.switchSettingsTab('license');
-            }
         },
 
         // ==========================================
@@ -575,9 +555,7 @@
             });
 
             // Load data for specific tabs on first activation
-            if (tabId === 'license') {
-                this.initLicensePanel();
-            } else if (tabId === 'extraction' && !this.providerConfig) {
+            if (tabId === 'extraction' && !this.providerConfig) {
                 this.loadProviderConfig();
             } else if (tabId === 'forms' && !this.formConfig) {
                 this.loadFormConfig(this.currentFormType);
@@ -629,174 +607,6 @@
                         panel.style.display = 'none';
                     }
                 }
-            });
-        },
-
-        // ==========================================
-        // LICENSE MANAGEMENT
-        // ==========================================
-
-        initLicensePanel: function() {
-            var self = this;
-
-            // Set account ID
-            var accountIdEl = el('#license-account-id');
-            if (accountIdEl && window.FC_CONFIG) {
-                accountIdEl.value = window.FC_CONFIG.accountId || '';
-            }
-
-            // Load saved license key if any
-            API.get('settings').then(function(result) {
-                var settings = result.data || result;
-                if (settings.licenseKey) {
-                    var keyInput = el('#license-key-input');
-                    if (keyInput) {
-                        keyInput.value = settings.licenseKey;
-                    }
-                }
-            }).catch(function() {
-                // Ignore - settings may not exist yet
-            });
-
-            // Update status based on current license state (from server)
-            // If license is valid, fetch full details from API
-            if (window.FC_CONFIG && window.FC_CONFIG.licenseValid === true) {
-                API.get('licenseStatus').then(function(result) {
-                    self.updateLicenseStatus(result);
-                }).catch(function() {
-                    self.updateLicenseStatus();
-                });
-            } else {
-                this.updateLicenseStatus();
-            }
-        },
-
-        updateLicenseStatus: function(validationResult) {
-            var badge = el('#license-status-badge');
-            var details = el('#license-details');
-            var orgName = el('#license-org-name');
-            var tierEl = el('#license-tier');
-            var activatedAt = el('#license-activated-at');
-            var expiresAt = el('#license-expires-at');
-
-            // Use validation result if provided, otherwise check FC_CONFIG
-            var isValid = validationResult
-                ? (validationResult.valid === true)
-                : (window.FC_CONFIG && window.FC_CONFIG.licenseValid === true);
-
-            if (isValid) {
-                if (badge) {
-                    badge.textContent = 'Active';
-                    badge.className = 'status-badge status-completed';
-                }
-                if (details) {
-                    details.style.display = 'block';
-                }
-                // Update details if we have validation result
-                if (validationResult) {
-                    if (orgName) orgName.textContent = validationResult.licensed_to || '-';
-                    if (tierEl) tierEl.textContent = validationResult.tier || 'Standard';
-                    if (activatedAt && validationResult.activated_at) {
-                        var actDate = new Date(validationResult.activated_at);
-                        activatedAt.textContent = actDate.toLocaleDateString();
-                    }
-                    if (expiresAt && validationResult.expires_at) {
-                        var expDate = new Date(validationResult.expires_at);
-                        expiresAt.textContent = expDate.toLocaleDateString();
-                    } else if (expiresAt) {
-                        expiresAt.textContent = 'Never';
-                    }
-                }
-            } else {
-                if (badge) {
-                    badge.textContent = 'Not Licensed';
-                    badge.className = 'status-badge status-error';
-                }
-                if (details) {
-                    details.style.display = 'none';
-                }
-            }
-        },
-
-        activateLicense: function() {
-            var self = this;
-            var keyInput = el('#license-key-input');
-            var licenseKey = keyInput ? keyInput.value.trim() : '';
-
-            if (!licenseKey) {
-                UI.toast('Please enter a license key', 'warning');
-                return;
-            }
-
-            var activateBtn = el('#btn-activate-license');
-            if (activateBtn) {
-                activateBtn.disabled = true;
-                activateBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Activating...';
-            }
-
-            // Save license key to settings and trigger validation
-            API.post('settings', {
-                licenseKey: licenseKey
-            }).then(function(result) {
-                // Check if license validation result is included
-                if (result.licenseStatus && result.licenseStatus.valid) {
-                    UI.toast('License activated successfully!', 'success');
-                    self.updateLicenseStatus(result.licenseStatus);
-                    // Update global license state
-                    window.FC_CONFIG.licenseValid = true;
-                    License._data = { valid: true };
-                    License._unlicensedMode = false;
-                    if (activateBtn) {
-                        activateBtn.disabled = false;
-                        activateBtn.innerHTML = '<i class="fas fa-check"></i> Activate License';
-                    }
-                } else {
-                    UI.toast('License key saved. Reloading to validate...', 'info');
-                    setTimeout(function() {
-                        License.refresh();
-                    }, 500);
-                }
-            }).catch(function(err) {
-                UI.toast('Failed to save license key: ' + err.message, 'error');
-                if (activateBtn) {
-                    activateBtn.disabled = false;
-                    activateBtn.innerHTML = '<i class="fas fa-check"></i> Activate License';
-                }
-            });
-        },
-
-        validateLicense: function() {
-            var self = this;
-            var validateBtn = el('#btn-validate-license');
-            if (validateBtn) {
-                validateBtn.disabled = true;
-                validateBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Validating...';
-            }
-
-            // Call API to validate license without reloading
-            API.get('licenseStatus').then(function(result) {
-                if (validateBtn) {
-                    validateBtn.disabled = false;
-                    validateBtn.innerHTML = '<i class="fas fa-sync"></i> Validate';
-                }
-
-                if (result.valid) {
-                    UI.toast('License is valid!', 'success');
-                    self.updateLicenseStatus(result);
-                    // Update global license state
-                    window.FC_CONFIG.licenseValid = true;
-                    License._data = { valid: true };
-                    License._unlicensedMode = false;
-                } else {
-                    UI.toast('License invalid: ' + (result.status || 'not found'), 'error');
-                    self.updateLicenseStatus(result);
-                }
-            }).catch(function(err) {
-                if (validateBtn) {
-                    validateBtn.disabled = false;
-                    validateBtn.innerHTML = '<i class="fas fa-sync"></i> Validate';
-                }
-                UI.toast('Validation failed: ' + err.message, 'error');
             });
         },
 

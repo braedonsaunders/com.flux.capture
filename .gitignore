@@ -1,8 +1,19 @@
 # Sync state
 .sync-state.json
 
+# Secrets and local env
+.env
+.env.*
+*.pem
+*.key
+*.p12
+*.pfx
+
 # Node
 node_modules/
+
+# Build output
+dist/
 
 # OS
 .DS_Store

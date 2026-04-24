@@ -1,9 +1,6 @@
 name: Deploy to NetSuite
 
 on:
-  push:
-    branches:
-      - main
   workflow_dispatch:
     inputs:
       sync_mode:

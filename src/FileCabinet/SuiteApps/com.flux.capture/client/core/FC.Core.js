@@ -6,150 +6,77 @@
     'use strict';
 
     // ==========================================
-    // LICENSE ENFORCEMENT
+    // ACCESS STATE
     // ==========================================
-
-    var LICENSE_CACHE_KEY = '_fc_lic';
-    var LICENSE_CACHE_TTL = 3600000; // 1 hour in ms
-
-    var License = {
-        _data: null,
-        _checked: false,
-        _unlicensedMode: false,
+    var Access = {
+        _data: { valid: true },
+        _checked: true,
+        _restrictedMode: false,
 
         /**
-         * Initialize license check on app load
-         * Uses server-side license status from FC_CONFIG
+         * Initialize access state on app load.
          */
         init: function() {
-            var self = this;
-
-            // Server already checked license - use that status
-            var serverLicenseValid = window.FC_CONFIG && window.FC_CONFIG.licenseValid === true;
-
-            if (serverLicenseValid) {
-                // License is valid - cache and proceed normally
-                self._data = { valid: true };
-                self._checked = true;
-                try {
-                    localStorage.setItem(LICENSE_CACHE_KEY, JSON.stringify({
-                        valid: true,
-                        _expires: Date.now() + LICENSE_CACHE_TTL
-                    }));
-                } catch (e) {
-                    // Cache write failed
-                }
-                return Promise.resolve(self._data);
-            }
-
-            // License invalid - enter unlicensed mode (allows Settings only)
-            self._data = { valid: false };
-            self._checked = true;
-            self._unlicensedMode = true;
-
-            console.warn('[License] No valid license - Settings access only');
-            return Promise.resolve(self._data);
+            this._data = { valid: true };
+            this._checked = true;
+            this._restrictedMode = false;
+            return Promise.resolve(this._data);
         },
 
         /**
-         * Check if current route is allowed without license
+         * Check if current route is allowed.
          * @param {string} route - Route name
          * @returns {boolean}
          */
         isRouteAllowed: function(route) {
-            // Settings is always allowed for license configuration
-            if (route === 'settings') return true;
-            // All other routes require license
-            return this.isValid();
+            return true;
         },
 
         /**
-         * Show license required overlay (doesn't block Settings)
-         * Called when trying to access protected routes
+         * Compatibility no-op.
          */
-        showLicenseOverlay: function() {
-            // Don't add multiple overlays
-            if (document.getElementById('fc-license-overlay')) return;
-
-            var overlay = document.createElement('div');
-            overlay.id = 'fc-license-overlay';
-            overlay.innerHTML =
-                '<div style="position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.5);z-index:9999;display:flex;align-items:center;justify-content:center;">' +
-                    '<div style="text-align:center;padding:40px;background:white;border-radius:12px;box-shadow:0 4px 20px rgba(0,0,0,0.2);max-width:500px;margin:20px;">' +
-                        '<div style="width:64px;height:64px;background:#fee2e2;border-radius:50%;display:flex;align-items:center;justify-content:center;margin:0 auto 20px;">' +
-                            '<svg style="width:32px;height:32px;color:#ef4444;" fill="none" stroke="currentColor" viewBox="0 0 24 24">' +
-                                '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/>' +
-                            '</svg>' +
-                        '</div>' +
-                        '<h1 style="color:#1f2937;margin:0 0 12px;font-size:24px;font-weight:600;">License Required</h1>' +
-                        '<p style="color:#6b7280;margin:0 0 24px;font-size:16px;">A valid Flux Capture license is required to use this feature.</p>' +
-                        '<div style="display:flex;gap:12px;justify-content:center;flex-wrap:wrap;">' +
-                            '<button id="fc-license-settings-btn" style="background:#3b82f6;color:white;padding:12px 24px;border-radius:8px;border:none;cursor:pointer;font-weight:500;font-size:14px;">Go to Settings</button>' +
-                            '<a href="https://fluxfornetsuite.com" target="_blank" style="display:inline-block;background:#e5e7eb;color:#374151;padding:12px 24px;border-radius:8px;text-decoration:none;font-weight:500;font-size:14px;">Get Licensed</a>' +
-                        '</div>' +
-                        '<p style="color:#9ca3af;margin:16px 0 0;font-size:12px;">Contact: sales@fluxfornetsuite.com</p>' +
-                    '</div>' +
-                '</div>';
-
-            document.body.appendChild(overlay);
-
-            // Handle Settings button click
-            document.getElementById('fc-license-settings-btn').addEventListener('click', function() {
-                License.hideLicenseOverlay();
-                if (window.Router) {
-                    Router.navigate('settings');
-                }
-            });
+        showAccessOverlay: function() {
         },
 
         /**
-         * Hide license overlay
+         * Compatibility no-op.
          */
-        hideLicenseOverlay: function() {
-            var overlay = document.getElementById('fc-license-overlay');
-            if (overlay) {
-                overlay.remove();
-            }
+        hideAccessOverlay: function() {
         },
 
         /**
-         * Check if license is valid
+         * Check if access is unrestricted.
          */
         isValid: function() {
-            return this._data && this._data.valid === true;
+            return true;
         },
 
         /**
-         * Check if in unlicensed mode (Settings only)
+         * Check if the UI is in restricted mode.
          */
-        isUnlicensedMode: function() {
-            return this._unlicensedMode === true;
+        isRestrictedMode: function() {
+            return this._restrictedMode === true;
         },
 
         /**
          * Check if specific module is enabled (not used for flat pricing)
          */
         hasModule: function(moduleName) {
-            if (!this.isValid()) return false;
-            return this._data.modules && this._data.modules.indexOf(moduleName) !== -1;
+            return true;
         },
 
         /**
          * Get current tier (not used for flat pricing)
          */
         getTier: function() {
-            return this._data && this._data.valid ? this._data.tier : null;
+            return 'community';
         },
 
         /**
-         * Refresh license status (reloads page to get fresh server check)
+         * Refresh access state.
          */
         refresh: function() {
-            // Clear cache and reload to get fresh server-side check
-            try {
-                localStorage.removeItem(LICENSE_CACHE_KEY);
-            } catch (e) {}
-            window.location.reload();
+            return Promise.resolve(this._data);
         }
     };
 
@@ -329,13 +256,6 @@
                     data.error.code === 'INVALID_LOGIN' ||
                     data.error.code === 'SSS_AUTHORIZATION_REQUIRED')) {
                     return self._handleSessionExpired(data.error.message || 'Session expired');
-                }
-
-                // Check for license error
-                if (data.error && (data.error.code === 'FLUX_LICENSE_REQUIRED' ||
-                    data.error.code === 'FLUX_MODULE_REQUIRED')) {
-                    License._lockUI(data.error.message || 'License required');
-                    return Promise.reject(new Error(data.error.message));
                 }
 
                 if (data.success === false) {
@@ -520,15 +440,6 @@
         navigate: function(route, params) {
             var self = this;
             params = params || {};
-
-            // License check - block non-settings routes if unlicensed
-            if (!License.isRouteAllowed(route)) {
-                License.showLicenseOverlay();
-                return;
-            }
-
-            // Hide license overlay if navigating to allowed route
-            License.hideLicenseOverlay();
 
             // Prevent navigation during transition
             if (this.isTransitioning) {
@@ -912,12 +823,12 @@
     window.Router = Router;
     window.renderTemplate = renderTemplate;
     window.UI = UI;
-    window.License = License;
+    window.Access = Access;
 
-    // Initialize license check on DOM ready
+    // Initialize access state on DOM ready
     document.addEventListener('DOMContentLoaded', function() {
-        License.init().catch(function(error) {
-            console.error('[License] Initialization error:', error);
+        Access.init().catch(function(error) {
+            console.error('[Access] Initialization error:', error);
         });
     });
 

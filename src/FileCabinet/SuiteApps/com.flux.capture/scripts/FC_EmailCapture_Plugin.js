@@ -10,84 +10,12 @@
  */
 
 /**
- * Validate license via API (SuiteScript 1.0 compatible)
- * @returns {boolean} True if license is valid
- */
-function _validateLicense() {
-    try {
-        var accountId = nlapiGetContext().getCompany();
-        var url = 'https://fluxfornetsuite.com/api/v1/license-check';
-
-        var headers = {
-            'Content-Type': 'application/json',
-            'Accept': 'application/json',
-            'X-Flux-Client': 'capture-email-plugin'
-        };
-
-        var body = JSON.stringify({
-            account: accountId,
-            product: 'capture',
-            client_version: '1.0.0'
-        });
-
-        var response = nlapiRequestURL(url, body, headers, 'POST');
-
-        if (response.getCode() !== 200) {
-            nlapiLogExecution('ERROR', 'Flux License', 'API returned: ' + response.getCode());
-            return false;
-        }
-
-        var result = JSON.parse(response.getBody());
-        return result && result.valid === true;
-
-    } catch (e) {
-        nlapiLogExecution('ERROR', 'Flux License', 'Validation error: ' + e.toString());
-        // Allow offline grace - check for cached valid state
-        return _getOfflineFallback();
-    }
-}
-
-/**
- * Check for offline fallback (cached license)
- */
-function _getOfflineFallback() {
-    try {
-        var filters = [
-            ['custrecord_flux_cfg_type', 'is', 'license'],
-            'AND',
-            ['custrecord_flux_cfg_key', 'is', 'cache'],
-            'AND',
-            ['custrecord_flux_cfg_active', 'is', 'T']
-        ];
-        var columns = [new nlobjSearchColumn('custrecord_flux_cfg_data')];
-        var results = nlapiSearchRecord('customrecord_flux_config', null, filters, columns);
-
-        if (results && results.length > 0) {
-            var data = JSON.parse(results[0].getValue('custrecord_flux_cfg_data'));
-            // Allow 24 hour grace period
-            if (data && data.valid && data._expires && data._expires > new Date().getTime()) {
-                return true;
-            }
-        }
-    } catch (e) {
-        // Fallback failed
-    }
-    return false;
-}
-
-/**
  * Main entry point for Email Capture Plug-in
  * Called by NetSuite when an email is received at the plug-in's email address
  *
  * @param {nlobjEmailObject} email - The email object provided by NetSuite
  */
 function process(email) {
-    // LICENSE CHECK - Block if unlicensed
-    if (!_validateLicense()) {
-        nlapiLogExecution('ERROR', 'Flux License', 'License validation failed - email processing blocked');
-        return;
-    }
-
     try {
         var subject = email.getSubject() || '(No Subject)';
         var sender = email.getFrom();

@@ -5,7 +5,7 @@ order: 10
 icon: "life-buoy"
 ---
 
-This guide helps you resolve common issues with Flux Capture. If you don't find your answer here, contact support@fluxfornetsuite.com.
+This guide helps you resolve common issues with Flux Capture. If you don't find your answer here, open an issue in the GitHub repository.
 
 ## Document Upload Issues
 
@@ -45,10 +45,10 @@ This guide helps you resolve common issues with Flux Capture. If you don't find 
 
 **Solutions:**
 
-1. **Update the bundle**
+1. **Update the SDF project**
    - This issue is fixed in the latest version
-   - Navigate to **Customization > SuiteBundler > Installed Bundles**
-   - Find "Flux Capture" and click **Update** if available
+   - Pull the latest repository changes
+   - Redeploy with SuiteCloud CLI
 
 2. **For administrators (manual fix)**
    - If you cannot update immediately, set the custom record access type:
@@ -349,51 +349,33 @@ This guide helps you resolve common issues with Flux Capture. If you don't find 
    - Embedded images may not process
    - Attachments work better
 
-## License Issues
+## Form Field Issues
 
-### "License Required" Error
+### Custom Field Missing From Review
 
 **Symptoms:**
-- Cannot access Flux Capture
-- License error message
+- A required NetSuite custom field does not appear in the review screen
+- A custom segment or sublist column is missing
 
 **Solutions:**
 
-1. **Check license key**
-   - Go to Settings > License
-   - Verify key is entered correctly
+1. **Refresh the form schema**
+   - Go to Settings > Forms
+   - Select the transaction type
+   - Refresh or recapture the schema
 
-2. **Refresh license**
-   - Click Refresh button
-   - Wait for re-validation
+2. **Import the form XML**
+   - Export the custom transaction form XML from NetSuite
+   - Upload it in Settings > Forms
+   - Select the tabs, groups, fields, and sublists you want to use
 
-3. **Check expiration**
-   - License may have expired
-   - Contact sales to renew
+3. **Check field visibility**
+   - Confirm the field is shown on the NetSuite form
+   - Confirm the field is available to the role using Flux Capture
 
-4. **Contact support**
-   - Provide NetSuite account ID
-   - We can verify license status
-
-### License Won't Validate
-
-**Symptoms:**
-- "Validation failed" message
-- Cannot save license key
-
-**Solutions:**
-
-1. **Check for network issues**
-   - License server may be temporarily unreachable
-   - Wait and try again
-
-2. **Verify license key format**
-   - Copy fresh from email
-   - Ensure no extra spaces
-
-3. **Check account match**
-   - License is account-specific
-   - Verify correct NetSuite account
+4. **Review mappings**
+   - Check any custom field mappings in the learning settings
+   - Confirm body fields and sublist fields are mapped to the expected NetSuite field IDs
 
 ## Performance Issues
 
@@ -440,7 +422,7 @@ This guide helps you resolve common issues with Flux Capture. If you don't find 
 
 ## Getting Help
 
-### Before Contacting Support
+### Before Opening An Issue
 
 Gather this information:
 1. NetSuite account ID
@@ -451,10 +433,10 @@ Gather this information:
 
 ### Contact Options
 
-- **Email**: support@fluxfornetsuite.com
-- **Response time**: Within 24 hours (business days)
+- **Issues**: [GitHub Issues](https://github.com/braedonsaunders/com.flux.capture/issues)
+- **Repository**: [com.flux.capture](https://github.com/braedonsaunders/com.flux.capture)
 
-### What Support Can Do
+### What Maintainers Can Help With
 
 - Diagnose account-specific issues
 - Reset learned data if needed

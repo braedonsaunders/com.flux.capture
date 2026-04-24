@@ -28,9 +28,8 @@ define([
     '/SuiteApps/com.flux.capture/lib/FC_Debug',
     '/SuiteApps/com.flux.capture/suitelet/FC_FormSchemaExtractor',
     '/SuiteApps/com.flux.capture/lib/llm/GeminiVerifier',
-    '/SuiteApps/com.flux.capture/lib/matching/POMatchingEngine',
-    '/SuiteApps/com.flux.capture/lib/FC_LicenseGuard'
-], function(file, record, search, query, runtime, errorModule, config, log, encode, email, format, task, workflow, FC_Engine, fcDebug, FormSchemaExtractor, GeminiVerifierModule, POMatchingEngine, License) {
+    '/SuiteApps/com.flux.capture/lib/matching/POMatchingEngine'
+], function(file, record, search, query, runtime, errorModule, config, log, encode, email, format, task, workflow, FC_Engine, fcDebug, FormSchemaExtractor, GeminiVerifierModule, POMatchingEngine) {
 
     const API_VERSION = '2.0.0';
 
@@ -151,18 +150,8 @@ define([
     // CRITICAL: Return JSON.stringify() to avoid NetSuite serialization bug
 
     /**
-     * License gate wrapper - validates license before processing
-     * @private
-     */
-    function _requireLicense() {
-        var lic = License.require();
-        log.debug('FC_Router.License', 'Validated: ' + lic.tier);
-        return lic;
-    }
-
-    /**
      * Get detailed health and installation status
-     * Used for installation verification from website portal
+     * Used for installation verification.
      * @param {boolean} detailed - Include detailed component checks
      * @returns {Object} Health status response
      */
@@ -174,18 +163,6 @@ define([
             environment: runtime.envType,
             timestamp: new Date().toISOString()
         };
-
-        // Basic license check (non-blocking)
-        try {
-            var licenseResult = License.validate();
-            health.license = {
-                valid: licenseResult && licenseResult.valid === true,
-                status: licenseResult ? licenseResult.status : 'unknown',
-                expires_at: licenseResult ? licenseResult.expires_at : null
-            };
-        } catch (e) {
-            health.license = { valid: false, status: 'error', message: e.message };
-        }
 
         if (detailed) {
             // Check custom records exist
@@ -269,12 +246,6 @@ define([
         try {
             var action = context.action || 'list';
 
-            // Allow settings, licenseStatus, health, and installationVerify actions without license
-            if (action !== 'settings' && action !== 'licenseStatus' && action !== 'health' && action !== 'installationVerify') {
-                // LICENSE CHECK - Block unauthorized access for all other actions
-                _requireLicense();
-            }
-
             switch (action) {
                 case 'document':
                     result = getDocument(context.id);
@@ -302,9 +273,6 @@ define([
                     break;
                 case 'settings':
                     result = getSettings();
-                    break;
-                case 'licenseStatus':
-                    result = getLicenseStatus();
                     break;
                 case 'analytics':
                     result = getAnalytics(context);
@@ -396,12 +364,6 @@ define([
         try {
             var action = context.action || 'upload';
 
-            // Allow settings action without license (needed to save license key)
-            if (action !== 'settings') {
-                // LICENSE CHECK - Block unauthorized access for all other actions
-                _requireLicense();
-            }
-
             switch (action) {
                 case 'upload':
                     result = uploadDocument(context);
@@ -450,9 +412,6 @@ define([
         
         var result;
         try {
-            // LICENSE CHECK - Block unauthorized access
-            _requireLicense();
-
             var action = context.action || 'update';
 
             switch (action) {
@@ -530,9 +489,6 @@ define([
     function _delete(context) {
         var result;
         try {
-            // LICENSE CHECK - Block unauthorized access
-            _requireLicense();
-
             // For DELETE requests, params come as URL query string object (not body)
             // NetSuite RESTlets pass query params directly to the handler
             var params = context || {};
@@ -2820,8 +2776,6 @@ define([
         var netsuiteDateFormat = getNetSuiteDateFormat();
 
         var settings = {
-            // License key (if saved)
-            licenseKey: savedSettings.licenseKey || '',
             defaultDocumentType: savedSettings.defaultDocumentType || 'auto',
             emailImportEnabled: true,
             emailAddress: 'flux-' + runtime.accountId + '@netsuite.com',
@@ -2854,41 +2808,6 @@ define([
         return Response.success(settings);
     }
 
-    /**
-     * Get current license status (forces fresh check from API)
-     */
-    function getLicenseStatus() {
-        try {
-            // Force refresh to get fresh status from API
-            var licenseData = License.refresh();
-
-            if (licenseData && licenseData.valid) {
-                return Response.success({
-                    valid: true,
-                    status: licenseData.status || 'active',
-                    tier: licenseData.tier,
-                    modules: licenseData.modules,
-                    licensed_to: licenseData.licensed_to,
-                    activated_at: licenseData.activated_at,
-                    expires_at: licenseData.expires_at
-                });
-            } else {
-                return Response.success({
-                    valid: false,
-                    status: licenseData ? licenseData.status : 'not_found',
-                    message: licenseData ? licenseData.message : 'License not found'
-                });
-            }
-        } catch (e) {
-            log.error('getLicenseStatus', e);
-            return Response.success({
-                valid: false,
-                status: 'error',
-                message: e.message
-            });
-        }
-    }
-
     function saveSettings(context) {
         try {
             // Get existing settings first to preserve fields not being updated
@@ -2918,8 +2837,6 @@ define([
             var submitModes = context.submitButtonMode || existingSettings.submitButtonMode || {};
             var workflowSettings = context.workflowSettings || existingSettings.workflowSettings || {};
             var settingsData = {
-                // License key for activation
-                licenseKey: context.licenseKey !== undefined ? context.licenseKey : (existingSettings.licenseKey || ''),
                 defaultDocumentType: context.defaultDocumentType || existingSettings.defaultDocumentType || 'auto',
                 defaultLineSublist: context.defaultLineSublist || existingSettings.defaultLineSublist || 'auto',
                 preferVendorDefaultAccount: context.preferVendorDefaultAccount === true,
@@ -3026,29 +2943,7 @@ define([
 
             log.audit('saveSettings', 'Settings saved: ' + JSON.stringify(settingsData));
 
-            // If license key was updated, refresh license and return status
-            var licenseStatus = null;
-            if (context.licenseKey !== undefined) {
-                try {
-                    var licenseData = License.refresh();
-                    log.audit('saveSettings', 'License cache cleared after key update');
-                    if (licenseData) {
-                        licenseStatus = {
-                            valid: licenseData.valid,
-                            status: licenseData.status || (licenseData.valid ? 'active' : 'not_found'),
-                            tier: licenseData.tier,
-                            modules: licenseData.modules,
-                            licensed_to: licenseData.licensed_to,
-                            activated_at: licenseData.activated_at,
-                            expires_at: licenseData.expires_at
-                        };
-                    }
-                } catch (e) {
-                    log.debug('saveSettings', 'Could not refresh license cache: ' + e.message);
-                }
-            }
-
-            return Response.success({ saved: true, configId: configId, licenseStatus: licenseStatus });
+            return Response.success({ saved: true, configId: configId });
         } catch (e) {
             log.error('saveSettings', e);
             return Response.error('SAVE_SETTINGS_ERROR', e.message);

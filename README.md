@@ -1,322 +1,207 @@
-# Flux Capture - Intelligent Document Capture for NetSuite
+# Flux Capture
 
-<div align="center">
-  <img src="https://via.placeholder.com/200x200/6366f1/ffffff?text=Flux" alt="Flux Capture Logo" width="200"/>
+Flux Capture is an open source document capture SuiteApp for NetSuite. It helps accounts payable teams ingest invoices and receipts, extract fields with OCR/AI providers, review the results in NetSuite, and create transactions from approved documents.
 
-  **AI-Powered Document Capture & Processing Platform**
+The main idea: document capture should understand your NetSuite account, not force your process into a generic invoice template. Flux Capture is built around custom transaction forms, custom fields, sublists, custom segments, and the messy real-world configuration that makes every NetSuite environment different.
 
-  [![NetSuite](https://img.shields.io/badge/NetSuite-SuiteApp-blue)](https://www.netsuite.com)
-  [![SuiteScript](https://img.shields.io/badge/SuiteScript-2.1-green)](https://docs.oracle.com/en/cloud/saas/netsuite/ns-online-help/)
-  [![License](https://img.shields.io/badge/License-Proprietary-red)](LICENSE)
-</div>
+[![NetSuite](https://img.shields.io/badge/NetSuite-SuiteApp-blue)](https://www.netsuite.com/)
+[![SuiteScript](https://img.shields.io/badge/SuiteScript-2.1-green)](https://docs.oracle.com/en/cloud/saas/netsuite/ns-online-help/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
----
+This project is not affiliated with, certified by, or endorsed by Oracle NetSuite.
 
-## Overview
+## Status
 
-Flux Capture is a world-class, AI-powered document capture SuiteApp for NetSuite that transforms how businesses process vendor bills, expense reports, and financial documents. It goes far beyond NetSuite's native Bill Capture functionality with advanced features like machine learning, fraud detection, and intelligent automation.
+Flux Capture was originally built as a commercial SuiteApp and is now MIT licensed. Commercial activation and entitlement checks have been removed from the application: there is no license server call, account lock, trial gate, or paid tier check in the deployed SuiteScript code.
 
-## Key Features
+## Why Use This Instead Of Another Capture Tool?
 
-### 🤖 AI-Powered Document Intelligence
-- **Oracle Cloud Document Understanding Integration** - Enterprise-grade OCR and document parsing
-- **Smart Field Extraction** - Automatically extracts vendor name, invoice number, dates, amounts, PO references, payment terms, and line items
-- **Multi-Document Support** - Process invoices, receipts, credit memos, expense reports, and purchase orders
-- **Confidence Scoring** - Every extraction includes a confidence score with weighted field analysis
+Most document capture products are good at the same demo: vendor, invoice number, date, subtotal, tax, total. The hard part starts after that, when the bill has to land in your actual NetSuite transaction form with your fields, your approval workflow, your coding rules, and your line-level requirements.
 
-### 🔍 Advanced Fraud Detection
-- **Duplicate Invoice Detection** - Smart similarity matching to catch duplicate submissions
-- **Benford's Law Analysis** - Statistical analysis of number distributions to detect manipulation
-- **Amount Anomaly Detection** - Compares against historical vendor averages
-- **Round Number Pattern Detection** - Identifies suspicious patterns in invoice amounts
+Flux Capture is aimed at that deeper layer:
 
-### 🧠 Machine Learning Engine
-- **Learn from Corrections** - System improves accuracy by learning from user corrections
-- **Vendor-Specific Patterns** - Builds custom extraction rules per vendor
-- **Suggestion Engine** - Provides intelligent suggestions based on historical data
+- It can work with every body field on supported NetSuite transaction records, not only a fixed set of invoice fields.
+- It supports custom fields such as `custbody_*`, line/sublist fields such as `custcol_*`, custom segments, departments, classes, locations, accounts, items, and memo-style fields.
+- It lets users import the XML definition of a NetSuite transaction form, then choose which tabs, field groups, fields, sublists, and columns should appear in the capture workflow.
+- It stores form schemas and form layouts in NetSuite so the review UI can mirror how your account actually creates bills, credits, POs, expense reports, invoices, sales orders, and journal entries.
+- It has a learning layer for vendor aliases, account coding, segment mappings, item mappings, date formats, amount formats, and custom field mappings.
+- It keeps the source open and deployable through SDF, so you can adapt it to your own NetSuite implementation instead of waiting for a vendor roadmap.
 
-### 📊 Smart Vendor Matching
-- **Fuzzy String Matching** - Intelligent vendor matching algorithm
-- **Multiple Suggestions** - Ranked vendor suggestions with similarity scores
-- **Auto-Match Confidence** - High-confidence matches can be auto-approved
+## Deep Dive: NetSuite-Native Form Intelligence
 
-### 💰 Financial Validation
-- **Amount Reconciliation** - Validates line items against document totals
-- **Currency Support** - Multi-currency with real-time exchange rates
-- **Tax Calculation Verification** - Ensures tax amounts are accurate
+Flux Capture treats NetSuite form metadata as a first-class part of document capture.
 
-### 📬 Email Integration
-- **Email-to-Invoice** - Send invoices to a dedicated email address for automatic processing
-- **Trusted Sender Lists** - Configure approved senders and domains
-- **Auto-Processing** - Documents automatically queue for extraction
+### Custom Form XML Import
 
-### 📈 Analytics Dashboard
-- **Processing Statistics** - Track total processed, auto-processed, and pending review counts
-- **Performance Trends** - Processing trend visualization
-- **Document Type Breakdown** - Analysis by document type
-- **Anomaly Alerts** - Real-time alerts for detected issues
+From Settings, users can upload a NetSuite custom transaction form XML export. Flux Capture parses the XML, shows the detected tabs and sublists, and lets the user select only the pieces they want in the capture experience. This is useful when the account has heavily customized vendor bill, vendor credit, purchase order, invoice, sales order, expense report, or journal entry forms.
 
-### 🎨 Modern User Interface
-- **Split-Screen Review** - Document preview alongside extraction data
-- **Drag & Drop Upload** - Modern file upload with progress tracking
-- **Mobile Responsive** - Works on tablets and phones
-- **Batch Upload** - Process multiple documents at once
+The imported configuration can include:
 
-## Installation
+- Form tabs and tab ordering
+- Field groups and group labels
+- Body fields, including custom transaction body fields
+- Sublists such as expense, item, landed cost, and line
+- Sublist columns, including custom transaction column fields
+- Field visibility, labels, ordering, and display choices
 
-### Prerequisites
-- NetSuite account with SuiteScript 2.1 support
-- Advanced Bill Capture feature enabled (optional, for OCI integration)
+### Dynamic Schema Extraction
 
-### Simplified Deployment (Recommended)
+When XML is not available, the SuiteApp can also extract record metadata from NetSuite using SuiteScript. The schema extractor discovers fields, field types, select options, and known sublists for supported transaction records, then stores that configuration in `customrecord_flux_config`.
 
-Flux Capture uses a **simplified 2-script architecture** for easy deployment:
+That means the review screen can render a transaction-aware editor instead of a generic fixed invoice form.
 
-1. **FC_Suitelet** - Complete UI (Dashboard, Upload, Review, Queue, Settings)
-2. **FC_Router** - RESTlet API handling all operations
+### Every Transaction Field Is Mappable
 
-Deploy using SuiteCloud CLI:
+Flux Capture is designed so extracted document data can flow into standard and custom transaction fields. The review UI and learning engine both understand body fields and sublist fields, so a team can map document labels like "Job", "Project Code", "Grant", "Department", "GL Account", "PO Ref", or vendor-specific fields into the NetSuite fields that matter to them.
+
+This matters for accounts where successful automation depends on more than total amount accuracy. If a required approval field, segment, custom classification, or line column is missing, the bill still gets stuck. Flux Capture brings those fields into the capture process.
+
+## Use It If Your NetSuite Account Is Not Vanilla
+
+Flux Capture is especially useful when:
+
+- Vendor bills have required approval fields, project fields, or custom classifications
+- Line items need account, department, class, location, item, memo, tax, project, or custom column values
+- Different subsidiaries or transaction types use different forms
+- Your AP team needs to review extracted document data in the same shape as the final NetSuite transaction
+- Your capture rules need to evolve by vendor, document layout, or account coding history
+
+## Is Open Source Allowed For NetSuite SuiteApps?
+
+In general, NetSuite's SuiteCloud/SDF tooling is designed around file-based projects and standard software development workflows, including revision control. Oracle's docs describe SDF projects as file-based projects that can be used for internal use or commercial distribution, and SuiteApp projects as self-contained SDF projects for deployment to NetSuite accounts.
+
+The important caveat is license compatibility. The SuiteCloud Terms of Service define "Prohibited Open Source Software" broadly and specifically call out AGPL, GPL, and LGPL style licenses. For that reason this repository uses MIT, and contributors should avoid adding copyleft dependencies to any code that is deployed into NetSuite.
+
+Useful references:
+
+- [SuiteCloud Development Framework overview](https://docs.oracle.com/en/cloud/saas/netsuite/ns-online-help/chapter_4702622163.html)
+- [SuiteCloud project structure](https://docs.oracle.com/en/cloud/saas/netsuite/ns-online-help/section_4724963992.html)
+- [SuiteApp projects](https://docs.oracle.com/en/cloud/saas/netsuite/ns-online-help/subsect_1509931104.html)
+- [SuiteCloud Terms of Service](https://www.netsuite.com/portal/assets/pdf/Cloud_SuiteCloud_TOS_v102219_US_ENG.pdf)
+
+This README is not legal advice. If you plan to publish a SuiteApp through SDN or SuiteApp Marketplace, review your own Oracle/NetSuite agreements.
+
+## Features
+
+- Document upload and queue management for vendor bills, receipts, credit memos, expense reports, purchase orders, invoices, sales orders, and journal entries
+- OCR/extraction provider abstraction with OCI Document Understanding, Azure Form Recognizer, and Mindee provider modules
+- Field extraction for vendors, invoice numbers, dates, amounts, PO references, payment terms, and line items
+- Dynamic transaction form rendering based on imported XML, server-extracted schema, or manual configuration
+- Support for standard fields, custom body fields, custom column fields, custom segments, and transaction sublists
+- Vendor matching and PO matching helpers
+- Fraud and quality signals such as duplicate invoice checks, amount anomalies, date validation, and line-total reconciliation
+- Review UI with document preview, editable extracted fields, confidence signals, and transaction creation workflows
+- Email capture plugin for inbound invoice attachments
+- Learning helpers for corrections, aliases, and vendor-specific patterns
+
+## Requirements
+
+- NetSuite account with SuiteScript enabled
+- SuiteCloud CLI for project deployment
+- Node.js 18 or newer for local helper scripts
+- Optional OCR/AI provider credentials, depending on which provider you configure
+
+## Quick Start
+
+Install dependencies:
+
 ```bash
+npm install
+```
+
+Authenticate SuiteCloud CLI:
+
+```bash
+suitecloud account:setup
+```
+
+Deploy the SuiteCloud project:
+
+```bash
+cd src
 suitecloud project:deploy
 ```
 
-### GitHub Actions Deployment
-
-This project includes automated deployment via GitHub Actions. Configure these secrets:
-
-| Secret | Description |
-|--------|-------------|
-| `NS_ACCOUNT_ID` | NetSuite account ID (e.g., `TSTDRV1234567`) |
-| `NS_CERTIFICATE_ID` | OAuth certificate ID |
-| `NS_PRIVATE_KEY` | Base64-encoded private key |
-| `NS_PASSKEY` | SuiteCloud CI passkey (32-100 chars) |
+After deployment, open the Flux Capture Suitelet in NetSuite and configure providers from Settings.
 
 ## Project Structure
 
-```
-com.flux.capture/
-├── manifest.xml                    # SuiteApp manifest
-├── deploy.xml                      # Deployment configuration
-├── README.md                       # This file
-├── .github/
-│   └── workflows/
-│       └── deploy-netsuite.yml     # GitHub Actions deployment
-├── Objects/                        # Custom record definitions
-│   ├── customrecord_dm_captured_document.xml
-│   ├── customrecord_dm_batch.xml
-│   ├── customscript_fc_router.xml      # RESTlet deployment
-│   └── customscript_fc_suitelet.xml    # Suitelet deployment
-└── FileCabinet/
-    └── SuiteScripts/
-        └── FluxCapture/
-            ├── FC_Engine.js        # Core AI/OCR processing engine
-            ├── FC_Router.js        # RESTlet API (single entry point)
-            └── FC_Suitelet.js      # Complete UI (single Suitelet)
+```text
+.
+├── src/
+│   ├── manifest.xml
+│   ├── deploy.xml
+│   ├── Objects/
+│   │   ├── customrecord_flux_config.xml
+│   │   ├── customrecord_flux_document.xml
+│   │   └── customscript_*.xml
+│   └── FileCabinet/SuiteApps/com.flux.capture/
+│       ├── App/
+│       ├── client/
+│       ├── lib/
+│       ├── scripts/
+│       └── suitelet/
+├── docs/
+├── scripts/
+├── suitecloud.config.js
+└── package.json
 ```
 
 ## Architecture
 
-### Simplified 2-Script Design
+The app is built around a small set of NetSuite entry points:
 
-| Script | Type | Purpose |
-|--------|------|---------|
-| **FC_Suitelet** | Suitelet | Complete web UI - Dashboard, Upload, Review, Queue, Batch, Settings |
-| **FC_Router** | RESTlet | All API operations - CRUD, upload, process, approve, batch, email import |
-| **FC_Engine** | Library | Core processing - OCR, vendor matching, fraud detection, confidence scoring |
+| Component | Type | Purpose |
+| --- | --- | --- |
+| `FC_Suitelet.js` | Suitelet | Serves the NetSuite-hosted UI |
+| `FC_Router.js` | RESTlet | API router for document, settings, provider, and transaction actions |
+| `FC_ProcessDocuments_MR.js` | Map/Reduce | Async document processing and polling |
+| `FC_ContinuePolling_SS.js` | Scheduled Script | Continues long-running extraction operations |
+| `FC_Document_UE.js` | User Event | Triggers processing when Flux document records are created |
+| `FC_EmailCapture_Plugin.js` | Email Capture Plugin | Creates Flux document records from inbound attachments |
+| `FC_Engine.js` | Library | Extraction, validation, matching, anomaly detection, and learning orchestration |
 
-### Why 2 Scripts?
+## Development
 
-- **Easy Deployment** - Only 2 script records to manage
-- **Simplified Permissions** - Fewer deployments to configure
-- **Single API Entry Point** - FC_Router handles all API calls with action routing
-- **Embedded Client Logic** - No separate client script needed
-- **No Scheduled Scripts** - Email import triggered via RESTlet endpoint (use external scheduler)
+Sync changed files into NetSuite:
 
-## Script Details
-
-### FC_Engine.js (Library Module)
-Core document processing engine:
-- `FluxCaptureEngine` class - Main orchestrator for document processing
-- Vendor matching with fuzzy logic
-- Fraud/anomaly detection algorithms
-- Confidence scoring calculation
-
-### FC_Suitelet.js (Suitelet)
-Complete web UI featuring:
-- **Dashboard** - Statistics, charts, recent documents, anomaly alerts
-- **Upload** - Drag-drop file upload with type detection
-- **Review** - Split-screen document review interface
-- **Queue** - Processing queue with filters and bulk actions
-- **Batch** - Batch upload and management
-- **Settings** - Configuration options
-
-### FC_Router.js (RESTlet)
-RESTful API router with all operations:
-
-**GET Endpoints:**
-- `action=document&id=123` - Get document details
-- `action=list` - List documents with filters
-- `action=queue` - Get processing queue
-- `action=stats` - Dashboard statistics
-- `action=vendors&query=xyz` - Search vendors
-- `action=batches` - List batches
-- `action=health` - Health check
-
-**POST Endpoints:**
-- `action=upload` - Upload single document
-- `action=batch` - Upload batch
-- `action=process` - Process document
-- `action=reprocess` - Reprocess document
-- `action=emailImport` - Import from email
-- `action=learn` - Submit correction
-
-**PUT Endpoints:**
-- `action=update` - Update document
-- `action=approve` - Approve and create transaction
-- `action=reject` - Reject document
-- `action=status` - Update status
-
-**DELETE Endpoints:**
-- `action=document&id=123` - Delete document
-- `action=batch&batchId=456` - Delete batch
-- `action=clear` - Clear completed documents
-
-## Custom Records
-
-### DM Captured Document (`customrecord_dm_captured_document`)
-Primary record for captured documents with fields for:
-- Source file and document ID
-- Vendor, invoice details, amounts
-- Line items (JSON)
-- Confidence scores
-- Anomaly data
-- Status tracking (INTEGER - values hardcoded in JS)
-- Document type (INTEGER - values hardcoded in JS)
-- Source (INTEGER - values hardcoded in JS)
-- User corrections (JSON - for ML learning)
-- Audit information
-
-### DM Batch (`customrecord_dm_batch`)
-Groups multiple documents for batch processing:
-- Document counts and progress
-- Status tracking (INTEGER - values hardcoded in JS)
-- Total value calculations
-
-> **Note:** All enum values (status, document type, source, batch status) are stored as INTEGER fields with values defined as constants in `FC_Router.js` and `FC_Engine.js`. No custom lists are used.
-
-### Enum Values (Hardcoded Constants)
-
-**Document Type** (`custrecord_dm_document_type`):
-| Value | Meaning |
-|-------|---------|
-| 1 | Invoice |
-| 2 | Receipt |
-| 3 | Credit Memo |
-| 4 | Expense Report |
-| 5 | Purchase Order |
-| 6 | Unknown |
-
-**Document Status** (`custrecord_dm_status`):
-| Value | Meaning |
-|-------|---------|
-| 1 | Pending |
-| 2 | Processing |
-| 3 | Extracted |
-| 4 | Needs Review |
-| 5 | Rejected |
-| 6 | Completed |
-| 7 | Error |
-
-**Batch Status** (`custrecord_dm_batch_status`):
-| Value | Meaning |
-|-------|---------|
-| 1 | Pending |
-| 2 | Processing |
-| 3 | Completed |
-| 4 | Partial Error |
-| 5 | Failed |
-| 6 | Cancelled |
-
-**Source** (`custrecord_dm_source` / `custrecord_dm_batch_source`):
-| Value | Meaning |
-|-------|---------|
-| 1 | Manual Upload |
-| 2 | Email Import |
-| 3 | Drag and Drop |
-| 4 | API Integration |
-| 5 | Scanner |
-| 6 | Mobile App |
-
-## API Examples
-
-### Upload Document
-```javascript
-POST /app/site/hosting/restlet.nl?script=customscript_fc_router&deploy=customdeploy_fc_router
-Content-Type: application/json
-
-{
-  "action": "upload",
-  "fileName": "invoice.pdf",
-  "fileContent": "base64encodedcontent",
-  "documentType": "auto"
-}
+```bash
+npm run sync
 ```
 
-### Approve Document
-```javascript
-PUT /app/site/hosting/restlet.nl?script=customscript_fc_router&deploy=customdeploy_fc_router
-Content-Type: application/json
+Sync and deploy:
 
-{
-  "action": "approve",
-  "documentId": 12345,
-  "createTransaction": true
-}
+```bash
+npm run sync:deploy
 ```
 
-### Get Dashboard Stats
-```javascript
-GET /app/site/hosting/restlet.nl?script=customscript_fc_router&deploy=customdeploy_fc_router&action=stats
+Build a local distribution package:
+
+```bash
+npm run build
 ```
 
-## Confidence Scoring
+Verify an installation through the RESTlet health endpoint:
 
-Weighted calculation:
-- Vendor Name: 20%
-- Invoice Number: 15%
-- Invoice Date: 10%
-- Total Amount: 25%
-- Line Items: 15%
-- Vendor Match: 15%
+```bash
+npm run verify-installation -- --account ACCOUNT_ID --restlet-url RESTLET_URL
+```
 
-**Levels:**
-- HIGH: ≥85% (auto-approvable)
-- MEDIUM: ≥60% (needs review)
-- LOW: <60% (needs review)
+## Repository Automation
 
-## Deployment Summary
+The included GitHub Actions workflow can deploy to NetSuite when configured with these repository secrets:
 
-After deployment, you will have:
+| Secret | Description |
+| --- | --- |
+| `NS_ACCOUNT_ID` | NetSuite account ID |
+| `NS_CERTIFICATE_ID` | OAuth certificate ID |
+| `NS_PRIVATE_KEY` | Base64-encoded private key |
+| `NS_PASSKEY` | SuiteCloud CI passkey |
 
-| Component | Count |
-|-----------|-------|
-| **Scripts** | 2 (1 Suitelet + 1 RESTlet) |
-| **Custom Records** | 2 |
-| **Custom Lists** | 0 (enums hardcoded in JS) |
-| **Total Objects** | 4 |
-
-## Support
-
-For support and feature requests, please contact your NetSuite administrator or the Flux Capture development team.
+For public forks, leave those secrets unset and deploy manually from your own environment.
 
 ## License
 
-Proprietary - All rights reserved.
+Flux Capture is released under the [MIT License](LICENSE).
 
----
-
-<div align="center">
-  <strong>Flux Capture</strong> - Transforming Document Capture
-  <br>
-  Built with ❤️ for NetSuite
-</div>
+When contributing, keep deployed SuiteApp dependencies permissively licensed. Avoid AGPL, GPL, LGPL, or similar copyleft dependencies in SuiteScript/File Cabinet code unless you have reviewed the SuiteCloud terms and your own Oracle/NetSuite agreements.
