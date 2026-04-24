@@ -1,5 +1,6 @@
+# Flux Capture
 
-![Flux Capture social preview](fluxcapturesocial.png)
+![Flux Capture social preview](screenshots/fluxcapturesocial.png)
 
 [![NetSuite](https://img.shields.io/badge/NetSuite-SuiteApp-blue)](https://www.netsuite.com/)
 [![SuiteScript](https://img.shields.io/badge/SuiteScript-2.1-green)](https://docs.oracle.com/en/cloud/saas/netsuite/ns-online-help/)
@@ -10,6 +11,8 @@ Flux Capture is an open source document capture SuiteApp for NetSuite. It helps 
 The main idea: document capture should understand your NetSuite account, not force your process into a generic invoice template. Flux Capture is built around custom transaction forms, custom fields, sublists, custom segments, and the messy real-world configuration that makes every NetSuite environment different.
 
 This project is not affiliated with, certified by, or endorsed by Oracle NetSuite.
+
+![Flux Capture review screen](screenshots/review.png)
 
 ## Why Use This Instead Of Another Capture Tool?
 
@@ -31,6 +34,8 @@ Flux Capture treats NetSuite form metadata as a first-class part of document cap
 ### Custom Form XML Import
 
 From Settings, users can upload a NetSuite custom transaction form XML export. Flux Capture parses the XML, shows the detected tabs and sublists, and lets the user select only the pieces they want in the capture experience. This is useful when the account has heavily customized vendor bill, vendor credit, purchase order, invoice, sales order, expense report, or journal entry forms.
+
+![Flux Capture settings screen](screenshots/settings.png)
 
 The imported configuration can include:
 
