@@ -10,10 +10,6 @@ The main idea: document capture should understand your NetSuite account, not for
 
 This project is not affiliated with, certified by, or endorsed by Oracle NetSuite.
 
-## Status
-
-Flux Capture was originally built as a commercial SuiteApp and is now MIT licensed. Commercial activation and entitlement checks have been removed from the application: there is no license server call, account lock, trial gate, or paid tier check in the deployed SuiteScript code.
-
 ## Why Use This Instead Of Another Capture Tool?
 
 Most document capture products are good at the same demo: vendor, invoice number, date, subtotal, tax, total. The hard part starts after that, when the bill has to land in your actual NetSuite transaction form with your fields, your approval workflow, your coding rules, and your line-level requirements.
