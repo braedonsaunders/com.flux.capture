@@ -1,14 +1,13 @@
-# Flux Capture
 
 ![Flux Capture social preview](fluxcapturesocial.png)
-
-Flux Capture is an open source document capture SuiteApp for NetSuite. It helps accounts payable teams ingest invoices and receipts, extract fields with OCR/AI providers, review the results in NetSuite, and create transactions from approved documents.
-
-The main idea: document capture should understand your NetSuite account, not force your process into a generic invoice template. Flux Capture is built around custom transaction forms, custom fields, sublists, custom segments, and the messy real-world configuration that makes every NetSuite environment different.
 
 [![NetSuite](https://img.shields.io/badge/NetSuite-SuiteApp-blue)](https://www.netsuite.com/)
 [![SuiteScript](https://img.shields.io/badge/SuiteScript-2.1-green)](https://docs.oracle.com/en/cloud/saas/netsuite/ns-online-help/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+
+Flux Capture is an open source document capture SuiteApp for NetSuite. It helps accounts payable teams ingest invoices and receipts, extract fields with OCR/AI providers, review the results in NetSuite, and create transactions from approved documents.
+
+The main idea: document capture should understand your NetSuite account, not force your process into a generic invoice template. Flux Capture is built around custom transaction forms, custom fields, sublists, custom segments, and the messy real-world configuration that makes every NetSuite environment different.
 
 This project is not affiliated with, certified by, or endorsed by Oracle NetSuite.
 
