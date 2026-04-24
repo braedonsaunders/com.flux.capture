@@ -33,7 +33,7 @@ Flux Capture treats NetSuite form metadata as a first-class part of document cap
 
 ### Custom Form XML Import
 
-From Settings, users can upload a NetSuite custom transaction form XML export. Flux Capture parses the XML, shows the detected tabs and sublists, and lets the user select only the pieces they want in the capture experience. This is useful when the account has heavily customized vendor bill, vendor credit, purchase order, invoice, sales order, expense report, or journal entry forms.
+From Settings, users can upload a NetSuite custom transaction form XML export. Flux Capture parses the XML, shows the detected tabs and sublists, and lets the user select only the pieces they want in the capture experience. This is useful when the account has heavily customized vendor bill, vendor credit, purchase order, or expense reports.
 
 ![Flux Capture settings screen](screenshots/settings.png)
 
