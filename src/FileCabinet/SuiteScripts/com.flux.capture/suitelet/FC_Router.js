@@ -569,10 +569,21 @@ define([
             return Response.error('MISSING_PARAM', 'Document ID is required');
         }
 
-        var docRecord = record.load({
-            type: 'customrecord_flux_document',
-            id: documentId
-        });
+        var docRecord;
+        try {
+            docRecord = record.load({
+                type: 'customrecord_flux_document',
+                id: documentId
+            });
+        } catch (e) {
+            var message = String(e && e.message || '').toLowerCase();
+            if ((e && e.name === 'RCRD_DSNT_EXIST') ||
+                message.indexOf('record does not exist') !== -1 ||
+                message.indexOf('that record does not exist') !== -1) {
+                return Response.error('NOT_FOUND', 'Document not found');
+            }
+            throw e;
+        }
 
         var lineItems = JSON.parse(docRecord.getValue('custrecord_flux_line_items') || '[]');
         var anomalies = JSON.parse(docRecord.getValue('custrecord_flux_anomalies') || '[]');

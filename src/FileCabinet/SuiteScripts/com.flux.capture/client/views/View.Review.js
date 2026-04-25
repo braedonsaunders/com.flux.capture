@@ -242,6 +242,17 @@
         },
 
         showNoDocumentsState: function() {
+            this.docId = null;
+            this.data = null;
+            this.formData = null;
+            this.queueIds = [];
+            this.queueDocs = [];
+            this.queueIndex = -1;
+            sharedQueueState.queueIds = [];
+            sharedQueueState.queueDocs = [];
+            sharedQueueState.lastFetch = Date.now();
+            this.setDocumentUrl(null);
+
             var container = el('#view-container');
             if (container) {
                 container.innerHTML = '<div class="review-empty-state animate-in">' +
@@ -271,6 +282,64 @@
             }
         },
 
+        setDocumentUrl: function(docId) {
+            if (!window.history || !window.history.replaceState) return;
+
+            try {
+                var params = new URLSearchParams(window.location.search || '');
+                if (docId) {
+                    params.set('docId', docId);
+                } else {
+                    params.delete('docId');
+                }
+
+                var query = params.toString();
+                var nextUrl = window.location.pathname + (query ? '?' + query : '') + (window.location.hash || '');
+                window.history.replaceState(docId ? { docId: docId } : {}, '', nextUrl);
+            } catch (e) {
+                // URL state is helpful but not required for the review workflow.
+            }
+        },
+
+        removeDocumentFromQueueState: function(docId) {
+            if (!docId) return;
+
+            var idString = String(docId);
+            this.queueIds = (this.queueIds || []).filter(function(id) {
+                return String(id) !== idString;
+            });
+            this.queueDocs = (this.queueDocs || []).filter(function(doc) {
+                return doc && String(doc.id) !== idString;
+            });
+            this.queueIndex = -1;
+
+            sharedQueueState.queueIds = this.queueIds;
+            sharedQueueState.queueDocs = this.queueDocs;
+            sharedQueueState.lastFetch = Date.now();
+        },
+
+        isMissingDocumentError: function(err) {
+            if (!err) return false;
+            var code = String(err.code || '').toUpperCase();
+            var message = String(err.message || '').toLowerCase();
+            return code === 'NOT_FOUND' ||
+                code === 'RCRD_DSNT_EXIST' ||
+                message.indexOf('document not found') !== -1 ||
+                message.indexOf('record does not exist') !== -1 ||
+                message.indexOf('that record does not exist') !== -1;
+        },
+
+        handleMissingDocument: function() {
+            this.removeDocumentFromQueueState(this.docId);
+            this.docId = null;
+            this.data = null;
+            this.formData = null;
+            this.isLoading = false;
+            this.setDocumentUrl(null);
+            this.showCenteredLoading();
+            this.loadFirstDocument();
+        },
+
         // ==========================================
         // DATA LOADING
         // ==========================================
@@ -282,6 +351,11 @@
             // First load the document to get its type, then load form schema for that type
             API.get('document', { id: this.docId })
                 .then(function(data) {
+                    if (!data || !data.id) {
+                        self.handleMissingDocument();
+                        return Promise.reject({ handled: true });
+                    }
+
                     self.data = data;
                     self.lineItems = data.lineItems || [];
                     self.fieldConfidences = data.fieldConfidences || {};
@@ -340,6 +414,12 @@
                     }
                 })
                 .catch(function(err) {
+                    if (err && err.handled) return;
+                    if (self.isMissingDocumentError(err)) {
+                        self.handleMissingDocument();
+                        return;
+                    }
+
                     console.error('[Review] Load error:', err);
                     self.isLoading = false;
                     self.showError(err.message);
@@ -363,6 +443,15 @@
 
                         self.updateNavigationButtons();
                         self.renderDocumentSelector(); // Update dropdown with document list
+                    } else {
+                        self.queueIds = [];
+                        self.queueDocs = [];
+                        self.queueIndex = -1;
+                        sharedQueueState.queueIds = [];
+                        sharedQueueState.queueDocs = [];
+                        sharedQueueState.lastFetch = Date.now();
+                        self.updateNavigationButtons();
+                        self.renderDocumentSelector();
                     }
                 })
                 .catch(function() {
@@ -445,13 +534,7 @@
             }
 
             // Update URL without triggering router navigation
-            if (window.history && window.history.replaceState) {
-                var newUrl = window.location.pathname + window.location.search.replace(/docId=\d+/, 'docId=' + newDocId);
-                if (window.location.search.indexOf('docId=') === -1) {
-                    newUrl = window.location.pathname + '?docId=' + newDocId;
-                }
-                window.history.replaceState({ docId: newDocId }, '', newUrl);
-            }
+            this.setDocumentUrl(newDocId);
 
             // Update state
             this.docId = newDocId;
@@ -502,6 +585,11 @@
                 // Load new document data
                 API.get('document', { id: newDocId })
                     .then(function(data) {
+                        if (!data || !data.id) {
+                            self.handleMissingDocument();
+                            return Promise.reject({ handled: true });
+                        }
+
                         self.data = data;
                         self.transactionType = self.getTransactionType(data.documentType);
 
@@ -555,6 +643,12 @@
                         }
                     })
                     .catch(function(err) {
+                        if (err && err.handled) return;
+                        if (self.isMissingDocumentError(err)) {
+                            self.handleMissingDocument();
+                            return;
+                        }
+
                         console.error('[Review] Transition error:', err);
                         self.isLoading = false;
                         self.animateContentEnter();
@@ -570,6 +664,11 @@
         initializeFormData: function() {
             var doc = this.data;
             var self = this;
+
+            if (!doc) {
+                this.handleMissingDocument();
+                return;
+            }
 
             // If formData exists from server, use it
             if (doc.formData && typeof doc.formData === 'object') {
