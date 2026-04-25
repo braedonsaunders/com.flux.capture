@@ -5708,6 +5708,10 @@ body.dark-mode {
     --surface-bg: #18181b;
     --surface-card: #1f1f23;
     --surface-elevated: #18181b;
+    --surface-topbar: linear-gradient(90deg, #09090b 0%, #18181b 100%);
+    --topbar-bg-hover: rgba(255, 255, 255, 0.1);
+    --topbar-active: rgba(255, 255, 255, 0.16);
+    --topbar-border: rgba(255, 255, 255, 0.08);
     --text-primary: #e4e4e7;
     --text-secondary: #a1a1aa;
     --text-muted: #71717a;
@@ -5724,7 +5728,52 @@ body.dark-mode .app-main {
 }
 
 body.dark-mode .app-topbar {
-    background: linear-gradient(90deg, #09090b 0%, #18181b 100%);
+    background: var(--surface-topbar) !important;
+    color: rgba(255, 255, 255, 0.78);
+}
+
+body.dark-mode .app-topbar.light-theme .brand-name,
+body.dark-mode .app-topbar .brand-name {
+    color: #ffffff;
+}
+
+body.dark-mode .app-topbar.light-theme .topbar-tab,
+body.dark-mode .app-topbar .topbar-tab {
+    color: rgba(255, 255, 255, 0.68);
+}
+
+body.dark-mode .app-topbar.light-theme .topbar-tab:hover,
+body.dark-mode .app-topbar .topbar-tab:hover {
+    background: var(--topbar-bg-hover);
+    color: rgba(255, 255, 255, 0.95);
+}
+
+body.dark-mode .app-topbar.light-theme .topbar-tab.active,
+body.dark-mode .app-topbar .topbar-tab.active {
+    background: var(--topbar-active);
+    color: #ffffff;
+}
+
+body.dark-mode .app-topbar.light-theme .topbar-tab .tab-number,
+body.dark-mode .app-topbar .topbar-tab .tab-number {
+    background: rgba(255, 255, 255, 0.14);
+}
+
+body.dark-mode .app-topbar.light-theme .tab-connector,
+body.dark-mode .app-topbar .tab-connector {
+    color: rgba(255, 255, 255, 0.28);
+}
+
+body.dark-mode .app-topbar.light-theme .topbar-control,
+body.dark-mode .app-topbar .topbar-control {
+    background: rgba(255, 255, 255, 0.08);
+    color: rgba(255, 255, 255, 0.7);
+}
+
+body.dark-mode .app-topbar.light-theme .topbar-control:hover,
+body.dark-mode .app-topbar .topbar-control:hover {
+    background: rgba(255, 255, 255, 0.14);
+    color: #ffffff;
 }
 
 body.dark-mode .surface-card,
