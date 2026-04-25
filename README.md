@@ -85,8 +85,10 @@ Flux Capture is especially useful when:
 
 - NetSuite account with SuiteScript enabled
 - SuiteCloud CLI for project deployment
+- Java 17 or 21 for SuiteCloud CLI validation/package commands
 - Node.js 18 or newer for local helper scripts
 - Optional OCR/AI provider credentials, depending on which provider you configure
+- NetSuite secrets with GUIDs `flux_capture_encryption_key` and `flux_capture_llm_key` before saving provider or Gemini API keys
 
 ## Quick Start
 
@@ -99,14 +101,13 @@ npm install
 Authenticate SuiteCloud CLI:
 
 ```bash
-suitecloud account:setup
+npx suitecloud account:setup
 ```
 
-Deploy the SuiteCloud project:
+Deploy the SuiteApp:
 
 ```bash
-cd src
-suitecloud project:deploy
+npm run deploy
 ```
 
 After deployment, open the Flux Capture Suitelet in NetSuite and configure providers from Settings.
@@ -122,7 +123,7 @@ After deployment, open the Flux Capture Suitelet in NetSuite and configure provi
 │   │   ├── customrecord_flux_config.xml
 │   │   ├── customrecord_flux_document.xml
 │   │   └── customscript_*.xml
-│   └── FileCabinet/SuiteApps/com.flux.capture/
+│   └── FileCabinet/SuiteScripts/com.flux.capture/
 │       ├── App/
 │       ├── client/
 │       ├── lib/
@@ -168,10 +169,28 @@ Build a local distribution package:
 npm run build
 ```
 
+Validate before deploying:
+
+```bash
+npm run validate
+```
+
+Run a deployment preview:
+
+```bash
+npm run deploy:dryrun
+```
+
 Verify an installation through the RESTlet health endpoint:
 
 ```bash
-npm run verify-installation -- --account ACCOUNT_ID --restlet-url RESTLET_URL
+npm run verify-installation -- \
+  --account ACCOUNT_ID \
+  --restlet-url RESTLET_URL \
+  --consumer-key CONSUMER_KEY \
+  --consumer-secret CONSUMER_SECRET \
+  --token-id TOKEN_ID \
+  --token-secret TOKEN_SECRET
 ```
 
 ## Repository Automation

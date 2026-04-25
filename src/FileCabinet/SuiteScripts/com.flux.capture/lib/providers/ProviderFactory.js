@@ -563,16 +563,8 @@ define([
                 return 'ENC:' + encrypted;
 
             } catch (e) {
-                // If crypto fails, fall back to base64 encoding (not secure, but better than plaintext)
-                log.error('ProviderFactory._encryptValue', `Crypto encryption failed: ${e.message}, using fallback`);
-
-                const encoded = encode.convert({
-                    string: value,
-                    inputEncoding: encode.Encoding.UTF_8,
-                    outputEncoding: encode.Encoding.BASE_64
-                });
-
-                return 'B64:' + encoded;
+                log.error('ProviderFactory._encryptValue', `Crypto encryption failed: ${e.message}`);
+                throw new Error('Could not encrypt provider API key. Configure the NetSuite secret "' + ENCRYPTION_KEY_ID + '" before saving provider credentials.');
             }
         }
 

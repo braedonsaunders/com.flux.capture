@@ -9,5 +9,5 @@
     <notifyemails></notifyemails>
     <notifyowner>T</notifyowner>
     <notifyuser>F</notifyuser>
-    <scriptfile>[/SuiteApps/com.flux.capture/scripts/FC_EmailCapture_Plugin.js]</scriptfile>
+    <scriptfile>[/SuiteScripts/com.flux.capture/scripts/FC_EmailCapture_Plugin.js]</scriptfile>
 </emailcaptureplugin>

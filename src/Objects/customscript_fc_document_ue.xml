@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <usereventscript scriptid="customscript_fc_document_ue">
     <name>Flux Capture - Document Events</name>
-    <scriptfile>[/SuiteApps/com.flux.capture/scripts/FC_Document_UE.js]</scriptfile>
+    <scriptfile>[/SuiteScripts/com.flux.capture/scripts/FC_Document_UE.js]</scriptfile>
     <description>Triggers document processing when new Flux documents are created</description>
     <notifyadmins>F</notifyadmins>
     <notifyemails></notifyemails>

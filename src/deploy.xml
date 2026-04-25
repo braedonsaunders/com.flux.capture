@@ -1,5 +1,8 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <deploy>
+    <files>
+        <path>~/FileCabinet/SuiteScripts/com.flux.capture/*</path>
+    </files>
     <objects>
         <path>~/Objects/customrecord_flux_document.xml</path>
         <path>~/Objects/customrecord_flux_config.xml</path>

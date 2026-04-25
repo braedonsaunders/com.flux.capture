@@ -135,13 +135,12 @@
         </customrecordcustomfield>
 
         <customrecordcustomfield scriptid="custrecord_flux_currency">
-            <fieldtype>SELECT</fieldtype>
+            <fieldtype>TEXT</fieldtype>
             <label>Currency</label>
-            <description>Document currency</description>
+            <description>Document currency code or internal ID when available</description>
             <ismandatory>F</ismandatory>
             <displaytype>NORMAL</displaytype>
             <showinlist>F</showinlist>
-            <selectrecordtype>-122</selectrecordtype>
         </customrecordcustomfield>
 
         <customrecordcustomfield scriptid="custrecord_flux_po_number">
@@ -213,6 +212,25 @@
             <description>Internal ID of created transaction</description>
             <ismandatory>F</ismandatory>
             <displaytype>NORMAL</displaytype>
+            <showinlist>F</showinlist>
+        </customrecordcustomfield>
+
+        <customrecordcustomfield scriptid="custrecord_flux_submission_lock">
+            <fieldtype>CHECKBOX</fieldtype>
+            <label>Submission Lock</label>
+            <description>Prevents duplicate transaction creation while approval is in progress</description>
+            <ismandatory>F</ismandatory>
+            <displaytype>HIDDEN</displaytype>
+            <showinlist>F</showinlist>
+            <defaultchecked>F</defaultchecked>
+        </customrecordcustomfield>
+
+        <customrecordcustomfield scriptid="custrecord_flux_lock_timestamp">
+            <fieldtype>DATETIMETZ</fieldtype>
+            <label>Submission Lock Timestamp</label>
+            <description>Timestamp used to identify stale approval submission locks</description>
+            <ismandatory>F</ismandatory>
+            <displaytype>HIDDEN</displaytype>
             <showinlist>F</showinlist>
         </customrecordcustomfield>
 

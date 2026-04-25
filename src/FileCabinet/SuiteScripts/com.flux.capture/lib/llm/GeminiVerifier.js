@@ -1813,14 +1813,8 @@ Do not include account, department, class, or location fields in line items.
             return 'ENC:' + encrypted;
 
         } catch (e) {
-            // Fallback to base64
             log.error('GeminiVerifier.encryptValue', `Crypto failed: ${e.message}`);
-            const encoded = encode.convert({
-                string: value,
-                inputEncoding: encode.Encoding.UTF_8,
-                outputEncoding: encode.Encoding.BASE_64
-            });
-            return 'B64:' + encoded;
+            throw new Error('Could not encrypt Gemini API key. Configure the NetSuite secret "' + ENCRYPTION_KEY_ID + '" before saving AI credentials.');
         }
     }
 

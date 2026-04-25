@@ -1,12 +1,11 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <scheduledscript scriptid="customscript_fc_continue_polling">
     <name>Flux Capture - Continue Polling</name>
-    <scriptfile>[/SuiteApps/com.flux.capture/scripts/FC_ContinuePolling_SS.js]</scriptfile>
+    <scriptfile>[/SuiteScripts/com.flux.capture/scripts/FC_ContinuePolling_SS.js]</scriptfile>
     <description>Continues polling for documents that didn't complete in the initial MR run. Triggered on-demand via task.create() from the MR summarize function.</description>
     <notifyadmins>F</notifyadmins>
     <notifyemails></notifyemails>
     <notifyowner>T</notifyowner>
-    <customplugintypes></customplugintypes>
     <isinactive>F</isinactive>
     <scriptdeployments>
         <scriptdeployment scriptid="customdeploy_fc_continue_polling">
@@ -14,7 +13,6 @@
             <title>Flux Capture - Continue Polling</title>
             <isdeployed>T</isdeployed>
             <loglevel>DEBUG</loglevel>
-            <runasrole>ADMINISTRATOR</runasrole>
         </scriptdeployment>
     </scriptdeployments>
 </scheduledscript>

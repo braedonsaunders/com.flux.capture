@@ -7,8 +7,8 @@
  * Usage:
  *   node scripts/sync.js              # Sync changed files since last sync (local dev)
  *   node scripts/sync.js --ci         # Sync only files changed in latest commit (for CI/CD)
- *   node scripts/sync.js --all        # Force sync all files + deploy Objects (custom records, scripts)
- *   node scripts/sync.js --deploy     # Full project deploy (Objects + Files) via SDF
+ *   node scripts/sync.js --all        # Force sync all files + run SDF deploy
+ *   node scripts/sync.js --deploy     # Full project deploy (Files + Objects) via SDF
  *   node scripts/sync.js --watch      # Watch for changes and auto-sync
  *   node scripts/sync.js --no-delete  # Skip deletion of removed files
  *
@@ -23,7 +23,7 @@ const fs = require('fs');
 const path = require('path');
 
 const SYNC_STATE_FILE = '.sync-state.json';
-const FILE_CABINET_PATH = 'src/FileCabinet/SuiteApps/com.flux.capture';
+const FILE_CABINET_PATH = 'src/FileCabinet/SuiteScripts/com.flux.capture';
 const OBJECTS_PATH = 'src/Objects';
 
 // File extensions to sync
@@ -207,14 +207,14 @@ function deleteFiles(files) {
 
 /**
  * Run full SDF project deployment
- * This deploys Objects (custom records, scripts) and Files according to deploy.xml
+ * This deploys FileCabinet files and Objects according to deploy.xml
  */
 function runProjectDeploy() {
     try {
         log(`Running SDF project:deploy...`, 'info');
-        log(`  This will deploy Objects (custom records, scripts) and Files`, 'info');
+        log(`  This will deploy FileCabinet files and SDF Objects`, 'info');
 
-        execSync('suitecloud project:deploy', {
+        execSync('suitecloud project:deploy --validate --accountspecificvalues WARNING', {
             encoding: 'utf8',
             stdio: 'inherit',
             cwd: path.join(process.cwd(), 'src')
@@ -285,7 +285,7 @@ function uploadFile(filePath) {
         if (output && (output.includes('were not uploaded') || output.includes('problem when uploading') || output.includes('does not exist'))) {
             log(`  Upload result: ${output.trim()}`, 'warn');
 
-            // Retry once without project:deploy (which is broken for SuiteApps)
+            // Retry once for transient SuiteCloud/File Cabinet upload failures
             log(`  Retrying upload...`);
             try {
                 output = execSync(`suitecloud file:upload --paths "${fileCabinetPath}"`, {
@@ -392,33 +392,15 @@ function main() {
         return;
     }
 
-    // Full deploy mode - upload files first, then deploy Objects
+    // Full deploy mode - native SDF deployment
     if (deployMode) {
-        log('Deploy mode: running full deployment...');
-
-        // Step 1: Upload all FileCabinet files first (Objects reference these)
-        log('Step 1: Uploading FileCabinet files...');
-        const filesToSync = getAllFiles(FILE_CABINET_PATH);
-        const { success, failed } = uploadFiles(filesToSync);
-
-        if (failed > 0) {
-            log(`File upload completed with errors: ${success} uploaded, ${failed} failed`, 'warn');
+        log('Deploy mode: running native SDF deployment...');
+        const deploySuccess = runProjectDeploy();
+        if (!deploySuccess) {
+            log('Full deployment failed', 'error');
             process.exit(1);
         }
-        log(`File upload completed: ${success} files uploaded`, 'success');
-
-        // Step 2: Deploy Objects via SDF project:deploy
-        if (hasObjectFiles()) {
-            log('Step 2: Deploying Objects (custom records, scripts)...');
-            const objectSuccess = runProjectDeploy();
-            if (!objectSuccess) {
-                log('Object deployment failed', 'error');
-                process.exit(1);
-            }
-            log('Full deployment completed successfully', 'success');
-        } else {
-            log('No Object files found in src/Objects/, skipping Object deployment', 'warn');
-        }
+        log('Full deployment completed successfully', 'success');
         return;
     }
 
@@ -430,7 +412,7 @@ function main() {
     if (forceAll) {
         log('Force syncing all files...');
         filesToSync = getAllFiles(FILE_CABINET_PATH);
-        // Also deploy Objects when using --all
+        // Also run SDF deploy when using --all
         needsObjectDeploy = hasObjectFiles();
     } else if (ciMode) {
         log('CI mode: detecting files changed in latest commit...');
@@ -460,18 +442,18 @@ function main() {
         state.fileHashes = { ...state.fileHashes, ...newHashes };
     }
 
-    // Upload new/changed files first (Objects may reference these)
+    // Upload new/changed files first for fast dev/CI feedback.
     const { success: uploadSuccess, failed: uploadFailed } = uploadFiles(filesToSync);
 
-    // If Objects need deployment, deploy them after files are uploaded
+    // If Objects need deployment, run the full native SDF deploy.
     if (needsObjectDeploy) {
-        log('Deploying Objects via SDF project:deploy...', 'info');
+        log('Running SDF project:deploy...', 'info');
         const deploySuccess = runProjectDeploy();
         if (!deploySuccess) {
-            log('Object deployment failed', 'error');
+            log('SDF deployment failed', 'error');
             process.exit(1);
         }
-        log('Object deployment completed', 'success');
+        log('SDF deployment completed', 'success');
     }
 
     // Delete removed files

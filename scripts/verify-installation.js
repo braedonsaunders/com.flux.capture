@@ -6,7 +6,9 @@
  * It calls the Flux Capture RESTlet health endpoint with NetSuite TBA credentials.
  *
  * Usage:
- *   node verify-installation.js --account TSTDRV123456 --restlet-url <url>
+ *   node verify-installation.js --account TSTDRV123456 --restlet-url <url> \
+ *     --consumer-key <key> --consumer-secret <secret> \
+ *     --token-id <id> --token-secret <secret>
  */
 
 const https = require('https');
@@ -46,6 +48,13 @@ const EXPECTED_COMPONENTS = {
  * Generate OAuth 1.0 signature for NetSuite REST API
  * This is used for TBA (Token Based Authentication)
  */
+function encodeOAuth(value) {
+    return encodeURIComponent(value)
+        .replace(/[!'()*]/g, function(char) {
+            return '%' + char.charCodeAt(0).toString(16).toUpperCase();
+        });
+}
+
 function generateOAuth1Signature(params) {
     const {
         url,
@@ -69,19 +78,28 @@ function generateOAuth1Signature(params) {
         oauth_version: '1.0'
     };
 
-    // Create signature base string
-    const sortedParams = Object.keys(oauthParams).sort().map(key =>
-        `${encodeURIComponent(key)}=${encodeURIComponent(oauthParams[key])}`
+    const parsedUrl = new URL(url);
+    const baseUrl = `${parsedUrl.protocol}//${parsedUrl.host}${parsedUrl.pathname}`;
+    const signingParams = { ...oauthParams };
+
+    parsedUrl.searchParams.forEach((value, key) => {
+        signingParams[key] = value;
+    });
+
+    // Create signature base string. Query parameters such as script/deploy/action
+    // must be included in the OAuth base string for NetSuite RESTlets.
+    const sortedParams = Object.keys(signingParams).sort().map(key =>
+        `${encodeOAuth(key)}=${encodeOAuth(signingParams[key])}`
     ).join('&');
 
     const baseString = [
         method.toUpperCase(),
-        encodeURIComponent(url),
-        encodeURIComponent(sortedParams)
+        encodeOAuth(baseUrl),
+        encodeOAuth(sortedParams)
     ].join('&');
 
     // Create signing key
-    const signingKey = `${encodeURIComponent(consumerSecret)}&${encodeURIComponent(tokenSecret)}`;
+    const signingKey = `${encodeOAuth(consumerSecret)}&${encodeOAuth(tokenSecret)}`;
 
     // Generate signature
     const signature = crypto.createHmac('sha256', signingKey)
@@ -93,7 +111,7 @@ function generateOAuth1Signature(params) {
     // Build Authorization header
     const authHeader = 'OAuth realm="' + realm + '",' +
         Object.keys(oauthParams).sort().map(key =>
-            `${key}="${encodeURIComponent(oauthParams[key])}"`
+            `${key}="${encodeOAuth(oauthParams[key])}"`
         ).join(',');
 
     return authHeader;
@@ -105,9 +123,10 @@ function generateOAuth1Signature(params) {
 async function verifyViaRestlet(accountId, restletUrl, credentials) {
     return new Promise((resolve, reject) => {
         const url = new URL(restletUrl);
+        url.searchParams.set('action', 'installationVerify');
 
         const authHeader = generateOAuth1Signature({
-            url: restletUrl,
+            url: url.toString(),
             method: 'GET',
             ...credentials,
             realm: accountId
@@ -115,7 +134,7 @@ async function verifyViaRestlet(accountId, restletUrl, credentials) {
 
         const options = {
             hostname: url.hostname,
-            path: url.pathname + '?action=health',
+            path: url.pathname + url.search,
             method: 'GET',
             headers: {
                 'Authorization': authHeader,
@@ -130,10 +149,11 @@ async function verifyViaRestlet(accountId, restletUrl, credentials) {
             res.on('end', () => {
                 try {
                     const result = JSON.parse(data);
+                    const payload = result && result.data ? result.data : result;
                     resolve({
-                        success: res.statusCode === 200,
+                        success: res.statusCode === 200 && (!result || result.success !== false),
                         statusCode: res.statusCode,
-                        data: result
+                        data: payload
                     });
                 } catch (e) {
                     resolve({
@@ -146,7 +166,10 @@ async function verifyViaRestlet(accountId, restletUrl, credentials) {
         });
 
         req.on('error', reject);
-        req.on('timeout', () => reject(new Error('Request timeout')));
+        req.on('timeout', () => {
+            req.destroy();
+            reject(new Error('Request timeout'));
+        });
         req.end();
     });
 }
@@ -183,6 +206,9 @@ function generateReport(verification) {
         lines.push('');
         lines.push('HEALTH CHECK:');
         lines.push(`  Status: ${verification.health.status}`);
+        if (verification.health.installed !== undefined) {
+            lines.push(`  Installed: ${verification.health.installed ? 'yes' : 'no'}`);
+        }
         lines.push(`  Version: ${verification.health.version || 'Unknown'}`);
     }
 

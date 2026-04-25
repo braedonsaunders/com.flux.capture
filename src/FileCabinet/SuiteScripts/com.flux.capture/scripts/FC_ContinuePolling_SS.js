@@ -22,8 +22,9 @@ define([
     'N/runtime',
     'N/task',
     'N/https',
-    '/SuiteApps/com.flux.capture/lib/FC_Engine'
-], function(record, search, log, runtime, task, https, FC_Engine) {
+    '/SuiteScripts/com.flux.capture/lib/FC_Engine',
+    '/SuiteScripts/com.flux.capture/suitelet/FC_FormSchemaExtractor'
+], function(record, search, log, runtime, task, https, FC_Engine, FormSchemaExtractor) {
 
     'use strict';
 
@@ -43,6 +44,28 @@ define([
         MAX_TOTAL_ATTEMPTS: 500,         // Absolute max before giving up
         GOVERNANCE_THRESHOLD: 500        // Stop if remaining units below this
     };
+
+    function getTransactionTypeForDocumentType(documentType) {
+        const docType = parseInt(documentType, 10);
+        if (docType === 4) return 'expensereport';
+        if (docType === 3) return 'vendorcredit';
+        if (docType === 5) return 'purchaseorder';
+        return 'vendorbill';
+    }
+
+    function loadProcessingFormSchema(documentType) {
+        try {
+            if (!FormSchemaExtractor || !FormSchemaExtractor.extractFormSchema) return null;
+            const transactionType = getTransactionTypeForDocumentType(documentType);
+            const schemaResult = FormSchemaExtractor.extractFormSchema(transactionType, {});
+            if (schemaResult && schemaResult.success && schemaResult.data) {
+                return schemaResult.data;
+            }
+        } catch (e) {
+            log.debug('loadProcessingFormSchema', e.message);
+        }
+        return null;
+    }
 
     /**
      * Load general settings from config record
@@ -286,12 +309,14 @@ define([
                     const normalizedResult = provider._normalizeResult(result, {
                         maxPages: maxExtractionPages
                     });
+                    const formSchema = loadProcessingFormSchema(doc.documentType);
 
                     const processed = engine.processWithRawResult(normalizedResult, {
                         documentType: doc.documentType,
                         enableVendorMatching: true,
                         maxExtractionPages: maxExtractionPages,
-                        documentId: doc.id
+                        documentId: doc.id,
+                        formSchema: formSchema
                     });
 
                     if (processed.success) {
@@ -430,7 +455,7 @@ define([
             'custrecord_flux_status': DocStatus.NEEDS_REVIEW,
             'custrecord_flux_document_type': extraction.documentType || documentType,
             'custrecord_flux_vendor': extraction.vendorMatch?.vendorId || null,
-            'custrecord_flux_vendor_match_confidence': extraction.vendorMatch?.confidence || 0,
+            'custrecord_flux_vendor_match_conf': extraction.vendorMatch?.confidence || 0,
             'custrecord_flux_invoice_number': extraction.fields?.invoiceNumber || '',
             'custrecord_flux_invoice_date': invoiceDate,
             'custrecord_flux_due_date': dueDate,
@@ -461,6 +486,9 @@ define([
         if (extraction.fieldConfidences) {
             extractedDataObj._fieldConfidences = extraction.fieldConfidences;
         }
+        if (extraction.customFieldMatches) {
+            extractedDataObj._customFieldMatches = extraction.customFieldMatches;
+        }
         extractedDataObj._confidence = extraction.confidence;
         extractedDataObj._vendorMatch = extraction.vendorMatch;
         extractedDataObj._extractedAt = new Date().toISOString();
@@ -472,6 +500,8 @@ define([
             const currencyVal = extraction.fields.currency;
             if (typeof currencyVal === 'number' || (typeof currencyVal === 'string' && /^\d+$/.test(currencyVal))) {
                 updateValues['custrecord_flux_currency'] = parseInt(currencyVal, 10);
+            } else {
+                updateValues['custrecord_flux_currency'] = String(currencyVal);
             }
         }
 

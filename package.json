@@ -30,9 +30,15 @@
     "sync:watch": "node scripts/sync.js --watch",
     "build": "node scripts/build-distribution.js",
     "build:bundle": "node scripts/build-distribution.js --bundle",
+    "validate": "cd src && suitecloud project:validate --accountspecificvalues WARNING",
+    "validate:server": "cd src && suitecloud project:validate --server --accountspecificvalues WARNING",
+    "deploy": "cd src && suitecloud project:deploy --validate --accountspecificvalues WARNING",
+    "deploy:dryrun": "cd src && suitecloud project:deploy --dryrun --accountspecificvalues WARNING",
+    "package:sdf": "cd src && suitecloud project:package",
     "verify-installation": "node scripts/verify-installation.js"
   },
   "devDependencies": {
+    "@oracle/suitecloud-cli": "^3.1.2",
     "archiver": "^6.0.1"
   },
   "engines": {

@@ -4,45 +4,9 @@
     <frameworkversion>1.0</frameworkversion>
     <dependencies>
         <features>
+            <feature required="true">ACCOUNTING</feature>
+            <feature required="true">CUSTOMRECORDS</feature>
             <feature required="true">SERVERSIDESCRIPTING</feature>
         </features>
-        <files>
-            <!-- Suitelet and Router -->
-            <file>/SuiteApps/com.flux.capture/suitelet/FC_Suitelet.js</file>
-            <file>/SuiteApps/com.flux.capture/suitelet/FC_Router.js</file>
-            <!-- HTML Shell -->
-            <file>/SuiteApps/com.flux.capture/App/app_index.html</file>
-            <!-- CSS -->
-            <file>/SuiteApps/com.flux.capture/App/css/base.css</file>
-            <file>/SuiteApps/com.flux.capture/App/css/components.css</file>
-            <!-- Client JS -->
-            <file>/SuiteApps/com.flux.capture/client/core/FC.Core.js</file>
-            <file>/SuiteApps/com.flux.capture/client/FC.Main.js</file>
-            <file>/SuiteApps/com.flux.capture/client/views/View.Dashboard.js</file>
-            <file>/SuiteApps/com.flux.capture/client/views/View.Queue.js</file>
-            <file>/SuiteApps/com.flux.capture/client/views/View.Review.js</file>
-            <file>/SuiteApps/com.flux.capture/client/views/View.Settings.js</file>
-            <file>/SuiteApps/com.flux.capture/client/views/View.Rail.js</file>
-            <file>/SuiteApps/com.flux.capture/client/views/View.Documents.js</file>
-            <!-- Libraries -->
-            <file>/SuiteApps/com.flux.capture/lib/FC_Engine.js</file>
-            <file>/SuiteApps/com.flux.capture/lib/FC_Debug.js</file>
-            <!-- Providers -->
-            <file>/SuiteApps/com.flux.capture/lib/providers/ExtractionProvider.js</file>
-            <file>/SuiteApps/com.flux.capture/lib/providers/ProviderFactory.js</file>
-            <file>/SuiteApps/com.flux.capture/lib/providers/AzureFormRecognizerProvider.js</file>
-            <file>/SuiteApps/com.flux.capture/lib/providers/OCIProvider.js</file>
-            <file>/SuiteApps/com.flux.capture/lib/providers/MindeeProvider.js</file>
-            <!-- Utilities -->
-            <file>/SuiteApps/com.flux.capture/lib/utils/PDFUtils.js</file>
-            <!-- Email Capture Plugin -->
-            <file>/SuiteApps/com.flux.capture/scripts/FC_EmailCapture_Plugin.js</file>
-            <!-- User Event Script for Document Processing Trigger -->
-            <file>/SuiteApps/com.flux.capture/scripts/FC_Document_UE.js</file>
-            <!-- Map/Reduce Script for Document Processing -->
-            <file>/SuiteApps/com.flux.capture/scripts/FC_ProcessDocuments_MR.js</file>
-            <!-- Scheduled Script for Continuation Polling -->
-            <file>/SuiteApps/com.flux.capture/scripts/FC_ContinuePolling_SS.js</file>
-        </files>
     </dependencies>
 </manifest>

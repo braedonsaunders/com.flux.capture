@@ -38,6 +38,10 @@ function copyDir(src, dest) {
         const srcPath = path.join(src, entry.name);
         const destPath = path.join(dest, entry.name);
 
+        if (shouldSkipBuildEntry(entry.name)) {
+            continue;
+        }
+
         if (entry.isDirectory()) {
             copyDir(srcPath, destPath);
         } else if (entry.isFile()) {
@@ -46,15 +50,21 @@ function copyDir(src, dest) {
     }
 }
 
+function shouldSkipBuildEntry(name) {
+    return name === 'project.json' ||
+        name === '.DS_Store' ||
+        /^suitecloud-.*\.log$/i.test(name);
+}
+
 function writeInstallNotes() {
     const notes = `Flux Capture ${pkg.version}
 
 This archive contains the SuiteCloud project files for Flux Capture.
 
 Install:
-1. Install SuiteCloud CLI: npm install -g @oracle/suitecloud-cli
-2. Authenticate: suitecloud account:setup
-3. Deploy from the extracted archive root: suitecloud project:deploy
+1. Install dependencies: npm install
+2. Authenticate: npx suitecloud account:setup
+3. Deploy from the extracted archive root: npm run deploy
 
 No activation is required. Configure OCR/AI providers from the SuiteApp
 settings page after deployment.

@@ -18,7 +18,7 @@
  * NO HARDCODED LAYOUTS - Everything is extracted dynamically or user-configured
  */
 
-define(['N/record', 'N/search', 'N/log', 'N/query', 'N/runtime', '/SuiteApps/com.flux.capture/lib/FC_Debug'],
+define(['N/record', 'N/search', 'N/log', 'N/query', 'N/runtime', '/SuiteScripts/com.flux.capture/lib/FC_Debug'],
 function(record, search, log, query, runtime, fcDebug) {
 
     // Schema version for migrations (bump to invalidate old configs)
@@ -401,6 +401,156 @@ function(record, search, log, query, runtime, fcDebug) {
         return fieldInfo;
     }
 
+    function normalizeFieldId(fieldId) {
+        if (!fieldId) return '';
+        var cleaned = String(fieldId).trim();
+        if (cleaned.charAt(0) === '[' && cleaned.charAt(cleaned.length - 1) === ']') {
+            var inner = cleaned.slice(1, -1);
+            var match = inner.match(/scriptid\s*=\s*([^,\]]+)/i) ||
+                        inner.match(/id\s*=\s*([^,\]]+)/i);
+            if (match && match[1]) {
+                cleaned = match[1];
+            } else if (inner.indexOf('=') === -1) {
+                cleaned = inner;
+            }
+        }
+        return cleaned.replace(/^['"]|['"]$/g, '');
+    }
+
+    function shouldPreferMetadataLabel(field, metadata) {
+        if (!metadata || !metadata.label) return false;
+        var label = field && field.label ? String(field.label) : '';
+        var id = normalizeFieldId(field && field.id);
+        return !label || label === id || label === field.id || label.indexOf('[scriptid=') !== -1;
+    }
+
+    function mergeFieldMetadata(field, metadata) {
+        if (!field || !metadata) return field;
+
+        if (shouldPreferMetadataLabel(field, metadata)) {
+            field.label = metadata.label;
+        }
+
+        if (metadata.type) {
+            field.type = metadata.type;
+        }
+
+        if (metadata.mandatory !== undefined) {
+            field.mandatory = metadata.mandatory;
+        }
+
+        ['isCustom', 'isDisplay', 'isDisabled', 'help', 'hasOptions', 'optionCount', 'lookupRequired'].forEach(function(key) {
+            if (metadata[key] !== undefined) {
+                field[key] = metadata[key];
+            }
+        });
+
+        if (metadata.options && metadata.options.length > 0) {
+            field.options = metadata.options;
+        }
+
+        return field;
+    }
+
+    function extractServerMetadataMaps(normalizedType, recordTypeEnum, formId) {
+        var maps = {
+            bodyFields: {},
+            sublists: {}
+        };
+
+        try {
+            var createOptions = { type: recordTypeEnum, isDynamic: true };
+            if (formId) {
+                createOptions.defaultValues = { customform: formId };
+            }
+
+            var tempRecord = record.create(createOptions);
+            var bodyFieldIds = tempRecord.getFields() || [];
+
+            bodyFieldIds.forEach(function(fieldId, index) {
+                if (SKIP_FIELDS.indexOf(fieldId) !== -1) return;
+                var metadata = extractFieldMetadata(tempRecord, fieldId, index);
+                maps.bodyFields[normalizeFieldId(fieldId).toLowerCase()] = metadata;
+            });
+
+            (RECORD_SUBLISTS[normalizedType] || []).forEach(function(sublistId) {
+                try {
+                    var sublistFieldIds = tempRecord.getSublistFields({ sublistId: sublistId }) || [];
+                    maps.sublists[sublistId.toLowerCase()] = {};
+
+                    sublistFieldIds.forEach(function(fieldId, index) {
+                        var metadata = extractSublistFieldMetadata(tempRecord, sublistId, fieldId, index);
+                        maps.sublists[sublistId.toLowerCase()][normalizeFieldId(fieldId).toLowerCase()] = metadata;
+                    });
+                } catch (e) {
+                    fcDebug.debug('extractServerMetadataMaps', 'Could not inspect sublist ' + sublistId + ': ' + e.message);
+                }
+            });
+        } catch (e) {
+            fcDebug.debug('extractServerMetadataMaps', 'Could not build metadata maps: ' + e.message);
+        }
+
+        return maps;
+    }
+
+    function enrichFieldList(fields, metadataMap) {
+        if (!fields || !Array.isArray(fields) || !metadataMap) return;
+        fields.forEach(function(field) {
+            if (!field || !field.id) return;
+            var metadata = metadataMap[normalizeFieldId(field.id).toLowerCase()];
+            mergeFieldMetadata(field, metadata);
+        });
+    }
+
+    function enrichSublistList(sublists, sublistMaps) {
+        if (!sublists || !Array.isArray(sublists) || !sublistMaps) return;
+        sublists.forEach(function(sublist) {
+            if (!sublist) return;
+            var sublistId = String(sublist.id || sublist.type || '').toLowerCase();
+            var metadataMap = sublistMaps[sublistId];
+            if (!metadataMap) return;
+
+            enrichFieldList(sublist.fields, metadataMap);
+            enrichFieldList(sublist.columns, metadataMap);
+        });
+    }
+
+    function enrichConfigWithServerMetadata(config, normalizedType, recordTypeEnum, formId) {
+        if (!config || !recordTypeEnum) return config;
+
+        var metadataMaps = extractServerMetadataMaps(normalizedType, recordTypeEnum, formId);
+
+        enrichFieldList(config.bodyFields, metadataMaps.bodyFields);
+        enrichSublistList(config.sublists, metadataMaps.sublists);
+
+        (config.fieldGroups || []).forEach(function(group) {
+            enrichFieldList(group.fields, metadataMaps.bodyFields);
+        });
+
+        (config.tabs || []).forEach(function(tab) {
+            enrichFieldList(tab.fields, metadataMaps.bodyFields);
+            (tab.fieldGroups || []).forEach(function(group) {
+                enrichFieldList(group.fields, metadataMaps.bodyFields);
+            });
+            enrichSublistList(tab.sublists, metadataMaps.sublists);
+        });
+
+        if (config.layout) {
+            enrichFieldList(config.layout.bodyFields, metadataMaps.bodyFields);
+            enrichSublistList(config.layout.sublists, metadataMaps.sublists);
+            (config.layout.tabs || []).forEach(function(tab) {
+                enrichFieldList(tab.fields, metadataMaps.bodyFields);
+                (tab.fieldGroups || []).forEach(function(group) {
+                    enrichFieldList(group.fields, metadataMaps.bodyFields);
+                });
+                enrichSublistList(tab.sublists, metadataMaps.sublists);
+            });
+        }
+
+        config.metadataEnrichedAt = new Date().toISOString();
+        return config;
+    }
+
     // ==========================================
     // MAIN EXTRACTION FUNCTION
     // ==========================================
@@ -439,6 +589,7 @@ function(record, search, log, query, runtime, fcDebug) {
             if (layout) {
                 userConfig.layout = layout;
             }
+            enrichConfigWithServerMetadata(userConfig, normalizedType, recordTypeEnum, formId);
             userConfig.source = userConfig._source || 'user_config';
             return { success: true, data: userConfig };
         }
@@ -538,8 +689,9 @@ function(record, search, log, query, runtime, fcDebug) {
 
             fcDebug.debug('extractFormSchema', 'Extracted ' + bodyFields.length + ' body fields, ' + sublists.length + ' sublists');
 
-            // Save to config record
-            saveSchemaToConfig(normalizedType, actualFormId, schema);
+            // Save to config record under the requested form key. If no specific
+            // form was requested, keep the cache as the default schema.
+            saveSchemaToConfig(normalizedType, formId || null, schema);
 
             return { success: true, data: schema };
 
@@ -571,6 +723,11 @@ function(record, search, log, query, runtime, fcDebug) {
 
             // Add metadata
             config.savedAt = new Date().toISOString();
+
+            var recordTypeEnum = getRecordType(normalizedType);
+            if (recordTypeEnum) {
+                enrichConfigWithServerMetadata(config, normalizedType, recordTypeEnum, formId);
+            }
 
             // Determine source
             var sourceType = SOURCE_TYPE.MANUAL;

@@ -620,7 +620,7 @@
 
             // Initialize ALL fields from form schema (not just the 7 mapped above)
             // This ensures custom fields and other standard fields are included
-            var schemaFields = (this.formFields && this.formFields.bodyFields) || [];
+            var schemaFields = this.getBodySchemaFields();
             schemaFields.forEach(function(fieldDef) {
                 var fieldId = fieldDef.id;
                 if (!fieldId) return;
@@ -655,6 +655,8 @@
                     }
                 }
             });
+
+            this.applyCustomBodyFieldMatches(bodyFields, extractedData, schemaFields);
 
             // Also pull in any remaining extractedData fields that aren't in the schema
             // This preserves AI-extracted values even if they're not in the form definition
@@ -726,6 +728,8 @@
                     }
                 });
             }
+
+            this.applyCustomLineFieldMatches(sublists, extractedData);
 
             // Build formData structure
             this.formData = {
@@ -4022,10 +4026,11 @@
 
         getBodyFieldTypeMap: function() {
             var map = {};
-            var fields = (this.formFields && this.formFields.bodyFields) || [];
+            var fields = this.getBodySchemaFields();
+            var self = this;
             fields.forEach(function(f) {
                 if (f && f.id) {
-                    map[(f.id || '').toLowerCase()] = f;
+                    map[self.normalizeFieldId(f.id).toLowerCase()] = f;
                 }
             });
             return map;
@@ -4035,9 +4040,10 @@
             var schema = this.getSublistSchema(sublistId);
             var fields = (schema.columns || schema.fields || []);
             var map = {};
+            var self = this;
             fields.forEach(function(f) {
                 if (f && f.id) {
-                    map[(f.id || '').toLowerCase()] = f;
+                    map[self.normalizeFieldId(f.id).toLowerCase()] = f;
                 }
             });
             return map;
@@ -6387,6 +6393,190 @@
             }
         },
 
+        getBodySchemaFields: function() {
+            var formFields = this.formFields || {};
+            var fields = [];
+            var seen = {};
+            var self = this;
+
+            function addField(fieldDef) {
+                if (!fieldDef || !fieldDef.id) return;
+                var normalized = self.normalizeFieldId(fieldDef.id).toLowerCase();
+                if (!normalized || seen[normalized]) return;
+                var copy = {};
+                Object.keys(fieldDef).forEach(function(key) {
+                    copy[key] = fieldDef[key];
+                });
+                copy.id = self.normalizeFieldId(copy.id);
+                fields.push(copy);
+                seen[normalized] = true;
+            }
+
+            (formFields.bodyFields || []).forEach(addField);
+            (formFields.fieldGroups || []).forEach(function(group) {
+                (group.fields || []).forEach(function(fieldRef) {
+                    if (typeof fieldRef === 'object') addField(fieldRef);
+                });
+            });
+
+            var layout = formFields.layout || {};
+            var tabs = formFields.tabs || layout.tabs || [];
+            tabs.forEach(function(tab) {
+                (tab.fields || []).forEach(function(fieldRef) {
+                    if (typeof fieldRef === 'object') addField(fieldRef);
+                });
+                (tab.fieldGroups || []).forEach(function(group) {
+                    (group.fields || []).forEach(function(fieldRef) {
+                        if (typeof fieldRef === 'object') addField(fieldRef);
+                    });
+                });
+            });
+
+            return fields;
+        },
+
+        getCustomFieldMatches: function(extractedData) {
+            var raw = (extractedData && (extractedData._customFieldMatches || extractedData.customFieldMatches)) || {};
+            var bodyFields = {};
+            var lineFields = raw.lineFields || {};
+
+            if (raw.bodyFields) {
+                Object.keys(raw.bodyFields).forEach(function(fieldId) {
+                    bodyFields[fieldId] = raw.bodyFields[fieldId];
+                });
+            }
+
+            Object.keys(raw).forEach(function(fieldId) {
+                if (!fieldId || fieldId === 'bodyFields' || fieldId === 'lineFields' || fieldId === 'summary') return;
+                if (fieldId.indexOf('custbody_') === 0 && raw[fieldId] && raw[fieldId].value !== undefined) {
+                    bodyFields[fieldId] = raw[fieldId];
+                }
+            });
+
+            return {
+                bodyFields: bodyFields,
+                lineFields: lineFields
+            };
+        },
+
+        resolveMatchedFieldValue: function(fieldId, match, fieldDef) {
+            if (!match || match.value === undefined || match.value === null || match.value === '') return null;
+
+            var value = match.value;
+            var fieldType = (fieldDef && fieldDef.type) || match.fieldType || 'text';
+            var normalizedType = String(fieldType || '').toLowerCase();
+
+            if (this.requiresInternalId(fieldId, normalizedType)) {
+                if (this.isInternalIdValue(value)) {
+                    return { value: value };
+                }
+
+                var options = (fieldDef && fieldDef.options) || [];
+                var valueText = String(value).trim().toLowerCase();
+                for (var i = 0; i < options.length; i++) {
+                    var opt = options[i];
+                    var optText = String(opt.text || '').trim().toLowerCase();
+                    var optValue = String(opt.value || '').trim().toLowerCase();
+                    if (valueText && (valueText === optText || valueText === optValue)) {
+                        return {
+                            value: opt.value,
+                            displayValue: opt.text || String(value)
+                        };
+                    }
+                }
+
+                return null;
+            }
+
+            if (normalizedType === 'checkbox') {
+                var boolText = String(value).trim().toLowerCase();
+                return {
+                    value: value === true || boolText === 'true' || boolText === 't' ||
+                        boolText === 'yes' || boolText === 'y' || boolText === '1'
+                };
+            }
+
+            return { value: value };
+        },
+
+        applyCustomBodyFieldMatches: function(bodyFields, extractedData, schemaFields) {
+            var matches = this.getCustomFieldMatches(extractedData).bodyFields || {};
+            var self = this;
+            schemaFields = schemaFields || this.getBodySchemaFields();
+
+            Object.keys(matches).forEach(function(fieldId) {
+                var match = matches[fieldId];
+                if (!match || match.confidence < 0.7) return;
+
+                var normalizedId = self.normalizeFieldId(fieldId).toLowerCase();
+                var fieldDef = schemaFields.find(function(f) {
+                    return self.normalizeFieldId(f.id).toLowerCase() === normalizedId;
+                }) || { id: fieldId, type: match.fieldType || 'text' };
+
+                if (bodyFields[fieldDef.id] !== undefined && bodyFields[fieldDef.id] !== '') return;
+                if (bodyFields[normalizedId] !== undefined && bodyFields[normalizedId] !== '') return;
+
+                var resolved = self.resolveMatchedFieldValue(fieldDef.id || fieldId, match, fieldDef);
+                if (!resolved) return;
+
+                bodyFields[fieldDef.id || fieldId] = resolved.value;
+                if (resolved.displayValue) {
+                    bodyFields[(fieldDef.id || fieldId) + '_display'] = resolved.displayValue;
+                }
+            });
+        },
+
+        applyCustomLineFieldMatches: function(sublists, extractedData) {
+            var matches = this.getCustomFieldMatches(extractedData).lineFields || {};
+            var self = this;
+
+            Object.keys(matches).forEach(function(sublistId) {
+                var normalizedSublistId = String(sublistId || '').toLowerCase();
+                var lines = sublists[normalizedSublistId] || sublists[sublistId];
+                if (!Array.isArray(lines) || lines.length === 0) return;
+
+                var fieldMatches = matches[sublistId] || matches[normalizedSublistId] || {};
+                var schema = self.getSublistSchema(normalizedSublistId);
+                var fields = schema.columns || schema.fields || [];
+
+                Object.keys(fieldMatches).forEach(function(fieldId) {
+                    var match = fieldMatches[fieldId];
+                    if (!match || match.confidence < 0.7 || !match.sourceKey) return;
+
+                    var normalizedFieldId = self.normalizeFieldId(fieldId).toLowerCase();
+                    var fieldDef = fields.find(function(f) {
+                        return self.normalizeFieldId(f.id).toLowerCase() === normalizedFieldId;
+                    }) || { id: fieldId, type: match.fieldType || 'text' };
+
+                    lines.forEach(function(line) {
+                        if (!line) return;
+                        if (line[fieldDef.id] !== undefined && line[fieldDef.id] !== '') return;
+                        if (line[normalizedFieldId] !== undefined && line[normalizedFieldId] !== '') return;
+
+                        var sourceValue = line[match.sourceKey];
+                        if (sourceValue === undefined || sourceValue === null || sourceValue === '') {
+                            sourceValue = line[String(match.sourceKey).toLowerCase()];
+                        }
+                        if (sourceValue === undefined || sourceValue === null || sourceValue === '' || typeof sourceValue === 'object') return;
+
+                        var resolved = self.resolveMatchedFieldValue(fieldDef.id || fieldId, {
+                            value: sourceValue,
+                            fieldType: match.fieldType,
+                            confidence: match.confidence
+                        }, fieldDef);
+                        if (!resolved) return;
+
+                        line[fieldDef.id || fieldId] = resolved.value;
+                        line[normalizedFieldId] = resolved.value;
+                        if (resolved.displayValue) {
+                            line[(fieldDef.id || fieldId) + '_display'] = resolved.displayValue;
+                            line[normalizedFieldId + '_display'] = resolved.displayValue;
+                        }
+                    });
+                });
+            });
+        },
+
         // Normalize field IDs from XML/scriptid wrappers
         normalizeFieldId: function(fieldId) {
             if (!fieldId) return '';
@@ -6412,7 +6602,7 @@
             var ambiguous = {};
             var self = this;
 
-            (formFields.bodyFields || []).forEach(function(field) {
+            this.getBodySchemaFields().forEach(function(field) {
                 var fieldId = field && field.id;
                 var normalized = self.normalizeFieldId(fieldId);
                 if (!normalized) return;
@@ -6420,7 +6610,7 @@
             });
 
             (formFields.sublists || []).forEach(function(sublistDef) {
-                (sublistDef.fields || []).forEach(function(field) {
+                ((sublistDef.fields || sublistDef.columns) || []).forEach(function(field) {
                     var fieldId = field && field.id;
                     var normalized = self.normalizeFieldId(fieldId);
                     if (!normalized) return;

@@ -274,7 +274,8 @@ define([
                     customFieldMatches = this.dynamicFieldMatcher.matchCustomFields(
                         extractionResult.allExtractedFields,
                         options.formSchema,
-                        extractionResult.fields
+                        extractionResult.fields,
+                        extractionResult.lineItems
                     );
                 }
 
@@ -419,7 +420,8 @@ define([
                     customFieldMatches = this.dynamicFieldMatcher.matchCustomFields(
                         extractionResult.allExtractedFields,
                         options.formSchema,
-                        extractionResult.fields
+                        extractionResult.fields,
+                        extractionResult.lineItems
                     );
                 }
 

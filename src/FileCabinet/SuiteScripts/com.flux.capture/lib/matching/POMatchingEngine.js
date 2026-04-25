@@ -12,7 +12,7 @@ define([
     'N/query',
     'N/record',
     'N/log',
-    '/SuiteApps/com.flux.capture/lib/matching/LineItemMatcher'
+    '/SuiteScripts/com.flux.capture/lib/matching/LineItemMatcher'
 ], function(search, query, record, log, LineItemMatcher) {
 
     'use strict';

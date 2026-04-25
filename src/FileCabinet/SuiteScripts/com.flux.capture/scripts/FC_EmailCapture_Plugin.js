@@ -133,7 +133,7 @@ function createFile(fileName, content, ext) {
     // Create the file
     var file = nlapiCreateFile(uniqueName, fileType, content);
 
-    // Set folder - use SuiteApps folder or create dedicated folder
+    // Set folder - use the Flux Capture uploads folder
     var folderId = getOrCreateFolder();
     file.setFolder(folderId);
 

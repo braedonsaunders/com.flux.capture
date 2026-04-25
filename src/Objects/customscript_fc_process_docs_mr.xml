@@ -1,12 +1,11 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <mapreducescript scriptid="customscript_fc_process_docs_mr">
     <name>Flux Capture - Process Documents</name>
-    <scriptfile>[/SuiteApps/com.flux.capture/scripts/FC_ProcessDocuments_MR.js]</scriptfile>
+    <scriptfile>[/SuiteScripts/com.flux.capture/scripts/FC_ProcessDocuments_MR.js]</scriptfile>
     <description>Processes uploaded documents asynchronously using N/documentCapture AI extraction</description>
     <notifyadmins>F</notifyadmins>
     <notifyemails></notifyemails>
     <notifyowner>T</notifyowner>
-    <customplugintypes></customplugintypes>
     <isinactive>F</isinactive>
     <scriptdeployments>
         <scriptdeployment scriptid="customdeploy_fc_process_docs_mr">

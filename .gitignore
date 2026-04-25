@@ -8,12 +8,16 @@
 *.key
 *.p12
 *.pfx
+project.json
+suitecloud-*.log
+.sync-state.json
 
 # Node
 node_modules/
 
 # Build output
 dist/
+build/
 
 # OS
 .DS_Store

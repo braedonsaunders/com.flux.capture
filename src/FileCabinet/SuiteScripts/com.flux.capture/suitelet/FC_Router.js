@@ -24,11 +24,11 @@ define([
     'N/format',
     'N/task',
     'N/workflow',
-    '/SuiteApps/com.flux.capture/lib/FC_Engine',
-    '/SuiteApps/com.flux.capture/lib/FC_Debug',
-    '/SuiteApps/com.flux.capture/suitelet/FC_FormSchemaExtractor',
-    '/SuiteApps/com.flux.capture/lib/llm/GeminiVerifier',
-    '/SuiteApps/com.flux.capture/lib/matching/POMatchingEngine'
+    '/SuiteScripts/com.flux.capture/lib/FC_Engine',
+    '/SuiteScripts/com.flux.capture/lib/FC_Debug',
+    '/SuiteScripts/com.flux.capture/suitelet/FC_FormSchemaExtractor',
+    '/SuiteScripts/com.flux.capture/lib/llm/GeminiVerifier',
+    '/SuiteScripts/com.flux.capture/lib/matching/POMatchingEngine'
 ], function(file, record, search, query, runtime, errorModule, config, log, encode, email, format, task, workflow, FC_Engine, fcDebug, FormSchemaExtractor, GeminiVerifierModule, POMatchingEngine) {
 
     const API_VERSION = '2.0.0';
@@ -200,8 +200,8 @@ define([
 
             // Check key files exist
             var filesToCheck = [
-                '/SuiteApps/com.flux.capture/lib/FC_Engine.js',
-                '/SuiteApps/com.flux.capture/App/app_index.html'
+                '/SuiteScripts/com.flux.capture/lib/FC_Engine.js',
+                '/SuiteScripts/com.flux.capture/App/app_index.html'
             ];
 
             for (var i = 0; i < filesToCheck.length; i++) {
@@ -614,7 +614,7 @@ define([
             confidence: docRecord.getValue('custrecord_flux_confidence_score') || 0,
             vendor: docRecord.getValue('custrecord_flux_vendor'),
             vendorName: docRecord.getText('custrecord_flux_vendor'),
-            vendorMatchConfidence: docRecord.getValue('custrecord_flux_vendor_match_confidence'),
+            vendorMatchConfidence: docRecord.getValue('custrecord_flux_vendor_match_conf'),
             invoiceNumber: docRecord.getValue('custrecord_flux_invoice_number'),
             invoiceDate: docRecord.getValue('custrecord_flux_invoice_date'),
             dueDate: docRecord.getValue('custrecord_flux_due_date'),
@@ -623,7 +623,7 @@ define([
             taxAmount: docRecord.getValue('custrecord_flux_tax_amount'),
             totalAmount: docRecord.getValue('custrecord_flux_total_amount'),
             currency: docRecord.getValue('custrecord_flux_currency'),
-            currencyText: docRecord.getText('custrecord_flux_currency'),
+            currencyText: getDocumentCurrencyText(docRecord),
             paymentTerms: docRecord.getValue('custrecord_flux_payment_terms'),
             lineItems: lineItems,
             anomalies: anomalies,
@@ -2516,6 +2516,31 @@ define([
         }
     }
 
+    function getTransactionTypeForDocumentType(documentType) {
+        var docType = parseInt(documentType, 10);
+        if (docType === DocType.EXPENSE_REPORT) return 'expensereport';
+        if (docType === DocType.CREDIT_MEMO) return 'vendorcredit';
+        if (docType === DocType.PURCHASE_ORDER) return 'purchaseorder';
+        return 'vendorbill';
+    }
+
+    function loadProcessingFormSchema(documentType, formId) {
+        try {
+            if (!FormSchemaExtractor || !FormSchemaExtractor.extractFormSchema) return null;
+            var transactionType = getTransactionTypeForDocumentType(documentType);
+            var schemaResult = FormSchemaExtractor.extractFormSchema(transactionType, { formId: formId || null });
+            if (!schemaResult || !schemaResult.success || !schemaResult.data) return null;
+
+            var settingsResult = getSettings();
+            var settings = (settingsResult && settingsResult.data) ? settingsResult.data : (settingsResult || {});
+            normalizeFormConfigDefaults(schemaResult.data, settings);
+            return schemaResult.data;
+        } catch (e) {
+            log.debug('loadProcessingFormSchema', e.message);
+            return null;
+        }
+    }
+
     /**
      * Save user-customized form configuration
      * Used when user uploads XML or manually configures form layout
@@ -3346,11 +3371,13 @@ define([
                 anomalyDetection: settings.anomalyDetection || {}
             });
             var startTime = Date.now();
+            var formSchema = loadProcessingFormSchema(documentType, null);
 
             var result = engine.processDocument(fileId, {
                 documentType: documentType,
                 enableLearning: true,
-                documentId: documentId  // Pass document ID for duplicate detection exclusion
+                documentId: documentId,  // Pass document ID for duplicate detection exclusion
+                formSchema: formSchema
             });
 
             var processingTime = Date.now() - startTime;
@@ -3417,7 +3444,7 @@ define([
                     'custrecord_flux_status': newStatus,
                     'custrecord_flux_document_type': extraction.documentType || documentType,
                     'custrecord_flux_vendor': extraction.vendorMatch && extraction.vendorMatch.vendorId ? extraction.vendorMatch.vendorId : null,
-                    'custrecord_flux_vendor_match_confidence': extraction.vendorMatch ? extraction.vendorMatch.confidence : 0,
+                    'custrecord_flux_vendor_match_conf': extraction.vendorMatch ? extraction.vendorMatch.confidence : 0,
                     'custrecord_flux_invoice_number': extraction.fields && extraction.fields.invoiceNumber ? extraction.fields.invoiceNumber : '',
                     'custrecord_flux_invoice_date': parseExtractedDate(extraction.fields && extraction.fields.invoiceDate),
                     'custrecord_flux_due_date': parseExtractedDate(extraction.fields && extraction.fields.dueDate),
@@ -3439,6 +3466,8 @@ define([
                     var resolvedCurrency = resolveCurrencyId(extraction.fields.currency);
                     if (resolvedCurrency) {
                         updateValues['custrecord_flux_currency'] = resolvedCurrency;
+                    } else {
+                        updateValues['custrecord_flux_currency'] = String(extraction.fields.currency);
                     }
                 }
                 
@@ -3476,6 +3505,10 @@ define([
                 // Include field confidences for showing suggestion quality
                 if (extraction.fieldConfidences) {
                     extractedDataObj._fieldConfidences = extraction.fieldConfidences;
+                }
+
+                if (extraction.customFieldMatches) {
+                    extractedDataObj._customFieldMatches = extraction.customFieldMatches;
                 }
 
                 // Additional metadata
@@ -4566,6 +4599,19 @@ define([
         }
     }
 
+    function getDocumentCurrencyText(docRecord) {
+        if (!docRecord) return '';
+        try {
+            var text = docRecord.getText('custrecord_flux_currency');
+            if (text) return text;
+        } catch (e) { /* Text fields do not support getText in every account */ }
+        try {
+            return docRecord.getValue('custrecord_flux_currency') || '';
+        } catch (e) {
+            return '';
+        }
+    }
+
     /**
      * Helper to resolve currency value to NetSuite internal ID
      * Accepts either a numeric ID (passed through) or a currency code (USD, CAD, etc.)
@@ -4680,7 +4726,7 @@ define([
                     resolvedId = resolveCurrencyId(docCurrencyId);
                 }
                 if (!displayText) {
-                    displayText = docRecord.getText('custrecord_flux_currency') || '';
+                    displayText = getDocumentCurrencyText(docRecord);
                 }
             } catch (e) { /* ignore */ }
         }
@@ -4833,8 +4879,53 @@ define([
         });
     }
 
+    function addFormFieldIfMissing(fields, seen, fieldDef) {
+        if (!fieldDef || !fieldDef.id) return;
+        var normalized = normalizeFieldId(fieldDef.id).toLowerCase();
+        if (!normalized || seen[normalized]) return;
+        var copy = {};
+        Object.keys(fieldDef).forEach(function(key) {
+            copy[key] = fieldDef[key];
+        });
+        copy.id = normalizeFieldId(copy.id);
+        fields.push(copy);
+        seen[normalized] = true;
+    }
+
+    function ensureBodyFieldsFromLayout(config) {
+        if (!config) return;
+        var bodyFields = Array.isArray(config.bodyFields) ? config.bodyFields : [];
+        var seen = {};
+
+        bodyFields.forEach(function(fieldDef) {
+            if (!fieldDef || !fieldDef.id) return;
+            var normalized = normalizeFieldId(fieldDef.id).toLowerCase();
+            if (normalized) seen[normalized] = true;
+        });
+
+        (config.fieldGroups || []).forEach(function(group) {
+            (group.fields || []).forEach(function(fieldRef) {
+                if (typeof fieldRef === 'object') addFormFieldIfMissing(bodyFields, seen, fieldRef);
+            });
+        });
+
+        (config.tabs || []).forEach(function(tab) {
+            (tab.fields || []).forEach(function(fieldRef) {
+                if (typeof fieldRef === 'object') addFormFieldIfMissing(bodyFields, seen, fieldRef);
+            });
+            (tab.fieldGroups || []).forEach(function(group) {
+                (group.fields || []).forEach(function(fieldRef) {
+                    if (typeof fieldRef === 'object') addFormFieldIfMissing(bodyFields, seen, fieldRef);
+                });
+            });
+        });
+
+        config.bodyFields = bodyFields;
+    }
+
     function normalizeFormConfigDefaults(config, settings) {
         if (!config) return;
+        ensureBodyFieldsFromLayout(config);
         normalizeDefaultsInFields(config.bodyFields || [], settings);
 
         var sublists = config.sublists || [];
@@ -5128,6 +5219,21 @@ define([
         }
     }
 
+    function clearDocumentSubmissionLock(documentId) {
+        try {
+            record.submitFields({
+                type: 'customrecord_flux_document',
+                id: documentId,
+                values: {
+                    'custrecord_flux_submission_lock': false,
+                    'custrecord_flux_lock_timestamp': null
+                }
+            });
+        } catch (lockErr) {
+            log.debug('clearDocumentSubmissionLock', lockErr.message);
+        }
+    }
+
     function approveDocument(context) {
         var documentId = context.documentId;
         var createTransaction = context.createTransaction !== false;
@@ -5151,7 +5257,7 @@ define([
 
             // ===== DUPLICATE SUBMISSION PREVENTION =====
             // Check if document already has a transaction (already submitted)
-            var existingTransactionId = docRecord.getValue('custrecord_flux_transaction_id');
+            var existingTransactionId = docRecord.getValue('custrecord_flux_created_transaction');
             if (existingTransactionId) {
                 return Response.error('ALREADY_SUBMITTED', 'This invoice has already been submitted and created transaction #' + existingTransactionId, {
                     transactionId: existingTransactionId
@@ -5198,11 +5304,12 @@ define([
 
             // Determine transaction type
             if (!actualTransactionType) {
-                if (documentType === DocType.EXPENSE_REPORT) {
+                var documentTypeNum = parseInt(documentType, 10);
+                if (documentTypeNum === DocType.EXPENSE_REPORT) {
                     actualTransactionType = 'expensereport';
-                } else if (documentType === DocType.CREDIT_MEMO) {
+                } else if (documentTypeNum === DocType.CREDIT_MEMO) {
                     actualTransactionType = 'vendorcredit';
-                } else if (documentType === DocType.PURCHASE_ORDER) {
+                } else if (documentTypeNum === DocType.PURCHASE_ORDER) {
                     actualTransactionType = 'purchaseorder';
                 } else {
                     actualTransactionType = 'vendorbill';
@@ -5211,6 +5318,12 @@ define([
 
             // Load form data for validation and transaction creation
             var formData = JSON.parse(docRecord.getValue('custrecord_flux_form_data') || 'null');
+            var extractedDataForForm = {};
+            try {
+                extractedDataForForm = JSON.parse(docRecord.getValue('custrecord_flux_extracted_data') || '{}');
+            } catch (extractParseErr) {
+                extractedDataForForm = {};
+            }
 
             // Debug: log tranid from loaded formData
             log.debug('approveDocument.formData', 'tranid from loaded formData: ' + (formData && formData.bodyFields ? JSON.stringify(formData.bodyFields.tranid) : 'no formData'));
@@ -5231,6 +5344,7 @@ define([
                     }
                 };
             }
+            applyStoredCustomFieldMatchesToFormData(formData, extractedDataForForm);
 
             var resolvedCurrencyId = normalizeCurrencyInFormData(formData, docRecord, settings);
             if (resolvedCurrencyId) {
@@ -5254,10 +5368,12 @@ define([
                 validation = validateForTransaction(formData, actualTransactionType);
             } catch (validationErr) {
                 log.error('approveDocument.validationError', validationErr);
+                clearDocumentSubmissionLock(documentId);
                 return Response.error('VALIDATION_ERROR', 'Validation failed: ' + validationErr.message);
             }
 
             if (!validation.valid) {
+                clearDocumentSubmissionLock(documentId);
                 return Response.error('VALIDATION_FAILED', 'Document failed validation', {
                     errors: validation.errors,
                     warnings: validation.warnings
@@ -5288,6 +5404,7 @@ define([
                     transactionId = createTransactionFromDocument(docRecord, actualTransactionType, formData);
                 } catch (txnErr) {
                     log.error('approveDocument.createTxnError', txnErr.message + '\n' + (txnErr.stack || ''));
+                    clearDocumentSubmissionLock(documentId);
                     return Response.error('TXN_CREATE_FAILED', 'Transaction creation failed: ' + txnErr.message);
                 }
 
@@ -5383,6 +5500,30 @@ define([
                         }
                     }
                 }
+            }
+
+            if (transactionId) {
+                try {
+                    record.submitFields({
+                        type: 'customrecord_flux_document',
+                        id: documentId,
+                        values: {
+                            'custrecord_flux_status': DocStatus.COMPLETED,
+                            'custrecord_flux_created_transaction': String(transactionId),
+                            'custrecord_flux_submission_lock': false,
+                            'custrecord_flux_lock_timestamp': null,
+                            'custrecord_flux_modified_date': new Date()
+                        }
+                    });
+                } catch (statusErr) {
+                    log.debug('approveDocument.statusUpdate', statusErr.message);
+                    warnings.push({
+                        field: 'document',
+                        message: 'Transaction was created but Flux document status could not be updated: ' + statusErr.message
+                    });
+                }
+            } else {
+                clearDocumentSubmissionLock(documentId);
             }
 
             // ===== LEARNING (before potential deletion) =====
@@ -5494,18 +5635,7 @@ define([
             });
 
             // Clear submission lock on error so user can retry
-            try {
-                record.submitFields({
-                    type: 'customrecord_flux_document',
-                    id: documentId,
-                    values: {
-                        'custrecord_flux_submission_lock': false,
-                        'custrecord_flux_lock_timestamp': ''
-                    }
-                });
-            } catch (lockErr) {
-                // Ignore lock clear errors
-            }
+            clearDocumentSubmissionLock(documentId);
 
             // Check for validation error type
             if (e.type === 'VALIDATION_ERROR') {
@@ -5795,6 +5925,92 @@ define([
         }
         cleaned = cleaned.replace(/^['"]|['"]$/g, '');
         return cleaned;
+    }
+
+    function getStoredCustomFieldMatches(extractedData) {
+        var raw = extractedData && (extractedData._customFieldMatches || extractedData.customFieldMatches) || {};
+        var bodyFields = {};
+        var lineFields = raw.lineFields || {};
+
+        if (raw.bodyFields) {
+            Object.keys(raw.bodyFields).forEach(function(fieldId) {
+                bodyFields[fieldId] = raw.bodyFields[fieldId];
+            });
+        }
+
+        Object.keys(raw).forEach(function(fieldId) {
+            if (!fieldId || fieldId === 'bodyFields' || fieldId === 'lineFields' || fieldId === 'summary') return;
+            if (fieldId.indexOf('custbody_') === 0 && raw[fieldId] && raw[fieldId].value !== undefined) {
+                bodyFields[fieldId] = raw[fieldId];
+            }
+        });
+
+        return {
+            bodyFields: bodyFields,
+            lineFields: lineFields
+        };
+    }
+
+    function isSafeStoredMatchValue(match, value) {
+        if (!match) return false;
+        if (match.confidence !== undefined && match.confidence < 0.7) return false;
+        if (value === undefined || value === null || value === '') return false;
+        if (typeof value === 'object') return false;
+
+        var fieldType = String(match.fieldType || '').toLowerCase();
+        if (fieldType === 'select' || fieldType === 'multiselect') {
+            return /^\d+$/.test(String(value).trim());
+        }
+        return true;
+    }
+
+    function hasNonEmptyValue(map, key) {
+        if (!map || !key) return false;
+        var value = map[key];
+        return value !== undefined && value !== null && value !== '';
+    }
+
+    function applyStoredCustomFieldMatchesToFormData(formData, extractedData) {
+        if (!formData || !extractedData) return;
+        var matches = getStoredCustomFieldMatches(extractedData);
+        formData.bodyFields = formData.bodyFields || {};
+        formData.sublists = formData.sublists || {};
+
+        Object.keys(matches.bodyFields || {}).forEach(function(fieldId) {
+            var match = matches.bodyFields[fieldId];
+            var normalizedId = normalizeFieldId(fieldId).toLowerCase();
+            var canonicalId = normalizeFieldId(fieldId);
+            if (!canonicalId || hasNonEmptyValue(formData.bodyFields, canonicalId) || hasNonEmptyValue(formData.bodyFields, normalizedId)) return;
+            if (!isSafeStoredMatchValue(match, match.value)) return;
+
+            formData.bodyFields[canonicalId] = match.value;
+        });
+
+        Object.keys(matches.lineFields || {}).forEach(function(sublistId) {
+            var normalizedSublistId = String(sublistId || '').toLowerCase();
+            var lines = formData.sublists[normalizedSublistId] || formData.sublists[sublistId];
+            if (!Array.isArray(lines) || lines.length === 0) return;
+
+            var fieldMatches = matches.lineFields[sublistId] || matches.lineFields[normalizedSublistId] || {};
+            Object.keys(fieldMatches).forEach(function(fieldId) {
+                var match = fieldMatches[fieldId];
+                if (!match || !match.sourceKey) return;
+                var normalizedFieldId = normalizeFieldId(fieldId).toLowerCase();
+                var canonicalId = normalizeFieldId(fieldId);
+                if (!canonicalId) return;
+
+                lines.forEach(function(line) {
+                    if (!line || hasNonEmptyValue(line, canonicalId) || hasNonEmptyValue(line, normalizedFieldId)) return;
+                    var value = line[match.sourceKey];
+                    if (value === undefined || value === null || value === '') {
+                        value = line[String(match.sourceKey).toLowerCase()];
+                    }
+                    if (!isSafeStoredMatchValue(match, value)) return;
+                    line[canonicalId] = value;
+                    line[normalizedFieldId] = value;
+                });
+            });
+        });
     }
 
     // Normalize field map (case-insensitive) and skip internal/display fields
@@ -7676,6 +7892,25 @@ define([
                 }
             }
 
+            // Include Mindee config if present
+            if (context.mindee) {
+                config.mindee = {
+                    defaultDocumentType: context.mindee.defaultDocumentType || 'invoice'
+                };
+                if (context.mindee.apiKey) {
+                    config.mindee.apiKey = context.mindee.apiKey;
+                }
+                config.mindee._preserveExistingApiKey = !context.mindee.apiKey;
+            } else if (existingConfig && existingConfig.mindee) {
+                config.mindee = {
+                    defaultDocumentType: existingConfig.mindee.defaultDocumentType || 'invoice',
+                    _preserveExistingApiKey: true
+                };
+                if (existingConfig.mindee._hasApiKey) {
+                    config.mindee._hasApiKey = true;
+                }
+            }
+
             var result = EngineModule.saveProviderConfig(config);
 
             if (result.success) {
@@ -7707,7 +7942,18 @@ define([
 
             // Build test config, using saved values for missing fields
             var testConfig = {};
-            if (config) {
+            if (providerType === 'mindee') {
+                testConfig = {
+                    defaultDocumentType: (config && config.defaultDocumentType) ||
+                        (savedConfig && savedConfig.mindee ? savedConfig.mindee.defaultDocumentType : 'invoice')
+                };
+
+                if (config && config.apiKey) {
+                    testConfig.apiKey = config.apiKey;
+                } else if (savedConfig && savedConfig.mindee && savedConfig.mindee._hasApiKey) {
+                    testConfig._useSavedApiKey = true;
+                }
+            } else if (config) {
                 testConfig = {
                     endpoint: config.endpoint || (savedConfig && savedConfig.azure ? savedConfig.azure.endpoint : '') || '',
                     defaultModel: config.defaultModel || (savedConfig && savedConfig.azure ? savedConfig.azure.defaultModel : 'prebuilt-invoice')
@@ -7718,6 +7964,14 @@ define([
                     testConfig.apiKey = config.apiKey;
                 } else if (savedConfig && savedConfig.azure && savedConfig.azure._hasApiKey) {
                     // Signal to use the saved encrypted key
+                    testConfig._useSavedApiKey = true;
+                }
+            } else if (providerType === 'azure') {
+                testConfig = {
+                    endpoint: (savedConfig && savedConfig.azure ? savedConfig.azure.endpoint : '') || '',
+                    defaultModel: (savedConfig && savedConfig.azure ? savedConfig.azure.defaultModel : 'prebuilt-invoice')
+                };
+                if (savedConfig && savedConfig.azure && savedConfig.azure._hasApiKey) {
                     testConfig._useSavedApiKey = true;
                 }
             }

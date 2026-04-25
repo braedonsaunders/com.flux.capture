@@ -27,9 +27,10 @@ define([
     'N/runtime',
     'N/task',
     'N/log',
-    '/SuiteApps/com.flux.capture/lib/FC_Engine',
-    '/SuiteApps/com.flux.capture/lib/utils/PDFUtils'
-], function(record, file, search, runtime, task, log, FC_Engine, PDFUtils) {
+    '/SuiteScripts/com.flux.capture/lib/FC_Engine',
+    '/SuiteScripts/com.flux.capture/lib/utils/PDFUtils',
+    '/SuiteScripts/com.flux.capture/suitelet/FC_FormSchemaExtractor'
+], function(record, file, search, runtime, task, log, FC_Engine, PDFUtils, FormSchemaExtractor) {
 
     'use strict';
 
@@ -49,6 +50,28 @@ define([
         MAX_TOTAL_ATTEMPTS: 300,        // Absolute max attempts before timeout
         CHAIN_DELAY_SECONDS: 30         // Delay before chaining next MR run
     };
+
+    function getTransactionTypeForDocumentType(documentType) {
+        const docType = parseInt(documentType, 10);
+        if (docType === 4) return 'expensereport';
+        if (docType === 3) return 'vendorcredit';
+        if (docType === 5) return 'purchaseorder';
+        return 'vendorbill';
+    }
+
+    function loadProcessingFormSchema(documentType) {
+        try {
+            if (!FormSchemaExtractor || !FormSchemaExtractor.extractFormSchema) return null;
+            const transactionType = getTransactionTypeForDocumentType(documentType);
+            const schemaResult = FormSchemaExtractor.extractFormSchema(transactionType, {});
+            if (schemaResult && schemaResult.success && schemaResult.data) {
+                return schemaResult.data;
+            }
+        } catch (e) {
+            log.debug('loadProcessingFormSchema', e.message);
+        }
+        return null;
+    }
 
     /**
      * Load general settings from config record
@@ -176,6 +199,7 @@ define([
                 });
 
                 const startTime = Date.now();
+                const formSchema = loadProcessingFormSchema(documentType);
 
                 // Use traditional synchronous processing
                 const result = engine.processDocument(fileId, {
@@ -183,7 +207,8 @@ define([
                     enableVendorMatching: true,
                     enableLearning: true,
                     maxExtractionPages: maxExtractionPages,
-                    documentId: documentId
+                    documentId: documentId,
+                    formSchema: formSchema
                 });
 
                 const processingTime = Date.now() - startTime;
@@ -328,6 +353,7 @@ define([
             if (pollResult.status === 'succeeded') {
                 // Phase 3: Process the extraction result
                 const startTime = Date.now();
+                const formSchema = loadProcessingFormSchema(documentType);
 
                 // Use FC_Engine to process the raw result
                 const result = engine.processWithRawResult(pollResult.result, {
@@ -335,7 +361,8 @@ define([
                     enableVendorMatching: true,
                     maxExtractionPages: maxExtractionPages,
                     fileId: fileId,
-                    documentId: documentId
+                    documentId: documentId,
+                    formSchema: formSchema
                 });
 
                 const processingTime = Date.now() - startTime;
@@ -456,7 +483,7 @@ define([
             'custrecord_flux_status': DocStatus.NEEDS_REVIEW,
             'custrecord_flux_document_type': extraction.documentType || documentType,
             'custrecord_flux_vendor': extraction.vendorMatch?.vendorId || null,
-            'custrecord_flux_vendor_match_confidence': extraction.vendorMatch?.confidence || 0,
+            'custrecord_flux_vendor_match_conf': extraction.vendorMatch?.confidence || 0,
             'custrecord_flux_invoice_number': extraction.fields?.invoiceNumber || '',
             'custrecord_flux_invoice_date': invoiceDate,
             'custrecord_flux_due_date': dueDate,
@@ -488,6 +515,9 @@ define([
         if (extraction.fieldConfidences) {
             extractedDataObj._fieldConfidences = extraction.fieldConfidences;
         }
+        if (extraction.customFieldMatches) {
+            extractedDataObj._customFieldMatches = extraction.customFieldMatches;
+        }
         extractedDataObj._confidence = extraction.confidence;
         extractedDataObj._vendorMatch = extraction.vendorMatch;
         extractedDataObj._extractedAt = new Date().toISOString();
@@ -504,6 +534,8 @@ define([
             const currencyVal = extraction.fields.currency;
             if (typeof currencyVal === 'number' || (typeof currencyVal === 'string' && /^\d+$/.test(currencyVal))) {
                 updateValues['custrecord_flux_currency'] = parseInt(currencyVal, 10);
+            } else {
+                updateValues['custrecord_flux_currency'] = String(currencyVal);
             }
         }
 

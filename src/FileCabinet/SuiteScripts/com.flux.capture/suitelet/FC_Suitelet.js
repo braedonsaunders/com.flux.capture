@@ -6,12 +6,12 @@
  * Flux Capture - Main Suitelet
  * Uses iframe to preserve NetSuite menu while serving app
  */
-define(['N/file', 'N/runtime', 'N/url', 'N/ui/serverWidget', 'N/search', 'N/task', 'N/log', '/SuiteApps/com.flux.capture/lib/FC_Debug'], function(file, runtime, url, serverWidget, search, task, log, fcDebug) {
+define(['N/file', 'N/runtime', 'N/url', 'N/ui/serverWidget', 'N/search', 'N/task', 'N/log', '/SuiteScripts/com.flux.capture/lib/FC_Debug'], function(file, runtime, url, serverWidget, search, task, log, fcDebug) {
 
     'use strict';
 
     var CONFIG = {
-        basePath: '/SuiteApps/com.flux.capture'
+        basePath: '/SuiteScripts/com.flux.capture'
     };
 
     // Maps keys to file paths for URL resolution
