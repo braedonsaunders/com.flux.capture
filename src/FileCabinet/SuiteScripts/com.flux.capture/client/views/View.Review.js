@@ -673,6 +673,7 @@
             // If formData exists from server, use it
             if (doc.formData && typeof doc.formData === 'object') {
                 this.formData = doc.formData;
+                this.normalizeEntityBodyFields(this.formData.bodyFields, doc);
                 if (this.formFields && this.formFields.formInfo && this.formFields.formInfo.id) {
                     this.formData._meta = this.formData._meta || {};
                     this.formData._meta.formId = this.formFields.formInfo.id;
@@ -690,7 +691,7 @@
             // Map extracted/document fields to NS field IDs
             // These are the common mappings between our extraction and NS fields
             var fieldMappings = {
-                'entity': ['vendor', 'vendorId'],
+                'entity': ['entity', 'vendor', 'vendorId', 'vendorid'],
                 'tranid': ['invoiceNumber', 'tranid'],
                 'trandate': ['invoiceDate', 'trandate'],
                 'duedate': ['dueDate', 'duedate'],
@@ -756,6 +757,7 @@
             });
 
             this.applyCustomBodyFieldMatches(bodyFields, extractedData, schemaFields);
+            this.normalizeEntityBodyFields(bodyFields, doc);
 
             // Also pull in any remaining extractedData fields that aren't in the schema
             // This preserves AI-extracted values even if they're not in the form definition
@@ -781,7 +783,9 @@
             if (doc.vendor) {
                 // Vendor bill - use vendor field from custom record
                 bodyFields.entity = doc.vendor;
-                bodyFields.entity_display = doc.vendorName || '';
+                if (!bodyFields.entity_display) {
+                    bodyFields.entity_display = doc.vendorName || '';
+                }
             } else if (this.transactionType === 'expensereport' && doc.formData && doc.formData.bodyFields) {
                 // Expense report - restore employee from saved formData
                 if (doc.formData.bodyFields.entity) {
@@ -789,6 +793,7 @@
                     bodyFields.entity_display = doc.formData.bodyFields.entity_display || '';
                 }
             }
+            this.normalizeEntityBodyFields(bodyFields, doc);
 
             // Initialize sublists from lineItems
             var sublists = {
@@ -2549,10 +2554,10 @@
                         var fields = group.fields || [];
                         fields.forEach(function(fieldRef) {
                             var fieldId = typeof fieldRef === 'object' ? fieldRef.id : fieldRef;
-                            if (!fieldId || fieldId.toLowerCase() === 'entity' || fieldId.toLowerCase() === 'vendor') return;
+                            if (!fieldId || self.shouldSkipRenderedBodyField(fieldId)) return;
 
                             // Look up field in bodyFields for label
-                            var nsField = bodyFields.find(function(f) { return f.id === fieldId; });
+                            var nsField = self.findBodyFieldDef(bodyFields, fieldId);
                             var label = (nsField && nsField.label) || (typeof fieldRef === 'object' && fieldRef.label) || fieldId;
 
                             // Skip hidden fields
@@ -2593,12 +2598,14 @@
                     var other = document.createElement('optgroup');
                     other.label = '── Other Fields ──';
                     var standardIds = ['vendor', 'entity', 'subtotal', 'taxamount', 'totalamount',
-                        'invoicedate', 'duedate', 'invoicenumber', 'ponumber'];
+                        'invoicedate', 'duedate', 'invoicenumber', 'ponumber', 'customform', 'vendorname'];
                     var hasOther = false;
 
                     bodyFields.forEach(function(field) {
                         if (field.isDisplay === false) return;
-                        if (standardIds.indexOf(field.id.toLowerCase()) !== -1) return;
+                        var normalizedId = self.normalizeFieldId(field.id).toLowerCase();
+                        if (standardIds.indexOf(normalizedId) !== -1) return;
+                        if (self.shouldSkipRenderedBodyField(field.id)) return;
 
                         addFieldOption(other, field.id, field.label || field.id);
                         hasOther = true;
@@ -2996,14 +3003,21 @@
                 '</div>';
             } else {
                 // Vendor field for vendor bills, credits, POs
+                var entityBodyFields = (this.formData && this.formData.bodyFields) || {};
+                this.normalizeEntityBodyFields(entityBodyFields, doc);
+                var vendorDisplay = entityBodyFields.entity_display ||
+                    doc.vendorName ||
+                    (doc.extractedData && (doc.extractedData.vendorName || doc.extractedData.vendorname)) ||
+                    '';
+                var vendorId = entityBodyFields.entity || doc.vendorId || doc.vendor || '';
                 html += '<div class="form-section">' +
                     '<div class="form-field entity-field vendor-field' + (isEntityRequired ? ' is-required' : '') + '">' +
                         '<label>Vendor Name ' + this.renderConfidenceBadge('vendorName') + (isEntityRequired ? ' <span class="required">*</span>' : '') + '</label>' +
                         '<div class="entity-search-wrapper">' +
-                            '<input type="text" id="field-entity" class="entity-input" value="' + escapeHtml(doc.vendorName || '') + '" placeholder="Search or enter vendor name..." autocomplete="off">' +
+                            '<input type="text" id="field-entity" class="entity-input" value="' + escapeHtml(vendorDisplay) + '" placeholder="Search or enter vendor name..." autocomplete="off">' +
                             '<div class="entity-dropdown" id="entity-dropdown" style="display:none;"></div>' +
                         '</div>' +
-                        ((doc.vendorId || doc.vendor) ? '<input type="hidden" id="field-entityId" value="' + (doc.vendorId || doc.vendor) + '">' : '') +
+                        (vendorId ? '<input type="hidden" id="field-entityId" value="' + vendorId + '">' : '') +
                         (doc.vendorMatchConfidence ? '<div class="field-match-info"><i class="fas fa-check-circle"></i> Matched with ' + Math.round(doc.vendorMatchConfidence * 100) + '% confidence</div>' : '') +
                     '</div>' +
                 '</div>';
@@ -3030,9 +3044,10 @@
                             // Handle both field ID strings and field objects
                             var fieldId = typeof fieldRef === 'object' ? fieldRef.id : fieldRef;
                             var domField = typeof fieldRef === 'object' ? fieldRef : null;
+                            if (self.shouldSkipRenderedBodyField(fieldId)) return false;
 
                             // Check schema
-                            var field = bodyFields.find(function(f) { return f.id === fieldId; });
+                            var field = self.findBodyFieldDef(bodyFields, fieldId);
                             if (field && field.isDisplay !== false) return true;
 
                             // Or if DOM says it's visible
@@ -3071,16 +3086,15 @@
                             (group.fields || []).forEach(function(fieldRef) {
                                 // Handle both field ID strings and field objects from DOM extraction
                                 var fieldId = typeof fieldRef === 'object' ? fieldRef.id : fieldRef;
-                                var normalizedFieldId = (fieldId || '').toLowerCase();
 
                                 // Skip vendor/entity field (rendered specially at top) and customform (internal NS field)
-                                if (normalizedFieldId === 'entity' || normalizedFieldId === 'vendor' || normalizedFieldId === 'customform') return;
+                                if (self.shouldSkipRenderedBodyField(fieldId)) return;
 
                                 // First check if DOM extraction gave us field metadata
                                 var domField = typeof fieldRef === 'object' ? fieldRef : null;
 
                                 // Look up in schema bodyFields for full field definition
-                                var nsField = bodyFields.find(function(f) { return f.id === fieldId; });
+                                var nsField = self.findBodyFieldDef(bodyFields, fieldId);
 
                                 // Check both isDisplay (schema) and visible (user config) flags
                                 var fieldVisible = nsField && nsField.isDisplay !== false && nsField.visible !== false;
@@ -3103,7 +3117,7 @@
                                 } else if (domFieldVisible) {
                                     // Field not in schema but visible in DOM - use DOM data
                                     var newField = {
-                                        id: fieldId,
+                                        id: self.normalizeFieldId(fieldId),
                                         label: domField.label || fieldId,
                                         type: domField.type || 'text',
                                         mandatory: domField.mandatory || domField.required || false,
@@ -4054,7 +4068,10 @@
 
         // Determine API lookup type for a field
         getLookupType: function(fieldId, sublistId) {
-            var normalizedId = (fieldId || '').toLowerCase();
+            var normalizedId = this.normalizeFieldId(fieldId).toLowerCase();
+            if (this.isEntityFieldId(normalizedId)) {
+                return this.transactionType === 'expensereport' ? 'employees' : 'vendors';
+            }
             if (normalizedId === 'account') return 'accounts';
             if (normalizedId === 'expenseaccount') return 'expenseaccounts'; // Expense accounts only
             if (normalizedId === 'item') return 'items';
@@ -4062,7 +4079,6 @@
             if (normalizedId === 'department') return 'departments';
             if (normalizedId === 'class') return 'classes';
             if (normalizedId === 'location') return 'locations';
-            if (normalizedId === 'entity') return 'vendors';
             if (normalizedId === 'job' || normalizedId === 'project') return 'projects';
             if (normalizedId === 'subsidiary') return 'subsidiaries';
             if (normalizedId === 'currency') return 'currencies';
@@ -4080,7 +4096,8 @@
 
         // Detect if a field should be a select/typeahead based on its ID
         isSelectField: function(fieldId) {
-            var normalizedId = (fieldId || '').toLowerCase();
+            var normalizedId = this.normalizeFieldId(fieldId).toLowerCase();
+            if (this.isEntityFieldId(normalizedId)) return true;
             var selectFields = [
                 'account', 'department', 'class', 'location', 'subsidiary',
                 'entity', 'customer', 'vendor', 'employee', 'item',
@@ -4252,6 +4269,18 @@
             var bodyFields = data.bodyFields || {};
             var sublists = data.sublists || {};
             var bodyFieldMap = this.getBodyFieldTypeMap();
+
+            var entityDisplay = bodyFields.entity_display || bodyFields.vendorname ||
+                bodyFields.vendorName || bodyFields.vendor_name || '';
+            var entityValue = bodyFields.entity || bodyFields.vendor ||
+                bodyFields.vendorId || bodyFields.vendorid || '';
+            if (entityDisplay && !self.isInternalIdValue(entityValue)) {
+                return {
+                    valid: false,
+                    message: (this.transactionType === 'expensereport' ? 'Employee' : 'Vendor') + ' must be selected from the list',
+                    focusElement: el('#field-entity')
+                };
+            }
 
             // Validate body select fields (display text without ID)
             var bodyKeys = Object.keys(bodyFieldMap);
@@ -4651,8 +4680,19 @@
 
         // Check if a NetSuite field is mandatory
         isFieldMandatory: function(fieldId, bodyFields) {
-            var field = bodyFields.find(function(f) { return f.id === fieldId; });
-            return field && field.mandatory;
+            if (this.isCustomFormFieldId(fieldId)) return false;
+            var field = this.findBodyFieldDef(bodyFields || [], fieldId);
+            if (field && field.mandatory) return true;
+
+            // The NetSuite XML export can call the vendor field "vendor" or
+            // "vendorname", while the transaction record API calls it "entity".
+            if (this.isEntityFieldId(fieldId)) {
+                var self = this;
+                return (bodyFields || []).some(function(f) {
+                    return f && f.mandatory && self.isEntityFieldId(f.id);
+                });
+            }
+            return false;
         },
 
         renderConfidenceBadge: function(field) {
@@ -6693,6 +6733,87 @@
             return cleaned.replace(/^['"]|['"]$/g, '');
         },
 
+        canonicalBodyFieldId: function(fieldId) {
+            var normalized = this.normalizeFieldId(fieldId).toLowerCase();
+            if (!normalized) return '';
+            if (normalized === 'vendor' || normalized === 'vendorid' ||
+                normalized === 'vendorname' || normalized === 'vendor_name') {
+                return 'entity';
+            }
+            if (normalized === 'customform' || normalized === 'custom_form') {
+                return 'customform';
+            }
+            return normalized;
+        },
+
+        isEntityFieldId: function(fieldId) {
+            return this.canonicalBodyFieldId(fieldId) === 'entity';
+        },
+
+        isCustomFormFieldId: function(fieldId) {
+            return this.canonicalBodyFieldId(fieldId) === 'customform';
+        },
+
+        shouldSkipRenderedBodyField: function(fieldId) {
+            return this.isEntityFieldId(fieldId) || this.isCustomFormFieldId(fieldId);
+        },
+
+        findBodyFieldDef: function(bodyFields, fieldId) {
+            var self = this;
+            var canonical = this.canonicalBodyFieldId(fieldId);
+            var normalized = this.normalizeFieldId(fieldId).toLowerCase();
+            return (bodyFields || []).find(function(field) {
+                if (!field || !field.id) return false;
+                var fieldNormalized = self.normalizeFieldId(field.id).toLowerCase();
+                return fieldNormalized === normalized ||
+                    (canonical && self.canonicalBodyFieldId(field.id) === canonical);
+            }) || null;
+        },
+
+        normalizeEntityBodyFields: function(bodyFields, doc) {
+            if (!bodyFields) return;
+            if (this.transactionType === 'expensereport') return;
+            doc = doc || {};
+            var extractedData = doc.extractedData || {};
+
+            var entityCandidates = [
+                bodyFields.entity,
+                bodyFields.vendor,
+                bodyFields.vendorId,
+                bodyFields.vendorid,
+                doc.vendorId,
+                doc.vendor
+            ];
+
+            for (var i = 0; i < entityCandidates.length; i++) {
+                if (this.isInternalIdValue(entityCandidates[i])) {
+                    bodyFields.entity = String(entityCandidates[i]);
+                    break;
+                }
+            }
+
+            var displayCandidates = [
+                bodyFields.entity_display,
+                bodyFields.vendorname,
+                bodyFields.vendorName,
+                bodyFields.vendor_name,
+                bodyFields.vendor_display,
+                doc.vendorName,
+                doc.vendorname,
+                extractedData.vendorName,
+                extractedData.vendorname,
+                extractedData.vendor_name,
+                extractedData.vendor_display
+            ];
+
+            for (var j = 0; j < displayCandidates.length; j++) {
+                if (displayCandidates[j] !== undefined && displayCandidates[j] !== null && displayCandidates[j] !== '') {
+                    bodyFields.entity_display = displayCandidates[j];
+                    break;
+                }
+            }
+        },
+
         // Build field context maps to separate body vs sublist fields
         getFieldContextMaps: function() {
             var formFields = this.formFields || {};
@@ -8220,7 +8341,7 @@
 
         getHeaderFieldLabel: function(fieldId) {
             var fields = (this.formFields && this.formFields.bodyFields) || [];
-            var match = fields.find(function(f) { return f && f.id === fieldId; });
+            var match = this.findBodyFieldDef(fields, fieldId);
             return (match && match.label) || fieldId;
         },
 
@@ -8981,15 +9102,68 @@
             return resolveFromText();
         },
 
+        resolveEntityIdFromInput: function() {
+            var self = this;
+            var input = el('#field-entity');
+            if (!input) return Promise.resolve(false);
+
+            var displayText = input.value ? input.value.trim() : '';
+            if (!displayText) return Promise.resolve(false);
+
+            var hiddenInput = el('#field-entityId');
+            if (hiddenInput && this.isInternalIdValue(hiddenInput.value)) {
+                return Promise.resolve(false);
+            }
+
+            var lookupType = this.transactionType === 'expensereport' ? 'employees' : 'vendors';
+            return API.get('datasource', { type: lookupType, query: displayText, limit: 100 })
+                .then(function(result) {
+                    var data = result.data || result;
+                    var options = Array.isArray(data) ? data : (data.options || data);
+                    var match = self.findExactTypeaheadMatch(options, displayText, lookupType);
+                    if (!match || !match.value) return false;
+
+                    if (!hiddenInput) {
+                        hiddenInput = document.createElement('input');
+                        hiddenInput.type = 'hidden';
+                        hiddenInput.id = 'field-entityId';
+                        input.parentNode.appendChild(hiddenInput);
+                    }
+
+                    hiddenInput.value = match.value;
+                    input.value = match.text || displayText;
+
+                    if (!self.changes) self.changes = {};
+                    self.changes.entity = String(match.value);
+                    self.changes.entity_display = input.value;
+                    if (self.transactionType === 'expensereport') {
+                        self.changes.employeeId = String(match.value);
+                        self.changes.employeeName = input.value;
+                    } else {
+                        self.changes.vendorId = String(match.value);
+                        self.changes.vendorName = input.value;
+                    }
+
+                    return true;
+                })
+                .catch(function(err) {
+                    FCDebug.log('[Review] Failed to resolve entity field:', err);
+                    return false;
+                });
+        },
+
         resolveBodyTypeaheadIds: function() {
             var self = this;
             var wrappers = document.querySelectorAll('.typeahead-select.body-field-typeahead[data-field]');
-            if (!wrappers || wrappers.length === 0) {
-                return this.resolveHiddenTermsId();
-            }
 
             var tasks = [];
             tasks.push(this.resolveHiddenTermsId());
+            tasks.push(this.resolveEntityIdFromInput());
+            if (!wrappers || wrappers.length === 0) {
+                return Promise.all(tasks).then(function(results) {
+                    return results.some(function(r) { return r; });
+                });
+            }
             wrappers.forEach(function(wrapper) {
                 var fieldId = wrapper.dataset.field;
                 if (!fieldId) return;
@@ -9407,7 +9581,13 @@
         getFieldLabel: function(fieldId) {
             var formFields = this.formFields || {};
             var bodyFields = formFields.bodyFields || [];
-            var field = bodyFields.find(function(f) { return f.id === fieldId; });
+            if (this.isEntityFieldId(fieldId)) {
+                return this.transactionType === 'expensereport' ? 'Employee' : 'Vendor';
+            }
+            if (this.isCustomFormFieldId(fieldId)) {
+                return 'Custom Form';
+            }
+            var field = this.findBodyFieldDef(bodyFields, fieldId);
             if (field && field.label) return field.label;
 
             // Fallback - humanize the field ID
@@ -9663,6 +9843,13 @@
             }
         },
 
+        getErrorFieldTargetId: function(fieldId) {
+            if (!fieldId) return '';
+            var normalized = this.normalizeFieldId(fieldId);
+            if (this.isEntityFieldId(normalized)) return 'entity';
+            return normalized || fieldId;
+        },
+
         /**
          * Show validation errors in the header bar (expandable section)
          * @param {Array} errors - Array of error objects with field and message
@@ -9800,7 +9987,8 @@
                             }
                         } else {
                             // Body field - try to find by ID
-                            var fieldEl = el('#field-' + fieldId);
+                            var targetFieldId = self.getErrorFieldTargetId(fieldId);
+                            var fieldEl = el('#field-' + targetFieldId);
                             if (fieldEl) {
                                 fieldEl.focus();
                                 fieldEl.scrollIntoView({ behavior: 'smooth', block: 'center' });

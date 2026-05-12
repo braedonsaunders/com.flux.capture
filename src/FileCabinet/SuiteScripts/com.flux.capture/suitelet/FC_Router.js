@@ -5159,6 +5159,7 @@ define([
             var settings = (settingsResult && settingsResult.data) ? settingsResult.data : {};
             var resolvedCurrencyId = null;
             var currencyDoc = null;
+            var transactionType = formData._meta && formData._meta.transactionType;
             try {
                 currencyDoc = record.load({
                     type: 'customrecord_flux_document',
@@ -5167,6 +5168,7 @@ define([
             } catch (e) {
                 // Ignore currency fallback errors
             }
+            applyBodyFieldAliases(formData, transactionType, currencyDoc);
             resolvedCurrencyId = normalizeCurrencyInFormData(formData, currencyDoc, settings);
 
             // Also update key indexed fields for search/filtering purposes
@@ -5175,7 +5177,6 @@ define([
 
             // Only set custrecord_flux_vendor for non-expense-report documents
             // For expense reports, entity is an employee ID, not a vendor ID
-            var transactionType = formData._meta && formData._meta.transactionType;
             if (transactionType !== 'expensereport') {
                 applyVendorTermsToFormData(formData, currencyDoc);
             }
@@ -5356,6 +5357,7 @@ define([
                 };
             }
             applyStoredCustomFieldMatchesToFormData(formData, extractedDataForForm);
+            applyBodyFieldAliases(formData, actualTransactionType, docRecord);
 
             var resolvedCurrencyId = normalizeCurrencyInFormData(formData, docRecord, settings);
             if (resolvedCurrencyId) {
@@ -6057,6 +6059,72 @@ define([
         return map;
     }
 
+    function isBodyEntityAlias(fieldId) {
+        var normalized = normalizeFieldId(fieldId).toLowerCase();
+        return normalized === 'entity' ||
+            normalized === 'vendor' ||
+            normalized === 'vendorid' ||
+            normalized === 'vendorname' ||
+            normalized === 'vendor_name';
+    }
+
+    function isCustomFormField(fieldId) {
+        var normalized = normalizeFieldId(fieldId).toLowerCase();
+        return normalized === 'customform' || normalized === 'custom_form';
+    }
+
+    function getEntityLabel(transactionType) {
+        return transactionType === 'expensereport' ? 'Employee' : 'Vendor';
+    }
+
+    function getBodyValueForField(bodyFields, fieldId, normalizedBodyFields) {
+        var normalizedId = normalizeFieldId(fieldId).toLowerCase();
+        if (isBodyEntityAlias(normalizedId)) {
+            return normalizedBodyFields.entity ||
+                normalizedBodyFields.vendor ||
+                normalizedBodyFields.vendorid ||
+                '';
+        }
+
+        var direct = bodyFields[fieldId];
+        if (direct !== undefined && direct !== null && direct !== '') return direct;
+        return normalizedBodyFields[normalizedId];
+    }
+
+    function applyBodyFieldAliases(formData, transactionType, docRecord) {
+        if (!formData) return;
+        formData.bodyFields = formData.bodyFields || {};
+        var bodyFields = formData.bodyFields;
+        var normalized = buildNormalizedFieldMap(bodyFields, null);
+
+        if (transactionType !== 'expensereport') {
+            var entityValue = normalized.entity || normalized.vendorid || normalized.vendor || '';
+            if (!isInternalIdValue(entityValue) && docRecord) {
+                try {
+                    entityValue = docRecord.getValue('custrecord_flux_vendor') || entityValue;
+                } catch (e) { /* ignore */ }
+            }
+            if (isInternalIdValue(entityValue)) {
+                bodyFields.entity = String(entityValue);
+            }
+
+            var displayValue = bodyFields.entity_display ||
+                bodyFields.vendorname ||
+                bodyFields.vendorName ||
+                bodyFields.vendor_name ||
+                bodyFields.vendor_display ||
+                '';
+            if (!displayValue && docRecord) {
+                try {
+                    displayValue = docRecord.getText('custrecord_flux_vendor') || '';
+                } catch (e) { /* ignore */ }
+            }
+            if (displayValue) {
+                bodyFields.entity_display = displayValue;
+            }
+        }
+    }
+
     // ==================== Transaction Creation Helpers ====================
 
     /**
@@ -6069,8 +6137,10 @@ define([
     function validateForTransaction(formData, transactionType) {
         var errors = [];
         var warnings = [];
+        applyBodyFieldAliases(formData, transactionType, null);
         var bodyFields = formData.bodyFields || {};
         var sublists = formData.sublists || {};
+        var normalizedBodyFields = buildNormalizedFieldMap(bodyFields, null);
         function normalizeLine(line) {
             return buildNormalizedFieldMap(line || {}, null);
         }
@@ -6109,12 +6179,15 @@ define([
         if (schema && schema.bodyFields) {
             schema.bodyFields.forEach(function(fieldDef) {
                 if (fieldDef.mandatory && fieldDef.id) {
-                    var value = bodyFields[fieldDef.id];
+                    if (isCustomFormField(fieldDef.id)) return;
+
+                    var value = getBodyValueForField(bodyFields, fieldDef.id, normalizedBodyFields);
                     // Check if value is empty
                     if (value === undefined || value === null || value === '') {
+                        var isEntityAlias = isBodyEntityAlias(fieldDef.id);
                         errors.push({
-                            field: fieldDef.id,
-                            message: (fieldDef.label || fieldDef.id) + ' is required'
+                            field: isEntityAlias ? 'entity' : normalizeFieldId(fieldDef.id),
+                            message: (isEntityAlias ? getEntityLabel(transactionType) : (fieldDef.label || normalizeFieldId(fieldDef.id))) + ' is required'
                         });
                     }
                 }
@@ -6394,6 +6467,8 @@ define([
         var settingsResult = getSettings();
         var settings = (settingsResult && settingsResult.data) ? settingsResult.data : {};
         var txnRecord;
+        applyBodyFieldAliases(formData, transactionType, docRecord);
+        bodyFields = formData.bodyFields || bodyFields;
         stripBodyAccountIfLineLevel(bodyFields, sublists);
         var schemaMaps = buildSchemaMaps(transactionType, formData, bodyFields);
 
@@ -6411,7 +6486,8 @@ define([
         }
 
         function shouldSkipBodyField(fieldId) {
-            return shouldSkipField(fieldId);
+            if (shouldSkipField(fieldId)) return true;
+            return isBodyEntityAlias(fieldId) && normalizeFieldId(fieldId).toLowerCase() !== 'entity';
         }
 
         function stripBodyAccountIfLineLevel(bodyFieldsToClean, sublistsToCheck) {
@@ -7419,8 +7495,25 @@ define([
             });
         }
 
+        function getCustomFormInternalId() {
+            var formId = (bodyFields && (bodyFields.customform || bodyFields.customForm)) ||
+                (formData && formData._meta && formData._meta.formId) ||
+                (schemaMaps && schemaMaps.formId) ||
+                '';
+            return coerceInternalId(formId);
+        }
+
+        function createTransactionRecord(recordType) {
+            var options = { type: recordType, isDynamic: true };
+            var customFormId = getCustomFormInternalId();
+            if (customFormId) {
+                options.defaultValues = { customform: customFormId };
+            }
+            return record.create(options);
+        }
+
         if (transactionType === 'vendorbill') {
-            txnRecord = record.create({ type: record.Type.VENDOR_BILL, isDynamic: true });
+            txnRecord = createTransactionRecord(record.Type.VENDOR_BILL);
 
             // Set all body fields from formData (normalize field IDs to lowercase)
             setBodyFieldsInOrder(txnRecord, bodyFields);
@@ -7448,7 +7541,7 @@ define([
             applyTaxOverrideIfEnabled(txnRecord, bodyFields, transactionType);
 
         } else if (transactionType === 'vendorcredit') {
-            txnRecord = record.create({ type: record.Type.VENDOR_CREDIT, isDynamic: true });
+            txnRecord = createTransactionRecord(record.Type.VENDOR_CREDIT);
 
             setBodyFieldsInOrder(txnRecord, bodyFields);
 
@@ -7460,7 +7553,7 @@ define([
             }
 
         } else if (transactionType === 'expensereport') {
-            txnRecord = record.create({ type: record.Type.EXPENSE_REPORT, isDynamic: true });
+            txnRecord = createTransactionRecord(record.Type.EXPENSE_REPORT);
 
             // Set all body fields from formData (normalize field IDs to lowercase)
             setBodyFieldsInOrder(txnRecord, bodyFields);
@@ -7470,7 +7563,7 @@ define([
             }
 
         } else if (transactionType === 'purchaseorder') {
-            txnRecord = record.create({ type: record.Type.PURCHASE_ORDER, isDynamic: true });
+            txnRecord = createTransactionRecord(record.Type.PURCHASE_ORDER);
 
             setBodyFieldsInOrder(txnRecord, bodyFields);
 
